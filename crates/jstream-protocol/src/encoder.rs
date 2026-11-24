@@ -132,7 +132,7 @@ pub struct VideoEncoding {
 }
 
 /// A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in
-/// enhanced RTMP; a recording takes H.264 only so far, and its start fails with another.
+/// enhanced RTMP, and a recording writes each in MP4.
 /// A machine with no encoder for the codec, or none that fits the profile's
 /// `hardware`, fails `output.start`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

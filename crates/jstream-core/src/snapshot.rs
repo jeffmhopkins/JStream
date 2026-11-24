@@ -53,7 +53,7 @@ use crate::motion::{self, TrackMotion};
 use crate::preview::PreviewCapture;
 use crate::profile::{DrawMeter, Phase};
 use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
-use crate::transition::{self, From, Planned, Running, Seen, Visual};
+use crate::transition::{self, From, Planned, Running, Seen, ShowFade, Visual};
 
 mod groups;
 mod probes;
@@ -472,6 +472,9 @@ struct Placed {
     /// (ADR-0049 §3): its track and the transition's start, which replace the fields
     /// above (`placement` holds its end) and its live values.
     moving: Option<Moving>,
+    /// An item of the show scene fading in or out on its own ([`ShowFade`]), sampled
+    /// over its pose as each frame is drawn.
+    fading: Option<ShowFade>,
     /// Its motion modifiers (ADR-0099), evaluated as each frame is drawn: both sides'
     /// for a moving child, its own on both sides otherwise.
     motion: TrackMotion,
@@ -483,6 +486,9 @@ struct Placed {
 
 /// A layer's track inside a group a transition moves, and when the transition started.
 type Moving = (MediaTime, Track);
+
+/// The show scene's items fading in or out on their own, by item.
+pub(crate) type ShowFades = BTreeMap<ItemId, ShowFade>;
 
 /// The longest side of an item's effects layer, in pixels: a larger box plus outset is
 /// drawn into it scaled down uniformly (ADR-0065 §5).
@@ -1484,10 +1490,26 @@ impl Shot {
         )
     }
 
-    /// The value `item`'s modifier `modifier` adds at `at`, alone, as a source setting's
-    /// drive reads it (ADR-0171 decision 4).
-    fn source_value(&self, item: &ItemId, modifier: &jstream_anim::Modifier, at: MediaTime) -> f64 {
-        f64::from(self.motion_at(item, std::slice::from_ref(modifier), at).x)
+    /// What `item`'s modifier `modifier` makes of a setting's `own` value at `at`, alone,
+    /// as an effect's or a source setting's drive reads it (ADR-0138, ADR-0171 decision
+    /// 4): `own` plus its value, or for a `replace` modifier the value it sets, pulled
+    /// toward `own` by its amount (ADR-0203).
+    fn source_value(
+        &self,
+        item: &ItemId,
+        modifier: &jstream_anim::Modifier,
+        at: MediaTime,
+        own: f64,
+    ) -> f64 {
+        let by = self.motion_at(item, std::slice::from_ref(modifier), at);
+        let x = jstream_anim::Property::X;
+        if modifier.replace {
+            let own32 = own as f32;
+            let set = by.base(x, own32);
+            if set == own32 { own } else { f64::from(set) }
+        } else {
+            own + f64::from(by.x)
+        }
     }
 
     /// Whether `item`'s modifier `modifier` paints a colour setting, with the colour it
@@ -1518,11 +1540,8 @@ impl Shot {
             let Some(chain) = self.chains.get(owner) else {
                 continue;
             };
-            let value = |modifier: &jstream_anim::Modifier| {
-                f64::from(
-                    self.motion_at(&driven.item, std::slice::from_ref(modifier), at)
-                        .x,
-                )
+            let value = |modifier: &jstream_anim::Modifier, own: f64| {
+                self.source_value(&driven.item, modifier, at, own)
             };
             let tint = |modifier: &jstream_anim::Modifier| self.tint(&driven.item, modifier);
             match blended.iter_mut().find(|(o, _)| *o == owner) {
@@ -1911,7 +1930,7 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
     .shot
 }
 
-/// What [`plan_with`] returns.
+/// What [`plan_program`] returns.
 pub(crate) struct Planning {
     pub(crate) shot: Shot,
     /// When the shot should be planned again: the earliest time a frame it shows is
@@ -1934,6 +1953,23 @@ pub(crate) struct Planning {
 /// the shot draws the transition instead of the program scene: its tracks, planned from
 /// what it starts from and the program scene as the collection holds them now, and the
 /// nested scenes they show. A video mix that shows the program shows the transition too.
+///
+/// With `fades`, the internal show scene's items fading in or out on their own, apart
+/// from `running` ([`ShowFade`]): each such item of the show scene carries its fade on
+/// its layer, drawn on its way in or out over its pose, one going is planned until its
+/// fade ends, and the plan wakes when each ends.
+pub(crate) fn plan_program(
+    graph: &Graph,
+    program: Option<&SceneId>,
+    (running, fades): (Option<(&Running, MediaTime)>, &ShowFades),
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+) -> Planning {
+    plan_inner(graph, program, (running, fades), look, assets, true)
+}
+
+/// [`plan_program`] with no show scene item fading, for the tests.
+#[cfg(test)]
 pub(crate) fn plan_with(
     graph: &Graph,
     program: Option<&SceneId>,
@@ -1941,7 +1977,7 @@ pub(crate) fn plan_with(
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Planning {
-    plan_inner(graph, program, running, look, assets, true)
+    plan_program(graph, program, (running, &ShowFades::new()), look, assets)
 }
 
 /// Copies the scene `scene_id` and the scenes it nests out of `graph` as the program
@@ -1954,7 +1990,14 @@ pub(crate) fn plan_scene(
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Planning {
-    plan_inner(graph, Some(scene_id), None, look, assets, false)
+    plan_inner(
+        graph,
+        Some(scene_id),
+        (None, &ShowFades::new()),
+        look,
+        assets,
+        false,
+    )
 }
 
 /// The scene and item a source's preview stream draws it through, in a copy of the
@@ -2041,7 +2084,14 @@ pub(crate) fn plan_source(
     assets: &FilterAssets,
 ) -> Option<Planning> {
     let (own, scene_id) = copies.copy(graph, source_id)?;
-    Some(plan_inner(own, Some(scene_id), None, look, assets, false))
+    Some(plan_inner(
+        own,
+        Some(scene_id),
+        (None, &ShowFades::new()),
+        look,
+        assets,
+        false,
+    ))
 }
 
 /// A copy of `graph` with one scene added whose one item places `source_id` over the
@@ -2083,11 +2133,11 @@ fn source_copy(graph: &Graph, source_id: &SourceId) -> Option<(Graph, SceneId)> 
     Some((own, scene_id))
 }
 
-/// [`plan_with`], drawing the scene each `scene` video mix shows when `mixes`.
+/// [`plan_program`], drawing the scene each `scene` video mix shows when `mixes`.
 fn plan_inner(
     graph: &Graph,
     program: Option<&SceneId>,
-    running: Option<(&Running, MediaTime)>,
+    (running, fades): (Option<(&Running, MediaTime)>, &ShowFades),
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
     mixes: bool,
@@ -2108,6 +2158,7 @@ fn plan_inner(
         assets,
         wake: None,
         quiet: false,
+        fades: None,
     };
     let mut finished = running.is_some();
     let mut end_ms = None;
@@ -2231,7 +2282,9 @@ fn plan_inner(
         && program.as_ref() != Some(show)
     {
         let mut path = BTreeSet::new();
+        planner.fades = Some((show, fades));
         planner.collect(show, &mut shot, &mut path);
+        planner.fades = None;
         let passes = schedule(&shot, show);
         if passes.last().is_some_and(|root| !root.layers.is_empty()) {
             shot.show = passes;
@@ -2388,9 +2441,10 @@ fn on_screen_until_end(
         assets,
         wake: None,
         quiet: false,
+        fades: None,
     };
     let (planned, pairs) = planner.transition(running, &mut shot);
-    // Ended as [`plan_with`] finds it.
+    // Ended as [`plan_program`] finds it.
     if until_end && end_time(running.start, planned.end_ms).is_none_or(|end| now >= end) {
         return None;
     }
@@ -2537,7 +2591,7 @@ fn placed_captures<'a>(
         })
 }
 
-/// What a source shows, as [`plan_with`] asks for it.
+/// What a source shows, as [`plan_program`] asks for it.
 pub(crate) enum Look {
     /// Its frame now, and when that frame is next replaced.
     Frame(Box<Frame>, Option<MediaTime>),
@@ -2552,7 +2606,7 @@ impl Look {
     }
 }
 
-/// What [`plan_with`] asks for each source it reaches; `None` shows nothing.
+/// What [`plan_program`] asks for each source it reaches; `None` shows nothing.
 pub(crate) type LookUp<'a> = dyn FnMut(&SourceId) -> Option<Look> + 'a;
 
 struct Planner<'a, 'f> {
@@ -2566,9 +2620,24 @@ struct Planner<'a, 'f> {
     /// `via` stops are planned, which are read only for their values, so a source only
     /// a stop shows isn't shown, heard or woken by `look`.
     quiet: bool,
+    /// The show scene and its items fading on their own, set while it is planned.
+    fades: Option<(&'a SceneId, &'a ShowFades)>,
 }
 
 impl<'a> Planner<'a, '_> {
+    /// The fade of `item_id` when it is an item of the show scene's own pass, placed
+    /// from the scene itself (never through a 3D group), and fading on its own; its end
+    /// wakes the plan, which then plans the item at rest.
+    fn fading(&mut self, scene: &SceneId, from: &SceneId, item_id: &ItemId) -> Option<ShowFade> {
+        let (show, fades) = self.fades?;
+        if scene != show || from != show {
+            return None;
+        }
+        let fade = *fades.get(item_id)?;
+        self.wake = earliest(self.wake, end_time(fade.start, fade.end_ms()));
+        Some(fade)
+    }
+
     /// The scene a planned ID draws, and the keyframe scene whose overrides its items
     /// show: a scene of the collection, a keyframe scene of its own, or a group's
     /// [`view_id`] through a keyframe scene.
@@ -3113,6 +3182,7 @@ impl<'a> Planner<'a, '_> {
                 blend: child.at.blend,
                 effects: None,
                 moving: Some((start, track.clone())),
+                fading: None,
                 motion: child.motion.clone(),
                 groups: None,
             });
@@ -3751,7 +3821,10 @@ impl<'a> Planner<'a, '_> {
         let groups: Groups = (!links.is_empty()).then(|| Arc::from(links));
         for item in self.items_of(from) {
             let item = item.as_ref();
-            if !item.visible() {
+            // An item of the show scene fading on its own; one going still draws until
+            // its fade ends.
+            let fading = self.fading(scene, from, item.id());
+            if !item.visible() && !fading.is_some_and(|fade| !fade.visible) {
                 continue;
             }
             let Some(source) = state.source(item.source_id()) else {
@@ -3813,6 +3886,7 @@ impl<'a> Planner<'a, '_> {
                 blend: item.blend(),
                 effects,
                 moving: None,
+                fading,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
                 groups: groups.clone(),
             });
@@ -4442,6 +4516,8 @@ struct Layer {
     boxed: Option<Boxed>,
     /// Its track, for a group's child a transition moves inside the group's layer.
     moving: Option<Moving>,
+    /// Its fade, for an item of the show scene fading in or out on its own.
+    fading: Option<ShowFade>,
     /// Its motion modifiers (ADR-0099): the moving child's both sides, else its own.
     motion: TrackMotion,
     /// The 3D groups it is placed through (ADR-0164), as [`Placed::groups`].
@@ -4673,6 +4749,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
                 blend: BlendMode::Normal,
                 boxed: None,
                 moving: None,
+                fading: None,
                 motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
                 groups: None,
             })
@@ -5017,6 +5094,7 @@ fn visit_into(
             blend: placed.blend,
             boxed: placed.effects,
             moving: placed.moving.clone(),
+            fading: placed.fading,
             motion: placed.motion.clone(),
             groups: placed.groups.clone(),
         });
@@ -7566,7 +7644,7 @@ fn draw_model(
     // Its materials as its item's modifiers drive them (ADR-0171 decision 4).
     let (drives, driving) = crate::sourced::materials(
         shot.source_drives(&boxed.item),
-        |m| shot.source_value(&boxed.item, m, at),
+        |m, own| shot.source_value(&boxed.item, m, at, own),
         |m| shot.tint(&boxed.item, m),
     );
     let (texture, reflection) = model_maps(shot, &*cache, source, shown);
@@ -8123,7 +8201,7 @@ fn draw_reflection(
         pose(compositor, shown.model, shown.shown);
         let (drives, driving) = crate::sourced::materials(
             shot.source_drives(shown.item),
-            |m| shot.source_value(shown.item, m, at),
+            |m, own| shot.source_value(shown.item, m, at, own),
             |m| shot.tint(shown.item, m),
         );
         let reflected = GpuKey::ReflectedModel(shown.scene.clone(), shown.item.clone());
@@ -8396,7 +8474,7 @@ fn scene_lights(
         let look = crate::sourced::light(
             light,
             shot.source_drives(&placed.item),
-            |m| shot.source_value(&placed.item, m, at),
+            |m, own| shot.source_value(&placed.item, m, at, own),
             |m| shot.tint(&placed.item, m),
         );
         let [r, g, b] = look.color;
@@ -8541,7 +8619,7 @@ fn environment_at<'c>(
         light.intensity,
         sky,
         shot.source_drives(&placed.item),
-        |m| shot.source_value(&placed.item, m, at),
+        |m, own| shot.source_value(&placed.item, m, at, own),
         |m| shot.tint(&placed.item, m),
     );
     let environment = jstream_render::Environment {
@@ -9255,6 +9333,10 @@ fn layer_pose<'a>(
     };
     let (placement, opacity) =
         groups::place_placement(&layer.groups, (placement, opacity), shot, at, live)?;
+    let (placement, opacity) = match &layer.fading {
+        Some(fade) => faded(fade, (placement, crop, opacity, layer.blend), at, size)?,
+        None => (placement, opacity),
+    };
     Some(LayerPose {
         placement,
         crop,
@@ -9262,6 +9344,34 @@ fn layer_pose<'a>(
         blend: layer.blend,
         depth,
     })
+}
+
+/// A show scene item's pose at `at` on a canvas of `size`, on its way in or out by
+/// `fade` from where it is fully shown: an item with a box moves by the fade's effect
+/// as a transition's item would, any other only fades. `None` when it draws nothing.
+fn faded(
+    fade: &ShowFade,
+    (placement, crop, opacity, blend): (Placement, Crop, f32, BlendMode),
+    at: MediaTime,
+    size: [f32; 2],
+) -> Option<(Placement, f32)> {
+    let elapsed = transition::elapsed_ms(fade.start, at);
+    match placement {
+        Placement::Geometry(geometry) => {
+            let whole = Endpoint {
+                geometry,
+                crop,
+                opacity,
+                blend,
+            };
+            let sampled = fade.sample(whole, elapsed, size)?;
+            Some((Placement::Geometry(sampled.geometry), sampled.opacity))
+        }
+        other => {
+            let opacity = opacity * fade.shown(elapsed);
+            (opacity > 0.0).then_some((other, opacity))
+        }
+    }
 }
 
 /// Another camera a scene's view depth is drawn through, as a shadow map or the mirrored
@@ -9433,7 +9543,7 @@ fn draw_surface(
         let (drives, driving) = match shot.boxes.get(&owner) {
             Some(boxed) => crate::sourced::materials(
                 shot.source_drives(&boxed.item),
-                |m| shot.source_value(&boxed.item, m, at),
+                |m, own| shot.source_value(&boxed.item, m, at, own),
                 |m| shot.tint(&boxed.item, m),
             ),
             None => Default::default(),
@@ -10332,6 +10442,7 @@ pub(crate) mod tests {
             blend: jstream_protocol::BlendMode::Normal,
             effects: None,
             moving: None,
+            fading: None,
             motion: crate::motion::TrackMotion::same(ItemId::new("itm"), std::sync::Arc::from([])),
             groups: None,
         }

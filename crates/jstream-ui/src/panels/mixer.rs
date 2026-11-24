@@ -1563,6 +1563,15 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
         drag,
         edit_for: move |db| source_gain(id.get_value(), db),
     };
+    // The strip's name dragged onto the Show panel's tracks adds its audio there
+    // (ADR-0216's "Add source audio").
+    let show_panel = use_context::<crate::panels::show::ShowPanel>();
+    let pressed = StoredValue::new(None::<(i32, i32, bool)>);
+    let carry = move |e: &leptos::ev::PointerEvent, dropped: bool| {
+        if let Some(p) = show_panel {
+            id.with_value(|id| p.carry_source(id.as_str(), &name(), e, dropped));
+        }
+    };
     let choose_follow = move |event: leptos::ev::Event| {
         let follow = match event_target_value(&event).as_str() {
             "always" => AudioFollow::Always,
@@ -1581,7 +1590,40 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
 
     view! {
         <li class="mix-row" class:off=move || !enabled()>
-            <span class="strip-name" title=move || id.with_value(ToString::to_string)>{name}</span>
+            <span class="strip-name" class:carries=show_panel.is_some()
+                title=move || id.with_value(ToString::to_string)
+                on:pointerdown=move |e: leptos::ev::PointerEvent| {
+                    if show_panel.is_none() || e.button() != 0 {
+                        return;
+                    }
+                    if let Some(el) = e
+                        .current_target()
+                        .and_then(|t| leptos::wasm_bindgen::JsCast::dyn_into::<leptos::web_sys::Element>(t).ok())
+                    {
+                        let _ = el.set_pointer_capture(e.pointer_id());
+                    }
+                    pressed.set_value(Some((e.client_x(), e.client_y(), false)));
+                }
+                on:pointermove=move |e: leptos::ev::PointerEvent| {
+                    let Some((x, y, moved)) = pressed.get_value() else { return };
+                    let (dx, dy) = (e.client_x() - x, e.client_y() - y);
+                    if moved || dx * dx + dy * dy >= 36 {
+                        pressed.set_value(Some((x, y, true)));
+                        carry(&e, false);
+                    }
+                }
+                on:pointerup=move |e: leptos::ev::PointerEvent| {
+                    if let Some((_, _, true)) = pressed.get_value() {
+                        carry(&e, true);
+                    }
+                    pressed.set_value(None);
+                }
+                on:pointercancel=move |_| {
+                    pressed.set_value(None);
+                    if let Some(p) = show_panel {
+                        p.carry.set(None);
+                    }
+                }>{name}</span>
             <Show
                 when=move || !is_scene()
                 fallback=|| view! { <span class="hint">"Nested scene: follows its own sources"</span> }

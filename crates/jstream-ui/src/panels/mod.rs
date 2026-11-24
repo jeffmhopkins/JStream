@@ -11,12 +11,14 @@
 
 pub mod add_source;
 pub mod agent;
+pub mod audio_read;
 pub mod camera_moves;
 pub mod channels;
 pub mod codec_downloads;
 mod confirm;
 pub mod curve;
 pub mod custom_shader;
+pub mod data_read;
 pub mod device_preview;
 pub mod encoders;
 pub mod events;

@@ -8,7 +8,10 @@
 //! audio-only streams cut a fragment every second. A file cut short by a crash is
 //! readable up to its last complete fragment, which is why recording uses fMP4.
 //!
-//! Only H.264 (`avc1` with `avcC`) and AAC (`mp4a` with `esds`) are written.
+//! The video track is H.264 (`avc1` with `avcC`), HEVC (`hvc1` with `hvcC`) or AV1
+//! (`av01` with `av1C`); the audio track is AAC (`mp4a` with `esds`). H.264 and HEVC
+//! frames keep their in-band parameter sets, and AV1 frames their sequence header, as
+//! the encoders emit them.
 
 use std::io::Write;
 
@@ -16,10 +19,12 @@ use jstream_media::{Codec, MediaTime, Packet, Rounding, Timebase};
 
 use crate::MuxError;
 use crate::aac::AudioSpecificConfig;
+use crate::av1::{self, Av1CodecConfig};
 use crate::flv::to_ms;
 use crate::h264::{AvcDecoderConfig, annexb_to_avcc};
+use crate::hevc::HevcDecoderConfig;
 
-/// The time scale of the video track: 90 kHz, as H.264 timestamps use.
+/// The time scale of the video track: 90 kHz, as H.264, HEVC and AV1 timestamps use.
 pub const VIDEO_TIMESCALE: u32 = 90_000;
 /// The time scale of the movie header, which only carries durations (all zero here).
 const MOVIE_TIMESCALE: u32 = 1_000;
@@ -48,17 +53,86 @@ const TRUN_CTS: u32 = 0x0800;
 /// The unity transform matrix of `mvhd` and `tkhd`, in 16.16 and 2.30 fixed point.
 const MATRIX: [u32; 9] = [0x0001_0000, 0, 0, 0, 0x0001_0000, 0, 0, 0, 0x4000_0000];
 
-/// The H.264 track.
+/// The video track.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VideoTrack {
     /// Display width in pixels, for `tkhd` and the sample entry.
     pub width: u16,
     /// Display height in pixels, for `tkhd` and the sample entry.
     pub height: u16,
-    /// The decoder configuration. When `None`, it is built from the SPS and PPS of the
-    /// first video packet, which must then be a keyframe carrying them in-band, and the
-    /// init segment waits for that packet.
-    pub avc: Option<AvcDecoderConfig>,
+    /// The codec and its decoder configuration.
+    pub config: VideoConfig,
+}
+
+/// The video codec and its decoder configuration. A `None` configuration is built from
+/// the first video packet, which must then be a keyframe carrying it in-band (SPS and PPS
+/// for H.264, VPS, SPS and PPS for HEVC, a sequence header OBU for AV1), and the init
+/// segment waits for that packet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VideoConfig {
+    /// H.264 (`avc1`), with Annex B packets.
+    Avc(Option<AvcDecoderConfig>),
+    /// HEVC (`hvc1`), with Annex B packets.
+    Hevc(Option<HevcDecoderConfig>),
+    /// AV1 (`av01`), with packets of low-overhead OBUs.
+    Av1(Option<Av1CodecConfig>),
+}
+
+impl VideoConfig {
+    /// The codec the track's packets carry.
+    pub fn codec(&self) -> Codec {
+        match self {
+            Self::Avc(_) => Codec::H264,
+            Self::Hevc(_) => Codec::Hevc,
+            Self::Av1(_) => Codec::Av1,
+        }
+    }
+
+    /// Whether the decoder configuration is known, so the init segment can be written.
+    pub fn is_known(&self) -> bool {
+        matches!(
+            self,
+            Self::Avc(Some(_)) | Self::Hevc(Some(_)) | Self::Av1(Some(_))
+        )
+    }
+
+    /// The error for samples that never got a decoder configuration.
+    fn missing(&self) -> MuxError {
+        match self {
+            Self::Avc(_) => MuxError::MissingAvcConfig,
+            other => MuxError::MissingDecoderConfig {
+                codec: other.codec(),
+            },
+        }
+    }
+
+    /// The same codec with the configuration taken from a keyframe that carries it.
+    fn learn_from(&self, packet: &Packet) -> Result<Self, MuxError> {
+        if !packet.is_keyframe() {
+            return Err(self.missing());
+        }
+        match self {
+            Self::Avc(_) => match AvcDecoderConfig::from_annexb(packet.data()) {
+                Err(MuxError::MissingParameterSets { .. }) => Err(MuxError::MissingAvcConfig),
+                other => other.map(|c| Self::Avc(Some(c))),
+            },
+            // A keyframe without the parameter sets keeps the error that says which
+            // ones were missing.
+            Self::Hevc(_) => {
+                HevcDecoderConfig::from_annexb(packet.data()).map(|c| Self::Hevc(Some(c)))
+            }
+            Self::Av1(_) => Av1CodecConfig::from_obus(packet.data()).map(|c| Self::Av1(Some(c))),
+        }
+    }
+
+    /// A packet's payload as MP4 stores it: length-prefixed NAL units for H.264 and
+    /// HEVC, and the OBUs without temporal delimiters or padding for AV1.
+    fn sample(&self, data: &[u8]) -> Result<Vec<u8>, MuxError> {
+        match self {
+            Self::Avc(_) | Self::Hevc(_) => annexb_to_avcc(data),
+            Self::Av1(_) => av1::to_sample(data),
+        }
+    }
 }
 
 /// The AAC track. Its time scale is the config's sample rate.
@@ -113,7 +187,7 @@ struct Sample {
     /// pts − dts in track ticks.
     cts: u32,
     keyframe: bool,
-    /// The payload as MP4 stores it (AVCC for video).
+    /// The payload as MP4 stores it (length-prefixed NAL units or OBUs for video).
     data: Vec<u8>,
 }
 
@@ -185,16 +259,24 @@ impl Track {
 
     /// The duration the newest sample gets when no successor will come.
     fn closing_duration(&self) -> u32 {
-        self.last_duration.unwrap_or(match self.codec {
-            Codec::H264 => DEFAULT_VIDEO_DURATION,
-            _ => DEFAULT_AUDIO_DURATION,
+        self.last_duration.unwrap_or(if self.is_video() {
+            DEFAULT_VIDEO_DURATION
+        } else {
+            DEFAULT_AUDIO_DURATION
         })
+    }
+
+    /// Whether this is the video track (every track but the AAC one).
+    fn is_video(&self) -> bool {
+        self.codec != Codec::Aac
     }
 }
 
 /// Turns packets into fMP4 segments, with no I/O.
 ///
-/// Video payloads are Annex B and are converted to AVCC; audio payloads are raw AAC.
+/// H.264 and HEVC payloads are Annex B and are converted to length-prefixed NAL units;
+/// AV1 payloads are low-overhead OBUs and lose their temporal delimiters and padding;
+/// audio payloads are raw AAC.
 /// Each track's timestamps are its packets' dts and pts rescaled to the track's time
 /// scale (rounded to nearest) from the origin, so audio and video stay in sync without
 /// an edit list. Decode times must increase within a track, because a sample's duration
@@ -226,7 +308,12 @@ impl Fmp4Muxer {
             None => 0,
         };
         let video = match config.video {
-            Some(_) => Some(Track::new(1, Codec::H264, VIDEO_TIMESCALE, config.origin)?),
+            Some(ref v) => Some(Track::new(
+                1,
+                v.config.codec(),
+                VIDEO_TIMESCALE,
+                config.origin,
+            )?),
             None => None,
         };
         let audio = match &config.audio {
@@ -248,18 +335,19 @@ impl Fmp4Muxer {
         })
     }
 
-    /// The configuration, including an AVC configuration taken from the stream.
+    /// The configuration, including a video decoder configuration taken from the stream.
     pub fn config(&self) -> &Fmp4Config {
         &self.config
     }
 
     /// The init segment, if every decoder configuration is known and it wasn't yielded
-    /// yet. Without a configured AVC record it comes with the first video packet instead.
+    /// yet. Without a configured video record it comes with the first video packet
+    /// instead.
     ///
     /// # Errors
     /// [`MuxError::TooLong`] when a box is too large for its size field.
     pub fn start(&mut self) -> Result<Option<Segment>, MuxError> {
-        if self.init_sent || self.config.video.as_ref().is_some_and(|v| v.avc.is_none()) {
+        if self.init_sent || !self.video_known() {
             return Ok(None);
         }
         let init = init_segment(&self.config)?;
@@ -276,17 +364,15 @@ impl Fmp4Muxer {
     /// [`MuxError::NegativeTimestamp`] for a dts before the origin,
     /// [`MuxError::DtsNotIncreasing`] when a track's dts doesn't increase,
     /// [`MuxError::TimestampOutOfRange`] for a composition offset or duration beyond 32
-    /// bits, [`MuxError::MissingAvcConfig`], [`MuxError::FirstVideoNotKeyframe`],
-    /// [`MuxError::NotAnnexB`], [`MuxError::TooLong`] and [`MuxError::Media`]. A rejected
+    /// bits, [`MuxError::MissingAvcConfig`] (H.264) or [`MuxError::MissingDecoderConfig`]
+    /// (HEVC, AV1) for a first video packet that isn't a keyframe while the record is
+    /// unknown, the errors of building the record from a keyframe,
+    /// [`MuxError::FirstVideoNotKeyframe`], [`MuxError::NotAnnexB`],
+    /// [`MuxError::InvalidObu`], [`MuxError::TooLong`] and [`MuxError::Media`]. A rejected
     /// packet leaves the muxer unchanged.
     pub fn push(&mut self, packet: &Packet) -> Result<Vec<Segment>, MuxError> {
         let codec = packet.codec();
-        let track = match codec {
-            Codec::H264 => self.video.as_ref(),
-            Codec::Aac => self.audio.as_ref(),
-            _ => None,
-        }
-        .ok_or(MuxError::NoTrack { codec })?;
+        let track = self.track(codec).ok_or(MuxError::NoTrack { codec })?;
 
         let dts = track.ticks(packet.dts())?;
         if dts < 0 {
@@ -319,17 +405,17 @@ impl Fmp4Muxer {
                 None => None,
             };
 
-        let mut new_avc = None;
-        let data = if codec == Codec::H264 {
-            let first = track.is_empty();
-            if self.config.video.as_ref().is_some_and(|v| v.avc.is_none()) {
-                new_avc = Some(avc_from_packet(packet)?);
-            } else if first && !packet.is_keyframe() {
-                return Err(MuxError::FirstVideoNotKeyframe);
+        let mut learned = None;
+        let data = match self.config.video.as_ref().map(|v| &v.config) {
+            Some(video) if track.is_video() => {
+                if !video.is_known() {
+                    learned = Some(video.learn_from(packet)?);
+                } else if track.is_empty() && !packet.is_keyframe() {
+                    return Err(MuxError::FirstVideoNotKeyframe);
+                }
+                video.sample(packet.data())?
             }
-            annexb_to_avcc(packet.data())?
-        } else {
-            packet.data().to_vec()
+            _ => packet.data().to_vec(),
         };
         let sample = Sample {
             dts,
@@ -342,13 +428,13 @@ impl Fmp4Muxer {
         // as it was.
         let init = if self.init_sent {
             None
-        } else if let Some(avc) = &new_avc {
+        } else if let Some(learned) = &learned {
             let mut config = self.config.clone();
             if let Some(video) = &mut config.video {
-                video.avc = Some(avc.clone());
+                video.config = learned.clone();
             }
             Some(init_segment(&config)?)
-        } else if self.config.video.as_ref().is_some_and(|v| v.avc.is_none()) {
+        } else if !self.video_known() {
             None
         } else {
             Some(init_segment(&self.config)?)
@@ -361,19 +447,20 @@ impl Fmp4Muxer {
         };
 
         // Commit.
-        if let Some(avc) = new_avc
+        if let Some(learned) = learned
             && let Some(video) = &mut self.config.video
         {
-            video.avc = Some(avc);
+            video.config = learned;
         }
         let mut out = Vec::new();
         if let Some(init) = init {
             self.init_sent = true;
             out.push(Segment::Init(init));
         }
-        let track = match codec {
-            Codec::H264 => self.video.as_mut(),
-            _ => self.audio.as_mut(),
+        let track = if codec == Codec::Aac {
+            self.audio.as_mut()
+        } else {
+            self.video.as_mut()
         }
         .ok_or(MuxError::NoTrack { codec })?;
         if let (Some(last), Some(d)) = (track.last.take(), duration) {
@@ -396,8 +483,9 @@ impl Fmp4Muxer {
     /// Yields nothing when nothing is buffered.
     ///
     /// # Errors
-    /// [`MuxError::MissingAvcConfig`] when samples are buffered but no video keyframe
-    /// ever gave the init segment its AVC record, and [`MuxError::TooLong`].
+    /// [`MuxError::MissingAvcConfig`] (H.264) or [`MuxError::MissingDecoderConfig`] (HEVC,
+    /// AV1) when samples are buffered but no video keyframe ever gave the init segment
+    /// its record, and [`MuxError::TooLong`].
     pub fn finish(&mut self) -> Result<Vec<Segment>, MuxError> {
         let buffered = [&self.video, &self.audio]
             .into_iter()
@@ -411,7 +499,11 @@ impl Fmp4Muxer {
             out.push(init);
         }
         if !self.init_sent {
-            return Err(MuxError::MissingAvcConfig);
+            return Err(self
+                .config
+                .video
+                .as_ref()
+                .map_or(MuxError::MissingAvcConfig, |v| v.config.missing()));
         }
         let tracks: Vec<Traf<'_>> = [&self.video, &self.audio]
             .into_iter()
@@ -434,7 +526,7 @@ impl Fmp4Muxer {
     /// `duration`) closes a fragment, and what goes in it.
     fn cut_for(&self, codec: Codec, sample: &Sample, duration: Option<u32>) -> Option<Cut> {
         match (&self.video, &self.audio) {
-            (Some(video), audio) if codec == Codec::H264 => {
+            (Some(video), audio) if codec == video.codec => {
                 // A keyframe ends the fragment of everything before it, if there is any.
                 if !sample.keyframe || video.last.is_none() {
                     return None;
@@ -491,6 +583,22 @@ impl Fmp4Muxer {
         media_segment(self.sequence + 1, &tracks)
     }
 
+    /// The track `codec`'s packets go on, if there is one.
+    fn track(&self, codec: Codec) -> Option<&Track> {
+        [&self.video, &self.audio]
+            .into_iter()
+            .flatten()
+            .find(|t| t.codec == codec)
+    }
+
+    /// Whether the video track's decoder configuration is known (or there is none).
+    fn video_known(&self) -> bool {
+        self.config
+            .video
+            .as_ref()
+            .is_none_or(|v| v.config.is_known())
+    }
+
     fn commit_cut(&mut self, cut: &Cut) {
         self.sequence += 1;
         if cut.video
@@ -541,7 +649,7 @@ fn pending_samples(track: &Track, count: usize, last_duration: Option<u32>) -> T
     Traf {
         id: track.id,
         base: first.map_or(0, |s| s.dts),
-        video: track.codec == Codec::H264,
+        video: track.is_video(),
         samples,
     }
 }
@@ -549,16 +657,6 @@ fn pending_samples(track: &Track, count: usize, last_duration: Option<u32>) -> T
 /// Whether `dts` ticks at `timescale` come before `video_dts` at [`VIDEO_TIMESCALE`].
 fn decodes_before(dts: i64, timescale: u32, video_dts: i64) -> bool {
     i128::from(dts) * i128::from(VIDEO_TIMESCALE) < i128::from(video_dts) * i128::from(timescale)
-}
-
-fn avc_from_packet(packet: &Packet) -> Result<AvcDecoderConfig, MuxError> {
-    if !packet.is_keyframe() {
-        return Err(MuxError::MissingAvcConfig);
-    }
-    match AvcDecoderConfig::from_annexb(packet.data()) {
-        Err(MuxError::MissingParameterSets { .. }) => Err(MuxError::MissingAvcConfig),
-        other => other,
-    }
 }
 
 /// Writes an fMP4 file (or stream) to any [`Write`]: the init segment as soon as it is
@@ -663,22 +761,29 @@ fn put_matrix(out: &mut Vec<u8>) {
     }
 }
 
-/// The init segment: `ftyp` and `moov` for `config`, whose AVC record must be known.
+/// The init segment: `ftyp` and `moov` for `config`, whose video record must be known.
 fn init_segment(config: &Fmp4Config) -> Result<Vec<u8>, MuxError> {
     let mut out = Vec::new();
-    ftyp(&mut out)?;
+    ftyp(&mut out, config.video.as_ref().map(|v| v.config.codec()))?;
     mp4_box(&mut out, b"moov", |out| {
         let tracks = u32::from(config.video.is_some()) + u32::from(config.audio.is_some());
         mvhd(out, tracks + 1)?;
         let mut id = 1;
         if let Some(video) = &config.video {
-            let avc = video.avc.as_ref().ok_or(MuxError::MissingAvcConfig)?;
+            let (kind, config_kind, record): (&[u8; 4], &[u8; 4], Vec<u8>) = match &video.config {
+                VideoConfig::Avc(Some(avc)) => (b"avc1", b"avcC", avc.to_bytes()),
+                // `hvc1`, the entry every player reads (Apple's only take this one): the
+                // record holds every parameter set, and the frames repeat the same ones.
+                VideoConfig::Hevc(Some(hevc)) => (b"hvc1", b"hvcC", hevc.to_bytes_complete()),
+                VideoConfig::Av1(Some(av1)) => (b"av01", b"av1C", av1.to_bytes()),
+                other => return Err(other.missing()),
+            };
             trak(
                 out,
                 id,
                 VIDEO_TIMESCALE,
                 Some((video.width, video.height)),
-                |out| avc1(out, video, avc),
+                |out| visual_sample_entry(out, video, kind, config_kind, &record),
             )?;
             id += 1;
         }
@@ -698,14 +803,23 @@ fn init_segment(config: &Fmp4Config) -> Result<Vec<u8>, MuxError> {
 }
 
 /// `ftyp`: ISO base media version 6 (which defines `mvex` fragments), compatible with
-/// the earlier brands players check for.
-fn ftyp(out: &mut Vec<u8>) -> Result<(), MuxError> {
+/// the earlier brands players check for, and with the video codec's brand when it has
+/// one: `avc1` for H.264, `av01` for AV1 (which its ISOBMFF binding asks for). HEVC has
+/// no brand of its own.
+fn ftyp(out: &mut Vec<u8>, video: Option<Codec>) -> Result<(), MuxError> {
     mp4_box(out, b"ftyp", |out| {
         out.extend_from_slice(b"iso6");
         put_u32(out, 0);
-        for brand in [b"iso6", b"isom", b"iso2", b"avc1", b"mp41"] {
+        for brand in [b"iso6", b"isom", b"iso2"] {
             out.extend_from_slice(brand);
         }
+        match video {
+            Some(Codec::Hevc) => {}
+            Some(Codec::Av1) => out.extend_from_slice(b"av01"),
+            // H.264, and audio-only files, as before HEVC and AV1 were recorded.
+            _ => out.extend_from_slice(b"avc1"),
+        }
+        out.extend_from_slice(b"mp41");
         Ok(())
     })
 }
@@ -826,9 +940,16 @@ fn sample_entry_header(out: &mut Vec<u8>) {
     put_u16(out, 1);
 }
 
-/// The `avc1` visual sample entry with its `avcC`.
-fn avc1(out: &mut Vec<u8>, video: &VideoTrack, avc: &AvcDecoderConfig) -> Result<(), MuxError> {
-    mp4_box(out, b"avc1", |out| {
+/// A visual sample entry (`avc1`, `hvc1` or `av01`) with its decoder configuration box
+/// (`avcC`, `hvcC` or `av1C`) holding `record`.
+fn visual_sample_entry(
+    out: &mut Vec<u8>,
+    video: &VideoTrack,
+    kind: &[u8; 4],
+    config_kind: &[u8; 4],
+    record: &[u8],
+) -> Result<(), MuxError> {
+    mp4_box(out, kind, |out| {
         sample_entry_header(out);
         out.extend_from_slice(&[0; 16]); // pre_defined, reserved, pre_defined
         put_u16(out, video.width);
@@ -840,8 +961,8 @@ fn avc1(out: &mut Vec<u8>, video: &VideoTrack, avc: &AvcDecoderConfig) -> Result
         out.extend_from_slice(&[0; 32]); // compressorname
         put_u16(out, 0x0018); // depth
         put_u16(out, 0xFFFF); // pre_defined = -1
-        mp4_box(out, b"avcC", |out| {
-            out.extend_from_slice(&avc.to_bytes());
+        mp4_box(out, config_kind, |out| {
+            out.extend_from_slice(record);
             Ok(())
         })
     })
@@ -1046,7 +1167,7 @@ mod tests {
         VideoTrack {
             width: 1280,
             height: 720,
-            avc,
+            config: VideoConfig::Avc(avc),
         }
     }
 
@@ -1203,12 +1324,28 @@ mod tests {
     #[test]
     fn ftyp_is_byte_exact() {
         let mut out = Vec::new();
-        ftyp(&mut out).unwrap();
+        ftyp(&mut out, Some(Codec::H264)).unwrap();
         let mut expected = vec![0, 0, 0, 0x24];
         expected.extend_from_slice(b"ftypiso6");
         expected.extend_from_slice(&[0, 0, 0, 0]);
         expected.extend_from_slice(b"iso6isomiso2avc1mp41");
         assert_eq!(out, expected);
+
+        let mut audio_only = Vec::new();
+        ftyp(&mut audio_only, None).unwrap();
+        assert_eq!(
+            audio_only, expected,
+            "audio-only files keep the H.264 brands"
+        );
+
+        let mut av1 = Vec::new();
+        ftyp(&mut av1, Some(Codec::Av1)).unwrap();
+        assert_eq!(&av1[16..], b"iso6isomiso2av01mp41");
+
+        let mut hevc = Vec::new();
+        ftyp(&mut hevc, Some(Codec::Hevc)).unwrap();
+        assert_eq!(&hevc[..4], &[0, 0, 0, 0x20]);
+        assert_eq!(&hevc[16..], b"iso6isomiso2mp41");
     }
 
     #[test]
@@ -1440,8 +1577,8 @@ mod tests {
 
         assert!(matches!(segments[0], Segment::Init(_)));
         assert_eq!(
-            muxer.config().video.as_ref().unwrap().avc,
-            Some(avc()),
+            muxer.config().video.as_ref().unwrap().config,
+            VideoConfig::Avc(Some(avc())),
             "the record comes from the first keyframe"
         );
         let fragments = media(&segments);
@@ -1617,6 +1754,179 @@ mod tests {
         // Audio is buffered, but with no keyframe there is no init segment to write.
         muxer.push(&aac(0, 0)).unwrap();
         assert!(matches!(muxer.finish(), Err(MuxError::MissingAvcConfig)));
+    }
+
+    fn hevc_idr() -> Vec<u8> {
+        crate::hevc::tests::idr_annexb()
+    }
+
+    fn av1_keyframe() -> Vec<u8> {
+        crate::av1::tests::keyframe_tu()
+    }
+
+    fn video_of(codec: Codec, key: bool, pts: i64, dts: i64, data: Vec<u8>) -> Packet {
+        Packet::new(codec, key, k90(pts), k90(dts), data).unwrap()
+    }
+
+    fn config_of(video: VideoConfig) -> Fmp4Config {
+        Fmp4Config {
+            video: Some(VideoTrack {
+                width: 1280,
+                height: 720,
+                config: video,
+            }),
+            audio: Some(audio_track()),
+            origin: None,
+        }
+    }
+
+    /// The video track's sample entry and the decoder configuration box inside it, as
+    /// (entry type, config box type, config box body).
+    fn video_entry(init: &[u8]) -> (String, String, Vec<u8>) {
+        let moov = boxes(init)[1].1;
+        let stsd = find(moov, &["trak", "mdia", "minf", "stbl", "stsd"]);
+        assert_eq!(u32_at(stsd, 12), 1, "one sample entry");
+        let entry = boxes(&stsd[16..])[0].1;
+        assert_eq!(&entry[32..36], &[0x05, 0x00, 0x02, 0xD0], "1280x720");
+        // Eight bytes of header, 78 of visual sample entry fields, then the config box.
+        let config = boxes(&entry[86..]);
+        assert_eq!(config.len(), 1, "only the decoder configuration follows");
+        let (kind, body) = &config[0];
+        (
+            String::from_utf8(entry[4..8].to_vec()).unwrap(),
+            kind.clone(),
+            body[8..].to_vec(),
+        )
+    }
+
+    /// HEVC and AV1 record like H.264: the init segment waits for the first keyframe
+    /// and takes its record from it, under the codec's own sample entry and brand, and
+    /// the samples hold what MP4 stores for the codec.
+    #[test]
+    fn records_hevc_and_av1() {
+        let hevc_record = HevcDecoderConfig::from_annexb(&hevc_idr()).unwrap();
+        let av1_record = Av1CodecConfig::from_obus(&av1_keyframe()).unwrap();
+        let hevc_inter = vec![0, 0, 0, 1, 0x02, 0x01, 0xD0];
+        // A temporal delimiter, then a frame OBU (type 6) with a size field.
+        let av1_inter = vec![0x12, 0x00, 0x32, 0x02, 0xCC, 0xDD];
+        let cases = [
+            (
+                VideoConfig::Hevc(None),
+                Codec::Hevc,
+                hevc_idr(),
+                hevc_inter.clone(),
+                ("hvc1", "hvcC", hevc_record.to_bytes_complete()),
+                b"iso6isomiso2mp41".to_vec(),
+                annexb_to_avcc(&hevc_idr()).unwrap(),
+                annexb_to_avcc(&hevc_inter).unwrap(),
+                VideoConfig::Hevc(Some(hevc_record)),
+            ),
+            (
+                VideoConfig::Av1(None),
+                Codec::Av1,
+                av1_keyframe(),
+                av1_inter,
+                ("av01", "av1C", av1_record.to_bytes()),
+                b"iso6isomiso2av01mp41".to_vec(),
+                av1::to_sample(&av1_keyframe()).unwrap(),
+                vec![0x32, 0x02, 0xCC, 0xDD],
+                VideoConfig::Av1(Some(av1_record)),
+            ),
+        ];
+        for (config, codec, key, inter, entry, brands, key_sample, inter_sample, learned) in cases {
+            let mut muxer = Fmp4Muxer::new(config_of(config)).unwrap();
+            assert!(muxer.start().unwrap().is_none(), "{codec:?}: init waits");
+            let mut segments = muxer
+                .push(&video_of(codec, true, 0, 0, key.clone()))
+                .unwrap();
+            segments.extend(
+                muxer
+                    .push(&video_of(codec, false, 3_000, 3_000, inter))
+                    .unwrap(),
+            );
+            segments.extend(muxer.push(&aac(0, 7)).unwrap());
+            segments.extend(muxer.push(&aac(1_024, 8)).unwrap());
+            segments.extend(
+                muxer
+                    .push(&video_of(codec, true, 6_000, 6_000, key))
+                    .unwrap(),
+            );
+            segments.extend(muxer.finish().unwrap());
+            assert_eq!(muxer.config().video.as_ref().unwrap().config, learned);
+
+            let Segment::Init(init) = &segments[0] else {
+                panic!("{codec:?}: init first");
+            };
+            assert_eq!(&boxes(init)[0].1[16..], &brands[..], "{codec:?} brands");
+            let (kind, config_kind, record) = video_entry(init);
+            assert_eq!((kind.as_str(), config_kind.as_str(), record), entry);
+
+            let fragments = media(&segments);
+            assert_eq!(fragments.len(), 2, "{codec:?}: a fragment per keyframe");
+            let (_, tracks) = read_fragment(fragments[0]);
+            let video: Vec<_> = tracks[0]
+                .1
+                .iter()
+                .map(|s| (s.dts, s.keyframe, s.data.clone()))
+                .collect();
+            assert_eq!(
+                video,
+                [(0, true, key_sample.clone()), (3_000, false, inter_sample)],
+                "{codec:?} samples"
+            );
+            assert_eq!(tracks[1].0, 2, "{codec:?}: the audio track");
+        }
+    }
+
+    /// A video track takes only its own codec's packets.
+    #[test]
+    fn a_video_track_takes_only_its_codec() {
+        let mut muxer = Fmp4Muxer::new(config_of(VideoConfig::Hevc(None))).unwrap();
+        for codec in [Codec::H264, Codec::Av1] {
+            assert!(matches!(
+                muxer.push(&video_of(codec, true, 0, 0, idr_annexb())),
+                Err(MuxError::NoTrack { codec: c }) if c == codec
+            ));
+        }
+        let mut muxer = Fmp4Muxer::new(av_config(None)).unwrap();
+        assert!(matches!(
+            muxer.push(&video_of(Codec::Hevc, true, 0, 0, hevc_idr())),
+            Err(MuxError::NoTrack { codec: Codec::Hevc })
+        ));
+    }
+
+    /// Without a record, HEVC and AV1 need a keyframe carrying theirs, as H.264 does.
+    #[test]
+    fn hevc_and_av1_need_their_records() {
+        for (config, codec, bare_key) in [
+            (
+                VideoConfig::Hevc(None),
+                Codec::Hevc,
+                vec![0, 0, 1, 0x28, 0x01],
+            ),
+            (VideoConfig::Av1(None), Codec::Av1, vec![0x32, 0x00]),
+        ] {
+            let mut muxer = Fmp4Muxer::new(config_of(config)).unwrap();
+            let missing = |r: Result<_, MuxError>| matches!(r, Err(MuxError::MissingDecoderConfig { codec: c }) if c == codec);
+            assert!(missing(muxer.push(&video_of(
+                codec,
+                false,
+                0,
+                0,
+                bare_key.clone()
+            ))));
+            let no_sets = muxer.push(&video_of(codec, true, 0, 0, bare_key));
+            assert!(
+                matches!(
+                    no_sets,
+                    Err(MuxError::MissingHevcParameterSets { .. }
+                        | MuxError::MissingAv1SequenceHeader)
+                ),
+                "{codec:?}: {no_sets:?}"
+            );
+            muxer.push(&aac(0, 0)).unwrap();
+            assert!(missing(muxer.finish()), "{codec:?}");
+        }
     }
 
     #[test]

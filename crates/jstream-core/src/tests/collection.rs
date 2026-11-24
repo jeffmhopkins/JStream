@@ -360,3 +360,31 @@ fn concurrent_changes_leave_the_latest_collection() {
     assert_eq!(files(&dir), ["scenes.json"]);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// The show scene marker is saved as soon as the engine sets it, though it is no
+/// revision, and a new engine loads it (ADR-0210, #1748).
+#[test]
+fn the_show_scene_marker_is_saved_when_it_is_set() {
+    let dir = temp_dir("show-scene");
+    let path = dir.join("scenes.json");
+    {
+        let engine = open(&path);
+        let control = connected(&engine);
+        let rev = batch(&control, edits(vec![create("a"), create("show")]));
+        assert_eq!(rev.ok(), Some(Rev(1)));
+        let marker = || saved(&path).get("show_scene").cloned();
+        assert_eq!(marker().and_then(|v| v.as_str().map(str::to_owned)), None);
+        assert!(engine.set_show_scene(Some(SceneId::new("show"))));
+        assert_eq!(engine.rev(), Rev(1), "not a revision");
+        assert_eq!(marker(), Some(serde_json::json!("show")));
+        assert!(engine.set_show_scene(None));
+        assert_eq!(marker().and_then(|v| v.as_str().map(str::to_owned)), None);
+        assert!(engine.set_show_scene(Some(SceneId::new("show"))));
+    }
+    let control = connected(&open(&path));
+    assert_eq!(
+        scene_ids(&control),
+        (Rev(1), vec!["a".to_owned()]),
+        "loaded as the show scene, which no list shows"
+    );
+}
