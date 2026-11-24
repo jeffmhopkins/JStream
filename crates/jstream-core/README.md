@@ -73,7 +73,8 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   for the apps' crash hook to leave out (#999);
   `connect()` opens a session, and `handles()` counts the handles and sessions that keep
   the engine alive; `rev()`; `set_source_frame` stores the latest RGBA8
-  frame of a source; `output_stats` reads a running output's pipeline counters
+  frame of a source; `set_show_scene` marks (or clears) the internal show scene drawn
+  over program (*Snapshots*, The show scene); `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
   injected `StreamKeyStore`, never under the collection lock, and so does the removal
@@ -763,8 +764,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
   `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`,
-  `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `tests/mcp.rs`,
-  `tests/scenarios.rs`):
+  `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `src/tests/show_scene.rs`,
+  `tests/mcp.rs`, `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end, folders and labels), live values (no `rev` or collection change, a commit as one `rev` and one undo
@@ -772,7 +773,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   commit, a failed commit, cancel and expiry with their audit entries, validation and
   limits, takeover, a deleted item, coalesced `live.changed`, a source's live setting
   drawn until committed or cancelled, and dropped with its source) and a live value drawn
-  over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
+  over the shot in `snapshot.rs`, the internal show scene drawn over program and over a
+  fade, gone when its item is hidden, its items counted as drawn and redrawn as they move, scaled into an output of another size, left out of
+  `scene.list` and `state.get`, and refused as program, preview, a `scene` source or a
+  mix's scene (`src/tests/show_scene.rs`), the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on whatever adapter opens (the software one in CI), frame sheets
   (a `scene.switch_and_watch` showing a fade as it plays, judged so either blending
@@ -1534,7 +1538,11 @@ sets it (`not_found` for a scene the collection doesn't have) and emits
 nothing. After every applied batch, undo and redo the engine reconciles it: the collection's first
 scene goes on program when it is created, a deleted program scene gives way to the
 first scene left (or none), and a reorder never moves it. A scene's `role` changes none
-of this: a group is a scene here, and can go on program. A batch, undo or redo that moves
+of this: a group is a scene here, and can go on program. The internal show scene is the
+exception (*Snapshots*, The show scene): `scene.switch` and `studio.set_preview` refuse it
+with `invalid_argument`, the first scene that goes on program or preview is the first other
+one, and marking the scene on program or preview as the show scene moves them to it
+(`Engine::set_show_scene`, which then emits `studio.changed`). A batch, undo or redo that moves
 program emits `studio.changed` right after its `state.changed`, naming the same request. The
 mock applies the same rules, and the differential script holds the two to each other.
 Program is not saved in the collection file, so an engine that loads one (a restart) starts
@@ -1550,7 +1558,8 @@ studio also names the **warm scenes** (ADR-0117 §7 and
 [ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md), `Studio::warm`, which
 reads the collection): the Preview scene, then the scenes whose `keep_warm` option is
 on, in display order, then the scenes a hotkey's or a trigger binding's `scene.switch`
-names, then the scenes most recently on program, never the program scene, each once,
+names, then the scenes most recently on program, never the program scene or the show
+scene, each once,
 at most the warm budget in all. The Preview scene is warm even past the budget. Right
 after it comes the upcoming scene, the one a show runs to next (`Studio::upcoming`,
 named with `State::set_upcoming`, `not_found` for a scene the collection doesn't hold;
@@ -1916,6 +1925,20 @@ draws nothing. A group that shares its 3D scene's space
 it has no pass or layer, and its children are drawn in the scene's own pass, each placed
 through the group item's pose (*Contents: live sources and snapshots*). Its nesting
 counts toward the same limit, and a deeper one draws flat.
+
+**The show scene.** The internal show scene (`State::show_scene`, set by
+`Engine::set_show_scene`, see ARCH › Data model) is planned with the program mix when
+it shows anything (`Shot::show`, its passes scheduled like a mix's), and drawn wherever
+the program mix is (`Shot::show_of`): every output, with or without an output stage, and
+the program monitor, but not a `scene` mix or a scene's own preview. The program root,
+its scene's pass or a running transition's tracks, is drawn into the canvas-sized
+`GpuKey::UnderShow` layer, which is placed over the canvas under the show scene's own
+items; the scenes they nest are passes beside program's (one that program nests at the
+same depth is drawn once), and its background is never drawn. Its items count as drawn
+items like any pass's (`Shot::drawn_passes`): their `shown` clock, their motion's redraws,
+and the sizes their sources are decoded and captured at. A show scene with no item shown is not planned at all, so a frame without
+overlays is drawn exactly as before, and one with overlays costs one more canvas-sized
+composite. Its nesting counts from it, as a program scene's does.
 
 **Sky backdrops.** A 3D scene whose first environment light has `backdrop` on
 ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)) has its sky drawn

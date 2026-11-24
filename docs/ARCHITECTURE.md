@@ -217,6 +217,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scene, set by `studio.set_preview`; a switch doesn't move it. The collection's first
   scene goes on program and on preview when it is created, and a deleted program or
   preview scene gives way to the first scene left.
+- The **show scene** is an ordinary scene the engine marks as internal
+  (`State::show_scene`, runtime state on the graph, not a revision): wherever `Program`
+  is drawn (every output, recording and virtual camera, and the program monitor), it is
+  drawn over program, with program, any transition included, as its bottom layer and
+  its items above, so overlays are its nested-scene items. Scene lists (`scene.list`,
+  `state.get`) leave it out, and nothing may show it: a `scene` source, a settings
+  reference, a `VideoMix`, program or preview naming it is `invalid_argument`, so no
+  scene can contain it and program never contains itself. A `Scene(id)` mix, the
+  editing canvas and a scene's preview never draw it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
   Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
   shares everything with the other placements of that source except its own placement,
