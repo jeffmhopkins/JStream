@@ -451,7 +451,17 @@ fn Picture(
                         return;
                     }
                     let mut screen = screen.borrow_mut();
-                    if let Err(reason) = screen.show(&header, &frame.payload)
+                    let result = screen.show(&header, &frame.payload);
+                    if screen.wants_keyframe() {
+                        // Behind: the next keyframe now (`preview.keyframe`), rather
+                        // than the stream's next regular one.
+                        let control = control.clone();
+                        spawn_local(async move {
+                            let ask = Action::PreviewKeyframe { channel };
+                            let _asked = act(&control, ask).await;
+                        });
+                    }
+                    if let Err(reason) = result
                         && !screen.h264_failed()
                     {
                         shown.try_set(Shown::Ended(reason));

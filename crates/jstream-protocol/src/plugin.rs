@@ -262,6 +262,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("preview.unsubscribe", N),
     // A session's own views (ADR-0132): a plugin shows no preview streams.
     ("preview.report", N),
+    ("preview.show", N),
+    ("preview.keyframe", N),
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),

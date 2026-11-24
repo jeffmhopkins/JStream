@@ -132,7 +132,7 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// here is not `destructiveHint`. Every other action is: going live or stopping, setting
 /// or clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 30] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 32] = [
     "audio.reset_loudness",
     "channel.nudge",
     "channel.set_value",
@@ -149,7 +149,9 @@ pub(crate) const REVERSIBLE_ACTIONS: [&str; 30] = [
     "overlay.hide",
     "overlay.show",
     "overlay.toggle",
+    "preview.keyframe",
     "preview.report",
+    "preview.show",
     "preview.subscribe",
     "preview.unsubscribe",
     "scene.aim_camera",

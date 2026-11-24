@@ -1824,6 +1824,17 @@ impl Engine {
         })
     }
 
+    /// Each encoder session the stage's preview streams hold, by identity, and the scene
+    /// it shows, for tests of `preview.show`.
+    #[cfg(test)]
+    pub(crate) fn preview_encodes_shown(&self) -> Vec<(u64, Option<SceneId>)> {
+        self.media.as_ref().map_or_else(Vec::new, |host| {
+            lock(&host.gate)
+                .program()
+                .map_or_else(Vec::new, |program| program.preview_encodes().shown())
+        })
+    }
+
     /// Encoder and subscriber counters for `output_id`, if it is running.
     pub fn output_stats_of(&self, output_id: &OutputId) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
@@ -2573,7 +2584,11 @@ impl Engine {
                 },
             })
         } else if let Call::Action {
-            action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
+            action:
+                action @ (Action::PreviewSubscribe { .. }
+                | Action::PreviewUnsubscribe { .. }
+                | Action::PreviewShow { .. }
+                | Action::PreviewKeyframe { .. }),
         } = call
         {
             self.preview_action(previews, action)
@@ -2874,6 +2889,30 @@ impl Engine {
                     // shows it.
                     self.shared.replan_and_sync();
                 }
+                Ok(CallResult::Action { result: None })
+            }
+            Action::PreviewShow { channel, scene_id } => {
+                if let Some(scene_id) = &scene_id
+                    && lock(&self.shared.state)
+                        .graph
+                        .state()
+                        .scene(scene_id)
+                        .is_none()
+                {
+                    return Err(ProtocolError::NotFound {
+                        entity: EntityKind::Scene,
+                        id: scene_id.as_str().to_owned(),
+                    });
+                }
+                if previews.show(&self.shared.previews, channel, scene_id)? {
+                    // Plans the new scene, which the stream waits for, and stops planning
+                    // the old one unless another stream shows it.
+                    self.shared.replan_and_sync();
+                }
+                Ok(CallResult::Action { result: None })
+            }
+            Action::PreviewKeyframe { channel } => {
+                previews.keyframe(&self.shared.previews, channel);
                 Ok(CallResult::Action { result: None })
             }
             other => Err(not_implemented(other.name())),

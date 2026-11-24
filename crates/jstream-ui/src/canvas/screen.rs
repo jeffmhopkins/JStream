@@ -48,6 +48,11 @@ mod native {
         pub fn h264_failed(&self) -> bool {
             false
         }
+
+        /// Whether to ask the engine for a keyframe now. Never, natively.
+        pub fn wants_keyframe(&mut self) -> bool {
+            false
+        }
     }
 }
 
@@ -286,6 +291,12 @@ mod web {
         /// Whether the H.264 decoder has failed, so the stream should fall back to JPEG.
         pub fn h264_failed(&self) -> bool {
             self.failed.get()
+        }
+
+        /// Whether to ask the engine for a keyframe now (`preview.keyframe`): the
+        /// decoder fell behind and is skipping to the next one. True once per skip.
+        pub fn wants_keyframe(&mut self) -> bool {
+            self.feed.take_keyframe_ask()
         }
 
         /// Shows one frame: sizes the canvas to the picture, then decodes and draws it.
