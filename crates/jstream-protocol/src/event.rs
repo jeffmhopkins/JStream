@@ -347,7 +347,7 @@ pub enum Event {
         pass: u64,
     },
     /// A show started, paused, continued, jumped, looped, went off script, ended or
-    /// stopped (ADR-0210, since 0.178): never once a frame. Running a show is studio
+    /// stopped (ADR-0210, since 0.179): never once a frame. Running a show is studio
     /// state, so it carries no `rev`; `studio.get` reports the running show in full.
     #[serde(rename = "show.changed")]
     ShowChanged {

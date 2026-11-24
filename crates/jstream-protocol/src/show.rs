@@ -1,5 +1,5 @@
 //! Shows ([ADR-0210](../../../docs/adr/0210-shows-a-run-order-with-bookmarks.md), since
-//! 0.178): a saved run order of scenes, laid out on tracks in show time, with bookmarks
+//! 0.179): a saved run order of scenes, laid out on tracks in show time, with bookmarks
 //! the show pauses at or jumps to, and loops.
 //!
 //! A show is a collection object (`show.set`, `show.delete`, listed in `state.get`'s
@@ -879,8 +879,8 @@ pub struct RunningShow {
     pub at_ms: u32,
     /// Whether it plays, waits at a pausing bookmark, or was taken off script.
     pub state: ShowState,
-    /// The pausing bookmark it waits at. Omitted unless `state` is `paused`, and when
-    /// `show.pause` paused it between bookmarks.
+    /// The pausing bookmark it waits at. Omitted unless `state` is `paused` at a
+    /// bookmark, so also omitted while `show.pause` holds it between bookmarks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bookmark_id: Option<String>,
     /// How long it has waited at `bookmark_id`, in milliseconds. Omitted unless `state`
