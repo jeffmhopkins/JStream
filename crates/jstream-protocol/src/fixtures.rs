@@ -2236,6 +2236,7 @@ pub(crate) fn actions() -> Vec<Action> {
             at_ms: Some(120_000),
         },
         Action::ShowArm { at_ms: None },
+        Action::ShowPause,
         Action::ShowStop,
         // Overlays over program, with or without a show (ADR-0210).
         Action::OverlayShow {

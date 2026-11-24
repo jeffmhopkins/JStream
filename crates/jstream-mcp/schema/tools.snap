@@ -1393,7 +1393,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -1435,7 +1435,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "properties": {
+                  "type": {
+                    "const": "show.pause",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -11331,7 +11344,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -11373,7 +11386,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "properties": {
+                  "type": {
+                    "const": "show.pause",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -24116,7 +24142,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -24158,7 +24184,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "properties": {
+                  "type": {
+                    "const": "show.pause",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -36496,7 +36535,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -36538,7 +36577,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "properties": {
+                  "type": {
+                    "const": "show.pause",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -48432,7 +48484,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `show` operation: set `op.type` to one of `show.set` (edit), `show.delete` (edit), `show.play` (action), `show.stop` (action), `show.continue` (action), `show.back` (action), `show.skip` (action), `show.go_to` (action), `show.go_to_number` (action), `show.seek` (action), `show.arm` (action). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `show` operation: set `op.type` to one of `show.set` (edit), `show.delete` (edit), `show.play` (action), `show.stop` (action), `show.pause` (action), `show.continue` (action), `show.back` (action), `show.skip` (action), `show.go_to` (action), `show.go_to_number` (action), `show.seek` (action), `show.arm` (action). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Action": {
@@ -49725,7 +49777,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -49767,7 +49819,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "properties": {
+                  "type": {
+                    "const": "show.pause",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -58376,7 +58441,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -58418,7 +58483,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "properties": {
+                  "type": {
+                    "const": "show.pause",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -60448,7 +60526,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -60490,7 +60568,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "properties": {
+                  "type": {
+                    "const": "show.pause",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
