@@ -124,13 +124,19 @@ fn a_mod_crossing_a_level_presses_and_releases_at_most_once_a_gap() {
         }],
         "falling back releases"
     );
-    // Up again within the gap: no second press.
+    // Up again within the gap: held back, then pressed once the gap is over.
     put(&live, "params", &values(0.9));
     assert!(
         runner
             .tick(&graph, &live, t0 + MIN_GAP + Duration::from_millis(20))
             .is_empty()
     );
+    assert_eq!(
+        runner.tick(&graph, &live, t0 + MIN_GAP * 3).len(),
+        1,
+        "the held-back press runs after the gap"
+    );
+    assert!(runner.tick(&graph, &live, t0 + MIN_GAP * 4).is_empty());
 }
 
 #[test]

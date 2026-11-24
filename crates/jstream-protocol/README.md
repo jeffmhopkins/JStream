@@ -1616,7 +1616,7 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - **`midi.last_notes`** (0.178, ADR-0202) answers `MidiNoteInfo {input, channel, note,
   velocity, count}` for each MIDI input whose latest notes hold a note-on, for a client
   that learns a note: the input whose `count` (its note events, on and off) grows played
-  it.
+  it. A note-off doesn't move the note it reports.
 - A value binding's input may also be `kind` `channel` (since 0.169), and its optional
   `amount` names a channel that scales it: its value is `from + (value - from) ×
   amount`, so a channel at 0 holds it at `from` (a missing channel scales by 1).

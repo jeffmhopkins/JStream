@@ -1020,7 +1020,7 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:aecfb345f02245db", by = "agent:claude", note = "Re-read: the protocol overview holds; data triggers are detailed in the protocol README" }
+stamp = { hash = "b3:369dd9f509e750f9", by = "agent:claude", note = "query.rs change is only a doc line on MidiLastNotes (a note-off doesn't move it); re-read this section, it still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/rendering.rs"]
 stamp = { hash = "b3:c0769385ccb93e44", by = "agent:claude", note = "Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; the regenerated snapshots and rendering.rs's doc change the default only; the Reflections bullet names no step default and holds." }
@@ -2013,7 +2013,7 @@ stamp = { hash = "b3:4c313edf233da586", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:7555920d25b26a7d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-motion"."body"]
-stamp = { hash = "b3:a96f370ea7510e0f", by = "agent:claude", note = "Added the Data triggers entry (ADR-0202): equals/rises/falls press and release, changes, * keys, starting baseline, 50 ms gap, used-state gate; ActionBindings skips data triggers | kept from the merged side: Transitions bullet edited: a 3D group's child track places each end through its groups each frame (Visual::groups, paired as Visual::motion in plan); motion.rs adds TrackMotion::offsets_on, which the bullet list's Motion entry doesn't go into; holds" }
+stamp = { hash = "b3:9708a53b5684258f", by = "agent:claude", note = "Data triggers entry now says a press MIN_GAP holds back fires once the gap is over if its condition still holds (Followed.pending in data_triggers.rs, test rises_and_falls) | kept from the merged side: Transitions bullet edited: a 3D group's child track places each end through its groups each frame (Visual::groups, paired as Visual::motion in plan); motion.rs adds TrackMotion::offsets_on, which the bullet list's Motion entry doesn't go into; holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/action_bindings.rs"]
 stamp = { hash = "b3:7771e01c25842011", by = "agent:claude", note = "Added the Data triggers entry (ADR-0202): equals/rises/falls press and release, changes, * keys, starting baseline, 50 ms gap, used-state gate; ActionBindings skips data triggers" }
@@ -4575,7 +4575,7 @@ stamp = { hash = "b3:e90844923a76aa3e", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "added 'Views report back': preview.report's label rules, ViewCounts fields, run restart, session-only, 16-view limit, errors; checked against command.rs, preview.rs and the engine | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
 
 ["CRATE-jstream-protocol#bindings"."body"]
-stamp = { hash = "b3:496d4b4878befa16", by = "agent:claude", note = "Added the Data triggers bullet and midi.last_notes (ADR-0202)" }
+stamp = { hash = "b3:325fee250f98f734", by = "agent:claude", note = "re-read; Trigger::Data and DataOn description still match binding.rs" }
 
 ["CRATE-jstream-protocol#bindings"."dep:docs/adr/0122-controller-input-midi-and-one-binding-system.md"]
 stamp = { hash = "b3:90465e14077d637b", by = "agent:r9bzj2", note = "New section for 0.96 controller bindings (ADR-0122): binding.set/clear, Trigger, Binding, state.get bindings, delete.plan bindings, removed_bindings, entity binding, checked against binding.rs, the graph's and the mock's checks, and the parity cases | merge: Merged wave/alpha5 (page API schema 8, projects 0.94, collection tool, #1272's crates): re-read for what it changed here; the binding text holds beside it" }
@@ -4602,7 +4602,7 @@ stamp = { hash = "b3:8e4501071dcb7376", by = "agent:mute-thread", note = "Renumb
 stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:aecfb345f02245db", by = "agent:claude", note = "Re-read: midi.last_notes is documented under bindings; calls section holds" }
+stamp = { hash = "b3:369dd9f509e750f9", by = "agent:claude", note = "query.rs change is only a doc line on MidiLastNotes (a note-off doesn't move it); re-read this section, it still holds" }
 
 ["CRATE-jstream-protocol#camera-aim"."body"]
 stamp = { hash = "b3:beaf081f013c6b07", by = "agent:ptz-builder", note = "new section for camera_aim.rs: the actions, the query, the checks, binding and plugin classes, matching the code; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -4665,7 +4665,7 @@ stamp = { hash = "b3:aaea5a5d3bcc0c6f", by = "agent:issues-thread", note = "Re-r
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:aecfb345f02245db", by = "agent:claude", note = "Re-read: plugin.rs lists midi.last_notes as a read; calls contents hold" }
+stamp = { hash = "b3:369dd9f509e750f9", by = "agent:claude", note = "query.rs change is only a doc line on MidiLastNotes (a note-off doesn't move it); re-read this section, it still holds" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/settings.rs"]
 stamp = { hash = "b3:12085313843efe02", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**" }
@@ -4758,7 +4758,7 @@ stamp = { hash = "b3:2031d27ef862a130", by = "agent:claude", note = "Edited: Hot
 stamp = { hash = "b3:058a20509ea722cf", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to filter.rs, output.rs, hotkey.rs, encoder.rs, mix.rs, audio.rs, organise.rs, query.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#contents-state"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:aecfb345f02245db", by = "agent:claude", note = "Re-read: query.rs gains midi.last_notes; state contents hold" }
+stamp = { hash = "b3:369dd9f509e750f9", by = "agent:claude", note = "query.rs change is only a doc line on MidiLastNotes (a note-off doesn't move it); re-read this section, it still holds" }
 
 ["CRATE-jstream-protocol#design"."body"]
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now the preface plus Envelope and versioning and Tagging; the other subsections moved out unchanged as their own sections. Re-read: the envelope, handshake, message size, semver rule and tagging hold against envelope.rs, version.rs (can_serve) and lib.rs, the narrowed covers; depends_on keeps R-API-001 and R-API-002, which these two subsections cite; ADR-0013, R-ARCH-006 and R-API-004 moved with the subsections that cite them (#calls, #batches); the schema files moved to #compatibility" }
@@ -5046,7 +5046,7 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:aecfb345f02245db", by = "agent:claude", note = "Re-read: Trigger::Data, DataOn and MidiNoteInfo are additions within the crate's purpose" }
+stamp = { hash = "b3:369dd9f509e750f9", by = "agent:claude", note = "query.rs change is only a doc line on MidiLastNotes (a note-off doesn't move it); re-read this section, it still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/rendering.rs"]
 stamp = { hash = "b3:c0769385ccb93e44", by = "agent:claude", note = "Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; rendering.rs's DEFAULT doc says the fewest steps; the purpose holds." }
@@ -5091,7 +5091,7 @@ stamp = { hash = "b3:aaea5a5d3bcc0c6f", by = "agent:issues-thread", note = "Edit
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:aecfb345f02245db", by = "agent:claude", note = "Re-read: midi.last_notes runtime query documented beside last_controls in bindings; queries section holds" }
+stamp = { hash = "b3:369dd9f509e750f9", by = "agent:claude", note = "midi.last_notes entry now says a note-off doesn't move the note it reports, matching MidiInputs::last_notes" }
 
 ["CRATE-jstream-protocol#shared-values"."body"]
 stamp = { hash = "b3:1a6b4bf810de3cb0", by = "agent:claude", note = "Edited: the tempo.* bullet says a page reads them only with page_api_tempo, never through page_api_values." }

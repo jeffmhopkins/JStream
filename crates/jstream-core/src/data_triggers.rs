@@ -17,7 +17,8 @@
 //!   holds when it first arrives, is where it starts from: it fires nothing. A key that
 //!   goes (its sender stops, or it goes stale) counts as not holding.
 //! - A trigger fires at most once every [`MIN_GAP`], so a field that flickers doesn't
-//!   run its action on every message.
+//!   run its action on every message. A press held back by the gap runs once the gap is
+//!   over if its condition still holds; a `changes` held back is dropped.
 //! - A press whose action has a release is held until its condition stops, or until
 //!   its binding is changed or removed.
 //!
@@ -43,6 +44,9 @@ struct Followed {
     holds: bool,
     /// When it last fired.
     fired: Option<Instant>,
+    /// A press [`MIN_GAP`] held back, run once the gap is over if its condition still
+    /// holds.
+    pending: bool,
     /// The action it ran and the release it holds, while pressed.
     held: Option<(Action, Action)>,
 }
@@ -92,6 +96,7 @@ impl DataTriggers {
                         seen: now_seen,
                         holds,
                         fired: None,
+                        pending: false,
                         held: None,
                     },
                 );
@@ -112,18 +117,25 @@ impl DataTriggers {
             followed.holds = is;
             let press = match on {
                 DataOn::Changes => changed,
-                _ => !was && is,
+                _ => (!was || followed.pending) && is,
             };
+            if !is {
+                followed.pending = false;
+            }
             let release = !matches!(on, DataOn::Changes) && was && !is;
             if release && let Some((_, release)) = followed.held.take() {
                 run.push(release);
             }
-            if press
-                && followed
-                    .fired
-                    .is_none_or(|at| now.duration_since(at) >= MIN_GAP)
-            {
+            let open = followed
+                .fired
+                .is_none_or(|at| now.duration_since(at) >= MIN_GAP);
+            // A press within the gap waits for it, unless its condition stops first.
+            if press && !open && !matches!(on, DataOn::Changes) {
+                followed.pending = true;
+            }
+            if press && open {
                 followed.fired = Some(now);
+                followed.pending = false;
                 run.push(action.clone());
                 if !matches!(on, DataOn::Changes)
                     && let Some(release) = action.on_release()

@@ -511,8 +511,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   segment matches. `equals`, `rises` and `falls` run the action when the condition
   starts to hold for any key and its release when it stops; `changes` runs it on each
   new value. A trigger's first read and a key's first arrival fire nothing, a key that
-  goes counts as not holding, a trigger fires at most once every `MIN_GAP` (50 ms), and
-  a held press is let go when its binding changes or goes. `ActionBindings` skips data
+  goes counts as not holding, a trigger fires at most once every `MIN_GAP` (50 ms) (a press
+  that limit holds back fires once it is over if its condition still holds), and a held press is let go when its binding changes or goes. `ActionBindings` skips data
   triggers. `midi.last_notes` answers from `MidiInputs::last_notes`.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows

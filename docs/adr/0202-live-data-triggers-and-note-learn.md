@@ -52,7 +52,8 @@ and learning a note for the Triggers UI.
    with scene 3 already selected doesn't jump the show. A key that goes away counts as
    not holding.
 5. **At most once every 50 ms.** A trigger fires at most once every 50 ms, so a field
-   that flickers doesn't run its action on every message.
+   that flickers doesn't run its action on every message. A press the limit holds back
+   fires once it is over if its condition still holds; a `changes` held back is dropped.
 6. **`midi.last_notes`.** This query answers `MidiNoteInfo {input, channel, note,
    velocity, count}` for each MIDI input's latest note-on, where `count` is the input's
    note events. A client learning a note watches for the input whose count grows, as

@@ -273,7 +273,8 @@ pub enum Query {
     MidiLastControls,
     /// Each MIDI input's latest note-on (since 0.178, ADR-0202), by input name: what a
     /// client that learns a note for a binding watches. Runtime state, so no `rev`; an
-    /// input whose latest notes hold no note-on is left out.
+    /// input whose latest notes hold no note-on is left out. It reads each input's last
+    /// 16 note events, so a note-off doesn't move it.
     #[serde(rename = "midi.last_notes")]
     MidiLastNotes,
     /// Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by
