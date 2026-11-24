@@ -310,6 +310,40 @@ impl Engine {
         Ok(())
     }
 
+    /// Makes `scene_id` the internal show scene, or clears it with `None`: the scene
+    /// every output, recording, virtual camera and the program monitor draw over
+    /// program, with program (its transitions included) as its bottom layer and its
+    /// items above. Its items are ordinary items: what they show, where, and whether
+    /// they are shown is edited as any scene's. Clients never see it in the scene lists,
+    /// and nothing may show it: no `scene` source, settings reference, video mix,
+    /// program or preview. It is runtime state, not a revision, and emits no event; if
+    /// program or preview was on it, they move to the first other scene.
+    ///
+    /// Returns `false`, and changes nothing, for a scene the collection doesn't have or
+    /// that something already shows ([`Graph::set_show_scene`]).
+    pub fn set_show_scene(&self, scene_id: Option<SceneId>) -> bool {
+        let mut guard = lock(&self.shared.state);
+        if !guard.graph.set_show_scene(scene_id) {
+            return false;
+        }
+        let state = &mut *guard;
+        let moved = state.studio.reconcile(state.graph.state());
+        state.publish_warm();
+        state.redraw();
+        let mut wake = Vec::new();
+        if moved {
+            state.emit_studio(
+                &ClientId::new("engine"),
+                &RequestId::new("show"),
+                None,
+                &mut wake,
+            );
+        }
+        drop(guard);
+        wake_all(wake);
+        true
+    }
+
     /// Adds an output in the `stopped` state, so `output.start`, `output.stop` and
     /// `output.status` can name it. Outputs are runtime state: this changes no `rev` and
     /// emits no event. Adding an ID twice keeps the first.
