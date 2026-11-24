@@ -44,6 +44,10 @@ The one exception is a series: the Sequence panel's lanes take `--accent`, `--ok
 apart. A sequence's own mark is teal, `--code-type`: its icon in the Scenes panel and the
 edge of an event chip, as a keyframe's is its purple diamond.
 
+A source's kind has a mark too, a dot on its chip in the Mappings panel: MIDI
+`--code-keyword`, JTunnel and other live data `--code-type`, a channel `--accent` and a key
+`--warn`, only to tell the kinds apart.
+
 <a id="buttons"></a>
 ## Buttons
 <!-- @section

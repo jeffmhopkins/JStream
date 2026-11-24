@@ -240,6 +240,11 @@ Contents ([Design](#design) explains the choices):
   the Channels panel (`channels.rs`: `Channels`, the channel
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
+  the Mappings panel (`mappings.rs`: `Mappings`, its Mappings, Sources and Triggers tabs over
+  `live_sources`, arming through the Shell's `MappingMode`, with a source's live value,
+  what moved and a Mod's reader tested natively, over `mapping_index.rs`, every
+  reader grouped by source with the edits that write one back, bypass it, name a Mod and
+  list and remove what starts and stops a sequence, tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
   point order, the lane's drawn path and each trigger's sentence tested natively), its
   Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text,
@@ -887,7 +892,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   control, `dragged` turns pointer travel into the amount (200 px the whole range, a
   tenth as fast with Shift), letting go after less than 3 px is a click that maps
   nothing, the click that follows a press is swallowed, Escape cancels the drag or
-  disarms, and `[` and `]` step the armed Mod (`stepped`). The body carries
+  disarms, and `[` and `]` step the armed Mod (`stepped_in`: a Mod named in the Mappings panel is armed as its channel, and stepping goes on from it). The body carries
   `mapping-mode` for the styles. The setting's control button (`learn.rs`) watches
   `drag` for its own ID: it shows `amount_label` of `ends_after` while the drag runs, and
   on `done` writes one `binding.set_value` reading the armed source from where the
@@ -922,6 +927,38 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one
   `channel.set` of the whole channel. `live_values` reads `channel.values` every 100 ms
   while a panel that shows values lives.
+- **Mappings** (`panels/mappings.rs` over `mapping_index.rs`). The Mappings panel
+  (`PanelId::Mappings`, in the bottom dock from the View menu) shows everything that is
+  mapped. `mapping_index::readers` lists every reader of a source wherever it is held
+  (a channel's `inputs`, a value binding, an item's `motion` as each scene shows it, a
+  keyframe's only where it differs from its parent's, and a camera's `camera_motion`),
+  and `rows` groups them by what drives them: each channel with what sets it (its inputs,
+  the keys and `bindings` whose action switches, sets or nudges it, the sequences with a
+  lane on it) and everything that follows it or that it scales (`amount`), then each MIDI
+  control or data field read directly, all of its readers under it. A channel whose only
+  input is one Mod (`named_mod`) is that Mod's name and is shown once, as "Camera roll
+  (Mod 20)". The **Mappings** tab draws them as a table: the source, its live value
+  (`channel.values`, or `live_sources` for a named Mod and a direct source), and per target its Amount (one-sided "+15°", centred
+  "±20°", or "0 → 6.5" for a value binding, which replaces the value), Mode, Smoothing (at
+  least `MIN_CHANNEL_SMOOTHING_MS` through a channel), Curve and Bypass (a motion row's
+  `enabled`), each edited in place as one edit of the list that holds it
+  (`write_all`, so two readers in one list change together), and ×. A search, "On
+  program now" (the program scene), the kind of source and "Find by moving a control"
+  (the first control or Mod that moves, `live_sources::moved`) narrow it; "+ Target…" arms the
+  group's source. The **Sources** tab shows each sender's 32 Mods four by eight: a name
+  box (`name_mods_edits`: a new channel with the Mod as its only input at 0 ms, the
+  mappings that read the Mod directly moved onto it, one batch; a rename of the channel
+  that names it; at most 40 bytes, shown while typing; Enter goes to the next, Escape
+  restores, several pasted lines fill the Mods after it), what it drives and its live
+  bar; the rest of a cell arms it in the Shell's `MappingMode` (`mapping_mode.rs`), whose
+  bar shows it, takes the drags, steps the armed Mod with `[` and `]` and disarms on
+  Escape; a named Mod is armed as its channel). Beside the grid, the armed source's targets, then the other sources (MIDI
+  controls seen, channels, keys that switch one), which arm the same way. The **Triggers**
+  tab is `triggers::KeysAndMidi` (every key and MIDI trigger with each action it runs),
+  then each sequence's starts and stops (`mapping_index::sequence_triggers`), with Edit,
+  which opens the Sequence panel on it, and Remove (`remove_sequence_trigger`, only the
+  trigger the row was drawn from). The panel reads
+  what is arriving through `live_sources()` (below) while it lives.
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).
   The Sequence panel (`PanelId::Sequence`, in the bottom dock from the View menu) edits a
   timeline with lanes of the selected scene (a keyframe's parent): the one in

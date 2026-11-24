@@ -2702,6 +2702,72 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .control-menu .menuitem.danger, .seq-panel .menuitem.danger, .chan-delete.menuitem.danger { background: transparent; border-color: transparent; color: var(--danger-text); font-weight: 400; }
 .control-menu .menuitem.danger:hover:not(:disabled), .seq-panel .menuitem.danger:hover:not(:disabled), .chan-delete.menuitem.danger:hover:not(:disabled) { background: var(--menu-hover); border-color: transparent; }
 
+/* The Mappings panel (UI-FEATURES MP-01, MP-02). `mp-`, apart from the Map control dialog's `map-`. */
+.mp-panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.mp-tabs { align-self: flex-start; }
+.mp-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mp-search { flex: 1 1 220px; min-width: 160px; }
+.mp-toggle { height: 28px; padding: 0 10px; font-size: 12px; }
+.mp-toggle[aria-pressed="true"] { background: var(--selected); border-color: var(--accent); color: var(--text); }
+.mp-find.learning, .mp-caught { color: var(--warn); }
+.mp-caught { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; }
+.mp-table { display: flex; flex-direction: column; min-width: 0; overflow-x: auto; }
+.mp-head, .mp-group { display: grid; grid-template-columns: minmax(150px, 1.1fr) 110px minmax(520px, 4fr); gap: 0 10px; }
+.mp-head { padding: 0 6px 4px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.mp-head-targets, .mp-target { display: grid; grid-template-columns: minmax(140px, 1fr) 150px 64px 88px 110px 88px; gap: 0 8px; align-items: center; }
+.mp-group { padding: 6px; border-bottom: 1px solid var(--line); align-items: start; }
+.mp-group.armed { background: var(--selected); }
+.mp-source { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding-top: 3px; }
+.mp-subs { display: flex; flex-wrap: wrap; gap: 4px; }
+.mp-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 24px; padding: 0 9px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-chip::before { content: ""; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.mp-chip.small { height: 18px; padding: 0 6px; font-size: 11px; color: var(--muted); }
+.mp-chip.link { cursor: pointer; }
+.mp-chip.link:hover { background: var(--hover); }
+.mp-chip.midi::before, .mp-dot.midi { background: var(--code-keyword); }
+.mp-chip.data::before, .mp-dot.data { background: var(--code-type); }
+.mp-chip.channel::before, .mp-dot.channel { background: var(--accent); }
+.mp-chip.key::before, .mp-dot.key { background: var(--warn); }
+.mp-dot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; }
+.mp-level { padding-top: 7px; }
+.mp-live { display: flex; align-items: center; gap: 6px; }
+.mp-live .meter-bar { flex: 1 1 auto; }
+.mp-fill { display: block; height: 100%; background: var(--ok); }
+.mp-unseen { color: var(--warn); }
+.mp-targets { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mp-target { min-height: 30px; }
+.mp-target.bypassed .mp-target-name { color: var(--faint); text-decoration: line-through; }
+.mp-target-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mp-amount { display: flex; align-items: center; gap: 4px; color: var(--link); }
+.mp-range .hint { flex: 0 0 auto; }
+.mp-span-rest { grid-column: span 4; }
+.mp-end { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.mp-bypass { height: 22px; padding: 0 6px; border: none; background: none; color: var(--dim); font-size: 11px; }
+.mp-bypass[aria-pressed="true"] { color: var(--warn); }
+.mp-add { align-self: flex-start; height: 24px; padding: 0 6px; border: none; background: none; color: var(--link); font-size: 12px; }
+.mp-add[aria-pressed="true"] { color: var(--accent); }
+.mp-sources-tab { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; align-items: start; }
+.mp-grids { min-width: 0; overflow-x: auto; }
+.mp-mods { display: grid; grid-template-columns: repeat(4, minmax(124px, 1fr)); gap: 4px; }
+.mp-mod { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; grid-template-rows: auto 3px; gap: 2px 4px; align-items: center; padding: 4px 6px 3px; border: 1px solid var(--line); border-radius: 5px; background: var(--raised); cursor: pointer; }
+.mp-mod:hover { border-color: var(--border-strong); }
+.mp-mod.armed { border-color: var(--accent); background: var(--selected); }
+.mp-mod-n { height: 20px; padding: 0; border: none; background: none; color: var(--dim); font-size: 11px; text-align: right; }
+.mp-mod.armed .mp-mod-n { color: var(--text); font-weight: 700; }
+.mp-mod-name { min-width: 0; height: 20px; padding: 0 4px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--text); font-size: 12px; }
+.mp-mod-name::placeholder { color: var(--faint); }
+.mp-mod-name:hover, .mp-mod-name:focus { border-color: var(--border); background: var(--app); }
+.mp-mod-count { min-width: 14px; font-size: 11px; text-align: right; }
+.mp-mod-count.over { color: var(--problem); }
+.mp-mod-bar { grid-column: 1 / -1; height: 3px; }
+.mp-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mp-armed { display: flex; flex-direction: column; gap: 2px; }
+.mp-armed .mp-target { grid-template-columns: minmax(120px, 1fr) 130px 0 0 0 64px; }
+.mp-armed .mp-mode, .mp-armed .mp-smooth, .mp-armed .mp-curve { visibility: hidden; }
+.mp-other-bar { flex: 0 0 48px; }
+.mp-triggers { display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
+.chan-row.armed { background: var(--selected); }
+
 /* The Map control dialog (UI-FEATURES VC-03): a source picker over a mapping's range,
    smoothing and curve. */
 .modal.map-dialog { width: min(640px, calc(100vw - 32px)); }

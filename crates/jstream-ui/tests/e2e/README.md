@@ -509,11 +509,19 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   drag tagging the field "+90°" and sending one edit while the field keeps its stored
   value, the same armed Mod mapping X as one more edit, and the menu's Remove taking the
   rotation mapping off.
+- **Mappings** (`mappings.spec.js`): the Mappings panel from the View menu saying nothing
+  is mapped, then listing a channel made in the Channels panel as a group with
+  "+ Target…"; a search that matches nothing saying so; a click on the channel opening its
+  card; "+ Target…" arming it, which the Sources tab shows beside its "No JTunnel sender"
+  hint, and Escape disarming it; and, with a live sender, naming Mod 20 in the Sources
+  tab, which makes its channel, shown in the Mappings tab as "Camera roll (Mod 20)" with
+  the Mod's live value; and the Triggers tab saying nothing runs yet and no sequence
+  starts by itself, then binding F8 to switch to Intro.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
   Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
-  menu's thirteen panels, adding Live chat, which says it waits on YouTube sign-in.
+  menu's fourteen panels, adding Live chat, which says it waits on YouTube sign-in.
 - **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

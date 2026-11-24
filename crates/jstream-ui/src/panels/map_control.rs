@@ -276,8 +276,8 @@ pub fn channel_reader(channel_id: &str, range: (f64, f64)) -> MotionKind {
     }
 }
 
-/// What `chord` does now, in words, when it is bound to anything but a channel's
-/// switch: mapping it here takes it from that.
+/// Whether `chord` is bound to anything but a channel's switch: mapping it here adds to
+/// that, since a chord runs several actions (ADR-0208).
 pub fn key_taken(collection: &Collection, chord: &Chord) -> bool {
     collection.hotkeys.iter().any(|b| &b.chord == chord) && key_channel(collection, chord).is_none()
 }
@@ -948,7 +948,7 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                     c.channel_name(&id)
                 ),
                 None if key_taken(c, &chord) => {
-                    format!("{key} is bound to something else, which this mapping replaces.")
+                    format!("{key} already runs something else. It keeps doing that and switches this setting too.")
                 }
                 None => format!(
                     "{key} will switch this setting between its off and on values, through a channel other settings can follow too."
@@ -1412,7 +1412,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_bound_to_something_else_is_taken_and_rebound() {
+    fn a_key_bound_to_something_else_keeps_it_and_switches_the_setting_too() {
         let mut c = collection();
         let chord = Chord::new("F6");
         let scene = SceneId::new("scn_1");
@@ -1439,7 +1439,6 @@ mod tests {
             [
                 Edit::ChannelSet { .. },
                 Edit::BindingSetValue { .. },
-                Edit::HotkeyClear { .. },
                 Edit::HotkeySet { .. }
             ]
         ));

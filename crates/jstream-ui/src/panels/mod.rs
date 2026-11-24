@@ -31,6 +31,7 @@ pub mod looks;
 pub mod map_control;
 pub mod map_target;
 pub mod mapping_mode;
+pub mod mappings;
 pub mod mixer;
 pub mod motion;
 pub mod number;
