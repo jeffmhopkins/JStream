@@ -1604,15 +1604,15 @@ beside it ([Design › Studio mode](#design)).
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
   on the source's runtime size, which the canvas doesn't evaluate a legacy transform
   against yet (ADR-0022 decision 5), and a note top left counts such items. Over the live
-  picture only the selected items, the box under the pointer and hidden items (which
-  aren't in the picture but still take clicks) are outlined, so an unselected source
-  shows no box; without the picture every box gets a faint outline and
-  its name. The name sits just inside the box's top-left corner and runs along its
+  picture only the selected items and the box under the pointer are outlined, so an
+  unselected source shows no box; without the picture every visible box gets a faint
+  outline and its name. A hidden item draws nothing and isn't hit, marqueed or snapped
+  to unless it is selected (`Layout::seen_boxes`, `seen_shapes`, #1732). The name sits just inside the box's top-left corner and runs along its
   top edge, so it turns with the box; a flip mirrors the picture and not the box, and
   the name stays on that corner. On a mirrored box the glyphs still grow into the
   box, so the name sits about one line deeper. When that corner or the far end of
   the edge is behind the viewer, or the edge has no direction, the name stays
-  upright on the box's bounds. Hidden items are drawn dashed, and the box
+  upright on the box's bounds. A selected hidden item is drawn dashed, and the box
   under the pointer gets a light outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they

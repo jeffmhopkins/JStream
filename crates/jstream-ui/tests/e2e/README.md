@@ -249,7 +249,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   on the canvas tools over an item leaves the selection alone; a row's lock button
   locks the Backdrop, after which a drag selects it but leaves it in place, the readout
   reads “640 × 360 · locked”, an arrow key sends nothing, and the item menu's checked
-  Lock unlocks it.
+  Lock unlocks it; a row's eye hides the Backdrop, after which it has no box and a click
+  where it was selects nothing, until its row is selected and it shows a dashed outline,
+  and showing it again draws a solid one (#1732).
 - **Crop** (`crop.spec.js`): the Crop tool, C, V, Escape, the item menu's Crop and a
   switch of scene enter and leave crop mode, whose readout says there is no source size
   while the engine reports none, and then a handle drag resizes as usual; with `sourceSizes` giving the Backdrop's source a size,
