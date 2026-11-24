@@ -310,11 +310,13 @@ Contents ([Design](#design) explains the choices):
   line and an (i), then a Probe resolution select (Up to 128, 256 or 512 px,
   `max_probe_resolution`, sent with `probe_cap`) and a Reflection quality select (Low,
   Medium or High: 16, 32 or 64 steps, `screen_space_steps`, sent with
-  `reflection_steps`). It reads the switches with
+  `reflection_steps`) and a 3D model resolution select (Automatic, Full, 85%, 75%, 67%
+  or 50%, `model_resolution`, sent with `model_resolution`,
+  [ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an
   engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
-  `read`, `set`, each `Switch`'s change, the probe cap and the reflection steps are
+  `read`, `set`, each `Switch`'s change, the probe cap, the reflection steps and the model resolution are
   tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Audio plugins section of
   the Settings dialog's Audio page: the CLAP scan's folders, the effects found and the files that failed
