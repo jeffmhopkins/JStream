@@ -214,4 +214,11 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
 | [ADR-0203](0203-mappings-add-or-replace.md) | A mapping adds to the value it drives or replaces it, and can be bypassed | accepted | agent |  |
 | [ADR-0206](0206-audio-level-drives-channels-and-bindings.md) | An audio level drives channels and value bindings | accepted | agent |  |
+| [ADR-0208](0208-several-actions-per-key-or-trigger.md) | A key chord or a controller trigger runs several actions, and output.toggle | accepted | agent |  |
+| [ADR-0209](0209-value-bindings-aim-ptz-cameras.md) | PTZ cameras in the desktop app: the camera list, the PTZ panel, and value bindings that aim a head | accepted | agent |  |
+| [ADR-0210](0210-shows-a-run-order-with-bookmarks.md) | Shows: a saved run order of scenes, with bookmarks, loops and Continue | accepted | agent |  |
+| [ADR-0211](0211-a-filters-pixel-settings-count-in-its-inputs-extent.md) | A built-in filter's pixel settings count in its input's extent | accepted | agent |  |
+| [ADR-0212](0212-a-warm-scenes-stills-stay-uploaded.md) | A warm scene's still images stay uploaded on the program stage | accepted | agent |  |
+| [ADR-0213](0213-number-drags-follow-live.md) | Filter settings, opacity and gains are live values, so every number drag follows live | accepted | agent |  |
+| [ADR-0214](0214-a-timer-restarts-when-shown.md) | A timer starts its count again when the program shows it again | accepted | agent |  |
 <!-- @generated end adr-index -->
