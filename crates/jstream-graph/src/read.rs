@@ -64,14 +64,23 @@ impl Graph {
         })
     }
 
-    /// The `scene.list` result: every scene in display order, with its item count.
+    /// The scenes clients see, in display order: every scene but the internal show
+    /// scene, which the engine keeps to itself.
+    fn listed_scenes(&self) -> impl Iterator<Item = &Scene> {
+        let show = self.state.show_scene();
+        self.state
+            .scenes()
+            .iter()
+            .filter(move |scene| Some(&scene.id) != show)
+    }
+
+    /// The `scene.list` result: every scene in display order, with its item count,
+    /// except the internal show scene.
     pub fn scene_list(&self) -> QueryResult {
         QueryResult::SceneList {
             rev: self.rev,
             scenes: self
-                .state
-                .scenes()
-                .iter()
+                .listed_scenes()
                 .map(|scene| SceneSummary {
                     scene_id: scene.id.clone(),
                     name: scene.name.clone(),
@@ -173,7 +182,7 @@ impl Graph {
                 .sources()
                 .map(|s| s.to_info(&self.state))
                 .collect(),
-            scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
+            scenes: self.listed_scenes().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
             transitions: Box::new(self.state.transitions_info()),

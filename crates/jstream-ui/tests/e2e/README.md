@@ -248,7 +248,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   on the canvas tools over an item leaves the selection alone; a row's lock button
   locks the Backdrop, after which a drag selects it but leaves it in place, the readout
   reads “640 × 360 · locked”, an arrow key sends nothing, and the item menu's checked
-  Lock unlocks it.
+  Lock unlocks it; a row's eye hides the Backdrop, after which it has no box and a click
+  where it was selects nothing, until its row is selected and it shows a dashed outline,
+  and showing it again draws a solid one (#1732).
 - **Crop** (`crop.spec.js`): the Crop tool, C, V, Escape, the item menu's Crop and a
   switch of scene enter and leave crop mode, whose readout says there is no source size
   while the engine reports none, and then a handle drag resizes as usual; with `sourceSizes` giving the Backdrop's source a size,
@@ -527,7 +529,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   of `timing` and blanks the field again.
 - **Studio mode** (`studio.spec.js`): turning studio mode on puts the canvas, the
   studio controls and the program monitor side by side, labelled "Preview · Main" and
-  "Program · Main", and turning it off takes the controls and the monitor away;
+  "Program · Main", and turning it off takes the controls and the monitor away; with
+  a 1080 × 1920 canvas they stay side by side in a 1600 × 1000 window and stack,
+  preview over the controls over program at the same width, in a 1080 × 1900 one;
   Transition and Cut are off while preview is the program scene; a scene clicked onto
   preview goes to program with Transition, and the old program scene comes back on
   preview, where the canvas shows it; with Swap off, Cut takes the preview scene and it
