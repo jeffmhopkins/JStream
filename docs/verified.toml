@@ -6681,7 +6681,7 @@ stamp = { hash = "b3:d38089f7c063f4c3", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:b204a6251c10057f", by = "agent:st6-docs", note = "Re-read the Source trait and media kind against source.rs, media/mod.rs, player.rs and tests/media.rs: documented seek(at, to) (default restarts) and duration() (default None), the media file's seek (forward or back, past-end wrap or last frame, ends a hold) and its length (container, else player's shared length), and the new media.rs and player.rs tests." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/player.rs"]
-stamp = { hash = "b3:1e3dedd399882bbe", by = "agent:st6-docs", note = "Re-read the Source trait and media kind against source.rs, media/mod.rs, player.rs and tests/media.rs: documented seek(at, to) (default restarts) and duration() (default None), the media file's seek (forward or back, past-end wrap or last frame, ends a hold) and its length (container, else player's shared length), and the new media.rs and player.rs tests." }
+stamp = { hash = "b3:5d8ad2979fd67246", by = "agent:issues-thread", note = "Re-read against #1746's change: test-only, the player tests' Clip gains an end gate so the_length_is_shared_once_a_play_ends looks before the decode thread reaches the end; no kind, descriptor or decoding behaviour changes, section holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/midi/kinds.rs"]
 stamp = { hash = "b3:896f8bfaece6addb", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds; review N1: the per-particle seed now uses wrapping_add after its wrapping_mul, so a late note's seed can't overflow in a debug build. The section's account of the kind holds" }
