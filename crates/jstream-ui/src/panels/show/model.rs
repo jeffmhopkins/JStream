@@ -244,7 +244,7 @@ pub struct RunView {
     pub looping: Option<(String, u32)>,
     /// Whether it runs on preview (Rehearse), leaving program alone.
     pub rehearsing: bool,
-    /// The scene a hand switch put on program, taking the show off script.
+    /// The name of the scene a hand switch put on program, taking the show off script.
     pub off_script: Option<String>,
     /// How long the stream has been live, for the Run view's clocks, if it is.
     pub live_ms: Option<u32>,

@@ -14,6 +14,8 @@
 pub mod drop;
 pub mod edit;
 pub mod edits;
+pub mod inspect_edits;
+pub mod inspector;
 pub mod model;
 pub mod run;
 pub mod time;
@@ -201,6 +203,17 @@ impl ShowPanel {
             panel.continue_key.set(keys.first().cloned());
             let mut run = studio.show.with(|s| wire::run_of(s.as_ref()));
             run.continue_keys = keys;
+            // Off script names the scene put up by hand, as the Scenes panel does.
+            if let Some(id) = &run.off_script {
+                let name = studio.collection.with(|c| {
+                    c.as_ref()
+                        .and_then(|c| c.scene(&jstream_control::protocol::SceneId::new(id.clone())))
+                        .map(|s| s.name.clone())
+                });
+                if let Some(name) = name {
+                    run.off_script = Some(name);
+                }
+            }
             panel.run.set(run);
         });
         panel
@@ -382,6 +395,10 @@ pub fn status(show: &ShowView, run: &RunView, now: f64) -> String {
             None => "Playing".to_owned(),
         },
         RunPhase::Transition => "In transition".to_owned(),
+        RunPhase::Paused { .. } if run.off_script.is_some() => format!(
+            "Off script: {} is on program",
+            run.off_script.as_deref().unwrap_or_default()
+        ),
         RunPhase::Paused { bookmark, since } => {
             let name = show
                 .bookmarks
@@ -539,6 +556,73 @@ pub fn ModeSwitch() -> impl IntoView {
     }
 }
 
+/// Whether the Next monitor shows beside the canvas, and how: while the open show runs
+/// in the Run view, its Next monitor isn't Off, and studio mode is off. `Some(still)`
+/// when it shows.
+pub fn next_monitor_shown(studio: Studio) -> Memo<Option<bool>> {
+    let panel = use_context::<ShowPanel>();
+    Memo::new(move |_| {
+        let panel = panel?;
+        if studio.studio_mode.get() || panel.mode.get() != Mode::Run || !panel.is_running() {
+            return None;
+        }
+        match panel.show()?.next_monitor {
+            model::NextMonitor::Off => None,
+            model::NextMonitor::Still => Some(true),
+            model::NextMonitor::Live => Some(false),
+        }
+    })
+}
+
+/// The Next monitor beside the canvas: what Continue will put on program, under a label
+/// naming it, as one picture (Still) or a live one (Live).
+#[component]
+pub fn NextPane() -> impl IntoView {
+    let panel = expect_context::<ShowPanel>();
+    let studio = expect_context::<Studio>();
+    let shown = next_monitor_shown(studio);
+    let target = Memo::new(move |_| {
+        let show = panel.show()?;
+        let run = panel.run.get();
+        let head = panel.head();
+        Some((
+            run::next_picture(&show, &run, head),
+            run::next(&show, &run, head).title,
+        ))
+    });
+    let scene = Signal::derive(move || {
+        target
+            .get()
+            .and_then(|(scene, _)| scene)
+            .map(jstream_control::protocol::SceneId::new)
+    });
+    let label = move || {
+        let title = target.get().map(|(_, title)| title).unwrap_or_default();
+        let still = shown.get() == Some(true);
+        format!(
+            "Next on Continue · {title}{}",
+            if still {
+                " · still picture, not rendered live"
+            } else {
+                ""
+            }
+        )
+    };
+    view! {
+        <div class="stage-pane show-next-pane">
+            <div class="stage-label show-next-label">{label}</div>
+            <section class="region monitor show-next" aria-label="Next on Continue">
+                {move || {
+                    let still = shown.get() == Some(true);
+                    view! {
+                        <crate::canvas::monitor::Monitor scene=scene still=still label="show-next" />
+                    }
+                }}
+            </section>
+        </div>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::model::demo;
@@ -556,6 +640,23 @@ mod tests {
             ..RunView::default()
         };
         assert_eq!(status(&show, &run, 135_000.0), "Paused at Close-up · 2:14");
+    }
+
+    #[test]
+    fn status_says_when_a_hand_switch_took_the_show_off_script() {
+        let show = demo::friday();
+        let run = RunView {
+            phase: RunPhase::Paused {
+                bookmark: String::new(),
+                since: 0.0,
+            },
+            off_script: Some("Interview".to_owned()),
+            ..RunView::default()
+        };
+        assert_eq!(
+            status(&show, &run, 0.0),
+            "Off script: Interview is on program"
+        );
     }
 
     #[test]

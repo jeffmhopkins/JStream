@@ -333,6 +333,13 @@ pub fn Workspace() -> impl IntoView {
         nudge_canvas();
     });
     share(dock);
+    // The Show panel's Next monitor sits beside the canvas while its show runs in the Run
+    // view, unless studio mode already puts a monitor there.
+    let next_monitor = crate::panels::show::next_monitor_shown(studio);
+    Effect::new(move |_| {
+        next_monitor.track();
+        nudge_canvas();
+    });
 
     let end_drag = move |drop: bool| {
         let panel = ui.dragging.get_untracked();
@@ -390,13 +397,16 @@ pub fn Workspace() -> impl IntoView {
                     {zone(Zone::Left)}
                     <div class="ws-centre">
                         {zone(Zone::CanvasTop)}
-                        <div class="stage-row" class:two-up=studio_mode>
+                        <div class="stage-row" class:two-up=move || studio_mode() || next_monitor.get().is_some()>
                             <div class="stage-pane">
                                 <Show when=studio_mode>
                                     <StageLabel side=Side::Preview />
                                 </Show>
                                 <section class="region canvas" aria-label="Canvas"><Canvas /></section>
                             </div>
+                            <Show when=move || next_monitor.get().is_some()>
+                                <crate::panels::show::NextPane />
+                            </Show>
                             <Show when=studio_mode>
                                 <StudioControls />
                                 <div class="stage-pane">

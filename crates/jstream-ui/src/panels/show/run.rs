@@ -121,7 +121,8 @@ pub fn now(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Card {
         },
     };
     if run.off_script.is_some() {
-        line.push_str(" · off script");
+        // A hand switch: the show waits where it was, and Continue goes on from there.
+        line = "Off script · Continue goes on to the next clip".to_owned();
     }
     if run.rehearsing {
         line.push_str(" · rehearsing on preview");
@@ -145,6 +146,29 @@ fn fires_at(show: &ShowView, at: u32) -> Vec<String> {
             ClipKind::Keyframe(_) => None,
         })
         .collect()
+}
+
+/// The scene the Next monitor shows: what Continue will put on program, as the keyframe
+/// scene when a keyframe applies, else the clip's scene. `None` with nothing to show.
+pub fn next_picture(show: &ShowView, run: &model::RunView, head: u32) -> Option<String> {
+    let (clip, key) = if let Some(armed) = run.armed_ms {
+        on_program(show, armed, true)
+    } else {
+        match run.phase {
+            RunPhase::Stopped => on_program(show, 0, true),
+            // Continue goes on to the next pausing bookmark, which waits before what
+            // starts there.
+            RunPhase::Playing | RunPhase::Transition => {
+                on_program(show, show.next_pause(head)?.at_ms, false)
+            }
+            RunPhase::Paused { .. } => on_program(show, head, true),
+        }
+    };
+    let id = |c: &ClipView| match &c.kind {
+        ClipKind::Scene(id) | ClipKind::Keyframe(id) if !id.is_empty() => Some(id.clone()),
+        _ => None,
+    };
+    key.and_then(id).or_else(|| clip.and_then(id))
 }
 
 /// The NEXT ON CONTINUE card: where Continue takes the show and what fires there.
@@ -907,6 +931,23 @@ mod tests {
                 line: "Keyframe Close, with a Move · then Show Title".to_owned(),
             }
         );
+    }
+
+    #[test]
+    fn the_next_monitor_shows_where_continue_lands() {
+        let (show, mut run, _) = mockup();
+        assert_eq!(next_picture(&show, &run, 330_000).as_deref(), Some("close"));
+        run.phase = RunPhase::Paused {
+            bookmark: "b2".to_owned(),
+            since: 0.0,
+        };
+        assert_eq!(next_picture(&show, &run, 180_000).as_deref(), Some("intro"));
+        run.phase = RunPhase::Playing;
+        // Playing in the waiting room: Continue goes to Intro, which waits before the
+        // video starts, so Starting soon is still up.
+        assert_eq!(next_picture(&show, &run, 10_000).as_deref(), Some("soon"));
+        run.armed_ms = Some(430_000);
+        assert_eq!(next_picture(&show, &run, 10_000).as_deref(), Some("demo"));
     }
 
     #[test]
