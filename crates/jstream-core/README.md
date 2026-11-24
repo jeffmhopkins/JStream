@@ -1910,7 +1910,8 @@ itself), else `scene.set_keyframe` on the program scene;
 are not run yet. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
 running show off script. `show.stop`, deleting the show and opening a collection stop
-it. A show that starts on the scene already on program restarts every `timer` source
+it, taking its overlays down and stopping its sequences (a deleted show by the plan it
+ran, `Run::plan`). A show that starts on the scene already on program restarts every `timer` source
 that scene draws (`source.restart`), as the cut to it would have.
 `studio.get`'s `show` reports it, and `show.changed` says what it did.
 
@@ -1935,7 +1936,7 @@ off script, stopping, deleting, refused calls, a sequence clip's cue firing with
 `show.pause` holding show time until `show.continue` or `show.play` plays on,
 keyframe markers moving program to a keyframe scene and back, an edit of the running
 show cutting program to the clip now under the play head, an overlay clip up for its
-span and taken down when an edit removes it, the overlay actions with no show, and the
+span and taken down when an edit removes it or the show is deleted, the overlay actions with no show, and the
 show scene refusing a delete and being heard. `src/tests/timelines.rs` checks that a
 timeline played while the ticker waits for a later cue fires on time.
 

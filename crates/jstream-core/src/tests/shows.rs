@@ -377,6 +377,18 @@ fn an_overlay_clip_puts_its_scene_over_program_for_its_span() {
     );
     step(&control, 300);
     assert!(overlays(&control).is_empty(), "down at the clip's end");
+
+    // Deleting the running show takes its overlays down with it.
+    act(&control, Action::ShowSeek { at_ms: 250 }).expect("seek");
+    assert_eq!(overlays(&control), ["logo"]);
+    apply(
+        &control,
+        vec![Edit::ShowDelete {
+            show_id: ShowId::new("s"),
+        }],
+    );
+    assert!(studio(&control).1.is_none(), "stopped");
+    assert!(overlays(&control).is_empty(), "and its overlay is down");
 }
 
 /// The overlay-removed report: an overlay clip taken out of the running show comes
