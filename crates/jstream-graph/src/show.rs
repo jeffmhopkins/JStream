@@ -21,13 +21,6 @@ impl Graph {
     pub fn show(&self, show_id: &ShowId) -> Option<&ShowInfo> {
         self.state.shows.get(show_id)
     }
-
-    /// Marks `scene_id` as the internal show scene (ADR-0210 decision 12), or clears the
-    /// marker. Only the engine sets it; it is saved in the collection file, and is not an
-    /// edit or a revision.
-    pub fn set_show_scene(&mut self, scene_id: Option<SceneId>) {
-        self.state.show_scene = scene_id;
-    }
 }
 
 impl State {
