@@ -206,8 +206,8 @@ The property grid, as OBS's Properties lay a source's settings out:
 
 - In a dialog, labels sit in a 120 px column on the left, top-aligned with the first line
   of their control, in 12 px `--muted`.
-- Controls are at most 360 px wide. A number field is 88 px with its unit beside it; a
-  slider fills the row with a 64 px number after it.
+- Controls are at most 360 px wide. A number field is 88 px with its unit inside its
+  box; a slider fills the row with a 64 px number after it.
 - A setting's reset (↺) sits in a 20 px column of its own and shows only once the value
   differs from its default, so the right edges line up.
 - A setting a controller can drive (live, a number with both ends or a switch) has a
@@ -231,7 +231,9 @@ The property grid, as OBS's Properties lay a source's settings out:
   (Position's X and Y), each field's short caption sits inside its box before the
   number, and a drag on the caption scrubs too. A pair leaves a 20 px gap between its
   fields, where Size's link sits, so every pair lines up. Only the mixer's gain fields
-  keep steppers, for a single step without the keyboard.
+  keep steppers, for a single step without the keyboard. Every numeric input, in a
+  panel, a dialog or a kind's settings form, is this field, never a browser number
+  input (#1734).
 
 <a id="copy"></a>
 ## Copy

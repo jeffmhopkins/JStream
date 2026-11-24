@@ -344,6 +344,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   font", the mock's two fonts (`MOCK_FONTS`) and "Other file…" (ADR-0092); a picked
   font is saved on OK as one edit and selected when the dialog opens again, and "Other
   file…" shows the root and path, which stay shown for a path the list doesn't name.
+  With a live whole-number setting described, a drag on its field (#1734) sends
+  `live.set` values as it goes, the last one the dragged value, with `rev` unchanged
+  and no commit at the release; OK is one edit whose `ends_gesture` batch carries it.
 - **Capture targets** (`capture-targets.spec.js`): with the `window` kind described, a
   new Window capture's Properties dialog lists the mock's one window by name and size
   after None, and not its display; picking it and pressing OK is one edit, and the
@@ -360,7 +363,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   section, the arrow keys moving along the strip with the focus, the tab kept across a
   reload, and the header's Properties & filters… opening the Properties dialog; X and
   Y, W and H, and W % and H % each on one row of its group, the crop's four sides two by
-  two, and no sideways scroll in the Transform tab. The mock
+  two, and no sideways scroll in the Transform tab. A drag on X (#1734) sends
+  `live.set` values of the dragged box, which the engine answers with `live.changed`,
+  before the release, with `rev` unchanged; the release is one batch with
+  `ends_gesture`, and one Undo takes the whole drag back. The mock
   engine doesn't implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
   chain; with the Backdrop selected, its title, note, one video chain of its source
@@ -389,7 +395,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Add as one edit, the new filter opening in place, where a changed setting is one more
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filters window was closed,
-  each in the problem bar.
+  each in the problem bar. A drag on Sharpen's amount (#1734) shows its value under the
+  pointer and sends no `filter.set_settings` until the release, which sends one, one
+  revision that one Undo takes back.
 - **Scene filters** (`scene-filters.spec.js`): with no item selected the panel showing
   Main's empty video chain with the scene note; with Sharpen and Gain described, Add
   filter offering only Sharpen, with the scene's foot, as one edit on the scene, while
@@ -587,7 +595,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   checks a picture: the engine's tests check the frames.
 - **Video settings** (`video-settings.spec.js`): File › Video settings… opens Settings
   on Video, at 1920×1080 at 30 fps with Browser-style blending; a preset fills both sides, a typed
-  side of 0 turns the preset to Custom and is refused on Save; 1280×720 at 60 fps
+  side of 0 turns the preset to Custom and is kept to 1, the least the shared number
+  field takes; 1280×720 at 60 fps
   in Linear light saves as one revision and reopens with those values; Save with
   nothing changed sends nothing; and one Undo takes back all three. Scale existing scenes
   to fit starts ticked: 1280×720 then sends, in the batch with
