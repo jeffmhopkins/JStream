@@ -385,10 +385,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.179 because a value binding can drive one axis of a PTZ
+`PROTOCOL_VERSION` is 0.180 because a value binding can drive one axis of a PTZ
 camera's position: `ValueTarget`'s `ptz_axis {camera, axis}` with `PtzAxis` (`pan`,
 `tilt`, `zoom` or `focus`), in the head's own counts, which the engine sends as aims
-([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)); 0.178 because the rendering switches say how many pixels 3D models
+([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)); 0.179 because `profile.get` counts each drawing thread's GPU
+submits per frame (`DrawerProfile`'s `submits`); 0.178 because the rendering switches say how many pixels 3D models
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
 `model_resolution` and `model_frames_reduced`
@@ -1553,7 +1554,7 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
   modifier's own check refuses, as `binding.<field>`.
 - **`ValueTarget`**, tagged by `type`: `source_setting {source_id, param}`,
   `filter_setting {owner, filter_id, param}` (any `FilterOwner`), `source_gain
-  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}` and (0.179,
+  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}` and (0.180,
   [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) `ptz_axis {camera,
   axis}`, one axis (`PtzAxis`: `pan`, `tilt`, `zoom`, `focus`) of a PTZ camera's
   position in the head's own counts, whole numbers within `PtzAxis::range`. A
@@ -2029,7 +2030,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `stats.tick`'s `drops` leave out), since 0.178 the
   size its 3D models were drawn at when the window ended (`model_resolution`, a
   percentage, 100 from an older server) and the frames drawn with them below 100
-  (`model_frames_reduced`), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  (`model_frames_reduced`), since 0.179 the GPU submits it made per frame (`submits`:
+  each costs the thread a fixed time however little work it carries, and only the
+  compositor's own are counted), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
   its frames, average and recent longest time and share of its drawer's time; the
@@ -3040,8 +3043,8 @@ after 1.0:
   `ItemEasing` values `ease_in`, `hold` and `cubic_bezier` (ADR-0129) on the same
   terms: a client older than 0.99 can't parse `state.get` or an item listing once a
   preset, an item or a keyframe's timing uses one.
-  0.179 adds the `ValueTarget` value `ptz_axis` (ADR-0209) on the same terms: a client
-  older than 0.179 can't parse `state.get` once a value binding aims a PTZ head's axis.
+  0.180 adds the `ValueTarget` value `ptz_axis` (ADR-0209) on the same terms: a client
+  older than 0.180 can't parse `state.get` once a value binding aims a PTZ head's axis.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
