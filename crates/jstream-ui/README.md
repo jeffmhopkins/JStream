@@ -900,9 +900,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   panel's own, never saved. **Every edit is one `show.set` of the whole show**, so one
   undo step: each tool's gesture is a pure function from the show to the show
   (`edits.rs`, and `inspect_edits.rs` for the Inspector's fields), and `ShowPanel::commit`
-  sends nothing when the result equals the show the engine has. Program clips carry
-  lengths, not starts, so a trim or a removal ripples by itself; `shift_from` moves what
-  sits on other tracks from the old end on. A drag is a `Grab` taken on the press and
+  sends nothing when the result equals the show the engine has, and nothing when
+  `ShowInfo::problem` (the engine's own check) would refuse it, saying why in the problem
+  bar. Program clips carry lengths, not starts, so a trim or a removal ripples by itself;
+  `shift_from` moves what sits on other tracks from the old end on, and on a shortening
+  takes the cut-out time out of them too (what lay in it is dropped, clamped or cut), so
+  the result is one `problem` accepts. A drag is a `Grab` taken on the press and
   `gesture::dragged`, the show as it would be if the pointer came up there, snapped by a
   `Snapper` (clip edges, bookmarks, loop edges and the running play head within about
   6 px, else 0.1 s, Shift free): the view draws that show in place of the engine's

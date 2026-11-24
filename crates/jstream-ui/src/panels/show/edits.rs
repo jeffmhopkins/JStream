@@ -10,8 +10,8 @@
 
 use jstream_control::protocol::{
     AudioClip, AudioTrack, KeyframeMarker, MAX_SHOW_TRACKS, MIN_SHOW_LOOP_MS, OverlayClip,
-    OverlayTrack, ProgramClip, SceneId, ShowBookmark, ShowId, ShowInfo, ShowLoop, SourceId,
-    TransitionPresetId,
+    OverlayTrack, ProgramClip, SceneId, ShowBookmark, ShowEnd, ShowId, ShowInfo, ShowLoop,
+    SourceId, TransitionPresetId,
 };
 
 /// Where a dragged edge or point snaps to without Shift, in ms.
@@ -178,18 +178,26 @@ pub fn insert_program_clip(
     id
 }
 
-/// Moves everything at or after `from` by `by` ms (never below `from + by`, where a
-/// shortened or removed clip now ends): bookmarks,
-/// loops, keyframes, cues, overlay and audio clips. Program clips move by themselves.
+/// Moves everything at or after `from` by `by` ms: bookmarks, loops, keyframes, cues,
+/// overlay and audio clips. Program clips move by themselves.
+///
+/// A negative `by` (a program clip shortened or removed) takes out the time
+/// `[from + by, from)`. What was in it goes: keyframes and cues there are dropped, a
+/// bookmark there lands where the cut now ends, an overlay or audio clip loses the part
+/// inside it (dropped when less than [`MIN_CLIP_MS`] is left, its fades shrunk to fit),
+/// and a loop loses it too (dropped when shorter than [`MIN_SHOW_LOOP_MS`]). So the show
+/// stays one `problem()` accepts.
 fn shift_from(show: &mut ShowInfo, from: u32, by: i64) {
+    let cut = u32::try_from((i64::from(from) + by.min(0)).max(0)).unwrap_or(0);
+    // A time after the shift: on a cut, a time inside it lands at the cut.
     let moved = |t: u32| {
         if t >= from {
-            let floor = (i64::from(from) + by.min(0)).max(0);
-            u32::try_from((i64::from(t) + by).max(floor)).unwrap_or(u32::MAX)
+            u32::try_from((i64::from(t) + by).max(i64::from(cut))).unwrap_or(u32::MAX)
         } else {
-            t
+            t.min(cut)
         }
     };
+    let gone = |t: u32| t >= cut && t < from;
     for b in &mut show.bookmarks {
         b.at_ms = moved(b.at_ms);
     }
@@ -197,23 +205,41 @@ fn shift_from(show: &mut ShowInfo, from: u32, by: i64) {
         l.start_ms = moved(l.start_ms);
         l.end_ms = moved(l.end_ms);
     }
+    show.loops
+        .retain(|l| l.end_ms >= l.start_ms.saturating_add(MIN_SHOW_LOOP_MS));
+    show.keyframes.retain(|m| !gone(m.at_ms));
     for m in &mut show.keyframes {
         m.at_ms = moved(m.at_ms);
     }
     for t in &mut show.sequences {
+        t.cues.retain(|c| !gone(c.at_ms));
         for c in &mut t.cues {
             c.at_ms = moved(c.at_ms);
         }
     }
+    // A span after the shift: moved on as a whole by a positive shift; by a cut, its
+    // start and end moved alike, so the part inside the cut goes.
+    let span = |start: u32, length: u32| {
+        if by >= 0 {
+            return (moved(start), length);
+        }
+        let start2 = moved(start);
+        let end2 = moved(start.saturating_add(length));
+        (start2, end2.saturating_sub(start2))
+    };
     for t in &mut show.overlays {
         for c in &mut t.clips {
-            c.start_ms = moved(c.start_ms);
+            (c.start_ms, c.length_ms) = span(c.start_ms, c.length_ms);
+            (c.fade_in_ms, c.fade_out_ms) = fit_fades((c.fade_in_ms, c.fade_out_ms), c.length_ms);
         }
+        t.clips.retain(|c| c.length_ms >= MIN_CLIP_MS);
     }
     for t in &mut show.audio {
         for c in &mut t.clips {
-            c.start_ms = moved(c.start_ms);
+            (c.start_ms, c.length_ms) = span(c.start_ms, c.length_ms);
+            (c.fade_in_ms, c.fade_out_ms) = fit_fades((c.fade_in_ms, c.fade_out_ms), c.length_ms);
         }
+        t.clips.retain(|c| c.length_ms >= MIN_CLIP_MS);
     }
     tidy_bookmarks(show);
 }
@@ -289,6 +315,9 @@ pub fn remove(show: &mut ShowInfo, id: &str) -> bool {
     }
     show.keyframes.retain(|m| m.marker_id != id);
     show.bookmarks.retain(|b| b.bookmark_id != id);
+    if matches!(&show.end, ShowEnd::GoTo { bookmark_id } if bookmark_id == id) {
+        show.end = ShowEnd::Stop;
+    }
     show.loops.retain(|l| l.loop_id != id);
     *show != before
 }
@@ -927,5 +956,72 @@ mod tests {
         assert_eq!(copy.program, s.program);
         assert_eq!(new_show_name(&["Show 1"]), "Show 2");
         assert_eq!(copy_name("A", &["A copy"]), "A copy 2");
+    }
+
+    #[test]
+    fn a_cut_drops_keyframes_inside_it_and_keeps_the_rest_in_order() {
+        let mut s = show();
+        add_keyframe(&mut s, 120_000, None);
+        add_keyframe(&mut s, 200_000, None);
+        assert!(remove(&mut s, "clip1"));
+        let at: Vec<u32> = s.keyframes.iter().map(|k| k.at_ms).collect();
+        assert_eq!(at, [20_000]);
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn a_trim_cuts_an_overlay_across_it_and_shifts_the_next() {
+        let mut s = show();
+        let track = add_overlay_track(&mut s).unwrap_or_default();
+        add_overlay_clip(&mut s, &track, "lower".into(), 150_000, 40_000);
+        add_overlay_clip(&mut s, &track, "ticker".into(), 190_000, 20_000);
+        assert!(trim_program_clip(&mut s, "clip1", 160_000));
+        let spans: Vec<(u32, u32)> = s.overlays[0]
+            .clips
+            .iter()
+            .map(|c| (c.start_ms, c.length_ms))
+            .collect();
+        // 2:30 to 3:10 loses 2:40 to 3:00, the part the trim takes out.
+        assert_eq!(spans, [(150_000, 20_000), (170_000, 20_000)]);
+        assert_eq!(s.problem(), None);
+        // A clip wholly inside a removed clip goes with it.
+        let mut s = show();
+        let track = add_overlay_track(&mut s).unwrap_or_default();
+        add_overlay_clip(&mut s, &track, "lower".into(), 100_000, 40_000);
+        assert!(remove(&mut s, "clip1"));
+        assert!(s.overlays[0].clips.is_empty());
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn a_loop_cut_too_short_goes() {
+        let mut s = show();
+        add_loop(&mut s, 179_000, 180_050);
+        assert!(trim_program_clip(&mut s, "clip1", 179_000));
+        assert!(s.loops.is_empty(), "50 ms would be left");
+        assert_eq!(s.problem(), None);
+        // A loop across a removed clip keeps what lies after it.
+        let mut s = show();
+        add_loop(&mut s, 170_000, 190_000);
+        assert!(remove(&mut s, "clip1"));
+        assert_eq!((s.loops[0].start_ms, s.loops[0].end_ms), (0, 10_000));
+        assert_eq!(s.problem(), None);
+        // One that keeps enough of itself stays, shortened.
+        let mut s = show();
+        add_loop(&mut s, 100_000, 190_000);
+        assert!(trim_program_clip(&mut s, "clip1", 150_000));
+        assert_eq!((s.loops[0].start_ms, s.loops[0].end_ms), (100_000, 160_000));
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn deleting_the_bookmark_the_end_goes_to_stops_there_instead() {
+        let mut s = show();
+        s.end = ShowEnd::GoTo {
+            bookmark_id: "bm1".to_owned(),
+        };
+        assert!(remove(&mut s, "bm1"));
+        assert_eq!(s.end, ShowEnd::Stop);
+        assert_eq!(s.problem(), None);
     }
 }

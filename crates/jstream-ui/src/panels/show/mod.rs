@@ -311,6 +311,13 @@ impl ShowPanel {
         if self.info(show.show_id.as_str()).as_ref() == Some(&show) {
             return;
         }
+        // The engine runs the same check and would refuse the whole edit; say why here.
+        if let Some((field, why)) = show.problem() {
+            self.refuse(format!(
+                "That change would break the show ({field}: {why})."
+            ));
+            return;
+        }
         self.apply(vec![Edit::ShowSet { show }]);
     }
 

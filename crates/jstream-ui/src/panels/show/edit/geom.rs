@@ -225,7 +225,7 @@ pub enum Grip {
 }
 
 /// What a press `x` px along a zoom bar `width` px wide lands on. Each handle takes the
-/// last [`GRIP_PX`] of its end of the thumb, and a narrow thumb is split between them.
+/// last `GRIP_PX` of its end of the thumb, and a narrow thumb is split between them.
 pub fn grip_at(view: Viewport, x: f64, width: f64) -> Grip {
     let (a, b) = view.thumb();
     let (left, right) = (a * width, b * width);

@@ -92,6 +92,10 @@ pub fn place_files(
     let Some(mut show) = panel.info(show_id) else {
         return;
     };
+    // The same file twice in one drop goes in once: each copy would be planned against
+    // the same collection and make its own source and scene.
+    let mut seen = std::collections::HashSet::new();
+    let paths: Vec<String> = paths.iter().filter(|p| seen.insert(*p)).cloned().collect();
     let before = show.clone();
     let fresh = |prefix: &str| panel.fresh_id(prefix).unwrap_or_default();
     let folder_id = fresh("folder");
