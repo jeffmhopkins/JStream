@@ -466,8 +466,10 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   address records: a device uses the address the answer came from). It shares UDP 5353
   with the system's responder (address reuse) on `224.0.0.251`, announces three times a
   second apart and then once a minute with a TTL of 120 s, answers queries for the
-  service or the instance (and a one-shot query from another port to its sender too),
-  and says goodbye with TTL 0 when the server stops. A query is read with bounds on its
+  service or the instance from the local network only (a private, link-local or
+  loopback source, `announce::on_link`, as `jstream_core::lan::is_lan`) to the group at
+  most once a second, answers a one-shot query from another port to its sender with
+  its question repeated, and says goodbye with TTL 0 when the server stops. A query is read with bounds on its
   size, questions, labels and compression pointers (backwards only). If 5353 can't be
   opened it logs at `warn` and the listener works as before. The daemon announces with
   `--lan` unless `--lan-quiet`; the desktop app unless its setting is off.

@@ -9,7 +9,7 @@ review_every = "90d"
 # Stream Deck plugin
 
 A plugin for Elgato's Stream Deck app that controls JStream over the network. Its keys run
-shows, switch scenes, place keyframes, show, hide and mute sources, play sequences, turn
+shows, switch scenes, go to keyframes, show, hide and mute sources, play sequences, turn
 effects on and off, start streams and recordings, flip channels and run hotkey actions.
 Each key lights up from JStream's live state, so the deck shows what is on program, what
 is live, what plays and what is muted. It lives outside the Cargo workspace
@@ -72,8 +72,8 @@ refuses flashes Stream Deck's alert.
 | Key | Does | Lit while |
 |---|---|---|
 | **Show** | Play a show (or rehearse it on preview), Continue, Pause, Stop, Back, Skip, go to a bookmark, or go to bookmark 1 to 8 of the running show (`show.*`; a JStream without shows lists none) | Play: the show plays (ringed while it waits). Continue: the show waits for Continue. Pause: paused. Stop: a show runs |
-| **Switch scene** | `scene.switch`, with an optional transition | on program (red) or preview (green) |
-| **Place keyframe** | `scene.set_keyframe` on the keyframe's scene, with an optional transition | that keyframe is placed |
+| **Switch scene** | `scene.switch`, with an optional transition. With a **Keyframe** picked from the scene's own, it first moves the scene to that keyframe (`scene.set_keyframe`), so program lands on it; if the scene is already on program, it moves there with the transition | on program (red; with a keyframe, while the scene is at it) or preview (green) |
+| **Go to keyframe** | `scene.set_keyframe` on the keyframe's scene, with an optional transition. It moves the scene to a keyframe made in JStream and never creates one; on program, the move is seen live | the scene is at that keyframe |
 | **Show or hide source** | `item.toggle`, `item.show` or `item.hide` on one item of a scene | the item is shown |
 | **Mute source** | `source.set_audio` with `muted` | the source is muted (red) |
 | **Sequence** | `timeline.play` or `timeline.stop` | it plays (ringed while it waits to start) |
@@ -152,7 +152,8 @@ npm run pack                # validates, then writes dist/io.github.jeffmhopkins
   It skips on a JStream without shows.
 - `test/plugin.test.ts` runs the built plugin as the Stream Deck app does, against a
   stand-in for the app's socket. A key appears offline, the property inspector pairs it,
-  and a press switches program and lights the key.
+  and a press switches program and lights the key. A second scene key, with a keyframe
+  picked, puts program on its scene at that keyframe.
 
 The dependencies are exact pins with the lockfile committed (ADR-0232). Their licences are
 checked by hand against `deny.toml`'s allow list, since `cargo deny` doesn't read npm's

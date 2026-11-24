@@ -301,8 +301,11 @@ the network listener is open, the host announces it on mDNS as `_jstream._tcp.lo
 desktop app's "Let devices find JStream on my network" is off or the daemon runs with
 `--lan-quiet`. That tells anyone on the link, unasked, that this machine runs JStream
 and where; the port was already reachable to anyone who tried it. The responder on UDP
-5353 only answers queries for that service, reads each with bounds on its size,
-questions and labels, and admits no one: a device it points somewhere still checks the
+5353 only answers queries for that service, and only from a private, link-local or
+loopback source, so a host with a public address that can reach the port learns
+nothing (#1799 B1); one on a private network routed to this one (a VPN, say) still can,
+as with the JTunnel socket. It answers the group at most once a second, reads each query with bounds on
+its size, questions and labels, and admits no one: a device it points somewhere still checks the
 fingerprint and pairs with a code, so a spoofed answer can only send a device to an
 address the fingerprint check refuses.
 

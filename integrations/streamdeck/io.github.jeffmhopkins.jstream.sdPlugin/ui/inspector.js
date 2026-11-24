@@ -44,6 +44,7 @@ const FORMS = {
 	],
 	scene: [
 		{ setting: "scene_id", label: "Scene", list: "scenes" },
+		{ setting: "keyframe_id", label: "Keyframe", list: "sceneKeyframes", by: "scene_id", blank: "None" },
 		{ setting: "preset_id", label: "Transition", list: "transitions", blank: "Default" },
 	],
 	keyframe: [

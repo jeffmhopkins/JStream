@@ -99,4 +99,22 @@ test("a scene key pairs from its property inspector, then switches program and l
 	const studio = await call({ kind: "query", query: { type: "studio.get" } });
 	assert.equal(studio.program_scene, "scn_b");
 	assert.equal(last("showAlert"), undefined, "the press didn't fail");
+
+	// A scene key with a keyframe puts program on the scene at that keyframe.
+	await call({ kind: "action", action: { type: "scene.switch", scene_id: "scn_a" } });
+	await until("the first key unlit", () => !image().includes('fill="#d93636"'));
+	const wide = { action: `${PLUGIN}.scene`, context: "ctx2", device: "dev1" };
+	const widePayload = { ...payload, coordinates: { column: 1, row: 0 }, settings: { scene_id: "scn_b", keyframe_id: "scn_b_wide" } };
+	send({ event: "willAppear", ...wide, payload: widePayload });
+	await until("the keyframe key titled", () => last("setTitle", "ctx2")?.payload?.title?.replace("\n", " ") === "Main, wide", 8000);
+	send({ event: "keyDown", ...wide, payload: widePayload });
+	let at: { program_scene?: string; keyframes?: { keyframe_id: string }[] } = {};
+	for (let i = 0; i < 80 && !(at.program_scene === "scn_b" && (at.keyframes ?? []).some((k) => k.keyframe_id === "scn_b_wide")); i++) {
+		await new Promise((r) => setTimeout(r, 50));
+		at = await call({ kind: "query", query: { type: "studio.get" } });
+	}
+	assert.equal(at.program_scene, "scn_b");
+	assert.ok((at.keyframes ?? []).some((k) => k.keyframe_id === "scn_b_wide"), JSON.stringify(at.keyframes));
+	assert.equal(last("showAlert", "ctx2"), undefined, "the keyframe press didn't fail");
+	assert.deepEqual(toInspector("lists")!.payload.lists.sceneKeyframes, { scn_b: [{ value: "scn_b_wide", label: "Main, wide" }] });
 });

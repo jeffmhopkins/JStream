@@ -13,13 +13,17 @@
 //!   stops.
 //! - **The socket.** UDP port 5353 on every IPv4 interface, shared with the system's own
 //!   responder (address reuse), joined to `224.0.0.251`, as the JTunnel receiver does.
-//!   Answers go to the group; a query from a port other than 5353 (a one-shot "legacy"
-//!   query) is also answered to its sender. A query is read with bounds on its size,
-//!   its questions and the labels walked, so a hostile datagram costs a few steps.
+//!   Only a query from the local network is answered (a private, link-local or loopback
+//!   source, as `jstream_core::lan::is_lan` decides for JTunnel), so a host beyond the
+//!   link that can reach port 5353 learns nothing. Answers go to the group, at most once
+//!   a second (RFC 6762 §6); a query from a port other than 5353 (a one-shot "legacy"
+//!   query) is also answered to its sender, repeating its question (§6.7). A query is
+//!   read with bounds on its size, its questions and the labels walked, so a hostile
+//!   datagram costs a few steps.
 //! - **Trust.** Finding JStream admits no one: pairing still needs the code and the
 //!   certificate fingerprint the host shows (ADR-0104, ADR-0044).
 
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::time::Duration;
 use tokio::sync::watch;
 
@@ -45,6 +49,34 @@ const TYPE_ANY: u16 = 255;
 const CLASS_IN: u16 = 1;
 /// The cache-flush bit on a unique record's class.
 const FLUSH: u16 = 0x8000;
+
+/// The least time between two multicast answers (RFC 6762 §6).
+const THROTTLE: Duration = Duration::from_secs(1);
+
+/// A query that asks for JStream: its ID and the question that matched.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Asked {
+    /// The query's ID.
+    pub id: u16,
+    /// The name asked for, dotted.
+    pub name: String,
+    /// The record type asked for.
+    pub kind: u16,
+}
+
+/// Whether `ip` is on the local network: private or link-local IPv4, or loopback (as
+/// `jstream_core::lan::is_lan`, which this crate doesn't depend on). Only such a source
+/// is answered.
+pub fn on_link(ip: IpAddr) -> bool {
+    let v4 = match ip {
+        IpAddr::V4(v4) => v4,
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4,
+            None => return v6.is_loopback(),
+        },
+    };
+    v4.is_loopback() || v4.is_private() || v4.is_link_local()
+}
 
 /// What is announced: the instance's name and where its listener is.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,13 +126,29 @@ impl Announcement {
     /// The response datagram: PTR, SRV and TXT, each with `ttl` (0 says goodbye), with
     /// the query's `id` (0 for an unsolicited one).
     pub fn response(&self, id: u16, ttl: u32) -> Vec<u8> {
+        self.answer(id, ttl, None)
+    }
+
+    /// The answer to a one-shot ("legacy") query, sent to its sender: its ID, and its
+    /// question repeated (RFC 6762 §6.7).
+    pub fn legacy_response(&self, asked: &Asked) -> Vec<u8> {
+        self.answer(asked.id, TTL_SECS.min(10), Some(asked))
+    }
+
+    fn answer(&self, id: u16, ttl: u32, question: Option<&Asked>) -> Vec<u8> {
         let mut out = Vec::with_capacity(256);
         out.extend_from_slice(&id.to_be_bytes());
         out.extend_from_slice(&0x8400u16.to_be_bytes()); // response, authoritative
-        out.extend_from_slice(&0u16.to_be_bytes()); // questions
+        out.extend_from_slice(&u16::from(question.is_some()).to_be_bytes()); // questions
         out.extend_from_slice(&3u16.to_be_bytes()); // answers
         out.extend_from_slice(&0u16.to_be_bytes());
         out.extend_from_slice(&0u16.to_be_bytes());
+        if let Some(question) = question {
+            let labels: Vec<&str> = question.name.split('.').collect();
+            name(&mut out, &labels);
+            out.extend_from_slice(&question.kind.to_be_bytes());
+            out.extend_from_slice(&CLASS_IN.to_be_bytes());
+        }
         let service: Vec<&str> = SERVICE.split('.').collect();
         let instance = self.instance_name();
         // PTR: shared, so no cache-flush bit.
@@ -135,9 +183,9 @@ impl Announcement {
         out
     }
 
-    /// Whether `query` asks for this service or this instance, and its ID. `None` for a
-    /// response, a malformed datagram or a query for anything else.
-    pub fn asked(&self, query: &[u8]) -> Option<u16> {
+    /// Whether `query` asks for this service or this instance: its ID and the question.
+    /// `None` for a response, a malformed datagram or a query for anything else.
+    pub fn asked(&self, query: &[u8]) -> Option<Asked> {
         if query.len() < 12 || query.len() > MAX_DATAGRAM {
             return None;
         }
@@ -161,7 +209,11 @@ impl Announcement {
             let mine = asked.eq_ignore_ascii_case(&instance)
                 && matches!(kind, TYPE_SRV | TYPE_TXT | TYPE_ANY);
             if service || mine {
-                return Some(id);
+                return Some(Asked {
+                    id,
+                    name: asked,
+                    kind,
+                });
             }
         }
         None
@@ -258,6 +310,8 @@ pub(crate) async fn run(what: Announcement, mut stopping: watch::Receiver<bool>)
     let mut buf = vec![0u8; MAX_DATAGRAM];
     let mut sent = 0u32;
     let mut next = tokio::time::Instant::now();
+    // When the group last heard the answer, for the throttle.
+    let mut answered: Option<tokio::time::Instant> = None;
     loop {
         tokio::select! {
             // The `Ref` it answers isn't `Send`, so it is dropped inside.
@@ -266,16 +320,27 @@ pub(crate) async fn run(what: Announcement, mut stopping: watch::Receiver<bool>)
                 if let Err(error) = socket.send_to(&hello, group).await {
                     tracing::debug!(%error, "mDNS announcement not sent");
                 }
+                answered = Some(tokio::time::Instant::now());
                 sent = sent.saturating_add(1);
                 next += if sent < 3 { Duration::from_secs(1) } else { EVERY };
             }
             received = socket.recv_from(&mut buf) => {
                 let Ok((len, from)) = received else { continue };
-                let Some(id) = what.asked(&buf[..len]) else { continue };
-                let _ = socket.send_to(&what.response(0, TTL_SECS), group).await;
-                if from.port() != PORT {
-                    let _ = socket.send_to(&what.response(id, TTL_SECS), from).await;
+                // Beyond the link, nothing: not the group answer, not a unicast one.
+                if !on_link(from.ip()) {
+                    continue;
                 }
+                let Some(asked) = what.asked(&buf[..len]) else { continue };
+                if from.port() != PORT {
+                    let _ = socket.send_to(&what.legacy_response(&asked), from).await;
+                    continue;
+                }
+                let now = tokio::time::Instant::now();
+                if answered.is_some_and(|at| now.duration_since(at) < THROTTLE) {
+                    continue;
+                }
+                answered = Some(now);
+                let _ = socket.send_to(&hello, group).await;
             }
         }
     }
@@ -285,7 +350,7 @@ pub(crate) async fn run(what: Announcement, mut stopping: watch::Receiver<bool>)
 
 #[cfg(test)]
 mod tests {
-    use super::{Announcement, SERVICE, read_name};
+    use super::{Announcement, SERVICE, on_link, read_name};
 
     fn query(name: &str, kind: u16, id: u16) -> Vec<u8> {
         let mut q = Vec::new();
@@ -305,12 +370,10 @@ mod tests {
     #[test]
     fn answers_only_queries_for_jstream() {
         let a = Announcement::new("Studio PC", 4456);
-        assert_eq!(a.asked(&query(SERVICE, 12, 7)), Some(7));
-        assert_eq!(a.asked(&query("_JSTREAM._tcp.local", 255, 8)), Some(8));
-        assert_eq!(
-            a.asked(&query(&format!("Studio PC.{SERVICE}"), 33, 9)),
-            Some(9)
-        );
+        let id = |q: &[u8]| a.asked(q).map(|asked| asked.id);
+        assert_eq!(id(&query(SERVICE, 12, 7)), Some(7));
+        assert_eq!(id(&query("_JSTREAM._tcp.local", 255, 8)), Some(8));
+        assert_eq!(id(&query(&format!("Studio PC.{SERVICE}"), 33, 9)), Some(9));
         assert_eq!(a.asked(&query("_http._tcp.local", 12, 1)), None);
         assert_eq!(
             a.asked(&query(SERVICE, 1, 1)),
@@ -367,5 +430,46 @@ mod tests {
         assert!(a.target.ends_with(".local"));
         assert_eq!(Announcement::new("  ", 1).instance, "JStream");
         assert_eq!(Announcement::new("studio.local", 1).instance, "studio");
+    }
+
+    /// Only the local network is answered: an off-link source learns nothing (#1799 B1).
+    #[test]
+    fn only_the_local_network_is_answered() {
+        for lan in [
+            "192.168.1.20",
+            "10.0.0.5",
+            "172.16.3.4",
+            "169.254.9.9",
+            "127.0.0.1",
+            "::1",
+        ] {
+            assert!(on_link(lan.parse().expect("ip")), "{lan}");
+        }
+        for off in [
+            "8.8.8.8",
+            "203.0.113.7",
+            "100.64.0.1",
+            "2001:db8::1",
+            "fe80::1",
+        ] {
+            assert!(!on_link(off.parse().expect("ip")), "{off}");
+        }
+        assert!(on_link("::ffff:192.168.1.20".parse().expect("ip")));
+    }
+
+    /// A one-shot query's answer carries its ID and repeats its question (RFC 6762 §6.7).
+    #[test]
+    fn a_legacy_answer_repeats_the_question() {
+        let a = Announcement::new("Studio PC", 4456);
+        let asked = a.asked(&query(SERVICE, 12, 0x1234)).expect("asked");
+        let r = a.legacy_response(&asked);
+        assert_eq!(&r[0..2], &[0x12, 0x34]);
+        assert_eq!(&r[4..6], &[0, 1], "one question");
+        assert_eq!(&r[6..8], &[0, 3], "three answers");
+        let (question, after) = read_name(&r, 12).expect("question");
+        assert_eq!(question, SERVICE);
+        assert_eq!(&r[after..after + 4], &[0, 12, 0, 1], "PTR, IN");
+        let (owner, _) = read_name(&r, after + 4).expect("first answer");
+        assert_eq!(owner, SERVICE);
     }
 }

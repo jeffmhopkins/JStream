@@ -41,10 +41,10 @@
 			]
 		},
 		{
-			"Name": "Place keyframe",
+			"Name": "Go to keyframe",
 			"UUID": "io.github.jeffmhopkins.jstream.keyframe",
 			"Icon": "imgs/actions/keyframe/icon",
-			"Tooltip": "Places a keyframe of a scene. Lights while that keyframe is placed.",
+			"Tooltip": "Moves a scene to one of its keyframes. Lights while the scene is at that keyframe.",
 			"PropertyInspectorPath": "ui/inspector.html",
 			"Controllers": [
 				"Keypad"
@@ -188,7 +188,7 @@
 	"Category": "JStream",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
-	"Description": "Control JStream from Stream Deck over the network: run shows, switch scenes, place keyframes, show, hide and mute sources, play sequences, turn effects on and off, start streams and recordings, flip channels and run hotkey actions. Keys light up with JStream's live state.",
+	"Description": "Control JStream from Stream Deck over the network: run shows, switch scenes, go to keyframes, show, hide and mute sources, play sequences, turn effects on and off, start streams and recordings, flip channels and run hotkey actions. Keys light up with JStream's live state.",
 	"Icon": "imgs/plugin/marketplace",
 	"SDKVersion": 3,
 	"Software": {

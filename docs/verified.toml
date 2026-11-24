@@ -1074,7 +1074,7 @@ stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: t
 stamp = { hash = "b3:adb4118b32fd7889", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; no wire change | merge: Merged wave/alpha5 (#1288 CLAP scan 0.106, #1332 kinds.changed 0.107, #1396 camera controls, #1343/#1399/#1402 wheel chords, #1336 views, #1313 slow-effect quarantine, #1298 blend modes, network listener). Agent approval is protocol 0.108 in the bullet; the wave's 0.100 to 0.107 entries unchanged. | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/announce.rs"]
-stamp = { hash = "b3:3909c4505f156825", by = "agent:claude", note = "the network listener paragraph now says it is announced on mDNS unless turned off (ADR-0233); no protocol change (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:2fd8d9ca4bfc113c", by = "agent:claude", note = "announce.rs now answers the local network only; the protocol paragraph's 'announced on mDNS unless turned off' holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/approvals.rs"]
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); server-side only, no wire change; section holds | merge: Merged wave/alpha5 (#1288 CLAP scan 0.106, #1332 kinds.changed 0.107, #1396 camera controls, #1343/#1399/#1402 wheel chords, #1336 views, #1313 slow-effect quarantine, #1298 blend modes, network listener). Agent approval is protocol 0.108 in the bullet; the wave's 0.100 to 0.107 entries unchanged." }
@@ -2700,7 +2700,7 @@ stamp = { hash = "b3:d6364184ccac945d", by = "agent:release-alpha13", note = "Re
 stamp = { hash = "b3:fb916fb4301acdcb", by = "agent:claude", note = "Re-read in full after the train merge. Its stale inputs were core's audit-log and logging sections (mute sentences, MIDI binding debug log), which change nothing it says; its option list names --jtunnel-midi and --ptz-camera, both parsed in args.rs." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:63de9cd2b75fe7f6", by = "agent:claude", note = "network_config now sets NetworkConfig::announce from --lan-quiet (added); the hand-rolled flag list names --lan-quiet (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:c142885124ad2581", by = "agent:claude", note = "server design's announcement paragraph now says it answers the local network only, throttled; the daemon's --lan-quiet text holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:011c0665f03c1e58", by = "agent:scene-folders", note = "Re-read against ARCH#persistence gaining schema_version 23: its folder mentions are config, plugin, browser and data folders, and it names no collection schema version; holds. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
@@ -6498,7 +6498,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:707bdcd17bc89e64", by = "agent:claude", note = "tests.rs gained renders_at_alternating_sizes_keep_their_targets, an offscreen pixel check at three sizes plus counts of target sets made and kept for three and four sizes in rotation, more sizes than are kept, and a size left unused; it follows the section's approach (small flat colours, interior samples, tolerance 0) and adds no golden file. | kept from the merged side: Edited: the drawn-size list gains the_cache_holds_a_video_frame_at_the_size_it_is_drawn (tests.rs): whole first, a quarter once drawn at an eighth, refilled in place, whole when drawn large, planned start, whole after upload_frame and on a plain cache." }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:63de9cd2b75fe7f6", by = "agent:claude", note = "added Announcing it under The network listener (records, timing, socket, bounds, goodbye) checked against announce.rs and serve_with_shutdown; socket2 in Dependencies (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:c142885124ad2581", by = "agent:claude", note = "Announcing it: answers only private, link-local or loopback sources (on_link), group answers at most once a second, legacy answers repeat the question; checked against announce.rs (#1799 B1, N1, N2)" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:6bf099a800f9847b", by = "agent:claude", note = "Re-read listening, admission and limits, and scanned the rest for query lists: the server passes calls through and names no query; the new scene.drawn_camera bullet in ARCH protocol and the mock arm change nothing here | merge: Re-read after merging the alpha.13 train (fixed_aperture, ADR-0223; collection-load channel fix): the dep changes are ARCH#protocol's drawn-camera bullet and control#design's mock line; admission, sessions and transport name no query or camera and hold. | merge: Merged the alpha.13 train at a2b0855 (#1789 warp arrival fades ADR-0224, #1792 Show Next button, #1794 light CI for non-main PRs ADR-0231): none of it touches the drawn camera, the protocol (still 0.191 there, 0.192 here) or this section's text; only verified.toml conflicted. Re-read: names no query or camera; holds. | kept from the merged side: The alpha.13 train merged #1716, #1712, #1708, #1705, #1681, #1709, #1743, #1742 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it. | merge: Merged #1744 (ADR-0213: live filter settings, opacity, source and master faders and sends) into the alpha.13 train at bd7644b; its protocol 0.180 is renumbered 0.183 after the train's 0.178 to 0.182. Checked that every line #1744 added to this section is in the merged text, apart from the renumbered version mentions and the WS-05 row, which now carries both #1744's live-drag text and #1697's mapping text | merge: Merged main after #1681 landed there as protocol 0.178 (main's squash eca3905 holds the same content as f1a33c4, already in the train). The train renumbers from main: 0.178 model resolution (#1681), 0.179 shows (#1716), 0.180 several actions per key or trigger (#1708); 0.181 to 0.183 unchanged. Re-read this section's version mentions after the swap: each names its feature's new number, and the versions paragraph lists 0.183 down to 0.177 in order | merge: Merged #1725 (the Show panel, passed r6 at 5a1b811, carrying #1716's branch at a2dd8e7) into the train. Checked that every line #1725 added to this section is in the merged text (by script, against its head), apart from lines combined with the train's: the protocol versions paragraph keeps the train's 0.183 down to 0.177, the View menu now has sixteen panels (Mappings, PTZ cameras and Show), the UI-FEATURES totals are recounted with the Show panel row, and line rewraps. The loader keeps the marker through Graph::set_show_scene, as the persistence text says | kept from the merged side: Re-read the parts that rest on jstream-control (the subprotocol constants, the per-connection Control, hello/call/binary forwarding). The control design change is only the mock's timeline paragraph, which this section doesn't use. | kept from the merged side: Re-read against control#design's mock list change (source.seek internal, no duration_ms): the server forwards calls and events generically and answers only credential and UI-settings calls itself; holds. | kept from the merged side: Control design and ARCH protocol changes are the live send refusal and version number; server design holds | kept from the merged side: jstream-control's design only gained the mock's model_resolution refusal; the server's design names no rendering switch and still holds. After merging main (#1717, protocol 0.177: source.seek and duration_ms; #1706): main's additions carry main's stamp and sit beside this change, which moves to protocol 0.178; the snapshots were regenerated. | kept from the merged side: Re-read against ARCH protocol and control design changes (show.* commands, show.changed event, mock shows): the server relays messages and events without naming commands, and auth, subprotocol and pairing are unchanged. | merge: Re-read against the merged ARCH protocol and control design (#1717's source.seek/duration_ms, this PR's shows at 0.178): the server relays messages without naming commands; auth, subprotocols and pairing unchanged. | merge: Re-read against the merged ARCH protocol and control design (#1681's model_resolution switch, this PR's shows at 0.179): the server relays without naming commands; unchanged. | kept from the merged side: Re-read against its dependency CRATE-jstream-control#design gaining the mock's ADR-0219 owner checks: its only folder mentions are ui-settings.json's data folder; holds. | kept from the merged side: merged #1711's head a0278b0 (alpha.13 train, protocol 0.187) under ADR-0202's data triggers, now 0.189: re-read; depends on jstream-control#design (mock's empty midi.last_notes); server design unchanged | kept from the merged side: Re-read against its dependency CRATE-jstream-control#design gaining the mock's ADR-0222 owner checks: its only folder mentions are ui-settings.json's data folder; holds. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
@@ -6519,7 +6519,7 @@ stamp = { hash = "b3:c42fd9fca5ce1d57", by = "agent:claude", note = "added Annou
 stamp = { hash = "b3:adb4118b32fd7889", by = "agent:claude-settings", note = "This branch adds agent approval (ADR-0131) at 0.108. After merging wave/alpha5's network listener, the gate refuses the host UI's token there like the control token (README updated, new network test); the approval, configuration and token-file entries sit beside the wave's network listener and certificate entries. | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/announce.rs"]
-stamp = { hash = "b3:3909c4505f156825", by = "agent:claude", note = "added Announcing it under The network listener (records, timing, socket, bounds, goodbye) checked against announce.rs and serve_with_shutdown; socket2 in Dependencies (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:2fd8d9ca4bfc113c", by = "agent:claude", note = "Announcing it: answers only private, link-local or loopback sources (on_link), group answers at most once a second, legacy answers repeat the question; checked against announce.rs (#1799 B1, N1, N2)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/approvals.rs"]
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "This branch adds agent approval (ADR-0131) at 0.108. After merging wave/alpha5's network listener, the gate refuses the host UI's token there like the control token (README updated, new network test); the approval, configuration and token-file entries sit beside the wave's network listener and certificate entries." }
@@ -6594,7 +6594,7 @@ stamp = { hash = "b3:91b837e64ac2fb2b" }
 stamp = { hash = "b3:adb4118b32fd7889", by = "agent:claude-settings", note = "This branch adds agent approval (ADR-0131: approvals.rs, the UI token, held hello, agent.* answered in Admitted) at protocol 0.108. Merging wave/alpha5 brought the network listener (ADR-0104); Served now carries its network access, and the gate refuses the host UI's token on the network listener as it does the control token, which the README now says and the_network_listener_refuses_the_host_uis_token tests. | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/announce.rs"]
-stamp = { hash = "b3:3909c4505f156825", by = "agent:claude", note = "added announce.rs to the module list; NetworkConfig gained announce (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:2fd8d9ca4bfc113c", by = "agent:claude", note = "announce.rs gained on_link, Asked and legacy_response; the module line still describes it" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/approvals.rs"]
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "This branch adds agent approval (ADR-0131: approvals.rs, the UI token, held hello, agent.* answered in Admitted) at protocol 0.108. Merging wave/alpha5 brought the network listener (ADR-0104); Served now carries its network access, and the gate refuses the host UI's token on the network listener as it does the control token, which the README now says and the_network_listener_refuses_the_host_uis_token tests." }
@@ -8520,7 +8520,7 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "ADR-0156 is now maintainer tier and proposed; the Linux steps are unchanged and still match vcam.rs's MODPROBE and PERSIST_HINT" }
 
 ["INTEGRATION-streamdeck#build"."body"]
-stamp = { hash = "b3:58be7456ee6e5313", by = "agent:claude", note = "daemon test now finds the daemon by mDNS and checks a changed certificate isn't retried; tslib 0BSD exception noted (N1); 12 of 12 pass against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:d2fcacb2fa4e8117", by = "agent:claude", note = "plugin.test adds a scene key with a keyframe; unit test checks sceneKeyframes; 12 of 12 against the daemon" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/package.json"]
 stamp = { hash = "b3:d67843ed82f78f37", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8538,10 +8538,10 @@ stamp = { hash = "b3:19fdb8c40548a839", by = "agent:claude", note = "daemon test
 stamp = { hash = "b3:33e39cd38e1bb930", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/plugin.test.ts"]
-stamp = { hash = "b3:94be2533d4672455", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:e127568417f9d866", by = "agent:claude", note = "plugin.test adds a scene key with a keyframe; unit test checks sceneKeyframes; 12 of 12 against the daemon" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/unit.test.ts"]
-stamp = { hash = "b3:5f31c14d7cdead5e", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:4a9bcd854ebb2994", by = "agent:claude", note = "plugin.test adds a scene key with a keyframe; unit test checks sceneKeyframes; 12 of 12 against the daemon" }
 
 ["INTEGRATION-streamdeck#design"."body"]
 stamp = { hash = "b3:a0325add8e614ab0", by = "agent:claude", note = "client.ts stops retrying on FingerprintMismatch like a 401 (N3); discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -8556,7 +8556,7 @@ stamp = { hash = "b3:4458a76284b426ae", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/actions/index.ts"]
-stamp = { hash = "b3:badafd07ab70c4ce", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:dc41aebd4487e9c9", by = "agent:claude", note = "lists.ts adds sceneKeyframes; actions' design text (one connection, live state) holds" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/hub.ts"]
 stamp = { hash = "b3:22c5b9ecf7cda0b5", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8577,7 +8577,7 @@ stamp = { hash = "b3:0dd58e7625cb540c", by = "agent:claude", note = "client.ts a
 stamp = { hash = "b3:7099247b3b19db3f", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/lists.ts"]
-stamp = { hash = "b3:351ffd57d84fb195", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:335639140afddd29", by = "agent:claude", note = "lists.ts adds sceneKeyframes; actions' design text (one connection, live state) holds" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/plugin.ts"]
 stamp = { hash = "b3:202a0b83abd0d76b", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8589,7 +8589,7 @@ stamp = { hash = "b3:deafc942594334d1", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:6512a1eb1b7c3f81", by = "agent:claude", note = "Forget now says the device stays paired in JStream until revoked (N2); a changed certificate stops retries (N3); Find JStream names the announcement setting and --lan-quiet (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/manifest.json"]
-stamp = { hash = "b3:ab7094435b31befe", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:ee8d23c06c0e67ce", by = "agent:claude", note = "the manifest renames Place keyframe to Go to keyframe and the inspector adds the Switch scene key's keyframe picker; install steps unchanged" }
 
 ["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.css"]
 stamp = { hash = "b3:6890318949d37d88", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8598,19 +8598,19 @@ stamp = { hash = "b3:6890318949d37d88", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:11b9855f0cebf9a5", by = "agent:claude", note = "Forget now says the device stays paired in JStream until revoked (N2); a changed certificate stops retries (N3); Find JStream names the announcement setting and --lan-quiet (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.js"]
-stamp = { hash = "b3:fb6aa42bf1da6a0e", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:c6201800d9692594", by = "agent:claude", note = "the manifest renames Place keyframe to Go to keyframe and the inspector adds the Switch scene key's keyframe picker; install steps unchanged" }
 
 ["INTEGRATION-streamdeck#keys"."body"]
-stamp = { hash = "b3:6e3b2ce0823d19e6", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:b1a8ec4be4728779", by = "agent:claude", note = "Switch scene's row gains the keyframe option (set_keyframe then switch, or move on program); Place keyframe renamed Go to keyframe, which never creates one; checked against index.ts" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/base.ts"]
 stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/index.ts"]
-stamp = { hash = "b3:badafd07ab70c4ce", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:dc41aebd4487e9c9", by = "agent:claude", note = "Switch scene's row gains the keyframe option (set_keyframe then switch, or move on program); Place keyframe renamed Go to keyframe, which never creates one; checked against index.ts" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/lists.ts"]
-stamp = { hash = "b3:351ffd57d84fb195", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:335639140afddd29", by = "agent:claude", note = "Switch scene's row gains the keyframe option (set_keyframe then switch, or move on program); Place keyframe renamed Go to keyframe, which never creates one; checked against index.ts" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/render.ts"]
 stamp = { hash = "b3:deafc942594334d1", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8823,7 +8823,7 @@ stamp = { hash = "b3:f87505261e656e9f", by = "agent:bindings", note = "Checked a
 stamp = { hash = "b3:ea350f0f1e1f0467", by = "agent:claude", note = "re-read: the daemon gained --lan-quiet and the server an mDNS announcement for --lan, which this runbook doesn't use; it holds (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:63de9cd2b75fe7f6", by = "agent:claude", note = "re-read: the daemon gained --lan-quiet and the server an mDNS announcement for --lan, which this runbook doesn't use; it holds (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:c142885124ad2581", by = "agent:claude", note = "server design's change is the mDNS responder's source check; the runbook doesn't use --lan; holds" }
 
 ["RUNBOOK-LINUX-TESTING#script"."body"]
 stamp = { hash = "b3:956a50f6752c97f7", by = "agent:claude-ci-load", note = "linux-install.yml's jobs now run only on main and on ready PRs into main (ADR-0231); the paths list and the lint/ubuntu/fedora steps are unchanged, and the paragraph on when the workflow runs now says so" }
@@ -9084,7 +9084,7 @@ stamp = { hash = "b3:d9c7698aeaa621e4", by = "agent:claude", note = "ADR-0098 co
 stamp = { hash = "b3:750a8fe4bc845cdf", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, people-only MCP nouns, server parts or gate credentials) | merge: Merged wave/alpha5 (#1335 sync: main's #1280, #1283, #1289, #1304, #1314, #1315, plus #1284, #1329): ADR-0131 (#1304) now exists in the branch; re-read it, and the section's notice-not-a-control, two-minute timeout and approved-list file match the ADR" }
 
 ["THREAT-MODEL#pairing"."body"]
-stamp = { hash = "b3:660394071c3f02c6", by = "agent:claude", note = "added the accepted ADR-0233 paragraph: what is announced, the exposure, the bounded responder, a spoofed answer meets the fingerprint check; covers announce.rs (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:d378ab7d1375dba6", by = "agent:claude", note = "the responder answers private, link-local or loopback sources only, throttled to once a second; a routed private network (VPN) can still ask, said as for JTunnel" }
 
 ["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
 stamp = { hash = "b3:5670e6a5758601b2" }
@@ -9099,7 +9099,7 @@ stamp = { hash = "b3:4458a76284b426ae", by = "agent:claude", note = "#1129: per-
 stamp = { hash = "b3:adb4118b32fd7889", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; device sessions unaffected | merge: Merged wave/alpha5 (#1288 CLAP scan 0.106, #1332 kinds.changed 0.107, #1396 camera controls, #1343/#1399/#1402 wheel chords, #1336 views, #1313 slow-effect quarantine, #1298 blend modes, network listener). Pairing is unchanged by the merge: admitted.rs only moved network access into Served. | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/announce.rs"]
-stamp = { hash = "b3:3909c4505f156825", by = "agent:claude", note = "added the accepted ADR-0233 paragraph: what is announced, the exposure, the bounded responder, a spoofed answer meets the fingerprint check; covers announce.rs (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:2fd8d9ca4bfc113c", by = "agent:claude", note = "the responder answers private, link-local or loopback sources only, throttled to once a second; a routed private network (VPN) can still ask, said as for JTunnel" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:98ecc9b8edf1b4c3", by = "agent:claude", note = "#1307 round 1 B2: controls now say five wrong attempts from either listener void the code, as devices.rs does; Accepted adds that a network peer can deny pairing by voiding codes, never win it" }
