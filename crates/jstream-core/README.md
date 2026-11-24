@@ -425,7 +425,12 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
   motion modifiers, turned into `jstream-anim`'s when the shot is planned. A `width` or
   `height` modifier stretches the item's box on one axis about its centre
-  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 7).
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 7). A
+  reader modifier whose `mode` is `replace`
+  ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)) sets its property in
+  `jstream_anim::Offsets::set` instead of adding to it; `motion::apply` takes each
+  property's own value through `Offsets::on` and `Offsets::base`, so the last replace
+  sets it and the adds go on top.
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
   modifier hearing the program mix, a bus or a source.
@@ -457,7 +462,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
   modifier adding to a number or colour setting of one of its item's effects each
   frame, within the setting's range, by the path a Move's blend uses, with the layer padded for the
-  most and the least it reaches.
+  most and the least it reaches. A `replace` modifier (ADR-0203) sets a number setting
+  before the others add to it (`Shot::source_value` gives what a modifier makes of the
+  setting's own value), and the padding reaches from the own value to its range.
 - **Driven source settings** (`sourced.rs`,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4): a
   `source` modifier adding to a live setting of its item's own source as that item draws
@@ -465,7 +472,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   scene, an environment light's intensity and its sky (colours, stars, nebula, galaxy
   band and warp, `sourced::environment`) as it lights and draws it, and a model's
   colour, metallic, roughness and glow strength, or by material its glow, as it draws
-  it. Nothing is stored. A painting `data` modifier sets a light's colour, a
+  it. Nothing is stored. A `replace` modifier (ADR-0203) sets a light's or a sky's
+  number the same way; a model's materials take none, since their own values are the
+  model's. A painting `data` modifier sets a light's colour, a
   model's colour or a material's glow colour instead (`MaterialDrive::set_color` and
   `set_emissive`), and an effect's colour setting the same way (`driven.rs`).
 - **Value bindings** (`value_bindings.rs`,
@@ -480,14 +489,24 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   or range is unchanged across a batch keeps its follower, as does one (or a channel's
   input) whose input changed only its `smoothing_ms` (`same_but_smoothing`), which takes
   the new time and goes on driving; a missing target drives
-  nothing. A binding's `amount` scales its value toward `from` by a channel's level. A
-  binding on a PTZ head's axis (`ptz_axis`,
+  nothing. Each target takes its last moved `replace` binding's value, or its stored
+  value (`Graph::stored_value`), plus every moved `add` binding's, and a binding that
+  isn't `enabled` drives nothing
+  ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)). A binding's `amount` scales its value toward `from` by a channel's level.
+  An `audio` input (ADR-0206) hears the scope the engine keeps for it in the live
+  sources' heard map (`FilterAssets::motion_heard`): on each tick its own `AudioMeter`
+  measures the scope's latest window (the FFT only for a band) and its envelope follows
+  the measure with its attack and release (`ReaderOf::sample`), the envelope standing in
+  for the input's smoothing. One whose scope isn't held yet reads silence and is looked
+  up again each tick, and one whose scope was replaced is followed afresh.
+  A binding on a PTZ head's axis (`ptz_axis`,
   [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) makes no edit: the
   tick rounds its value to a whole count (`PtzAim`) and the engine hands those to the
   heads (`Ptz::follow_axes`, [PTZ cameras](#contents-media)).
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
-  each channel's inputs with the same readers and smoothing, in an order where a
+  each channel's inputs with the same readers and smoothing (an `audio` input's
+  envelope, as above), in an order where a
   channel's `channel` inputs come first, combines, switches, averages, fades and curves
   them, and stores each level in its `ChannelCell` in `LiveData::channels`, which the
   `channel` kind and `amount` read on any thread. The `jstream-values` thread ticks it
@@ -504,7 +523,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   camera motion and follow camera, planned with the shot; camera motion reads its
   `midi` and `data` levels from the shot's bindings, and its `pan` and `tilt` turn the
   view about the camera as the live aim does
-  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)). A follow camera holds its
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
+  A `replace` camera modifier sets its property, pulled toward the camera's own value by
+  its amount, before the adds (ADR-0203); a replaced pan or tilt is the turn itself. A follow camera holds its
   zoom by default and only pans at the box's edges
   ([ADR-0161](../../docs/adr/0161-follow-camera-holds-its-zoom.md)).
 - **Live aim** (`aim.rs`,
@@ -3786,8 +3807,9 @@ brings the mixer in line with the collection under the collection lock:
   and the meter still reads a source that is off program. `scene.switch` and a batch
   that moves program sync too, after program is reconciled;
 - the bus scopes (#362): every bus a source's settings refer to (a `waveform` or
-  `spectrum` drawing it), or an item's or keyframe override's `audio` motion modifier
-  hears (`heard_by_motion`, ADR-0100), keeps a scope in the engine's `AudioScopes`, and the others
+  `spectrum` drawing it), or an item's or keyframe override's `audio` motion modifier,
+  a channel's `audio` input or a value binding's hears (`heard_by_motion`, ADR-0100 and
+  ADR-0206), keeps a scope in the engine's `AudioScopes`, and the others
   are dropped (`AudioScopes::retain`). The live sources do this before they queue the
   edit's builds, and the sync again: a source drawing a new bus then finds its scope,
   and one still being built from settings from before the edit can't make a dropped
@@ -3803,8 +3825,8 @@ brings the mixer in line with the collection under the collection lock:
   goes to the program stage's audio sources thread, which plays it (see *Bus
   monitors*);
 - the source scopes (#459): every source a `waveform` or `spectrum` draws through its
-  `audio_source` (`jstream_sources::drawn_source`), or an `audio` motion modifier
-  hears through its own, keeps a scope too
+  `audio_source` (`jstream_sources::drawn_source`), or an `audio` motion modifier,
+  channel input or value binding hears through its own, keeps a scope too
   (`AudioScopes::retain_sources`), listed in the same `ScopeTaps` after the buses. It
   is fed from the source's mixer input (`Mixer::input_block`: after its filters,
   fader, mute and activity gain, before its sends, the point ADR-0028 gives a
@@ -4567,7 +4589,9 @@ would under that lock, [Timelines](#timelines)) and advance the running show
 ([Shows](#shows)), and waits without it (on the lock's `Shared::ticker` condvar,
 which releases it). The
 `jstream-values` thread does the same: it takes the collection lock for each tick, reads
-the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
+the MIDI state and the live data's watches (atomics) under it, measures the audio
+scopes its `audio` inputs hear (each scope's ring is lock-free to read, and the heard map
+is the live sources' snapshot, taken with no lock), and sleeps without it; a
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
 takes the live data's lock briefly, last, to find or make its watch, as a plan does. A
 `jstream-values` tick also plays the timelines whose wait is over and those a trigger

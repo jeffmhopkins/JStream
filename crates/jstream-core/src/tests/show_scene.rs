@@ -312,6 +312,7 @@ fn the_show_scenes_items_are_drawn_items_with_their_own_motion() {
                 },
                 clock: jstream_protocol::MotionClock::Shown,
                 enabled: true,
+                mode: jstream_protocol::MappingMode::Add,
                 amount: None,
             }],
         }]),
