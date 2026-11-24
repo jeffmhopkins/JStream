@@ -2904,7 +2904,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-card-big { font-size: 22px; font-weight: 700; color: var(--text); }
 .show-card-sub { margin-top: 3px; color: var(--muted); }
 .show-run .show-continue { display: block; width: 100%; height: auto; line-height: 1.2; padding: 22px 0; border: none; border-radius: 10px; background: var(--show-bookmark); color: var(--show-bookmark-ink); font-size: 26px; font-weight: 800; text-align: center; }
-.show-run .show-continue:hover { filter: brightness(1.06); }
+.show-run .show-continue:hover { background: var(--show-bookmark); color: var(--show-bookmark-ink); filter: brightness(1.06); }
 .show-run .show-continue.busy { opacity: .45; cursor: not-allowed; filter: none; }
 .show-run-back { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
 .show-run-back > .show-btn, .show-run-back > .show-key { flex: none; }
