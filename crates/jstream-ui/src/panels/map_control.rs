@@ -690,7 +690,8 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
     };
 
     // JTunnel: Mods, and any other field of a sender's data.
-    let any_sender = RwSignal::new(false);
+    // One JTunnel sender is live at a time, so a Mod follows it unnamed (ADR-0221).
+    let any_sender = RwSignal::new(true);
     let opened = RwSignal::new(None::<(String, String, Vec<(String, String)>)>);
     let open_key = move |sender: String, key: String| {
         let Some(s) = session.0.get_value() else {
@@ -833,11 +834,13 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                 let fields = {
                     let name = name.clone();
                     move || {
-                        let (from, key, fields) = opened.get().filter(|(s, _, _)| *s == name)?;
+                        let (_, key, fields) = opened.get().filter(|(s, _, _)| *s == name)?;
                         let rows = fields
                             .into_iter()
                             .map(|(field, value)| {
-                                let reader = data_reader(Some(&from), &key, &field);
+                                // Live data comes only from JTunnel, one sender live at
+                                // a time: the reader names none (ADR-0221).
+                                let reader = data_reader(None, &key, &field);
                                 let is_chosen = {
                                     let reader = reader.clone();
                                     move || chosen(&reader)
@@ -1247,7 +1250,7 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                             <label class="check map-any">
                                 <input type="checkbox" class="inline-check" prop:checked=any_sender
                                     on:change=move |e| any_sender.set(event_target_checked(&e)) />
-                                "Follow this Mod from any sender"
+                                "Follow the live sender, whatever its name"
                             </label>
                             {jtunnel}
                         }.into_any(),

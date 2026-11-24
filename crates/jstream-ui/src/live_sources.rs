@@ -230,13 +230,14 @@ impl Moved {
                 control: MotionMidiControl::Cc,
                 controller: Some(control.controller),
                 channel: Some(control.channel),
-                input: Some(control.input.clone()),
+                input: crate::jtunnel::bound_input(&control.input),
                 smoothing_ms: 50,
                 curve: MotionCurve::Linear,
                 from: Finite32::ZERO,
                 to: Finite32::ONE,
             },
-            Moved::Mod { sender, slot } => mod_reader(Some(sender), *slot),
+            // Mods come only from JTunnel, and one sender is live: no name (ADR-0221).
+            Moved::Mod { slot, .. } => mod_reader(None, *slot),
         }
     }
 }
@@ -660,7 +661,8 @@ mod tests {
             slot: 4,
         }
         .reader();
-        assert_eq!(mod_of(&knob), Some((Some("Bitwig"), 4)));
+        // A Mod is bound with no sender: it reads the live one (ADR-0221).
+        assert_eq!(mod_of(&knob), Some((None, 4)));
     }
 
     #[test]

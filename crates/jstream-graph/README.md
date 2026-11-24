@@ -86,8 +86,9 @@ protocol's types (`Overrides`).
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
   parent's at their effective values. A scene's `filters` (ADR-0065) are `Chains` whose
   audio chain is always empty; a keyframe scene has none.
-- `Folder` and `Label`: a folder has an ID, a name and an optional parent folder, and a
-  label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
+- `Folder` and `Label`: a folder has an ID, a name, an optional parent folder and an
+  optional scene it belongs to (ADR-0222: it then holds that scene's keyframe scenes and
+  timelines), and a label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
   only. `Graph::with_sample_labels` gives a graph with no labels the prototype's four
   samples (Intro / outro, Gameplay, Overlay, Sponsor) without changing its `rev`; the
   engine calls it when it creates a collection file.
@@ -392,8 +393,9 @@ that does not want to change the graph it has.
   own that names a keyframe scene as the fix. `State::shown_items` and `State::items_through` draw an item with its
   overridden effects. An override names an item in the
   parent's tree (`State::tree_items`: its own, or a child of a group placed in it, at
-  any depth, protocol 0.55, #846), and any other is refused. `item.add`, `item.move` into a variant
-  and `scene.set_folder` of one are refused. After every edit of a batch,
+  any depth, protocol 0.55, #846), and any other is refused. `item.add` and `item.move` into a variant
+  are refused, and `scene.set_folder` of one names only one of its parent's folders
+  (ADR-0222). After every edit of a batch,
   `keyframe::drop_orphans` drops each override whose item is no longer in its
   variant's tree (`drop_unless`), reports it in `Applied::dropped_overrides`, and
   restores it in the inverse after the edit's own
@@ -411,7 +413,16 @@ that does not want to change the graph it has.
   ordered lists with unique, non-empty IDs and non-empty names. `folder.create` takes an
   optional `parent` that must exist, and `folder.set_parent` refuses a parent that would
   put the folder inside itself (`invalid_argument`, field `parent`, naming the chain).
-  `scene.set_folder` names an existing folder or none. `label.create` and
+  `scene.set_folder` names an existing folder or none. A folder that belongs to a scene
+  ([ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md), `folder.create`'s `scene_id`)
+  names an existing scene that isn't a keyframe scene, and every owner is checked by
+  `check_folder_owner`: a folder's parent has its owner, a keyframe scene goes only in
+  its parent's folders and any other scene only in the scene list's, and a timeline's
+  `folder` (checked by `timeline.set`) is one of its scene's family's. A folder holding a
+  timeline is blocked like one holding a scene, and its plan moves the timeline up with
+  `timeline.set`. `scene.delete` takes the scene's folders with it
+  (`remove_scene_folders`), and its inverse puts them back in place before the
+  timelines. `label.create` and
   `label.update` check the colour (`#rrggbb`) and icon (1 to 64 bytes; ADR-0024 §4)
   with the protocol's `check_color` and `check_icon`, and `scene.set_meta` checks the
   same through `SceneMeta::problem`. `source.set_meta` replaces a source's labels (each
@@ -500,8 +511,9 @@ that does not want to change the graph it has.
   whole: the binding must exist, then each label, each once (`checked_labels`); an
   empty list removes them, and the inverse sets the old ones. Clearing or removing a
   binding takes its labels with it, and its inverse is `hotkey.set` then
-  `hotkey.set_labels`. Deleting a scene, source, output, encoder profile or
-  transition preset (a `scene.switch` may name one) removes the bindings that name it, and
+  `hotkey.set_labels`. Deleting a scene, source, output, encoder profile, bus (a
+  `bus.mute` names one, ADR-0207) or transition preset (a `scene.switch` may name one)
+  removes the bindings that name it, and
   any edit that takes away an item an `item.show`, `item.hide` or `item.toggle` names,
   or a timeline a `timeline.play`, `timeline.stop` or `timeline.seek` names, removes
   those bindings too (`remove_missing_items`,
@@ -529,7 +541,8 @@ that does not want to change the graph it has.
   `binding_id` (inverse `binding.clear_value`, or `binding.set_value` with the one it
   replaced) after `ValueBinding::problem` (`invalid_argument` at `binding.<field>`), the
   limit of 256 (at `binding`), and its target: `not_found` for a source, filter (found as
-  `filter.set_settings` finds it) or bus that doesn't exist, and `invalid_argument` at
+  `filter.set_settings` finds it), bus, item or scene that doesn't exist (the switch
+  targets `source_mute`, `bus_mute` and `item_visible`, ADR-0207, need only that), and `invalid_argument` at
   `binding.target.param` for a setting its kind lacks, doesn't mark `live`, or that isn't
   an `int`, `float` or `bool`. Last, the setter the engine will drive it with
   (`value_edit`) is applied to a copy of the state, and a refusal (a `scene` source's
@@ -541,7 +554,9 @@ that does not want to change the graph it has.
   `Graph::stored_value` the number it holds as stored (a setting's own or its kind's
   default, a gain in dB, a switch as 0 or 1), which `add` bindings add to
   ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)), and `value_edit` the
-  setter edit that gives it a value, clamped, rounded or switched. A motion modifier's
+  setter edit that gives it a value, clamped, rounded or switched: for a switch target
+  (ADR-0207) the `source.set_audio` or `bus.set_fader` mute, or `item.set_visible` with
+  the binding's `scene_id`. A motion modifier's
   `mode` becomes `jstream_anim::Modifier::replace` (`motion.rs`), a camera's too.
   A PTZ head's axis (`ptz_axis`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md))
   is bound with no lookup and no setter probe, since the camera list is the machine's,
@@ -616,7 +631,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 19), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 22), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -669,6 +684,8 @@ with `property` `source` and their `source` target, which drive a setting of the
 own source. A scene's `reflections` (ADR-0170), omitted while `false`, is
 `schema_version` 18. Version 19 (ADR-0178) adds the `value_bindings`, ordered by ID and
 omitted when there are none, and motion modifiers with `property` `width` or `height`.
+Versions 20, 21 and 22 add the `channels`, a timeline's `lanes`, `starts` and `stops`,
+and the `shows` with the `show_scene` marker (see Channels, Timelines and Shows above).
 Loading puts the value bindings in last, each after its own shape check, without looking
 up its target, so one whose target is gone or of a kind not installed loads as it was
 saved. Loading creates the folders top level first, then

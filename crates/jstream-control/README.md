@@ -176,12 +176,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - hotkeys: `hotkey.set`'s chord spelling, an action the chord runs already (a chord
     runs several, in bind order, ADR-0208), an action
     `Action::bind_problem` refuses, a wheel chord bound to an action that takes no
-    steps (ADR-0112 §3) and a missing named scene, output or preset (only `cut`
-    exists), in that order, and
+    steps (ADR-0112 §3) and a missing named scene, source, output, bus or preset (only
+    `cut` exists), in that order, and
     `hotkey.clear` of an unbound chord or of an action it doesn't run, restored in its
     exact order on undo; `hotkey.set_labels` of an unbound chord, then a
-    missing or repeated label (ADR-0133). Deleting a scene, source, output or encoder
-    profile removes the bindings naming it, with their labels, and lists them in the
+    missing or repeated label (ADR-0133). Deleting a scene, source, output, encoder
+    profile or bus removes the bindings naming it, with their labels, and lists them in the
     batch result's `removed_hotkeys`; undo restores both.
   - controller bindings (ADR-0122): `binding.set`'s `Trigger::problem`, an action the
     trigger runs already, then the hotkeys' action checks (`check_bindable`, shared),
@@ -189,7 +189,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     bindings naming what they delete, listed in `removed_bindings`.
   - value bindings (ADR-0178): `binding.set_value`'s `ValueBinding::problem` only, since
     the mock describes no kinds' settings, and `binding.clear_value` of an unknown ID.
-    `midi.last_controls` answers the controls `MockEngine::move_control` moved.
+    `midi.last_controls` answers the controls `MockEngine::move_control` moved. `midi.last_notes`
+    answers no notes: no MIDI input plays here.
   - channels (ADR-0183): `channel.set`'s `ChannelInfo::problem`, `channel.delete` of an
     unknown ID, and `channel.values`, which answers each channel at its default (its
     `off_value` while off) with no driver, since the mock follows no controls.
@@ -219,8 +220,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `scene.set_camera` and `source.set_meta`, in `mock/organise.rs`)
   make the graph's checks with the protocol's own `check_color`, `check_icon`,
   `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
-  background or reflections): a missing parent, folder or label, a folder inside itself, a
-  label listed twice, and no deleting a folder that holds a scene or folder or a label a
+  background or reflections): a missing parent, folder or label, a folder inside itself,
+  a folder, scene or timeline filed under the wrong owner (ADR-0222: a scene's own
+  folders hold its keyframes and timelines, and go with it on its delete), a
+  label listed twice, and no deleting a folder that holds a scene, timeline or folder or a label a
   source, scene or hotkey binding carries (with the graph's `blockers`; scenes carry labels since
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md), bindings since
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)). `label.members`
@@ -401,7 +404,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   mock draws nothing), `item.show`,
   `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
   `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
-  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `item.trigger_motion`
+  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `source.mute` and
+  `bus.mute` the same way (the `source.set_audio` or `bus.set_fader` mute, nothing for a
+  mute already set, `not_found` for a missing target and the edit's refusals,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), `item.trigger_motion`
   (#1107: `not_found` for a missing item, `invalid_argument` for a malformed
   `modifier_id`, and otherwise nothing, since the mock draws nothing), `studio.get`,
   and `studio.changed` for each and after a batch, undo or redo that creates the first

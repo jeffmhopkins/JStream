@@ -3005,6 +3005,8 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-edit-bar .show-continue { flex: none; height: 34px; padding: 0 18px; font-size: 14px; white-space: nowrap; }
 .show-btn { height: 32px; padding: 0 12px; font-size: 13px; white-space: nowrap; }
 .show-btn.on { background: var(--selected); }
+/* A locked show stands out: the show accent marks the Edit and Run bars' Lock while it is on. */
+.show-btn.show-lock.on { border-color: var(--show-bookmark); color: var(--show-bookmark); }
 .show-next { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .show-next b { color: var(--text); font-weight: 600; }
 .show-bar-gap { flex: 1; }

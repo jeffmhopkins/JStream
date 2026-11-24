@@ -9,7 +9,7 @@
 //! ([`Action::cue_problem`]), so playing a timeline never makes an edit.
 
 use crate::command::Action;
-use crate::id::{LabelId, SceneId, TimelineId};
+use crate::id::{FolderId, LabelId, SceneId, TimelineId};
 use crate::{Finite32, check_channel_id};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -78,6 +78,11 @@ pub struct TimelineInfo {
     /// none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stops: Vec<TimelineTrigger>,
+    /// The folder it is filed in under its scene (ADR-0222, since 0.190): a folder of
+    /// the scene that holds it, or of that scene's parent for a keyframe scene's, else
+    /// `invalid_argument`. Folders organise only. Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<FolderId>,
 }
 
 /// One lane: a channel moved through points while its timeline plays (ADR-0184).
@@ -611,6 +616,7 @@ mod tests {
 
     fn timeline(duration_ms: u32, looping: TimelineLoop, at: &[u32]) -> TimelineInfo {
         TimelineInfo {
+            folder: None,
             lanes: Vec::new(),
             starts: Vec::new(),
             stops: Vec::new(),

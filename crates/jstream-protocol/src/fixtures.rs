@@ -451,14 +451,23 @@ pub(crate) fn edits() -> Vec<Edit> {
             mix_id: VideoMixId::new("mix_old"),
         },
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new("fld_shows"),
             name: "Shows".into(),
             parent: None,
         },
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new("fld_intro"),
             name: "Intros".into(),
             parent: Some(FolderId::new("fld_shows")),
+        },
+        // A folder under one scene for its keyframes and sequences (ADR-0222).
+        Edit::FolderCreate {
+            scene_id: Some(SceneId::new("scn_main")),
+            folder_id: FolderId::new("fld_looks"),
+            name: "Looks".into(),
+            parent: None,
         },
         Edit::FolderRename {
             folder_id: FolderId::new("fld_intro"),
@@ -749,6 +758,35 @@ pub(crate) fn edits() -> Vec<Edit> {
                     ..show().loops.remove(0)
                 }],
                 ..show()
+            },
+        },
+        // Switches a binding drives, on at one half (ADR-0207).
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "mic_mute".into(),
+                target: ValueTarget::SourceMute {
+                    source_id: SourceId::new("src_mic"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "music_mute".into(),
+                target: ValueTarget::BusMute {
+                    bus_id: BusId::new("bus_music"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "logo_shown".into(),
+                target: ValueTarget::ItemVisible {
+                    item_id: ItemId::new("itm_1"),
+                    scene_id: Some(SceneId::new("scn_1")),
+                },
+                ..value_bindings().remove(0)
             },
         },
         // A channel, then its delete (ADR-0183).
@@ -1757,6 +1795,58 @@ fn controller_bindings() -> Vec<Binding> {
                 output_id: OutputId::new("out_yt"),
             },
         ),
+        // Bitwig's scene 3 selected, any track's playing scene changing, and a Mod
+        // crossing up and down (ADR-0202).
+        Binding::new(
+            Trigger::Data {
+                input: Some("Bitwig".into()),
+                key: "grid".into(),
+                field: "selectedScene".into(),
+                on: crate::DataOn::Equals { value: "3".into() },
+            },
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+                via: Vec::new(),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "track/*".into(),
+                field: "playing".into(),
+                on: crate::DataOn::Changes,
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "params".into(),
+                field: "values.19".into(),
+                on: crate::DataOn::Rises {
+                    level: Finite32::new(0.5).expect("finite"),
+                },
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "params".into(),
+                field: "values.20".into(),
+                on: crate::DataOn::Falls {
+                    level: Finite32::new(0.25).expect("finite"),
+                },
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
     ]
 }
 
@@ -2269,8 +2359,37 @@ pub(crate) fn actions() -> Vec<Action> {
             by: Finite32::new(-0.1).expect("finite"),
             fade_ms: None,
         },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::HoldOn,
+        },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::HoldOff,
+        },
         Action::SourceRestart {
             source_id: SourceId::new("src_1"),
+        },
+        // Mutes (ADR-0207): every way, on a source and on a bus.
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::Muted,
+        },
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::Unmuted,
+        },
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::PushToTalk,
+        },
+        Action::BusMute {
+            bus_id: BusId::new("bus_music"),
+            to: crate::MuteTo::Toggle,
+        },
+        Action::BusMute {
+            bus_id: BusId::master(),
+            to: crate::MuteTo::PushToMute,
         },
         Action::SourceSeek {
             source_id: SourceId::new("src_1"),
@@ -2447,6 +2566,7 @@ fn volley() -> TimelineInfo {
         curve,
     };
     TimelineInfo {
+        folder: None,
         lanes: vec![
             crate::TimelineLane {
                 target: crate::LaneTarget {
@@ -2589,6 +2709,7 @@ fn volley() -> TimelineInfo {
 /// A short timeline that toggles an item, repeating as `looping` says.
 fn pulse(looping: TimelineLoop) -> TimelineInfo {
     TimelineInfo {
+        folder: None,
         lanes: Vec::new(),
         starts: Vec::new(),
         stops: Vec::new(),
@@ -2792,6 +2913,7 @@ pub(crate) fn queries() -> Vec<Query> {
             key: "track/0".into(),
         },
         Query::MidiLastControls,
+        Query::MidiLastNotes,
         Query::ChannelValues,
     ]
 }
@@ -3604,14 +3726,22 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             video_mixes: mix_infos(),
             folders: vec![
                 FolderInfo {
+                    scene_id: None,
                     folder_id: FolderId::new("fld_shows"),
                     name: "Shows".into(),
                     parent: None,
                 },
                 FolderInfo {
+                    scene_id: None,
                     folder_id: FolderId::new("fld_intro"),
                     name: "Intros".into(),
                     parent: Some(FolderId::new("fld_shows")),
+                },
+                FolderInfo {
+                    scene_id: Some(SceneId::new("scn_main")),
+                    folder_id: FolderId::new("fld_looks"),
+                    name: "Looks".into(),
+                    parent: None,
                 },
             ],
             labels: vec![LabelInfo {
@@ -4269,6 +4399,15 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 controller: 7,
                 value: 96,
                 count: 41,
+            }],
+        },
+        QueryResult::MidiLastNotes {
+            notes: vec![crate::MidiNoteInfo {
+                input: "Pads".into(),
+                channel: 10,
+                note: 36,
+                velocity: 112,
+                count: 18,
             }],
         },
         QueryResult::DataList {

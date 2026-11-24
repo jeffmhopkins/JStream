@@ -60,12 +60,12 @@ pub use activity::{
 pub use agent::{AgentApproval, AgentTransport, ApprovalDecision, ApprovalOutcome, ApprovedAgent};
 pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
-    MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
+    MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, MuteTo, SendInfo, SourceAudio, SourceMeter,
     gain_db_problem,
 };
 pub use binding::{
-    Binding, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo, PtzAxis, Trigger,
-    ValueBinding, ValueTarget,
+    Binding, DataOn, MAX_DATA_VALUE_LEN, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo,
+    MidiNoteInfo, PtzAxis, Trigger, ValueBinding, ValueTarget,
 };
 pub use camera_aim::{
     CameraAim, CameraAimInfo, MAX_AIM_PAN_DEG, MAX_AIM_TILT_DEG, MAX_AIM_ZOOM, camera_aim_check,

@@ -187,7 +187,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                          camera?, camera_anchor?, camera_motion[], camera_follow?, ptz_shots[], timelines[] (cues, lanes, starts, stops), filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
-├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
+├── folders        Folder { id, name, parent?, scene? }   ordered; a tree per owner (the
+│                    scene list, or one scene's keyframes and timelines, ADR-0222); organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action, labels }]   chord → protocol action request; a chord repeats once per action, in bind order (ADR-0208)
 ├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request, repeated likewise (ADR-0122, ADR-0208)
@@ -310,7 +311,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   and saved with the collection, so every client and agent sees the same thing
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
   person). Folders change no rendering, switching or nesting; scenes keep their flat
-  display order, and a variant sits under its parent, never in a folder. A folder sits in
+  display order, and a variant sits under its parent, in none of the scene list's folders:
+  only in one of its parent's own, which a scene may have to organise its keyframe
+  scenes and timelines ([ADR-0222](adr/0222-a-scenes-own-folders.md)). A folder sits in
   at most one other (`parent`, [ADR-0064](adr/0064-nested-scene-folders.md)), never inside itself, and
   the folders in one parent show in folder order. A folder that holds anything, or a
   label anything carries, can't be deleted; `delete.plan` moves what the folder
@@ -772,7 +775,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   bus's monitor, an output device and a tap point (protocol 0.42).
   `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
   ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.25). Deleting the scene,
-  output or transition preset an action names removes its bindings in the same edit, the batch result lists
+  source, output, bus or transition preset an action names removes its bindings in the same edit, the batch result lists
   them as `removed_hotkeys`, and undo restores them
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
   `hotkey.set_labels` sets a binding's labels (protocol 0.100,
@@ -781,7 +784,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)) do the same
   for a controller `Trigger` (a MIDI note, controller or program change), with the
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
-  No input fires them yet.
+  Since 0.187 the engine fires them from the MIDI inputs the host lets run bindings (a
+  JTunnel sender with "Use this sender's MIDI" on, ADR-0123 §3), and a held note or
+  control releases an action that has a release (`Action::on_release`), as a client
+  does for a held key ([ADR-0207](adr/0207-mute-actions-and-held-triggers.md)).
+  Since 0.189 a trigger may also be one field of a JTunnel sender's live data meeting a
+  condition (`data`), which the engine fires from senders whose state is used
+  ([ADR-0202](adr/0202-live-data-triggers-and-note-learn.md)).
   A chord or trigger runs several actions in the order they were bound, and a clear can
   name the one action to unbind (protocol 0.181,
   [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
@@ -789,10 +798,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
   [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
   a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
-  setting, a fader or a send, drawn and heard without being stored, or since 0.182 one
+  setting, a fader or a send, since 0.187 a mute or a placement's visibility as a
+  switch (ADR-0207), drawn and heard without being stored, or since 0.182 one
   axis of a PTZ head, aimed rather than stored
   ([ADR-0209](adr/0209-value-bindings-aim-ptz-cameras.md)); `midi.last_controls`
-  reports each input's latest control change, for learning one.
+  reports each input's latest control change, for learning one, and `midi.last_notes`
+  (0.189, ADR-0202) each input's latest note-on.
   `channel.set` and `channel.delete` (protocol 0.169,
   [ADR-0183](adr/0183-virtual-control-channels.md)) set and remove a channel: up to eight
   `midi`, `data` or `channel` readings combined, averaged, faded, curved and switched
@@ -807,7 +818,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   reports it in `show`, and `show.changed` says what it did; `overlay.show`,
   `overlay.hide` and `overlay.toggle` put a scene over program with or without a show.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
-  `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
+  `folder.delete` and `scene.set_folder` organise the scene list (and, with a folder that
+  belongs to a scene, that scene's keyframe scenes and, through `timeline.set`'s
+  `folder`, its timelines; protocol 0.190, [ADR-0222](adr/0222-a-scenes-own-folders.md)), and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
   `source.set_meta` edit labels and organisation metadata
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31; a scene's labels, protocol
@@ -931,6 +944,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` and `state.changed` but no undo step, so a hotkey can show or hide an item. On
   program the engine plays the item's own appear or disappear effect as a Move that
   pairs every other item with itself.
+- **Mutes from an action** (protocol 0.187,
+  [ADR-0207](adr/0207-mute-actions-and-held-triggers.md)): `source.mute` and `bus.mute`
+  set a mute as `source.set_audio` and `bus.set_fader` do, on the same terms, to muted,
+  unmuted, toggled, or held for push to talk or push to mute, so a key or a pad can mute.
 - **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
   action `pairing.start` answers a one-time code (an action result, the one place it is
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own, and
@@ -1147,7 +1164,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)), and so does a `bus.delete`
   refused because a setting draws the bus (protocol 0.24: a `bus` reference, as the
   `waveform` and `spectrum` kinds' `audio` setting holds), and a `folder.delete` or
-  `label.delete` refused because a scene or folder is in the folder or a source, scene,
+  `label.delete` refused because a scene, timeline or folder is in the folder or a source, scene,
   hotkey binding or timeline carries the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
   `preview.subscribe` opens a stream of the program mix, of any one scene (0.46,
@@ -1840,7 +1857,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
   `delay_ms`, refused the same way. Version 22 (ADR-0210) adds `shows`, the
   `show_scene` marker and the `show.*` actions a binding may run, refused the same way;
-  a marker naming a scene the file doesn't hold, or one something shows, is dropped on load. A chord or trigger
+  a marker naming a scene the file doesn't hold, or one something shows, is dropped on load.
+  Version 23 (ADR-0222) adds a folder's `scene`, a keyframe scene's `folder` and a
+  timeline's `folder`, refused the same way; a scene's own folders are made after the
+  scenes, then every folder is put back in file order. A chord or trigger
   with several actions (ADR-0208) is stored as one entry per action with no version
   bump: an older file loads as before, and an older engine refuses a newer file that
   repeats a chord with `already_exists`, as it does any collection it can't rebuild.

@@ -94,9 +94,11 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.pause`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `source.seek`, `scene.set_keyframe`, `collection.open`, `collection.new`,
-  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
+  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`, and since 0.187
+  `source.mute` and `bus.mute` with `MuteTo` in `audio.rs`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
-  wheel chord may run it, 0.104),
+  wheel chord may run it, 0.104), `Action::on_release` (what a held key or note runs
+  when let go, 0.187, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)),
   which every implementation uses to check and follow a hotkey's action, and
   `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
   and say what state it sets ([Timelines](#timelines)), and `Action::show_problem`,
@@ -134,13 +136,15 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   `Trigger`, a MIDI note, control change or program change, on one channel or any, from
   one input or any (`Trigger::problem`, shared by every implementation), and `Binding`,
   a trigger and its action as reads report it; since 0.168 a `ValueBinding`, a control
-  or live-data field driving a `ValueTarget` (ADR-0178), and `MidiControlInfo`, an
+  or live-data field driving a `ValueTarget` (ADR-0178; since 0.187 also a switch: a
+  source's or bus's mute or a placement's visibility, ADR-0207), and `MidiControlInfo`, an
   input's latest control change. See [Controller bindings](#bindings).
 - **Channels** (`channel.rs`, since 0.169,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelInfo`, a named
   value 0 to 1 that up to `MAX_CHANNEL_INPUTS` (8) `midi`, `data` or `channel` inputs
   drive, combined by `ChannelCombine`, averaged, faded, curved and switched on or off
-  (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch`, and
+  (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch` (with
+  `hold_on` and `hold_off` since 0.187, ADR-0207), and
   `ChannelValueInfo` with its `ChannelDriver`, what `channel.values` reports. See
   [Controller bindings](#bindings).
 - **Shows** (`show.rs`, since 0.180,
@@ -167,7 +171,9 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   bus's monitor, with its shared check (`BusMonitor::problem`, 0.42); the fader range and
   its shared check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
   the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
-  a `meters.tick` carries.
+  a `meters.tick` carries; and `MuteTo` (0.187,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), what `source.mute`
+  and `bus.mute` do, with `MuteTo::muted` and `MuteTo::released`.
 - **Organisation** (`organise.rs`,
   [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): `FolderInfo`,
   `LabelInfo`, `SceneMeta` and `SourceMeta`, and the colour and icon checks every
@@ -188,7 +194,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `midi.last_controls` (since 0.168, with `MidiControlInfo` in `binding.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `midi.last_controls` (since 0.168, with `MidiControlInfo` in `binding.rs`), `midi.last_notes` (since 0.189, with `MidiNoteInfo` in `binding.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `channel.values` (since 0.169, with `ChannelValueInfo` in `channel.rs`), `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
@@ -399,9 +405,24 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.188 because `preview.show` moves an open preview stream to
+`PROTOCOL_VERSION` is 0.190 because a folder may belong to one scene and hold that
+scene's keyframe scenes and timelines (`FolderInfo.scene_id`, `folder.create`'s
+`scene_id`, `TimelineInfo.folder`, and `scene.set_folder` on a keyframe scene;
+[ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md));
+0.189 because a binding's trigger may be `data`, one field of a
+JTunnel sender's live data that is `equals` a value, `changes`, `rises` to a level or
+`falls` below it, with `*` key segments matching any (`DataOn`), and `midi.last_notes`
+answers each MIDI input's latest note-on (`MidiNoteInfo`)
+([ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md));
+0.188 because `preview.show` moves an open preview stream to
 another scene, or the program, on its channel, keeping its encoder where nothing else
-shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.186 because a value binding and a reader motion row (`midi`,
+shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.187 because a source's or bus's mute can be set by an action,
+`source.mute` and `bus.mute`, whose `to` (`MuteTo`) mutes, unmutes, toggles, or holds it
+for push to talk or push to mute; `channel.switch` gains `hold_on` and `hold_off`; a key
+or note bound to one of those runs `Action::on_release` when it is let go; and a value
+binding can drive a mute or a placement's visibility as a switch (`ValueTarget`'s
+`source_mute`, `bus_mute` and `item_visible`)
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)); 0.186 because a value binding and a reader motion row (`midi`,
 `data`, `channel` or `audio`, on an item or a scene camera) take a `mode`, `add` or
 `replace`; a value binding's target sums its `add` bindings onto the last moved
 `replace` binding's value or its stored value, a binding gains `enabled`, and a
@@ -938,7 +959,12 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
 The classification rule: **if the command's whole effect is a change to the collection
 state, and its inverse can be computed from the state before it, it is an edit.
 Otherwise it is an action.** A command that does both is split into an edit and an
-action. A **query** (`Query`) changes nothing and is neither.
+action. A **query** (`Query`) changes nothing and is neither. A few actions stand for
+an edit, so that a key or a trigger, which runs actions only, can make it: `item.show`,
+`item.hide` and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md))
+and `source.mute` and `bus.mute`
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)) apply the edit they
+stand for and move `rev` by one, and are still never undoable or batchable.
 
 The types enforce the split: a `Batch` holds only `Edit`s, an action travels alone, and
 `Call` (tagged by `kind`) has exactly four forms: `batch`, `action`, `query` and
@@ -1023,8 +1049,9 @@ keeps the addressing of the edit it undoes.
   (ADR-0049 §2). A batch that changed nothing is no undo step.
 - Everything else follows the parent, so the edits that add or order a scene's own
   things refuse a variant with `invalid_argument` on `scene_id`: `item.add`, `item.move`
-  into it, and `scene.set_folder` (a variant is listed under its parent, never in a
-  folder). `item.set_transform`, `scene.set_role`, renames, transitions and metadata
+  into it, and, until 0.190, `scene.set_folder` (a variant is listed under its parent;
+  since 0.190 it may sit in one of its parent's own folders, ADR-0222).
+  `item.set_transform`, `scene.set_role`, renames, transitions and metadata
   work as on any scene.
 - **Dropped overrides** (ADR-0040 §1): an edit that takes an item out of a variant's
   tree drops its override there in the same edit: `item.remove` of it, `item.move` of
@@ -1092,6 +1119,17 @@ Deleting a bus removes the sends into it, and deleting a source removes its send
 the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
+
+**Mute actions** (0.187, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)):
+`source.mute { source_id, to }` and `bus.mute { bus_id, to }` set a mute as
+`source.set_audio` and `bus.set_fader` do, as actions a key or a MIDI trigger can run.
+`to` (`MuteTo`) is `muted`, `unmuted`, `toggle`, `push_to_talk` or `push_to_mute`; the
+last two are for a held key or note, whose release runs the opposite
+([`Action::on_release`](#bindings)), and as a plain call they are their press alone
+(`push_to_talk` unmutes, `push_to_mute` mutes). Like `item.show`, they change the
+collection (`rev`, `state.changed`, saved) but are never an undo step; setting the mute
+a target already has changes nothing. They refuse what the edit refuses: a source without
+audio or a `scene` source is `invalid_argument`, a missing one `not_found`.
 
 **Output buses** (0.59): an output carries the audio of the buses in its
 `audio_buses`, one per audio track, in track order. Every output writes one audio track
@@ -1578,8 +1616,14 @@ decision 1): a `Trigger` bound to one or more `Action`s. A key chord stays a hot
 `state.get`'s `hotkeys` lists chords only, as a client that registers them with the OS
 expects; every other trigger is a binding, in `bindings`. Where a client listens for a
 chord and sends its action, a controller's messages come from an input the engine reads,
-so the engine runs the action itself, on the first frame at or after the message's time.
-No input feeds bindings yet; the MIDI and JTunnel inputs add them.
+so the engine runs the action itself. Since 0.187 it does
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md) decision 4): about 30
+times a second (60 while a value moves) it reads what each MIDI and JTunnel input sent since its last look, in
+the order sent, so a press and a release between two looks both run; nothing sent before
+its first look runs. It reads only an input the host lets run bindings: a JTunnel sender
+once the person turns on its "Use this sender's MIDI", off by default
+([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md) §3). A trigger with no
+`input` listens to each of those.
 - **Triggers** are tagged by `kind`: `midi_note {note}`, `midi_cc {controller}` and
   `midi_program {program}`, each 0 to 127, with an optional `channel` (1 to 16, as a
   device's panel shows it; missing for any channel) and an optional `input` (the name of
@@ -1589,6 +1633,23 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
   the same exactly when they are equal, so channel 1 and any channel are two bindings,
   and a message matching both fires both. Anything else is `invalid_argument` on
   `trigger.<field>`, with `Trigger::problem`'s reason.
+- **Data triggers** (0.189,
+  [ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)): `data {input?,
+  key, field, on}` reads what a `data` motion modifier reads, from senders whose state is
+  used. `key` is 1 to 63 bytes, where a whole `*` segment matches any one segment
+  (`track/*`); `field` is a dotted path, empty for the whole message. `on` is tagged by
+  `type`: `equals {value}` (the same text, or the number or `true`/`false` it spells, at
+  most 255 bytes), `changes`, `rises {level}` (a number at the level or above) or `falls
+  {level}` (below it). Each fires when its condition starts to hold, for any matching key,
+  and releases when it stops; `changes` fires on each new value and never releases. What
+  a field holds when the engine starts following it, or when a key first arrives, fires
+  nothing, and a trigger fires at most once every 50 ms.
+- **Releases** (0.187): a note's note-off (or note-on at velocity 0), and a control
+  change falling back from 64 or above to 63 or below, run the bound action's
+  `Action::on_release`, if it has one: `source.mute` and `bus.mute` with `push_to_talk`
+  or `push_to_mute`, and `channel.switch` with `hold_on` or `hold_off`. A trigger running
+  several actions releases each that has one. A program change has no release. A client
+  that runs hotkeys does the same when a chord's key goes up.
 - **`binding.set {trigger, action}`** binds a trigger to an action; its inverse is
   `binding.clear` naming that action. Like a chord, a trigger runs several actions in
   bind order (0.181, ADR-0208): it is refused with `already_exists` (entity `binding`,
@@ -1616,18 +1677,21 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
   modifier's own check refuses, as `binding.<field>`.
 - **`ValueTarget`**, tagged by `type`: `source_setting {source_id, param}`,
   `filter_setting {owner, filter_id, param}` (any `FilterOwner`), `source_gain
-  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}` and (0.182,
+  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}`, (0.182,
   [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) `ptz_axis {camera,
   axis}`, one axis (`PtzAxis`: `pan`, `tilt`, `zoom`, `focus`) of a PTZ camera's
-  position in the head's own counts, whole numbers within `PtzAxis::range`. A
-  `ptz_axis` names the camera by name, as a shot does; `ValueBinding::problem` refuses a
-  name `ptz.*` would refuse, at `binding.target.camera`.
+  position in the head's own counts, whole numbers within `PtzAxis::range`, and since
+  0.187 three switches, on at one half or more: `source_mute {source_id}`, `bus_mute
+  {bus_id}` and `item_visible {item_id, scene_id?}` (which cuts, with no appear or
+  disappear effect). A `ptz_axis` names the camera by name, as a shot does;
+  `ValueBinding::problem` refuses a name `ptz.*` would refuse, at `binding.target.camera`.
 - **`binding.set_value {binding}`** sets a binding by ID, whole, a new one (inverse
   `binding.clear_value`) or in place of one (inverse `binding.set_value` with the old).
   A `ptz_axis` target is not looked up: the camera belongs to the machine. Otherwise
   the collection refuses, at `binding.target` or `binding.target.param`, a setting its
   kind doesn't mark `live` or that isn't an `int`, `float` or `bool`, a `scene` source's
-  fader and a send that doesn't exist; `not_found` for a missing source, filter or bus;
+  fader or mute, a source without audio's mute, and a send that doesn't exist;
+  `not_found` for a missing source, filter, bus, item or scene;
   and `invalid_argument` at `binding` for a 257th ([`MAX_VALUE_BINDINGS`]).
 - **`binding.clear_value {binding_id}`** removes one, or is `not_found` (entity
   `binding`).
@@ -1644,6 +1708,10 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - A value binding's input may also be `kind` `audio` (since 0.186,
   [ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)): an
   audio modifier's fields, its attack and release following the level.
+- **`midi.last_notes`** (0.189, ADR-0202) answers `MidiNoteInfo {input, channel, note,
+  velocity, count}` for each MIDI input whose latest notes hold a note-on, for a client
+  that learns a note: the input whose `count` (its note events, on and off) grows played
+  it. A note-off doesn't move the note it reports.
 - A value binding's input may also be `kind` `channel` (since 0.169), and its optional
   `amount` names a channel that scales it: its value is `from + (value - from) ×
   amount`, so a channel at 0 holds it at `from` (a missing channel scales by 1).
@@ -1671,7 +1739,9 @@ controls into one live value, 0 to 1, that anything bindable follows, listed in
   `scene_id` goes back to its default each time that scene goes on program.
 - **`channel.set_value {channel_id, value, fade_ms?}`** (0 to 1),
   **`channel.nudge {channel_id, by, fade_ms?}`** (-1 to 1) and **`channel.switch
-  {channel_id, to}`** (`on`, `off`, `toggle`) change it until an input moves again
+  {channel_id, to}`** (`on`, `off`, `toggle`, and since 0.187 `hold_on` and `hold_off`,
+  on or off while a key or note is held and back on release, ADR-0207) change it until
+  an input moves again
   (`fade_ms` ≤ 60,000). A hotkey, a controller binding and a timeline cue may run them.
 - **`channel.values`** answers `ChannelValueInfo {channel_id, value, on, driver?}` for
   each channel, where `driver` is `{by: "input", index}` or `{by: "action"}`.
@@ -1688,7 +1758,14 @@ rendering, switching or nesting. Folders organise the scene list as a tree: an o
 list of `{ folder_id, name, parent? }`, where a folder's children show in folder order,
 and a scene names at most one folder (`scene.set_folder`) while keeping its place in the
 flat display order. `folder.set_parent` refuses a parent that would put the folder
-inside itself. Labels are an ordered list of `{ label_id, name, color, icon? }`, and a
+inside itself. Since 0.190 a folder may instead belong to one scene (`scene_id`,
+[ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md)): it shows under that scene and
+holds its keyframe scenes (`scene.set_folder`) and its timelines (`TimelineInfo.folder`,
+written with `timeline.set`; a keyframe scene's timelines file in its parent's
+folders). A folder's parent belongs to the same scene or, like it, to none; a keyframe
+scene goes only in its parent's folders and any other scene only in the scene list's;
+a keyframe scene has no folders of its own; each else `invalid_argument`. A scene's
+folders go with it when it is deleted, and its undo puts them back. Labels are an ordered list of `{ label_id, name, color, icon? }`, and a
 source carries a set of them, with a favourite flag (`source.set_meta`); they belong to
 the source, so every item placing it shares them, and `source.duplicate` copies them.
 A scene's `SceneMeta` (`scene.set_meta`) is its `labels` (since 0.45,
@@ -1759,12 +1836,13 @@ bytes). Since 0.100 hotkey bindings ([Hotkeys](#hotkeys)) and timelines
 `label.members {label_id}` lists everything that carries one: its scenes in display
 order, each with its parent when it is a keyframe scene, its sources by ID, its bindings
 by chord with their actions, and its timelines by scene then ID, each with its scene;
-`not_found` for a label that doesn't exist. A folder that holds a scene or folder, and a
-label anything carries, can't be deleted: the `invalid_argument` lists the `blockers`
-(`folder`, `parent` or `labels`; for a label, its sources first, then its scenes, its
-bindings and its timelines), and `delete.plan` with a `folder` or `label` target returns
-the batch that moves what the folder holds up to its parent, or takes the label off
-each, in that order, then deletes it.
+`not_found` for a label that doesn't exist. A folder that holds a scene, timeline or
+folder, and a label anything carries, can't be deleted: the `invalid_argument` lists the
+`blockers` (`folder`, `parent` or `labels`; for a folder, its scenes, then its timelines,
+then its folders; for a label, its sources first, then its scenes, its bindings and its
+timelines), and `delete.plan` with a `folder` or `label` target returns the batch that
+moves what the folder holds up to its parent (a timeline with `timeline.set`), or takes
+the label off each, in that order, then deletes it.
 `state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
 `state.get` and `source.list` report each scene's and source's fields, each omitted
 while it has its default, so an older client reads the collection as before.
@@ -1925,7 +2003,9 @@ depends_on = ["docs/RULES.md#R-API-004"]
 Edits are only sent inside a `Batch`; a single edit is a batch of one.
 
 - `rev` is the collection state revision. Every applied batch increments it by exactly
-  one, however many edits it holds. Actions and queries never change it.
+  one, however many edits it holds. Queries never change it, nor do actions, but the
+  few that apply the edit they stand for (`item.show`, `item.hide`, `item.toggle`,
+  `source.mute` and `bus.mute`; see [Edits, actions and queries](#calls)), each by one.
 - A batch is atomic: the engine applies its edits in order, each against the state the
   previous one left. If any edit fails, nothing is applied, `rev` is unchanged, and the
   error names the failing edit's field (`edits.2.name`).
@@ -2077,6 +2157,12 @@ Queries read and never change `rev`. Those that read the collection state carry 
   {input, channel, controller, value, count}`, its latest one with the value it holds
   now and how many it has sent since the engine started. A client learning a control for
   a value binding reads it once, then until a `count` grows. Runtime state, so no `rev`.
+- `midi.last_notes` (0.189,
+  [ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md) decision 6): each
+  MIDI input whose last 16 note events hold a note-on, ordered by name, as `MidiNoteInfo
+  {input, channel, note, velocity, count}`, its latest note-on and how many note events
+  it has pushed. A note-off doesn't move it, but its `count` grows. Runtime state, so no
+  `rev`.
   A plugin can't read it.
 - `data.list` and `data.get {input, key}` (0.140,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2):
@@ -2777,7 +2863,9 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey, binding, channel and studio
   edits, among them a scene's folder, metadata and transitions, a source's metadata, a
   hotkey binding's labels (ADR-0133), an
-  item's transition settings, the `transition.*` presets and `studio.set_preview`,
+  item's transition settings, the `transition.*` presets and `studio.set_preview`, the
+  `source.mute` and `bus.mute` actions (ADR-0207, as `source.set_audio` and
+  `bus.set_fader`),
   a camera's motion and follow camera, the group it rides with (ADR-0164), a scene's PTZ shots (ADR-0146), `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
@@ -2787,7 +2875,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `overlay.toggle`, ADR-0210) and `outputs` (`output.start`, `output.stop`, `output.toggle`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
-  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), `channel.values` (what the person plays, ADR-0183), creating, deleting and retargeting outputs, their encoders and stream
+  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), `midi.last_notes` (what the person plays, ADR-0202), `channel.values` (what the person plays, ADR-0183), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` and `studio.set_rendering` (application settings), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -3147,6 +3235,11 @@ after 1.0:
   preset, an item or a keyframe's timing uses one.
   0.182 adds the `ValueTarget` value `ptz_axis` (ADR-0209) on the same terms: a client
   older than 0.182 can't parse `state.get` once a value binding aims a PTZ head's axis.
+  0.187 adds the `ValueTarget` types `source_mute`, `bus_mute` and `item_visible`
+  (ADR-0207) on the same terms: a client older than 0.187 can't parse `state.get` once a
+  value binding drives one. Its `MuteTo` values and `ChannelSwitch`'s `hold_on` and
+  `hold_off` travel only inside actions, which hotkeys, bindings and cues hold as plain
+  JSON, so they break no older client's reads.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -3333,7 +3426,11 @@ Since 0.87 a scene holds timelines
   a timeline carries `labels` too, omitted for none
   ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)): each must exist
   (`not_found`) and be listed once (`invalid_argument` on `timeline.labels`), and they
-  are kept ordered by ID ([Folders, labels and scene options](#organisation)).
+  are kept ordered by ID ([Folders, labels and scene options](#organisation)). Since
+  0.190 a timeline may name a `folder`, omitted for none: one of its scene's own folders,
+  or its parent's for a keyframe scene's timeline (`invalid_argument` on
+  `timeline.folder` otherwise, [ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md)).
+  It only organises the scene's rows.
 - **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
   `scene.set_keyframe` (since 0.88, [Keyframe tracks](#keyframe-tracks)), `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
   `source.restart`, `timeline.play`, `timeline.stop` and `timeline.seek`, and since 0.169

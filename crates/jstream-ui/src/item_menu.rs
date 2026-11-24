@@ -688,6 +688,9 @@ struct Facts {
     picture: bool,
     /// Whether the primary item's source plays its audio, if it has any.
     audio: Option<bool>,
+    /// Whether the primary item's source is muted, if it has a mute of its own (audio,
+    /// and not a nested scene).
+    muted: Option<bool>,
     /// Whether the scene is a keyframe scene, which shows its parent's items.
     keyframe: bool,
     /// Whether the primary item is a child of a group in the keyframe scene's tree,
@@ -743,6 +746,11 @@ impl Facts {
             kind: source.kind.clone(),
             picture,
             audio: source.audio.as_ref().map(|a| a.enabled),
+            muted: source
+                .audio
+                .as_ref()
+                .filter(|_| !matches!(source.kind, SourceKind::Scene { .. }))
+                .map(|a| a.muted),
             keyframe: scene.variant_of.is_some(),
             child: !scene.items.iter().any(|i| i.item_id == primary.item_id),
             sharing: Sharing::of(collection, primary),
@@ -1296,6 +1304,21 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         })
         .checked(on)
     });
+    // Mute, as the mixer's Mute button sets it (ADR-0207).
+    let mute = facts.muted.map(|on| {
+        let source_id = facts.source_id.clone();
+        Entry::item("Mute", move || {
+            cx.send(vec![Edit::SourceSetAudio {
+                source_id: source_id.clone(),
+                enabled: None,
+                follow: None,
+                gain_db: None,
+                muted: Some(!on),
+            }]);
+        })
+        .checked(on)
+    });
+    let audio: Vec<Entry> = audio.into_iter().chain(mute).collect();
     let remove = {
         let ids = facts.items.clone();
         Entry::item("Remove from scene", move || cx.remove(&ids))

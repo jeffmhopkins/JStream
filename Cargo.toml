@@ -120,6 +120,11 @@ libc = { version = "0.2", default-features = false }
 # plugin file (a DLL) in the plugin host (`jstream-plugin-clap`, ADR-0035). Already in
 # the tree at 0.9 under cef; no build script.
 libloading = { version = "0.9", default-features = false, features = ["std"] }
+# Opening the JTunnel receiver's mDNS listener (ADR-0123 §3): a UDP socket that shares port
+# 5353 with the system's own responder (SO_REUSEADDR, and SO_REUSEPORT where it exists,
+# set before bind, which `std` can't do) and joins mDNS's group. Already in the tree under
+# tokio with the same `all` feature; no build script.
+socket2 = { version = "0.6", default-features = false, features = ["all"] }
 # WGSL parsing and validation for effect packs (`jstream-effects`). Pinned to wgpu's
 # exact version (ADR-0004), so it is the copy wgpu already brings in. `wgsl-in` is the
 # only feature: no back ends, no `std`-only extras.

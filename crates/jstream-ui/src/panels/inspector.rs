@@ -1828,12 +1828,27 @@ fn Placement(
                 item_id: item_id.clone(),
                 scene_id: scene_id.clone(),
             };
+            // A MIDI control or a channel can drive whether it shows too (ADR-0207).
+            let visible = jstream_control::protocol::ValueTarget::ItemVisible {
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
+            };
             let hide = jstream_control::protocol::Action::ItemHide { item_id, scene_id };
             view! {
                 <Fold title="Hotkeys" open=true>
                     <HotkeyRow label="Toggle" action=toggle />
                     <HotkeyRow label="Show" action=show />
                     <HotkeyRow label="Hide" action=hide />
+                    <div class="key-value hotkey-row">
+                        <span class="key">"Control"</span>
+                        <span class="hotkeys">
+                            <crate::panels::learn::Learn
+                                target=visible
+                                range=crate::panels::learn::SWITCH
+                                label="Visible"
+                            />
+                        </span>
+                    </div>
                 </Fold>
             }
         }}

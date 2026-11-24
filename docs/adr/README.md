@@ -212,8 +212,10 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0199](0199-a-carried-pass-compares-file-modes.md) | A carried review pass also compares the PR's file modes | accepted | agent |  |
 | [ADR-0200](0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md) | The size 3D models are drawn at is a rendering switch | accepted | agent |  |
 | [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
+| [ADR-0202](0202-live-data-triggers-and-note-learn.md) | Live data triggers fire bindings, and a client learns notes | accepted | agent |  |
 | [ADR-0203](0203-mappings-add-or-replace.md) | A mapping adds to the value it drives or replaces it, and can be bypassed | accepted | agent |  |
 | [ADR-0206](0206-audio-level-drives-channels-and-bindings.md) | An audio level drives channels and value bindings | accepted | agent |  |
+| [ADR-0207](0207-mute-actions-and-held-triggers.md) | Mute actions, held triggers that release, and switches as value targets | accepted | agent |  |
 | [ADR-0208](0208-several-actions-per-key-or-trigger.md) | A key chord or a controller trigger runs several actions, and output.toggle | accepted | agent |  |
 | [ADR-0209](0209-value-bindings-aim-ptz-cameras.md) | PTZ cameras in the desktop app: the camera list, the PTZ panel, and value bindings that aim a head | accepted | agent |  |
 | [ADR-0210](0210-shows-a-run-order-with-bookmarks.md) | Shows: a saved run order of scenes, with bookmarks, loops and Continue | accepted | agent |  |
@@ -225,4 +227,8 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0216](0216-a-scene-clips-audio-is-drawn-linked-under-it.md) | A scene clip's audio is drawn linked under it on the show timeline, derived, not stored | accepted | agent |  |
 | [ADR-0217](0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md) | Direct NVENC and AMF encoders on the Windows GPU path, before the Media Foundation MFTs | accepted | agent |  |
 | [ADR-0218](0218-autofocus-meets-a-model-at-its-surface.md) | Autofocus meets a 3D model at the surface it draws | accepted | agent |  |
+| [ADR-0219](0219-a-big-items-effects-layer-is-placed-at-its-boxs-size.md) | A big item's effects layer is placed at its box's size | accepted | agent |  |
+| [ADR-0220](0220-every-midi-reader-goes-through-the-senders-switch.md) | Every MIDI reader goes through "Use this sender's MIDI" | accepted | agent |  |
+| [ADR-0221](0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md) | JTunnel senders are found on the mDNS group, and one accepted sender is live and needs no name | accepted | agent |  |
+| [ADR-0222](0222-a-scenes-own-folders.md) | A scene's own folders | accepted | agent |  |
 <!-- @generated end adr-index -->

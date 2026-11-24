@@ -241,6 +241,13 @@ pub enum ChannelSwitch {
     Off,
     /// Switches it on if it is off, and off if it is on.
     Toggle,
+    /// Switches it on while a key or note is held, and off on release (ADR-0207, since
+    /// 0.187; [`Action::on_release`](crate::Action::on_release)). Sent as a call, with
+    /// nothing held, it switches it on.
+    HoldOn,
+    /// Switches it off while a key or note is held, and on on release (ADR-0207, since
+    /// 0.187). Sent as a call, it switches it off.
+    HoldOff,
 }
 
 /// One channel's value now, in `channel.values`.

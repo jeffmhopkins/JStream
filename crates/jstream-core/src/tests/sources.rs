@@ -1418,6 +1418,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    folder: None,
                     lanes: Vec::new(),
                     starts: Vec::new(),
                     stops: Vec::new(),
@@ -1437,6 +1438,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    folder: None,
                     lanes: Vec::new(),
                     starts: Vec::new(),
                     stops: Vec::new(),

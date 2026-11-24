@@ -761,6 +761,52 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Mutes or unmutes a source's audio (ADR-0207, since 0.187), as `source.set_audio`'s\n`muted` would: `to` says how, and [`MuteTo`] says what a held key or note does\nwith `push_to_talk` and `push_to_mute`. It is collection state, as `item.show` is:\n`rev` moves on by one, `state.changed` follows and the collection saves it, but it\nis an action, so it is never a step of the sender's undo history, and another\nclient's undo that would overwrite it fails with `undo_conflict`. Setting the mute\nit already has succeeds and changes nothing. The mixer ramps the change over one\nblock, so it never clicks, and nothing is reopened. Fails with `not_found` for a\nsource not in the collection, and `invalid_argument` on `source_id` for one\nwithout audio or a `scene` source, which has no mute of its own. An action takes\nno `expected_rev` or idempotency key, so a caller that may retry sends `muted` or\n`unmuted`, not `toggle`.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "to": {
+              "$ref": "#/$defs/MuteTo",
+              "description": "What to do to its mute."
+            },
+            "type": {
+              "const": "source.mute",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Mutes or unmutes a bus, the master included (ADR-0207, since 0.187), as\n`bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with\n`not_found` for a bus not in the collection.",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus."
+            },
+            "to": {
+              "$ref": "#/$defs/MuteTo",
+              "description": "What to do to its mute."
+            },
+            "type": {
+              "const": "bus.mute",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bus_id",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
           "properties": {
             "camera": {
@@ -4333,6 +4379,16 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "toggle",
           "description": "Switches it on if it is off, and off if it is on.",
           "type": "string"
+        },
+        {
+          "const": "hold_on",
+          "description": "Switches it on while a key or note is held, and off on release (ADR-0207, since\n0.187; [`Action::on_release`](crate::Action::on_release)). Sent as a call, with\nnothing held, it switches it on.",
+          "type": "string"
+        },
+        {
+          "const": "hold_off",
+          "description": "Switches it off while a key or note is held, and on on release (ADR-0207, since\n0.187). Sent as a call, it switches it off.",
+          "type": "string"
         }
       ]
     },
@@ -4653,6 +4709,78 @@ source: crates/jstream-protocol/src/fixtures.rs
         "remote_keys"
       ],
       "type": "object"
+    },
+    "DataOn": {
+      "description": "When a [`Trigger::Data`] fires (ADR-0202). Each fires when its condition starts to\nhold and releases when it stops, except `changes`, which only fires. What a field\nholds when the engine starts listening, or when a key first arrives, is where it\nstarts from and fires nothing.",
+      "oneOf": [
+        {
+          "description": "The field equals `value`: the same text, or a number or `true`/`false` that\n`value` spells.",
+          "properties": {
+            "type": {
+              "const": "equals",
+              "type": "string"
+            },
+            "value": {
+              "description": "What it equals, at most [`MAX_DATA_VALUE_LEN`] bytes.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The field takes any other value.",
+          "properties": {
+            "type": {
+              "const": "changes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The field is a number at `level` or above.",
+          "properties": {
+            "level": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The level it crosses upward."
+            },
+            "type": {
+              "const": "rises",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "level"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The field is a number below `level`.",
+          "properties": {
+            "level": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The level it crosses downward."
+            },
+            "type": {
+              "const": "falls",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "level"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "DeleteTarget": {
       "description": "What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a\nlabel.",
@@ -6404,7 +6532,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders\norganise only: they change no rendering, switching or nesting. Inverse:\n`folder.delete`.",
+          "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3), or, with\n`scene_id`, a folder under one scene for its keyframe scenes and sequences\n(ADR-0222, since 0.190). Folders organise only: they change no rendering,\nswitching or nesting. Inverse: `folder.delete`.",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -6423,7 +6551,18 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The folder it sits in, which must exist, else `not_found`. Omitted means top\nlevel."
+              "description": "The folder it sits in, which must exist, else `not_found`, and belong to the\nsame scene (or, like this one, to none), else `invalid_argument`. Omitted\nmeans top level."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose keyframe scenes and sequences it holds (since 0.190), which\nmust exist, else `not_found`, and not be a keyframe scene, else\n`invalid_argument`. The folder goes with the scene when it is deleted.\nOmitted makes a folder of the scene list."
             },
             "type": {
               "const": "folder.create",
@@ -6461,7 +6600,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself is `invalid_argument` (field\n`parent`), and a parent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
+          "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself, or that belongs to another\nscene than the folder (ADR-0222), is `invalid_argument` (field `parent`), and a\nparent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -6515,7 +6654,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes an empty folder. Rejected with `invalid_argument` while a scene or another\nfolder sits in it, listing them as `blockers`: move them out first, or send the\nbatch `delete.plan` returns, which moves them up to the folder's parent. Inverse:\n`folder.create` with its name and parent, then `folder.reorder` to its old\nposition (unless it was last).",
+          "description": "Deletes an empty folder. Rejected with `invalid_argument` while a scene, a\ntimeline or another folder sits in it, listing them as `blockers`: move them out\nfirst, or send the batch `delete.plan` returns, which moves them up to the\nfolder's parent. Inverse:\n`folder.create` with its name and parent, then `folder.reorder` to its old\nposition (unless it was last).",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -6533,7 +6672,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. Inverse: `scene.set_folder` with the previous folder.",
+          "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. A keyframe scene goes only in a folder of its parent\n(ADR-0222, since 0.190), and any other scene only in a folder of the scene list,\nelse `invalid_argument` on `folder_id`. Inverse: `scene.set_folder` with the\nprevious folder.",
           "properties": {
             "folder_id": {
               "anyOf": [
@@ -9195,6 +9334,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "The folder it sits in. Omitted for a top-level folder."
+        },
+        "scene_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The scene whose keyframe scenes and sequences it organises, under that scene\nin the scene list (ADR-0222, since 0.190). Omitted for a folder of the scene\nlist itself."
         }
       },
       "required": [
@@ -10462,6 +10612,50 @@ source: crates/jstream-protocol/src/fixtures.rs
         "channel",
         "controller",
         "value",
+        "count"
+      ],
+      "type": "object"
+    },
+    "MidiNoteInfo": {
+      "description": "One MIDI input's latest note-on, in `midi.last_notes` (since 0.189, ADR-0202).",
+      "properties": {
+        "channel": {
+          "description": "Its channel, 1 to 16.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "count": {
+          "description": "How many note events (on and off) the input has sent since the engine started:\na client learning a note waits for it to grow.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input": {
+          "description": "The input, a MIDI port or a JTunnel sender by name, as a binding names it.",
+          "type": "string"
+        },
+        "note": {
+          "description": "The note number, 0 to 127.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "velocity": {
+          "description": "Its velocity, 1 to 127.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input",
+        "channel",
+        "note",
+        "velocity",
         "count"
       ],
       "type": "object"
@@ -11794,6 +11988,36 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "saw",
           "description": "A sawtooth: rises from -1 to 1 over each period, then jumps back.",
+          "type": "string"
+        }
+      ]
+    },
+    "MuteTo": {
+      "description": "What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.187). Serialized as\na snake_case string.\n\n`push_to_talk` and `push_to_mute` are for a held key or note: pressing it runs the\naction, and releasing it runs [`MuteTo::released`]'s\n([`Action::on_release`](crate::Action::on_release)). Sent as a call, with nothing\nheld, they are the press alone: `push_to_talk` unmutes and `push_to_mute` mutes.",
+      "oneOf": [
+        {
+          "const": "muted",
+          "description": "Mutes it.",
+          "type": "string"
+        },
+        {
+          "const": "unmuted",
+          "description": "Unmutes it.",
+          "type": "string"
+        },
+        {
+          "const": "toggle",
+          "description": "Mutes it if it is unmuted, and unmutes it if it is muted.",
+          "type": "string"
+        },
+        {
+          "const": "push_to_talk",
+          "description": "Unmutes it while held, and mutes it on release.",
+          "type": "string"
+        },
+        {
+          "const": "push_to_mute",
+          "description": "Mutes it while held, and unmutes it on release.",
           "type": "string"
         }
       ]
@@ -14764,6 +14988,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Each MIDI input's latest note-on (since 0.189, ADR-0202), by input name: what a\nclient that learns a note for a binding watches. Runtime state, so no `rev`; an\ninput whose latest notes hold no note-on is left out. It reads each input's last\n16 note events, so a note-off doesn't move it.",
+          "properties": {
+            "type": {
+              "const": "midi.last_notes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by\nID. Runtime state, so no `rev`.",
           "properties": {
             "type": {
@@ -16064,6 +16301,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "controls"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `midi.last_notes` (0.178).",
+          "properties": {
+            "notes": {
+              "description": "Each input's latest note-on, ordered by input name.",
+              "items": {
+                "$ref": "#/$defs/MidiNoteInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "midi.last_notes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "notes"
           ],
           "type": "object"
         },
@@ -18410,6 +18668,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "folder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FolderId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The folder it is filed in under its scene (ADR-0222, since 0.190): a folder of\nthe scene that holds it, or of that scene's parent for a keyframe scene's, else\n`invalid_argument`. Folders organise only. Omitted for none."
+        },
         "labels": {
           "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",
           "items": {
@@ -18900,6 +19169,41 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "kind",
             "program"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One field of a JTunnel sender's live data meeting a condition (ADR-0202, since\n0.189): a Bitwig scene selected or launched, a Mod crossing a level. It reads what\na `data` motion modifier reads, only from a sender whose state is used.",
+          "properties": {
+            "field": {
+              "default": "",
+              "description": "A dotted path into the message (`selectedScene`, `values.19`), or empty for\nthe whole message.",
+              "type": "string"
+            },
+            "input": {
+              "description": "The sender, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "key": {
+              "description": "The message's key: `grid`, `params`, `track/3`. A `*` segment matches any\none segment, so `track/*` listens to every track, and the condition holds\nwhile it holds for any of them.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "data",
+              "type": "string"
+            },
+            "on": {
+              "$ref": "#/$defs/DataOn",
+              "description": "When it fires."
+            }
+          },
+          "required": [
+            "kind",
+            "key",
+            "on"
           ],
           "type": "object"
         }
@@ -19427,7 +19731,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "ValueTarget": {
-      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive. Serialized with an internal `type` tag.",
+      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive, or since 0.187 a switch: a mute, or whether a placement shows its item\n(ADR-0207). Serialized with an internal `type` tag.",
       "oneOf": [
         {
           "description": "A `live` number or `bool` setting of a source, which every place that draws it\nshows.",
@@ -19536,6 +19840,71 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "source_id",
             "bus_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An audio source's mute, a switch: muted at one half or more (ADR-0207, since\n0.187). A `scene` source has none.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source_mute",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A bus's mute, the master's included, a switch: muted at one half or more\n(ADR-0207, since 0.187).",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus."
+            },
+            "type": {
+              "const": "bus_mute",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bus_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Whether a placement shows its item, a switch: shown at one half or more\n(ADR-0207, since 0.187), as `item.set_visible` would set it, so it cuts, with no\nappear or disappear effect.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item it drives, as `item.set_visible`'s\n`scene_id`: omitted for the item's own."
+            },
+            "type": {
+              "const": "item_visible",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
           ],
           "type": "object"
         },
@@ -20317,5 +20686,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.188"
+  "title": "JStream protocol 0.190"
 }

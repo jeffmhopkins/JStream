@@ -271,6 +271,12 @@ pub enum Query {
     /// state, so no `rev`; an input that has sent no control change is left out.
     #[serde(rename = "midi.last_controls")]
     MidiLastControls,
+    /// Each MIDI input's latest note-on (since 0.189, ADR-0202), by input name: what a
+    /// client that learns a note for a binding watches. Runtime state, so no `rev`; an
+    /// input whose latest notes hold no note-on is left out. It reads each input's last
+    /// 16 note events, so a note-off doesn't move it.
+    #[serde(rename = "midi.last_notes")]
+    MidiLastNotes,
     /// Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by
     /// ID. Runtime state, so no `rev`.
     #[serde(rename = "channel.values")]
@@ -495,6 +501,7 @@ impl Query {
             Query::PtzList => "ptz.list",
             Query::JtunnelSenders => "jtunnel.senders",
             Query::MidiLastControls => "midi.last_controls",
+            Query::MidiLastNotes => "midi.last_notes",
             Query::ChannelValues => "channel.values",
             Query::DataList => "data.list",
             Query::DataGet { .. } => "data.get",
@@ -895,6 +902,12 @@ pub enum QueryResult {
         /// Each input's latest control change, ordered by input name.
         controls: Vec<MidiControlInfo>,
     },
+    /// The result of `midi.last_notes` (0.178).
+    #[serde(rename = "midi.last_notes")]
+    MidiLastNotes {
+        /// Each input's latest note-on, ordered by input name.
+        notes: Vec<crate::MidiNoteInfo>,
+    },
     /// The result of `channel.values` (0.169).
     #[serde(rename = "channel.values")]
     ChannelValues {
@@ -1056,6 +1069,7 @@ impl QueryResult {
             QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
             QueryResult::MidiLastControls { .. } => "midi.last_controls",
+            QueryResult::MidiLastNotes { .. } => "midi.last_notes",
             QueryResult::ChannelValues { .. } => "channel.values",
             QueryResult::DataList { .. } => "data.list",
             QueryResult::DataGet { .. } => "data.get",

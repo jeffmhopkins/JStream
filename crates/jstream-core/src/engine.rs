@@ -1628,6 +1628,17 @@ impl Engine {
             Some(changed),
         )?);
         spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
+        // Only a sender with "Use this sender's MIDI" on runs action bindings
+        // (ADR-0123 §3, ADR-0207); every sender's MIDI is drawn.
+        if let Some(midi) = &midi {
+            midi.set_bindable(
+                setup
+                    .accepted
+                    .iter()
+                    .filter(|sender| sender.uses_midi())
+                    .map(|sender| sender.name().to_owned()),
+            );
+        }
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
         // What the collection names its senders' params (ADR-0181), given to the new
@@ -1659,6 +1670,9 @@ impl Engine {
             return;
         }
         wanted.set_jtunnel(None);
+        if let Some(midi) = lock(&self.shared.state).live.midi() {
+            midi.set_bindable(Vec::new());
+        }
         self.jtunnel_turned();
     }
 
@@ -1712,6 +1726,22 @@ impl Engine {
             }),
             Query::ChannelValues => Some(QueryResult::ChannelValues {
                 channels: lock(&self.shared.state).channels.values(),
+            }),
+            Query::MidiLastNotes => Some(QueryResult::MidiLastNotes {
+                notes: lock(&self.shared.state)
+                    .live
+                    .midi()
+                    .map(|midi| midi.last_notes())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(input, (count, note))| jstream_protocol::MidiNoteInfo {
+                        input,
+                        channel: note.channel + 1,
+                        note: note.key,
+                        velocity: note.velocity,
+                        count,
+                    })
+                    .collect(),
             }),
             Query::MidiLastControls => Some(QueryResult::MidiLastControls {
                 controls: lock(&self.shared.state)
@@ -5150,8 +5180,13 @@ struct State {
     ticker_rev: u64,
     /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
     driver: crate::value_bindings::ValueDriver,
-    /// Whether the `jstream-values` thread is running: it ticks [`State::channels`] and
-    /// [`State::driver`] while the collection holds a channel or a value binding.
+    /// How far the action bindings have read each MIDI input (ADR-0122, ADR-0207).
+    action_bindings: crate::action_bindings::ActionBindings,
+    /// What each data trigger's field last read, and its held press (ADR-0202).
+    data_triggers: crate::data_triggers::DataTriggers,
+    /// Whether the `jstream-values` thread is running: it ticks [`State::channels`],
+    /// [`State::action_bindings`] and [`State::driver`] while the collection holds a
+    /// channel, an action binding or a value binding.
     values_ticking: bool,
     /// The channels' live values (ADR-0183): never stored.
     channels: crate::channels::ChannelDriver,
@@ -6068,10 +6103,11 @@ impl State {
         Ok(())
     }
 
-    /// Whether the `jstream-values` thread has work: a value binding, a channel, a
-    /// timeline trigger or a wait.
+    /// Whether the `jstream-values` thread has work: a value binding, an action binding,
+    /// a channel, a timeline trigger or a wait.
     fn needs_values(&self) -> bool {
         self.graph.value_bindings().len() > 0
+            || self.graph.state().bindings().next().is_some()
             || self.graph.channels().len() > 0
             || self.sequences.is_waiting()
             || crate::sequences::Sequences::has_triggers(&self.graph)
@@ -6362,6 +6398,14 @@ impl State {
             }
             Action::ItemToggle { item_id, scene_id } => {
                 self.set_shown(client_id, request_id, item_id, scene_id, None, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::SourceMute { source_id, to } => {
+                self.set_muted(client_id, request_id, Muting::Source(source_id), to, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::BusMute { bus_id, to } => {
+                self.set_muted(client_id, request_id, Muting::Bus(bus_id), to, wake)?;
                 return Ok(CallResult::action());
             }
             Action::ValuesSet { name, value } => {
@@ -6782,6 +6826,76 @@ impl State {
         // The scene now on program can show a source no plan reached before.
         self.sync_sizes(wake);
         self.feed_pages();
+        Ok(())
+    }
+
+    /// Runs `source.mute` or `bus.mute` (ADR-0207): the `source.set_audio` or
+    /// `bus.set_fader` edit that sets the mute `to` asks for, applied as `item.show`'s is,
+    /// never a step of the sender's undo history. Setting the mute it already has changes
+    /// nothing, but what the edit would refuse is refused. The mixer reads the new mute
+    /// on its next block and ramps to it over that block, so nothing clicks or reopens.
+    fn set_muted(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        target: Muting,
+        to: jstream_protocol::MuteTo,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let (now, edit) = match target {
+            Muting::Source(source_id) => {
+                let source = state
+                    .source(&source_id)
+                    .ok_or_else(|| ProtocolError::NotFound {
+                        entity: EntityKind::Source,
+                        id: source_id.to_string(),
+                    })?;
+                let now = source.audio().is_some_and(|audio| audio.muted);
+                (
+                    now,
+                    Edit::SourceSetAudio {
+                        source_id,
+                        enabled: None,
+                        follow: None,
+                        gain_db: None,
+                        muted: Some(to.muted(now)),
+                    },
+                )
+            }
+            Muting::Bus(bus_id) => {
+                let bus = state.bus(&bus_id).ok_or_else(|| ProtocolError::NotFound {
+                    entity: EntityKind::Bus,
+                    id: bus_id.to_string(),
+                })?;
+                let now = bus.muted();
+                (
+                    now,
+                    Edit::BusSetFader {
+                        bus_id,
+                        gain_db: None,
+                        muted: Some(to.muted(now)),
+                    },
+                )
+            }
+        };
+        let edits = vec![edit];
+        let running = self.outputs.running();
+        if to.muted(now) == now {
+            // Nothing to change, but a source the edit would refuse is refused here too.
+            self.graph
+                .clone()
+                .apply_with_running(&edits, None, &running)
+                .map_err(action_field)?;
+            return Ok(());
+        }
+        let applied = self
+            .graph
+            .apply_with_running(&edits, None, &running)
+            .map_err(action_field)?;
+        self.history
+            .record_batch(client_id, applied.rev, applied.touched, Vec::new());
+        self.changed(client_id, request_id, &edits, applied.rev, None, wake);
         Ok(())
     }
 
@@ -7876,6 +7990,18 @@ impl State {
         let settling = self
             .channels
             .tick(&self.graph, midi.as_deref(), data, heard, now);
+        // The action bindings a MIDI input fired since the last tick (ADR-0122, ADR-0207),
+        // each run as its call would be, credited to the engine.
+        let mut fired = self.action_bindings.tick(&self.graph, midi.as_deref());
+        // Then the data triggers (ADR-0202), from senders whose state is used.
+        fired.extend(self.data_triggers.tick(&self.graph, data, now));
+        let binding = ClientId::new(crate::history::ENGINE_CLIENT);
+        for action in fired {
+            let name = action.name();
+            if let Err(error) = self.action(&binding, &RequestId::new("binding"), action, wake) {
+                tracing::debug!(%error, action = name, "a bound action failed");
+            }
+        }
         let changed = self
             .driver
             .tick(&self.graph, midi.as_deref(), data, heard, now);
@@ -8732,6 +8858,12 @@ fn preset_run(
 
 /// An error from the `item.set_visible` an item action applies, with its field named
 /// as the action's (`scene_id`, not `edits.0.scene_id`).
+/// What `source.mute` or `bus.mute` mutes.
+enum Muting {
+    Source(jstream_protocol::SourceId),
+    Bus(jstream_protocol::BusId),
+}
+
 fn action_field(error: ProtocolError) -> ProtocolError {
     match error {
         ProtocolError::InvalidArgument {

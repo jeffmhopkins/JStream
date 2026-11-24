@@ -78,6 +78,7 @@ pub fn fresh_sequence(collection: &Collection) -> (TimelineId, String) {
 /// An empty sequence, six seconds long.
 pub fn empty_sequence(id: TimelineId, name: String) -> TimelineInfo {
     TimelineInfo {
+        folder: None,
         timeline_id: id,
         name,
         duration_ms: 6000,

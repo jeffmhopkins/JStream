@@ -2440,6 +2440,9 @@ mod clock_tests {
     fn a_stream_moved_to_another_sender_goes_on_from_the_last_time_sent() {
         let opened = Instant::now();
         let last = Arc::new(AtomicI64::new(0));
+        // Opened a moment ago: a first picture at age 0 µs would be sent at 1, just after
+        // the last time (0), and the media time after it would lag by that 1.
+        std::thread::sleep(Duration::from_millis(1));
         let mut first = StreamClock::new(opened, Arc::clone(&last));
         let start = first.at(0);
         // Media time running ahead of the wall clock: far past what the stream's age says.

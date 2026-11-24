@@ -292,6 +292,7 @@ impl Folder {
             folder_id: self.id.clone(),
             name: self.name.clone(),
             parent: self.parent.clone(),
+            scene_id: self.scene.clone(),
         }
     }
 }

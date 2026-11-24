@@ -162,6 +162,24 @@ pub fn target_name(collection: &Collection, target: &ValueTarget) -> String {
         ValueTarget::SendGain { source_id, bus_id } => {
             format!("{} · send to {bus_id}", collection.source_name(source_id))
         }
+        ValueTarget::SourceMute { source_id } => {
+            format!("{} · mute", collection.source_name(source_id))
+        }
+        ValueTarget::BusMute { bus_id } => {
+            let name = collection
+                .buses
+                .iter()
+                .find(|b| &b.bus_id == bus_id)
+                .map_or_else(|| bus_id.to_string(), |b| b.name.clone());
+            format!("{name} · mute")
+        }
+        ValueTarget::ItemVisible { item_id, .. } => {
+            let name = collection.item(item_id).map_or_else(
+                || item_id.to_string(),
+                |(_, item)| collection.source_name(&item.source_id),
+            );
+            format!("{name} · visible")
+        }
         _ => "A setting".into(),
     }
 }
@@ -1010,7 +1028,7 @@ pub fn midi_input(control: &MidiControlInfo) -> MotionKind {
         control: MotionMidiControl::Cc,
         controller: Some(control.controller),
         channel: Some(control.channel),
-        input: Some(control.input.clone()),
+        input: crate::jtunnel::bound_input(&control.input),
         smoothing_ms: 50,
         curve: MotionCurve::Linear,
         from: Finite32::ZERO,

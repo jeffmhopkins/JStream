@@ -338,11 +338,17 @@ impl Touched {
                 }
             }
             Edit::FolderCreate {
-                folder_id, parent, ..
+                folder_id,
+                parent,
+                scene_id,
+                ..
             } => {
                 self.exists.insert(Object::Folder(folder_id.clone()));
                 if let Some(parent) = parent {
                     self.uses.insert(Object::Folder(parent.clone()));
+                }
+                if let Some(scene_id) = scene_id {
+                    self.uses.insert(Object::Scene(scene_id.clone()));
                 }
             }
             Edit::FolderDelete { folder_id } => {
@@ -599,6 +605,9 @@ impl Touched {
                 self.uses.insert(Object::Scene(scene_id.clone()));
                 for label in &timeline.labels {
                     self.uses.insert(Object::Label(label.clone()));
+                }
+                if let Some(folder) = &timeline.folder {
+                    self.uses.insert(Object::Folder(folder.clone()));
                 }
             }
             Edit::TimelineDelete { timeline_id } => {
