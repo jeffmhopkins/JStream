@@ -564,6 +564,55 @@ fn a_timer_on_both_scenes_keeps_counting_through_a_switch() {
     timer_reaches(&engine, &timer_frame(&countdown, 1.0, 12_000), "00:48");
 }
 
+/// ADR-0214 with the internal show scene (alpha.13 ST4): a countdown on it is planned
+/// with the program mix, so it keeps counting through a program switch and starts again
+/// when its item is shown again.
+#[test]
+fn a_timer_on_the_show_scene_starts_again_when_its_item_is_shown() {
+    let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    let countdown = settings(&[("duration", json!(60))]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            create("show"),
+            source("t", "timer", countdown.clone()),
+            add("show", "i1", "t"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.set_show_scene(Some(SceneId::new("show"))));
+    block_on(control.call(super::switch_call("a"))).expect("a on program");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00 over program"
+    );
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+
+    block_on(control.call(super::switch_call("b"))).expect("b on program");
+    clock.advance(2_000);
+    timer_reaches(
+        &engine,
+        &timer_frame(&countdown, 1.0, 12_000),
+        "00:48: still shown through the switch",
+    );
+
+    visible(&control, false);
+    clock.advance(20_000);
+    visible(&control, true);
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00 again once shown again"
+    );
+}
+
 /// ADR-0214: `source.restart` starts a countdown on program again, and `source.seek`
 /// counts it on from a point.
 #[test]

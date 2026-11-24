@@ -34,8 +34,10 @@ needs an action it can call to start that scene's countdowns.
    it again after plans that didn't reach it: its scene goes on program, or its item
    is shown. This is the moment ADR-0115's `restart_on_show` uses. It has no setting:
    a timer that stays on program across a switch (on both scenes, or in a nested
-   scene on both) keeps counting. A clock shows the wall clock, so it has nothing to
-   restart.
+   scene on both) keeps counting. The internal show scene drawn over program is
+   reached the same way: a timer on it counts on through program switches and starts
+   again when the show scene shows it again (its item shown after being hidden). A
+   clock shows the wall clock, so it has nothing to restart.
 2. `source.restart` starts a timer's count again, and `source.seek` counts it on as if
    it had started `at_ms` ago. A seek before the show holds through it, as for media.
    Hotkeys, MIDI and other bindings, timeline and sequence cues, and plugins already

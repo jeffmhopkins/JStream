@@ -1211,7 +1211,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   counting when it is on both scenes of a switch
   (`a_timer_on_both_scenes_keeps_counting_through_a_switch`), and starts again for
   `source.restart` and counts on from a `source.seek`
-  (`source_restart_and_seek_start_a_timer_again`, ADR-0214), and a `media` file's
+  (`source_restart_and_seek_start_a_timer_again`, ADR-0214), and one on the internal
+  show scene that counts on through a program switch and starts again when its item is
+  shown again (`a_timer_on_the_show_scene_starts_again_when_its_item_is_shown`), and a `media` file's
   `duration_ms` in `source.sizes` and a `source.seek` that holds whether it comes just
   before or just after the switch that shows the file, also on a file held at its start
   on the upcoming scene, and is `not_found` for a missing source
@@ -2265,6 +2267,8 @@ its scene's pass or a running transition's tracks, is drawn into the canvas-size
 items; the scenes they nest are passes beside program's (one that program nests at the
 same depth is drawn once), and its background is never drawn. Its items count as drawn
 items like any pass's (`Shot::drawn_passes`): their `shown` clock, their motion's redraws,
+their sources reached as program reaches them (so a `timer` on it counts on through a
+program switch and starts again when the show scene shows it again, ADR-0214),
 and the sizes their sources are decoded and captured at. A show scene with no item shown is not planned at all, so a frame without
 overlays is drawn exactly as before, and one with overlays costs one more canvas-sized
 composite. Its nesting counts from it, as a program scene's does. An item of it fading
