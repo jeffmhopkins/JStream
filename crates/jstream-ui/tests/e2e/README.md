@@ -197,7 +197,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   quotes the plugin's name and says its folder stays; Cancel sends nothing, and Remove
   sends one `plugin.uninstall` and the row goes. The Inspector holds neither
   plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
-  between General, Video, 3D rendering, Audio, Plugins and Devices, and the install dialog opens
+  between General, Video, 3D rendering, Audio, Keys & MIDI, Plugins and Devices, and the install dialog opens
   centred over a moved Settings dialog and closes alone on Escape.
 - **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
   answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter
