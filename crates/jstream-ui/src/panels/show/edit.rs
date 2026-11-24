@@ -361,7 +361,8 @@ fn cuts(track: &TrackView, view: Viewport, px: f64) -> Vec<AnyView> {
         .into_iter()
         .zip(geom::cut_room(&xs))
         .map(|((c, label, left), room)| {
-            let room = room - CUT_CHROME_PX;
+            // A lone cut has the whole row.
+            let room = if room.is_finite() { room } else { px } - CUT_CHROME_PX;
             let fits = room >= geom::MIN_LABEL_PX;
             view! {
                 <div class="show-cut" class:bare=!fits style:left=format!("{left:.4}%")

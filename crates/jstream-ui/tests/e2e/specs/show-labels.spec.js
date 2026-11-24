@@ -94,7 +94,7 @@ test('labels on a crowded show stay clear of each other', async ({ page, daemon 
       {
         track_id: 's1',
         name: 'Events',
-        cues: [3000, 3080, 3400, 8000, 11000].map((at_ms, n) => ({
+        cues: [3000, 3080, 3400, 6500, 6550, 11000].map((at_ms, n) => ({
           cue_id: `c${n}`,
           at_ms,
           action: { type: 'source.restart', source_id: `clip-${n}` },
@@ -122,13 +122,32 @@ test('labels on a crowded show stay clear of each other', async ({ page, daemon 
     const next = diamonds.find((d) => d.left > name.left);
     if (next) expect(name.right, `"${name.text}" runs into the next diamond`).toBeLessThanOrEqual(next.left);
   }
-  // Events: a pill with its name ends before the next pill; stacked bare pills overlap.
+  // Events: a pill with its name ends before the next stack; its own stack's bare pills,
+  // within 10 px of it, lie over it.
   const named = await boxes(panel.locator('.show-ev span:not(.bare)'));
   const pills = await boxes(panel.locator('.show-ev span'));
   for (const pill of named) {
-    const next = pills.find((p) => p.left > pill.left);
+    const next = pills.find((p) => p.left >= pill.left + 10);
     if (next) expect(pill.right, `"${pill.text}" runs into the next event`).toBeLessThanOrEqual(next.left);
   }
+  // Every cue in a stack can still be reached by a click, named pill or bare.
+  for (const cue of await panel.locator('.show-ev').all()) {
+    const id = await cue.getAttribute('data-clip');
+    const b = await cue.locator('span').boundingBox();
+    // Somewhere along its pill, a press lands on it.
+    const reached = await page.evaluate(
+      ([id, x, w, y]) => {
+        for (let dx = 0.5; dx < w; dx += 1) {
+          const at = document.elementFromPoint(x + dx, y)?.closest('[data-clip]');
+          if (at?.getAttribute('data-clip') === id) return true;
+        }
+        return false;
+      },
+      [id, b.x, b.width, b.y + b.height / 2],
+    );
+    expect(reached, `cue ${id} is covered`).toBe(true);
+  }
+
   // Cut badges: one with its label clears its neighbours; bare icons may touch.
   const cuts = await boxes(panel.locator('.show-cut'));
   const labelled = await boxes(panel.locator('.show-cut:not(.bare)'));

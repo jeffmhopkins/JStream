@@ -3094,6 +3094,8 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-ev .show-mk-more { margin-left: 5px; background: var(--show-event-count); color: var(--show-seq-text); }
 .show-ev span.bare { padding-left: 2px; padding-right: 2px; min-height: 13px; }
 .show-ev.named { z-index: 2; }
+/* A stack's bare pills lie over its named one, so each stays reachable to a click. */
+.show-ev:not(.named) { z-index: 3; }
 .show-kf:hover, .show-ev:hover, .show-cut:hover { z-index: 7; }
 .show-kf:hover .show-mk-name, .show-ev:hover .show-mk-name, .show-cut:hover .show-cut-name { display: inline-block; max-width: none !important; }
 .show-kf:hover .show-mk-name { background: var(--panel); border-radius: 3px; padding: 0 3px; margin: 0 -3px; }
