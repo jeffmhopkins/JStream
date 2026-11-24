@@ -55,6 +55,7 @@ pub fn row_px(kind: TrackKind) -> u32 {
         TrackKind::Keyframes => 34,
         TrackKind::Sequences(_) => 46,
         TrackKind::Audio(_) => 42,
+        TrackKind::Linked(_) => 30,
     }
 }
 
@@ -64,7 +65,7 @@ pub fn starts_group(previous: Option<TrackKind>, kind: TrackKind) -> bool {
     let group = |k: TrackKind| match k {
         TrackKind::Program | TrackKind::Overlay(_) => 0,
         TrackKind::Keyframes | TrackKind::Sequences(_) => 1,
-        TrackKind::Audio(_) => 2,
+        TrackKind::Audio(_) | TrackKind::Linked(_) => 2,
     };
     previous.is_some_and(|p| group(p) != group(kind))
 }
@@ -73,6 +74,11 @@ pub fn starts_group(previous: Option<TrackKind>, kind: TrackKind) -> bool {
 /// their own kind. Program (V1) is always the bottom layer, under every overlay, and K
 /// is the show's one keyframe row, so neither moves.
 pub fn reorder_refusal(from: TrackKind, to: TrackKind) -> Option<String> {
+    if matches!(from, TrackKind::Linked(_)) || matches!(to, TrackKind::Linked(_)) {
+        return Some(
+            "A scene audio row follows its video track: reorder the V tracks instead.".to_owned(),
+        );
+    }
     let fixed = |k: TrackKind| matches!(k, TrackKind::Program | TrackKind::Keyframes);
     if fixed(from) || fixed(to) {
         return Some(

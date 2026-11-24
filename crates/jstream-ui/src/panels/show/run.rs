@@ -204,7 +204,7 @@ fn fires_at(show: &ShowView, at: u32) -> Vec<String> {
             ClipKind::Sequence(_) => Some(format!("Start {}", c.label)),
             ClipKind::Event(what) => Some(what.clone()),
             ClipKind::Audio(_) => Some(format!("Play {}", c.label)),
-            ClipKind::Keyframe(_) => None,
+            ClipKind::Keyframe(_) | ClipKind::Linked(_) => None,
         })
         .collect()
 }
@@ -940,14 +940,14 @@ fn NotesPanel() -> impl IntoView {
                 view! {
                     <div class="show-notes-next">
                         <h6>{format!("NEXT · {name}")}</h6>
-                        <div class="show-notes-said">{script(&note)}</div>
+                        <div class="show-notes-said selectable">{script(&note)}</div>
                     </div>
                 }
             })
     };
     let note = move || match here.get() {
         Some((_, note)) if !note.is_empty() => {
-            view! { <div class="show-notes-here">{script(&note)}</div> }.into_any()
+            view! { <div class="show-notes-here selectable">{script(&note)}</div> }.into_any()
         }
         Some(_) => {
             view! { <p class="show-notes-here hint">"No notes for this bookmark."</p> }.into_any()
@@ -995,7 +995,7 @@ fn NotesPanel() -> impl IntoView {
             <Show when=move || open.get()>
                 <div class="show-notes-body" node_ref=body
                     style:font-size=move || on().then(|| format!("{}px", look.with(|p| p.size)))>
-                    <div class="show-notes-text" node_ref=text>{note}</div>
+                    <div class="show-notes-text selectable" node_ref=text>{note}</div>
                     {move || (!on()).then(next)}
                 </div>
             </Show>

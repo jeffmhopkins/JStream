@@ -661,6 +661,38 @@ pub fn set_span(show: &mut ShowInfo, clip: &str, start_ms: u32, length_ms: u32) 
     false
 }
 
+/// Stretches audio or overlay clip `clip` over the whole show, from 0 to program's end.
+/// `false` when another clip on its track is in the way, or it already spans it.
+pub fn span_show(show: &mut ShowInfo, clip: &str) -> bool {
+    let end = show.length_ms();
+    end > 0 && set_span(show, clip, 0, end)
+}
+
+/// Puts source `source`'s audio on audio track `track` at `at_ms`, or on a new audio
+/// track when `track` is `None` or isn't one (a source dragged onto the tracks): one
+/// edit. `whole` spans it over the whole show. Returns the clip's ID, or `None` when it
+/// doesn't fit there or the show holds the most tracks.
+pub fn place_source_audio(
+    show: &mut ShowInfo,
+    track: Option<&str>,
+    source: SourceId,
+    at_ms: u32,
+    length_ms: u32,
+    whole: bool,
+) -> Option<String> {
+    let track = match track.filter(|t| show.audio.iter().any(|a| a.track_id == *t)) {
+        Some(t) => t.to_owned(),
+        None => add_audio_track(show)?,
+    };
+    let end = show.length_ms();
+    let (at_ms, length_ms) = if whole && end > 0 {
+        (0, end)
+    } else {
+        (at_ms, length_ms)
+    };
+    add_audio_clip(show, &track, source, at_ms, length_ms, (0, 0))
+}
+
 /// Sets audio or overlay clip `clip`'s fades (a fade handle dragged), fitted inside it.
 pub fn set_fades(show: &mut ShowInfo, clip: &str, fades: (u32, u32)) -> bool {
     let fades = (
@@ -923,6 +955,40 @@ mod tests {
         );
         assert!(!move_track(&mut s, &a, "program"), "nor under program");
         assert_eq!(order(&s), [a, b, c]);
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn a_sources_audio_goes_on_a_track_or_a_new_one_and_can_span_the_show() {
+        let mut s = show();
+        let end = s.length_ms();
+        // Dropped on the tracks with no audio track: one is made for it.
+        let id = place_source_audio(&mut s, None, "cam".into(), 10_000, 30_000, false)
+            .unwrap_or_default();
+        assert_eq!(s.audio.len(), 1);
+        assert_eq!(
+            (s.audio[0].clips[0].start_ms, s.audio[0].clips[0].length_ms),
+            (10_000, 30_000)
+        );
+        assert!(span_show(&mut s, &id));
+        assert_eq!(
+            (s.audio[0].clips[0].start_ms, s.audio[0].clips[0].length_ms),
+            (0, end)
+        );
+        assert!(!span_show(&mut s, &id), "already spans it");
+        // On that track again it can't overlap: it goes up against the clip it hit.
+        let a1 = s.audio[0].track_id.clone();
+        assert!(
+            place_source_audio(&mut s, Some(&a1), "mic".into(), 5_000, 10_000, false).is_some()
+        );
+        assert_eq!(s.audio[0].clips[1].start_ms, end);
+        assert_eq!(s.audio.len(), 1);
+        // The whole show at once, on a new track.
+        assert!(place_source_audio(&mut s, None, "mic".into(), 5_000, 10_000, true).is_some());
+        assert_eq!(
+            (s.audio[1].clips[0].start_ms, s.audio[1].clips[0].length_ms),
+            (0, end)
+        );
         assert_eq!(s.problem(), None);
     }
 

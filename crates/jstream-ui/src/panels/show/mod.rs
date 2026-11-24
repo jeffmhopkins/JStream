@@ -117,14 +117,17 @@ pub struct ShowPanel {
     pub prompter: RwSignal<prompter::Prompter>,
 }
 
-/// A scene dragged from the Scenes panel towards the Show panel's tracks. The Scenes
-/// panel sets it as the pointer moves and marks it dropped when the button comes up;
-/// the Edit view places the scene where it was let go and clears it.
+/// A scene dragged from the Scenes panel, or a source's audio from the Sources panel or
+/// a mixer strip, towards the Show panel's tracks. The panel it comes from sets it as
+/// the pointer moves and marks it dropped when the button comes up; the Edit view
+/// places it where it was let go and clears it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Carry {
-    /// The scene's ID.
+    /// The scene's ID; empty for a source's audio.
     pub scene: String,
-    /// Its name, for the pausing bookmark at its end.
+    /// The source whose audio it is, for a source's audio.
+    pub source: Option<String>,
+    /// Its name, for the pausing bookmark at a scene's end.
     pub name: String,
     /// Where the pointer is, in the page's CSS pixels.
     pub x: f64,
@@ -132,6 +135,27 @@ pub struct Carry {
     pub y: f64,
     /// Whether the button came up: place it.
     pub dropped: bool,
+}
+
+impl ShowPanel {
+    /// Carries source `source`'s audio (called `name`) towards the tracks, with the
+    /// pointer at `event`; `dropped` when the button came up there.
+    pub fn carry_source(
+        &self,
+        source: &str,
+        name: &str,
+        event: &leptos::ev::PointerEvent,
+        dropped: bool,
+    ) {
+        self.carry.set(Some(Carry {
+            scene: String::new(),
+            source: Some(source.to_owned()),
+            name: name.to_owned(),
+            x: f64::from(event.client_x()),
+            y: f64::from(event.client_y()),
+            dropped,
+        }));
+    }
 }
 
 /// Where the browser keeps the show last opened.

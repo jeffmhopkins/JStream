@@ -25,7 +25,6 @@ pub mod geom;
 pub mod gesture;
 pub mod zoom;
 
-use super::drop::DEFAULT_FADE_MS;
 use super::edits;
 use super::model::{ClipKind, ClipView, RunPhase, ShowView, TrackKind, TrackView};
 use super::time::{Viewport, clock};
@@ -142,6 +141,9 @@ fn grab_kind(track: TrackKind, clip: &ClipView) -> &'static str {
         (TrackKind::Program, _) => "program",
         (TrackKind::Overlay(_), _) => "overlay",
         (TrackKind::Audio(_), _) => "audio",
+        // Linked audio grabs its scene clip, which shares its ID (ADR-0213).
+        (TrackKind::Linked(1), _) => "program",
+        (TrackKind::Linked(_), _) => "overlay",
         _ => "marker",
     }
 }
@@ -248,6 +250,15 @@ fn clip_view(
                     <path d=geom::curve_path(&clip.curve) vector-effect="non-scaling-stroke" />
                 </svg>
                 <b>"▶ "{name(clip)}{badge}</b>
+            </div>
+        }
+        .into_any(),
+        (_, ClipKind::Linked(_)) => view! {
+            <div class="show-au show-linked" class:missing=clip.missing class:show-sel=selected
+                data-clip=id data-kind=grab style:left=left style:width=width
+                title=format!("{title} · linked to its scene clip")>
+                <b><i class="show-link" aria-hidden="true">"🔗"</i>{name(clip)}</b>
+                <span>{clip.detail.clone()}</span>
             </div>
         }
         .into_any(),
@@ -781,113 +792,137 @@ pub fn EditView() -> impl IntoView {
     };
     // A track's menu: on its head (`head`) the track's own entries too, and clips go in at
     // the play head; on its body they go in where it was clicked.
-    let track_menu =
-        move |e: &leptos::ev::MouseEvent, track: String, kind: String, at: u32, head: bool| {
-            let Some(menus) = menus else { return };
-            let off = locked_now();
-            let mut entries = Vec::new();
-            let at = if head { untrack(|| panel.head()) } else { at };
-            let view = show.with_untracked(|s| {
-                s.as_ref()
-                    .and_then(|s| s.tracks.iter().find(|t| t.id == track).cloned())
+    let track_menu = move |e: &leptos::ev::MouseEvent,
+                           track: String,
+                           kind: String,
+                           at: u32,
+                           head: bool| {
+        let Some(menus) = menus else { return };
+        let off = locked_now();
+        let mut entries = Vec::new();
+        let at = if head { untrack(|| panel.head()) } else { at };
+        let view = show.with_untracked(|s| {
+            s.as_ref()
+                .and_then(|s| s.tracks.iter().find(|t| t.id == track).cloned())
+        });
+        let own = matches!(
+            view.as_ref().map(|t| t.kind),
+            Some(TrackKind::Overlay(_) | TrackKind::Audio(_))
+        );
+        if let Some(t) = view
+            .clone()
+            .filter(|t| matches!(t.kind, TrackKind::Program | TrackKind::Overlay(_)))
+        {
+            let scenes = panel
+                .collection(|c| super::inspector::scene_options(c, None))
+                .unwrap_or_default();
+            let items: Vec<Entry> = scenes
+                .into_iter()
+                .map(|(scene, name)| {
+                    let t = t.clone();
+                    Entry::item(name.clone(), move || {
+                        drops::place_scene(&panel, &show_id(), &t, (&scene, &name), at, false);
+                    })
+                    .disabled_if(off)
+                })
+                .collect();
+            entries.push(if items.is_empty() {
+                Entry::unavailable("Add scene (no scenes yet)")
+            } else {
+                Entry::submenu(format!("Add scene at {}", clock(at)), items)
             });
-            let own = matches!(
-                view.as_ref().map(|t| t.kind),
-                Some(TrackKind::Overlay(_) | TrackKind::Audio(_))
-            );
-            if let Some(t) = view
-                .clone()
-                .filter(|t| matches!(t.kind, TrackKind::Program | TrackKind::Overlay(_)))
-            {
-                let scenes = panel
-                    .collection(|c| super::inspector::scene_options(c, None))
-                    .unwrap_or_default();
-                let items: Vec<Entry> = scenes
-                    .into_iter()
-                    .map(|(scene, name)| {
-                        let t = t.clone();
-                        Entry::item(name.clone(), move || {
-                            drops::place_scene(&panel, &show_id(), &t, (&scene, &name), at, false);
+            entries.push(Entry::Sep);
+        }
+        // Any source's audio, from anywhere in the project: on this A track, or on a new
+        // one from any other row (ADR-0213's linked audio is the scene's own).
+        {
+            let on = (kind == TrackKind::Audio(1).class()).then(|| track.clone());
+            let sources = panel
+                .collection(|c| {
+                    c.sources
+                        .iter()
+                        .filter(|s| s.audio.is_some())
+                        .map(|s| (s.source_id.clone(), s.name.clone()))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let items = |whole: bool| -> Vec<Entry> {
+                sources
+                        .iter()
+                        .cloned()
+                        .map(|(source, name)| {
+                            let on = on.clone();
+                            Entry::item(name.clone(), move || {
+                                let mut fits = true;
+                                panel.set_show(&show_id(), |s| {
+                                    fits = edits::place_source_audio(
+                                        s,
+                                        on.as_deref(),
+                                        source.clone(),
+                                        at,
+                                        drops::DEFAULT_SCENE_MS,
+                                        whole,
+                                    )
+                                    .is_some();
+                                });
+                                if !fits {
+                                    panel.refuse(format!(
+                                        "{name} doesn't fit on this track there: try another A track, or a row that isn't one for a new track."
+                                    ));
+                                }
+                            })
+                            .disabled_if(off)
                         })
-                        .disabled_if(off)
-                    })
-                    .collect();
-                entries.push(if items.is_empty() {
-                    Entry::unavailable("Add scene (no scenes yet)")
-                } else {
-                    Entry::submenu(format!("Add scene at {}", clock(at)), items)
-                });
-                entries.push(Entry::Sep);
+                        .collect()
+            };
+            let new = if on.is_some() { "" } else { " (new A track)" };
+            if sources.is_empty() {
+                entries.push(Entry::unavailable("Add source audio (no audio sources)"));
+            } else {
+                entries.push(Entry::submenu(
+                    format!("Add source audio at {}{new}", clock(at)),
+                    items(false),
+                ));
+                entries.push(Entry::submenu(
+                    format!("Add source audio for the whole show{new}"),
+                    items(true),
+                ));
             }
-            if kind == TrackKind::Audio(1).class() {
-                let sources = panel
-                    .collection(|c| {
-                        c.sources
-                            .iter()
-                            .filter(|s| s.audio.is_some())
-                            .map(|s| (s.source_id.clone(), s.name.clone()))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                let items: Vec<Entry> = sources
-                    .into_iter()
-                    .map(|(source, name)| {
-                        let track = track.clone();
-                        Entry::item(name.clone(), move || {
-                            let mut fits = true;
-                            panel.set_show(&show_id(), |s| {
-                                fits = edits::add_audio_clip(
-                                    s,
-                                    &track,
-                                    source.clone(),
-                                    at,
-                                    drops::DEFAULT_SCENE_MS,
-                                    (DEFAULT_FADE_MS, DEFAULT_FADE_MS),
-                                )
-                                .is_some();
-                            });
-                            if !fits {
-                                panel.refuse(format!("{name} doesn't fit on this track there."));
-                            }
-                        })
-                        .disabled_if(off)
-                    })
-                    .collect();
-                entries.push(if items.is_empty() {
-                    Entry::unavailable("Add audio clip (no audio sources)")
-                } else {
-                    Entry::submenu(format!("Add audio clip at {}", clock(at)), items)
-                });
-                entries.push(Entry::Sep);
-            }
-            if head && own {
-                let (rename_id, delete_id) = (track.clone(), track.clone());
-                entries.push(
-                    Entry::item("Rename track", move || {
-                        renaming.set(Some(rename_id.clone()))
-                    })
-                    .disabled_if(off),
-                );
-                entries.push(
-                    Entry::item("Delete track", move || {
-                        panel.set_show(&show_id(), |s| {
-                            edits::delete_track(s, &delete_id);
-                        });
-                    })
-                    .danger()
-                    .disabled_if(off),
-                );
-                entries.push(Entry::Sep);
-            }
+            entries.push(Entry::Sep);
+        }
+        if head && own {
+            let rename_id = track.clone();
             entries.push(
-                Entry::item("+ Overlay track", move || {
-                    send(Command::AddOverlayTrack(show_id()));
+                Entry::item("Rename track", move || {
+                    renaming.set(Some(rename_id.clone()))
                 })
                 .disabled_if(off),
             );
-            entries.push(Entry::item("+ Audio track", add_audio_track).disabled_if(off));
-            menus.open(e, entries);
-        };
+            entries.push(Entry::Sep);
+        }
+        entries.push(
+            Entry::item("+ Overlay track", move || {
+                send(Command::AddOverlayTrack(show_id()));
+            })
+            .disabled_if(off),
+        );
+        entries.push(Entry::item("+ Audio track", add_audio_track).disabled_if(off));
+        // Removal is the last group (UI-DESIGN › Menus).
+        if head && own {
+            let delete_id = track.clone();
+            entries.push(Entry::Sep);
+            entries.push(
+                Entry::item("Delete track", move || {
+                    panel.set_show(&show_id(), |s| {
+                        edits::delete_track(s, &delete_id);
+                    });
+                })
+                .danger()
+                .disabled_if(off),
+            );
+        }
+        menus.open(e, entries);
+    };
     let remove_selected = move || {
         let Some(id) = selected.get_untracked() else {
             return;
@@ -1239,10 +1274,33 @@ pub fn EditView() -> impl IntoView {
                 .get_attribute("data-clip")
                 .or_else(|| el.get_attribute("data-loop"))
                 .unwrap_or_default();
-            selected.set(Some(id));
+            selected.set(Some(id.clone()));
             let Some(menus) = menus else { return };
             let loop_id = el.get_attribute("data-loop");
             let mut entries = Vec::new();
+            // An overlay or an A clip can stretch over the whole show in one step.
+            if matches!(
+                el.get_attribute("data-kind").as_deref(),
+                Some("overlay" | "audio")
+            ) && loop_id.is_none()
+            {
+                let clip = id.clone();
+                entries.push(
+                    Entry::item("Span the whole show", move || {
+                        let mut spans = true;
+                        panel.set_show(&show_id(), |s| {
+                            spans = edits::span_show(s, &clip);
+                        });
+                        if !spans {
+                            panel.refuse(
+                                "It can't span the whole show: another clip on its track is in the way, or it already does.",
+                            );
+                        }
+                    })
+                    .disabled_if(locked_now()),
+                );
+                entries.push(Entry::Sep);
+            }
             if let Some(l) = loop_id {
                 entries.push(
                     Entry::item("Rename", move || renaming.set(Some(l.clone())))
@@ -1372,10 +1430,34 @@ pub fn EditView() -> impl IntoView {
             panel.refuse("The show is locked: unlock it to edit.");
             return;
         }
-        if let Some(track) = track_of(&h.track) {
-            let at = snap_now(h.at_ms);
-            drops::place_scene(&panel, &show_id(), &track, (&c.scene, &c.name), at, h.slot);
+        let Some(track) = track_of(&h.track) else {
+            return;
+        };
+        let at = snap_now(h.at_ms);
+        if let Some(source) = c.source {
+            // A source's audio: on the A track it was let go on, or a new one.
+            let on = matches!(track.kind, TrackKind::Audio(_)).then_some(track.id.as_str());
+            let mut fits = true;
+            panel.set_show(&show_id(), |s| {
+                fits = edits::place_source_audio(
+                    s,
+                    on,
+                    source.as_str().into(),
+                    at,
+                    drops::DEFAULT_SCENE_MS,
+                    false,
+                )
+                .is_some();
+            });
+            if !fits {
+                panel.refuse(format!(
+                    "{}'s audio doesn't fit on that track there.",
+                    c.name
+                ));
+            }
+            return;
         }
+        drops::place_scene(&panel, &show_id(), &track, (&c.scene, &c.name), at, h.slot);
     });
     // A browser's drag of files clears itself when the drag-overs stop coming.
     Effect::new(move |_| {

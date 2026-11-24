@@ -83,6 +83,9 @@ pub enum TrackKind {
     Sequences(u8),
     /// A1 and up: audio clips. Numbered from 1.
     Audio(u8),
+    /// The scene audio of video track V`n` (1 for program): drawn from its clips'
+    /// scenes, read only, each clip linked to its scene clip (ADR-0213).
+    Linked(u8),
 }
 
 impl TrackKind {
@@ -94,6 +97,7 @@ impl TrackKind {
             TrackKind::Keyframes => "K".to_owned(),
             TrackKind::Sequences(n) => format!("S{n}"),
             TrackKind::Audio(n) => format!("A{n}"),
+            TrackKind::Linked(n) => format!("V{n}"),
         }
     }
 
@@ -105,6 +109,7 @@ impl TrackKind {
             TrackKind::Keyframes => "Keyframes",
             TrackKind::Sequences(_) => "Sequences",
             TrackKind::Audio(_) => "Audio",
+            TrackKind::Linked(_) => "Scene audio",
         }
     }
 
@@ -116,6 +121,7 @@ impl TrackKind {
             TrackKind::Keyframes => "keyframes",
             TrackKind::Sequences(_) => "sequences",
             TrackKind::Audio(_) => "audio",
+            TrackKind::Linked(_) => "linked",
         }
     }
 }
@@ -186,6 +192,8 @@ pub enum ClipKind {
     Event(String),
     /// An audio source, by ID, up for the clip.
     Audio(String),
+    /// A scene clip's own audio, by the scene's ID: its ID is the scene clip's.
+    Linked(String),
 }
 
 /// A show bookmark: a named point the show can jump to.
