@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0218"
+id = "ADR-0220"
 title = "Every MIDI reader goes through \"Use this sender's MIDI\""
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0218: Every MIDI reader goes through "Use this sender's MIDI"
+# ADR-0220: Every MIDI reader goes through "Use this sender's MIDI"
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

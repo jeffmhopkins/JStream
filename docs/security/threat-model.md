@@ -759,7 +759,7 @@ somewhere it shouldn't.
   for that sender (the desktop app's checkbox, the daemon's `--jtunnel-midi`), off by
   default ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md) §3,
   [ADR-0207](../adr/0207-mute-actions-and-held-triggers.md),
-  [ADR-0218](../adr/0218-every-midi-reader-goes-through-the-senders-switch.md)): the
+  [ADR-0220](../adr/0220-every-midi-reader-goes-through-the-senders-switch.md)): the
   engine's action-binding runner (`binding.set`, so any bindable action, `output.stop`
   included) reads only the inputs `MidiInputs::bindable` names, and value bindings,
   channels and `midi` modifiers read a named input only while its state is bindable

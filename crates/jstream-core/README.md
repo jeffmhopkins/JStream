@@ -457,7 +457,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   modifier, binding or channel input naming no input reads `MidiInputs::bound`, never the
   every-input state the sources draw: a JTunnel sender with "Use this sender's MIDI" off
   moves none of them ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
-  §3, [ADR-0218](../../docs/adr/0218-every-midi-reader-goes-through-the-senders-switch.md)),
+  §3, [ADR-0220](../../docs/adr/0220-every-midi-reader-goes-through-the-senders-switch.md)),
   and one switched off mid-hold leaves nothing held. Switched on, an input is read from
   where its controls are.
   A scene camera's `midi` and `data` modifiers are recorded and smoothed the
