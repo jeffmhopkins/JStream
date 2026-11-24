@@ -1212,7 +1212,7 @@ stamp = { hash = "b3:fc747925e68f859c", by = "agent:claude-readme-polish", note 
 stamp = { hash = "b3:03d8063e7a07d5dd", by = "agent:release-thread", note = "Step 3 now says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; the rest of the PR loop, and REVIEW#output's added carry sentence, are consistent with review-gate.yml" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#output"]
-stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Re-read: step 3's carry sentence still holds (a push that only merges main into a passed head carries, ADR-0109); the base line is the reviewer's to write, so the builder's loop is unchanged" }
+stamp = { hash = "b3:f30a7b5715853e86", by = "agent:claude-ci-load", note = "REVIEW#output only changed which PRs get the after-review dispatch (any base but main skips it); the PR loop's auto-merge, findings and review-gate steps are unchanged" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#rounds"]
 stamp = { hash = "b3:1d8bae6753e4ae8d", by = "agent:release-thread", note = "Step 3 says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; REVIEW#rounds and #gather are back to main's text (no merge-only reviewer round), consistent with that" }
@@ -8292,13 +8292,13 @@ stamp = { hash = "b3:0b930991b44ef71c", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:1f6f84288d2d8caa", by = "agent:linux-desktop", note = "Re-read against lint_deps.rs: only the notes of the Tauri and GTK -sys allowlist entries changed (built with jstream-desktop's webkitgtk feature, ADR-0141); the checks, and the graph being the default-features one across platforms, are unchanged" }
 
 ["DOCS#governance"."body"]
-stamp = { hash = "b3:797e4656587876ea", by = "agent:issues-burndown", note = "Added #1297's identity checks to the list (removed plain anchors, removed tombstones, a new anchor reusing a tombstoned ID, a retired rule made active again) and said how anchors and tombstones are compared, per doc; matches identity() in governance.rs and its two new tests" }
+stamp = { hash = "b3:f9fd532f802a3eea", by = "agent:claude-ci-load", note = "governance.yml now skips draft PRs and adds ready_for_review, so a draft runs the check once it is marked ready; the body now says it runs on every event of a ready PR. What counts as a governance change and how the check reads labels and the description are unchanged" }
 
 ["DOCS#governance"."dep:docs/adr/0019-review-gate-v2.md"]
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["DOCS#governance"."file:.github/workflows/governance.yml"]
-stamp = { hash = "b3:74359364a23f0470", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
+stamp = { hash = "b3:3eccb3a40b8d43a0", by = "agent:claude-ci-load", note = "governance.yml now skips draft PRs and adds ready_for_review, so a draft runs the check once it is marked ready; the body now says it runs on every event of a ready PR. What counts as a governance change and how the check reads labels and the description are unchanged" }
 
 ["DOCS#governance"."file:xtask/src/governance.rs"]
 stamp = { hash = "b3:a21610e70fb7cb33", by = "agent:issues-burndown", note = "Added #1297's identity checks to the list (removed plain anchors, removed tombstones, a new anchor reusing a tombstoned ID, a retired rule made active again) and said how anchors and tombstones are compared; matches identity() in governance.rs and its two new tests" }
@@ -8562,10 +8562,10 @@ stamp = { hash = "b3:ef6690600d49a5a1", by = "agent:claude@session_01QBbMRwRuZe7
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["REVIEW#output"."body"]
-stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Added the jstream-review-base line under the verdict marker (the base SHA reviewed against, from gh pr view --json baseRefOid) and said the carry diffs the reviewed head against it (ADR-0154); checked against review-gate.yml's baseRe, markersOf and reviewedBase" }
+stamp = { hash = "b3:f30a7b5715853e86", by = "agent:claude-ci-load", note = "review-gate now skips the after-review dispatch for any PR whose base isn't main (ADR-0231), not only wave/*; the marker format and verdict table are unchanged, and the dispatch paragraph now says a retargeted PR is dispatched when review-gate evaluates the retarget" }
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
-stamp = { hash = "b3:0727637159d92c07", by = "agent:issues-thread", note = "The carry still needs: no marker for the head, the latest pass's head an ancestor, only base merges or ledger restamps since, and the same change. #1692 only changes how the commits since are listed and classified (each asked whether the base has it), so the section holds" }
+stamp = { hash = "b3:b3955c04438bf66a", by = "agent:claude-ci-load", note = "review-gate now skips the after-review dispatch for any PR whose base isn't main (ADR-0231), not only wave/*; the marker format and verdict table are unchanged, and the dispatch paragraph now says a retargeted PR is dispatched when review-gate evaluates the retarget" }
 
 ["ROADMAP#beta"."body"]
 stamp = { hash = "b3:9ac5e66a16ef76f7", by = "agent:claude", note = "beta.1 gates per platform; the macOS pass includes browser pages. Wanted, not waited for: the macOS virtual camera and video files in Linux's media-file sources. Audio files play (#1523), and H.264 in MP4, MOV and Matroska through VA-API is built (#1529, #1532) but hasn't decoded on a real GPU; the Linux pass (#1357) is its first run. macOS browser sources (#1522) and the Linux v4l2loopback camera (#1521) are built and in the packages." }
@@ -8655,7 +8655,7 @@ stamp = { hash = "b3:265cc716fca78aa0", by = "agent:issues-thread", note = "Live
 stamp = { hash = "b3:f4e69848c6224703", by = "agent:claude", note = "round 1 fixes: the script now removes release/, appimage/ and the daemons' data folders after the zip unless --keep, and prints a Left on this machine line, as the section now says; a daemon whose token file stays empty counts as a start failure; the profile.get row says the Linux check needs only thread_cpu and the live row says it checks jstream-render" }
 
 ["RUNBOOK-AGENT-PRE-PASS#linux"."dep:docs/runbooks/linux-testing.md#script"]
-stamp = { hash = "b3:df277ad520db543d", by = "agent:linux-decoders", note = "the AAC notice row still holds: the NOTICE still says no AAC patent licence and names Via LA; it now also mentions the decoder" }
+stamp = { hash = "b3:956a50f6752c97f7", by = "agent:claude-ci-load", note = "linux-testing#script only gained when linux-install CI runs; the release-pass script and its checks are unaffected" }
 
 ["RUNBOOK-AGENT-PRE-PASS#linux"."file:scripts/release-pass.py"]
 stamp = { hash = "b3:00b685dbbd52f3e0", by = "agent:claude", note = "round 1 fixes: the script now removes release/, appimage/ and the daemons' data folders after the zip unless --keep, and prints a Left on this machine line, as the section now says; a daemon whose token file stays empty counts as a start failure; the profile.get row says the Linux check needs only thread_cpu and the live row says it checks jstream-render" }
@@ -8700,7 +8700,7 @@ stamp = { hash = "b3:a89f0c39e4c1b340", by = "agent:release-alpha13", note = "Re
 stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "Re-read: the steps connect with the daemon's control token over loopback, which agent approval (desktop app only, this branch) and the network listener's UI-token refusal (after the wave merge) don't change. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed | merge: the wave's #1366 (Allow devices on my network turns on the network listener) merged in cleanly; this section's text is untouched by the renumber | kept from the merged side: the server README change is open question 1's desktop note; going live by hand uses no network access | merge: the wave brought #1364's squash, the same content this branch already had; this branch adds #1364 N1 (<url>/pair) | kept from the merged side: the CLI and server changes add pair's network lines; going live by hand uses neither pair nor --lan | kept from the merged side: jstream-server's Design gained TCP_NODELAY on accepted connections (#1440); the go-live steps and their checks are unchanged by it" }
 
 ["RUNBOOK-LINUX-TESTING#script"."body"]
-stamp = { hash = "b3:df277ad520db543d", by = "agent:linux-decoders", note = "install.sh's NOTICE now also names the AAC-LC decoder; the stage step still describes it correctly, with ADR-0160 added" }
+stamp = { hash = "b3:956a50f6752c97f7", by = "agent:claude-ci-load", note = "linux-install.yml's jobs now run only on main and on ready PRs into main (ADR-0231); the paths list and the lint/ubuntu/fedora steps are unchanged, and the paragraph on when the workflow runs now says so" }
 
 ["RUNBOOK-LINUX-TESTING#script"."dep:apps/jstream-daemon/README.md#purpose"]
 stamp = { hash = "b3:ef1d5391e951088a", by = "agent:mac-e2e", note = "Purpose's change is to the tests list only; the Linux install script's steps don't depend on it" }
@@ -8712,10 +8712,10 @@ stamp = { hash = "b3:3d3663bf20225913", by = "agent:linux-install", note = "new:
 stamp = { hash = "b3:28fa830d7989af60", by = "agent:linux-install", note = "new: re-read against scripts/linux/install.sh, scripts/linux/jstream and linux-install.yml step by step: packages per family, the libcef strip, sandbox rule, paths, launcher flags and its two-minute clipboard clear, the CI jobs including the browser-source render check; the Mac script it points to (main's, after #1093) still shares the pins file and flags" }
 
 ["RUNBOOK-LINUX-TESTING#script"."dep:docs/runbooks/mac-testing.md#script"]
-stamp = { hash = "b3:a569994a4e453983", by = "agent:claude", note = "mac-testing#script changed only its desktop-app paragraph (the .dmg also attached to releases from beta.1, licences in the bundle); the installer's shape this section mirrors is unchanged, so it holds | merge: #1522 changed only mac-testing #script's desktop-app paragraph (macOS browser sources); the Linux script is unaffected. | kept from the merged side: mac-testing#script now describes bundle-app.sh's browser-source bundling and pins checking both scripts. This section only borrows the installer's step order, pins file and flags, which are unchanged. Still holds. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
+stamp = { hash = "b3:201fec83217818e7", by = "agent:claude-ci-load", note = "linux-install.yml's jobs now run only on main and on ready PRs into main (ADR-0231); the paths list and the lint/ubuntu/fedora steps are unchanged, and the paragraph on when the workflow runs now says so" }
 
 ["RUNBOOK-LINUX-TESTING#script"."file:.github/workflows/linux-install.yml"]
-stamp = { hash = "b3:13c17f0228ea193c", by = "agent:linux-install", note = "new: re-read against scripts/linux/install.sh, scripts/linux/jstream and linux-install.yml step by step: packages per family, the libcef strip, sandbox rule, paths, launcher flags and its two-minute clipboard clear, the CI jobs including the browser-source render check (their folders are now fixed /tmp paths, as the runner context isn't allowed in a job's env); the Mac script it points to still shares the pins file and flags" }
+stamp = { hash = "b3:0239b3fbeb1429b3", by = "agent:claude-ci-load", note = "linux-install.yml's jobs now run only on main and on ready PRs into main (ADR-0231); the paths list and the lint/ubuntu/fedora steps are unchanged, and the paragraph on when the workflow runs now says so" }
 
 ["RUNBOOK-LINUX-TESTING#script"."file:scripts/install-tools.txt"]
 stamp = { hash = "b3:9f7028b088c0a0f7", by = "agent:linux-install", note = "re-read against scripts/linux/install.sh, scripts/linux/jstream and linux-install.yml step by step: packages per family (Arch now adds vulkan-swrast), the toolchain installed by name with the wasm target as the Mac script does, the libcef strip, the sandbox rule and its one root step refusing a symlink or a file the user doesn't own, paths, launcher flags and the two-minute clipboard clear, the CI jobs; what it shares with the Mac script is now stated exactly (step order, pins file, four flags) and the pins job is said to check versions, with the aarch64 sums recorded by hand; install-tools.txt is now in covers" }
@@ -8730,10 +8730,10 @@ stamp = { hash = "b3:dbad4ff6bc060b8b", by = "agent:linux-install", note = "new:
 stamp = { hash = "b3:2ddbf6b5778eb1ae", by = "agent:linux-install", note = "new: the command, the two sudo prompts, sign-in with the token on the clipboard for two minutes, Stop JStream, flags, data folder and what's missing match the script and ADR-0060" }
 
 ["RUNBOOK-LINUX-TESTING#tester"."dep:docs/runbooks/linux-testing.md#script"]
-stamp = { hash = "b3:df277ad520db543d", by = "agent:linux-decoders", note = "only the script section's NOTICE wording changed (AAC-LC decoder); the tester steps are unchanged" }
+stamp = { hash = "b3:956a50f6752c97f7", by = "agent:claude-ci-load", note = "linux-testing#script only gained when linux-install CI runs; the tester's install command and prompts are unaffected" }
 
 ["RUNBOOK-MAC-TESTING#script"."body"]
-stamp = { hash = "b3:a569994a4e453983", by = "agent:claude", note = "bundle-app.sh only gained the licence files in Contents/Resources; the desktop-app paragraph now also says each release attaches the image from beta.1; rest unchanged | merge: Merge resolved by hand: kept this branch's 'from beta.1 each release attaches it too' link and main's (#1522) paragraph on bundling browser sources with the helper and CEF, signed inside out. The bundle-app.sh licence copy and #1522's browser options coexist. | kept from the merged side: Script section now says bundle-app.sh, given the helper and CEF's folder (build-browser-helper.sh builds the one and prints the other), bundles CEF's framework and helper apps signed ad hoc inside out and macos-app opens a page; and pins checks both scripts. Checked against bundle-app.sh, build-browser-helper.sh and mac-install.yml. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
+stamp = { hash = "b3:201fec83217818e7", by = "agent:claude-ci-load", note = "mac-install.yml's jobs now run only on main and on ready PRs into main (ADR-0231); the paths list and the pins/install steps are unchanged, and the paragraph on when the workflow runs now says so" }
 
 ["RUNBOOK-MAC-TESTING#script"."dep:apps/jstream-daemon/README.md#purpose"]
 stamp = { hash = "b3:ef1d5391e951088a", by = "agent:mac-e2e", note = "Purpose's change is to the tests list only; the Mac install script's steps and the macos-app job description are unaffected" }
@@ -8745,7 +8745,7 @@ stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:mac-install", note = "whole 
 stamp = { hash = "b3:f8df5ea8ba2523a0", by = "agent:ptz-builder", note = "ADR-0153: the threat model's server section gained the desktop app's PTZ controller setting; the script checks nothing of it, and holds" }
 
 ["RUNBOOK-MAC-TESTING#script"."file:.github/workflows/mac-install.yml"]
-stamp = { hash = "b3:162a2069e7bd75fb", by = "agent:mac-browser", note = "The pins job now runs bash -n and shellcheck on build-browser-helper.sh as well; the section says pins checks both scripts. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
+stamp = { hash = "b3:cb2548cb88670afc", by = "agent:claude-ci-load", note = "mac-install.yml's jobs now run only on main and on ready PRs into main (ADR-0231); the paths list and the pins/install steps are unchanged, and the paragraph on when the workflow runs now says so" }
 
 ["RUNBOOK-MAC-TESTING#script"."file:scripts/install-tools.txt"]
 stamp = { hash = "b3:9f7028b088c0a0f7", by = "agent:linux-install", note = "this PR adds Linux lines to install-tools.txt (the pins job checks every line by tool, Linux ones included) and a Linux clipboard paragraph to threat-model#server beside the Mac one; the section's account of the Mac script still holds | kept from the merged side: whole PR: a new section for the one-command macOS install. Re-read against install.sh (checks, CLT, rustup, clone at --ref or newest tag else main, pinned UI tools from install-tools.txt checked against Cargo.lock, rustup toolchain install of rust-toolchain.toml's channel by name plus the wasm32 target, trunk and cargo builds, install folder and JStream.command, --uninstall/--purge, embedded --help), jstream.sh (daemon with the data folder's token file and collection, waits for listening on, opens the ui URL, SIGTERM on Ctrl-C, HUP or exit, JSTREAM_NO_BROWSER for CI), clipboard.js (stdin, current-host only, concealed and transient, cleared after 120 s, run with HUP ignored so a closed window still clears) and mac-install.yml (pins and install jobs). No app bundle or signing root: ADR-0063 §11 attributes prompts to Terminal and §13 leaves packaging and signing for later; usage strings come from the daemon's embedded Info.plist (apps/jstream-daemon README#purpose, whose token-file line #1091 changed); the clipboard paragraph matches threat-model#server's Accepted text" }
@@ -8769,7 +8769,7 @@ stamp = { hash = "b3:a2504b854bb622af", by = "agent:mac-install", note = "whole 
 stamp = { hash = "b3:dd692a456ed83dfe", by = "agent:mac-browser", note = "The tester section now lists browser sources as in JStream.app only (the installer's daemon has none) and adds the hand checks from a quarantined download: the page shows and plays, no second Dock icon or menu bar, cef.log without sandbox errors, no Keychain prompt. These match ADR-0157 and the checklist posted on #1356. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["RUNBOOK-MAC-TESTING#tester"."dep:docs/runbooks/mac-testing.md#script"]
-stamp = { hash = "b3:a569994a4e453983", by = "agent:claude", note = "mac-testing#script changed only its desktop-app paragraph (the .dmg also attached to releases from beta.1); the tester's install steps here don't depend on it and hold | merge: #1522 added the browser-sources paragraph to #script; the tester's steps don't depend on it and still hold. | kept from the merged side: The script section now covers bundling browser sources; the tester's checks refer to an app built that way, consistent with it. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
+stamp = { hash = "b3:201fec83217818e7", by = "agent:claude-ci-load", note = "mac-testing#script only gained when mac-install CI runs; the tester's install command and steps are unaffected" }
 
 ["RUNBOOK-RELEASE#cut"."body"]
 stamp = { hash = "b3:9ba0fa495084c964", by = "agent:dxc-packaging", note = 'The zip step now downloads DXC and checks its SHA-256, and the Windows notes name the DXC release from dxc\DXC-VERSION.txt, matching release.yml' }
@@ -8892,7 +8892,7 @@ stamp = { hash = "b3:bc43dee67b83cb62", by = "agent:claude", note = "New depende
 stamp = { hash = "b3:91baf30b25242110", by = "agent:mac-browser", note = "New dependency: ADR-0157 keeps the same sandboxed helper and request policy with the sandbox always on and adds --use-mock-keychain; the section's macOS controls say exactly that. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["THREAT-MODEL#browser"."dep:docs/runbooks/linux-testing.md#script"]
-stamp = { hash = "b3:df277ad520db543d", by = "agent:linux-decoders", note = "linux-testing changed only the NOTICE's ADR references; the browser-source threat analysis is unaffected" }
+stamp = { hash = "b3:956a50f6752c97f7", by = "agent:claude-ci-load", note = "linux-testing#script only gained when linux-install CI runs; browser-linux still opens a page through the sandboxed helper on main and on PRs into main, so the section holds" }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/handlers.rs"]
 stamp = { hash = "b3:7ea3249d6cdc1fae", by = "agent:mac-browser", note = "Adds --use-mock-keychain on macOS (the profile key stays out of the login Keychain), which the Controls paragraph now states; the request policy and permission handlers are unchanged. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
