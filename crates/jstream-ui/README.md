@@ -1878,10 +1878,12 @@ studio mode's program monitor beside the canvas (`ProgramMonitor`,
 [Design › Studio mode](#design)) and the Show panel's Next monitor
 ([Design › Shows](#design)). It opens its own `preview.subscribe` stream, sized for its
 box, on a channel tapped from the canvas's binary channel, and reports itself as the
-view `monitor:<label>` (`monitor:program`, `monitor:show-next`). Given a new scene it opens a
-stream of it. A still monitor asks for 1 fps and closes its stream once the first frame
-is drawn, keeping that picture, so it costs the engine one frame each time its scene
-changes.
+view `monitor:<label>` (`monitor:program`, `monitor:show-next`). Given a new scene, a
+moving monitor moves its open stream there on the same channel (`preview.show`), keeping
+its last picture until the new scene's first with no "Starting" placeholder, and opens a
+stream of the scene only if the engine refuses. A still monitor asks for 1 fps and closes its stream once the first frame
+is drawn, keeping that picture, so it opens a new stream, and costs the engine one frame,
+each time its scene changes.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
   `Layout::sized` from the shared collection and the sources' sizes, so it follows every state change the app
@@ -2121,8 +2123,9 @@ is not a view of the show.
   "Starting…" (the view's first included) and each change to why it has no picture.
   A scene switch that keeps the last picture until the new stream draws (#1205) counts
   no placeholder.
-- `reopens`: every `preview.subscribe` for the view after its first, on a scene switch or
-  the JPEG fallback.
+- `reopens`: every `preview.subscribe` for the view after its first: a new size or rate,
+  a scene switch the engine wouldn't move the open stream for, or the JPEG fallback. A
+  scene switch that moves the stream (`preview.show`) is no reopen.
 
 <a id="build"></a>
 ## Build

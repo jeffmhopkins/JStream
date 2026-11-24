@@ -1157,8 +1157,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   does throughout a running transition), in H.264
   when the platform has an encoder and JPEG otherwise, or in PNG for a client that asks
   for it alone to take a screenshot (0.71,
-  [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md)); `preview.unsubscribe` or the
-  session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
+  [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md)); `preview.show` (0.188) moves
+  an open stream to another scene on its channel, keeping its encoder where nothing else
+  shares it, `preview.keyframe` asks it for a keyframe at once, and `preview.unsubscribe`
+  or the session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
   keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
   frames drops up to the next keyframe when full, so a slow client still decodes what
   it gets. The layout is in
