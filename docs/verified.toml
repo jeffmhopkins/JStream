@@ -8108,6 +8108,102 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: 
 ["GETTING-STARTED#vcam"."dep:docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
 stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "ADR-0156 is now maintainer tier and proposed; the Linux steps are unchanged and still match vcam.rs's MODPROBE and PERSIST_HINT" }
 
+["INTEGRATION-streamdeck#build"."body"]
+stamp = { hash = "b3:c978e02464f078a5", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/package.json"]
+stamp = { hash = "b3:d67843ed82f78f37", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/scripts/icons-png.mjs"]
+stamp = { hash = "b3:71c171caa84ac726", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/scripts/icons.ts"]
+stamp = { hash = "b3:91d8b1042b9fc2de", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.test.ts"]
+stamp = { hash = "b3:45034f96c0717dc3", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.ts"]
+stamp = { hash = "b3:33e39cd38e1bb930", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/plugin.test.ts"]
+stamp = { hash = "b3:94be2533d4672455", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/unit.test.ts"]
+stamp = { hash = "b3:5f31c14d7cdead5e", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."body"]
+stamp = { hash = "b3:af2bcf956450fbcb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."dep:docs/adr/0044-pairing-remote-browsers.md"]
+stamp = { hash = "b3:5670e6a5758601b2", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."dep:docs/adr/0104-network-listener-over-tls.md"]
+stamp = { hash = "b3:4458a76284b426ae", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/actions/base.ts"]
+stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/actions/index.ts"]
+stamp = { hash = "b3:badafd07ab70c4ce", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/hub.ts"]
+stamp = { hash = "b3:22c5b9ecf7cda0b5", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/client.ts"]
+stamp = { hash = "b3:3664d88d5c05e290", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/discovery.ts"]
+stamp = { hash = "b3:d65185eb4dff3671", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/protocol.ts"]
+stamp = { hash = "b3:68b84d51d14515c9", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/studio.ts"]
+stamp = { hash = "b3:83d2f4ba8bf1d569", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/tls.ts"]
+stamp = { hash = "b3:7099247b3b19db3f", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/lists.ts"]
+stamp = { hash = "b3:351ffd57d84fb195", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/plugin.ts"]
+stamp = { hash = "b3:202a0b83abd0d76b", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/render.ts"]
+stamp = { hash = "b3:deafc942594334d1", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."body"]
+stamp = { hash = "b3:3dcabdc0fb68c15e", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/manifest.json"]
+stamp = { hash = "b3:ab7094435b31befe", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.css"]
+stamp = { hash = "b3:6890318949d37d88", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.html"]
+stamp = { hash = "b3:8f3f80f5d7199d4f", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.js"]
+stamp = { hash = "b3:fb6aa42bf1da6a0e", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."body"]
+stamp = { hash = "b3:6e3b2ce0823d19e6", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/base.ts"]
+stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/index.ts"]
+stamp = { hash = "b3:badafd07ab70c4ce", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/lists.ts"]
+stamp = { hash = "b3:351ffd57d84fb195", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/render.ts"]
+stamp = { hash = "b3:deafc942594334d1", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
 ["PERF-SUITE#runner"."body"]
 stamp = { hash = "b3:6ef2740094e0f29b", by = "agent:claude-perf-suite", note = "run() now writes report.json before running the bench, and reports both the bench and the threshold failures before returning false; the text says the bench runs after the report is written" }
 
