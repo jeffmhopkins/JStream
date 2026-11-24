@@ -524,7 +524,7 @@ mod tests {
         assert!(set_note(&mut s, &id, "  cue the host  "));
         assert_eq!(s.bookmarks[0].note, "cue the host");
         assert!(
-            !set_note(&mut s, &id, &"x".repeat(5_000))
+            !set_note(&mut s, &id, &"x".repeat(MAX_SHOW_NOTE_LEN + 1_000))
                 || s.bookmarks[0].note.len() == MAX_SHOW_NOTE_LEN
         );
     }
