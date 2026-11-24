@@ -1400,10 +1400,13 @@ impl Shot {
     }
 
     /// Whether a camera it draws through moves on its own (ADR-0113): a follow camera,
-    /// or camera motion.
+    /// camera motion, or a glide through a Move (ADR-0226).
     fn cameras_move(&self) -> bool {
         let moves = |moves: &Option<Arc<CameraMoves>>| moves.as_ref().is_some_and(|m| m.moves());
-        self.cameras.values().any(|camera| moves(&camera.moves))
+        // A camera gliding through a Move moves too (ADR-0226).
+        self.cameras
+            .values()
+            .any(|camera| moves(&camera.moves) || camera.glide.is_some())
             || self
                 .transition
                 .as_ref()
@@ -1707,6 +1710,14 @@ impl Shot {
                 })
                 .collect()
         })
+    }
+
+    /// The camera scene `scene` glides through `elapsed_ms` into the Move it glides with
+    /// (ADR-0226), before its camera motion, or `None` when it doesn't glide, for tests.
+    #[cfg(test)]
+    pub(crate) fn gliding_camera(&self, scene: &SceneId, elapsed_ms: f32) -> Option<SceneCamera> {
+        let glide = self.cameras.get(scene)?.glide.as_ref()?;
+        glide.cameras.sky_camera(false, elapsed_ms)
     }
 
     /// Whether the running transition moves its held screen's camera as its shown
@@ -2182,6 +2193,7 @@ fn plan_inner(
         wake: None,
         quiet: false,
         fades: None,
+        glide: None,
     };
     let mut finished = running.is_some();
     let mut end_ms = None;
@@ -2190,7 +2202,31 @@ fn plan_inner(
     {
         let (planned, pairs) = planner.transition(running, &mut shot);
         let end = end_time(running.start, planned.end_ms);
-        if end.is_some_and(|end| now < end) {
+        let glides = end.is_some_and(|end| now < end)
+            && planner.moves_only_the_camera(running, &planned, &shot);
+        if glides {
+            // Only the camera moves (ADR-0226): the program scene is drawn as it is,
+            // with its chain, through a camera that follows the Move's.
+            finished = false;
+            end_ms = Some(planned.end_ms);
+            let glide = CameraGlide {
+                start: running.start,
+                cameras: planner.track_cameras(running, pairs),
+            };
+            let family = planner.family(&running.to);
+            // Planned again from nothing: the transition's plan left frames, chains,
+            // boxes and arrival pictures that the scene at rest plans its own way.
+            shot = Shot {
+                canvas: state.canvas(),
+                blending: state.blending(),
+                program: program.clone(),
+                tempo: assets.tempo().cloned(),
+                features: assets.features(),
+                ..Shot::default()
+            };
+            planner.wake = end;
+            planner.glide = family.map(|family| (family, Arc::new(glide)));
+        } else if end.is_some_and(|end| now < end) {
             finished = false;
             end_ms = Some(planned.end_ms);
             planner.wake = earliest(planner.wake, end);
@@ -2474,6 +2510,7 @@ fn on_screen_until_end(
         wake: None,
         quiet: false,
         fades: None,
+        glide: None,
     };
     let (planned, pairs) = planner.transition(running, &mut shot);
     // Ended as [`plan_program`] finds it.
@@ -2654,6 +2691,9 @@ struct Planner<'a, 'f> {
     quiet: bool,
     /// The show scene and its items fading on their own, set while it is planned.
     fades: Option<(&'a SceneId, &'a ShowFades)>,
+    /// The family whose camera glides, and along what, while a Move moves only its
+    /// camera (ADR-0226): every camera of that family planned meanwhile carries it.
+    glide: Option<(SceneId, Arc<CameraGlide>)>,
 }
 
 impl<'a> Planner<'a, '_> {
@@ -2746,6 +2786,11 @@ impl<'a> Planner<'a, '_> {
             .scene(&family)
             .and_then(|family| family.camera_follow())
             .map(|_| SceneCamera::framing(self.state.canvas()));
+        let glide = self
+            .glide
+            .as_ref()
+            .filter(|(glides, _)| *glides == family)
+            .map(|(_, glide)| Arc::clone(glide));
         (own.is_some() || parent.is_some() || supplied.is_some()).then_some(PassCamera {
             own,
             parent,
@@ -2753,6 +2798,7 @@ impl<'a> Planner<'a, '_> {
             moves: None,
             family,
             anchor: groups::anchor_of(self.state, scene),
+            glide,
         })
     }
 
@@ -2940,6 +2986,60 @@ impl<'a> Planner<'a, '_> {
                 && g.depth_px.get() == 0.0
                 && !g.billboard
         })
+    }
+
+    /// Whether `running`, planned as `planned` into `out`, moves nothing but the camera
+    /// within a 3D scene's family whose scene has a video chain (ADR-0226): a Move
+    /// within the family ([`Self::moves_within_3d_family`]) whose every track is an item
+    /// staying where it is (or, for one that can't glide, going and coming back the
+    /// same), with no effect to blend, and whose camera rides with no 3D
+    /// group. Such a Move is drawn as the scene itself, chain and all, through a
+    /// gliding camera, rather than track by track with its chain paused (ADR-0180).
+    fn moves_only_the_camera(&self, running: &Running, planned: &Planned, out: &Shot) -> bool {
+        // An item that can't glide (one whose effects cover the canvas, such as a
+        // model's layer, ADR-0106) goes and comes back: still when it comes back as it
+        // went, with the same effects.
+        fn comes_back(tracks: &[(Visual, Track)], visual: &Visual, at: &Endpoint) -> bool {
+            tracks.iter().any(|(other, track)| {
+                matches!(track, Track::Appear { to, .. } if to == at)
+                    && other.item_id == visual.item_id
+                    && other.effects == visual.effects
+                    && other.inside.is_none()
+            })
+        }
+        fn still(tracks: &[(Visual, Track)]) -> bool {
+            tracks.iter().all(|(visual, track)| match track {
+                Track::Pair { from, to, via, .. } => {
+                    from == to
+                        && via.iter().all(|stop| stop == to)
+                        && visual.blend_from.is_none()
+                        && visual
+                            .inside
+                            .as_ref()
+                            .is_none_or(|inside| still(&inside.planned.tracks))
+                }
+                Track::Disappear { from, .. } => {
+                    visual.inside.is_none() && comes_back(tracks, visual, from)
+                }
+                Track::Appear { to, .. } => {
+                    visual.inside.is_none()
+                        && tracks.iter().any(|(other, track)| {
+                            matches!(track, Track::Disappear { from, .. } if from == to)
+                                && other.item_id == visual.item_id
+                        })
+                }
+                Track::Through { .. } => false,
+            })
+        }
+        if !self.moves_within_3d_family(running) || self.scene_chain(&running.to).is_none() {
+            return false;
+        }
+        let Some(camera) = self.camera(&running.to) else {
+            return false;
+        };
+        let mut blends = Vec::new();
+        effect_blends(&planned.tracks, &out.chains, &mut blends);
+        camera.anchor.is_none() && blends.is_empty() && still(&planned.tracks)
     }
 
     /// Whether `running` is a Move within the family of a 3D scene (ADR-0180): from one
@@ -4481,6 +4581,30 @@ struct PassCamera {
     /// that group's space, placed through the group item as each frame is drawn.
     /// `None` for a camera in the scene's own space.
     anchor: Groups,
+    /// The Move its family's camera glides along while a Move between two of the
+    /// family's members moves only the camera (ADR-0226): drawn through instead of the
+    /// committed camera until the Move ends.
+    glide: Option<Arc<CameraGlide>>,
+}
+
+/// A Move between two members of a 3D scene's family that moves nothing but the camera
+/// (ADR-0226): the scene is drawn as it is, through its passes and its video chain, and
+/// only its camera follows the Move's camera path.
+#[derive(Debug, PartialEq)]
+struct CameraGlide {
+    /// When the Move started, on the media clock.
+    start: MediaTime,
+    /// The cameras it moves between and how, as the Move's tracks would be seen.
+    cameras: TrackCameras,
+}
+
+impl CameraGlide {
+    /// The camera at `at`, before the family's camera motion and live aim: the Move's
+    /// one moving camera, its end once the Move is over.
+    fn camera(&self, at: MediaTime) -> Option<SceneCamera> {
+        self.cameras
+            .sky_camera(false, transition::elapsed_ms(self.start, at))
+    }
 }
 
 impl PassCamera {
@@ -9704,7 +9828,11 @@ fn moved_camera(
     (live, captures): (&LiveParams, &dyn Captures),
     chains: &Chains,
 ) -> Option<SceneCamera> {
-    let base = base?;
+    // A family whose camera glides through a Move draws the Move's camera (ADR-0226).
+    let base = match planned.and_then(|camera| camera.glide.as_deref()) {
+        Some(glide) => glide.camera(at).or(base)?,
+        None => base?,
+    };
     let moved = match planned.and_then(|camera| camera.moves.as_deref()) {
         Some(moves) => moves.apply(
             base,

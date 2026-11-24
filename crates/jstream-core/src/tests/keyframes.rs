@@ -2911,26 +2911,22 @@ fn move_after_a_fade_onto_the_model_scene(fade_ms: u32) -> Engine {
 
 /// #1598: a Move between two views of a 3D scene, started once the Fade onto it has
 /// ended but before a plan let that go, moves straight from the scene's camera to the
-/// keyframe's, item by item, as from the scene at rest: not from the framing camera, as
-/// if what the ended Fade left on screen were 2D.
+/// keyframe's, as from the scene at rest: not from the framing camera, as if what the
+/// ended Fade left on screen were 2D. The views differ only in their camera and the
+/// scene has a chain, so the scene's camera glides (ADR-0226).
 #[test]
 fn a_move_after_an_ended_fade_starts_from_the_scenes_camera() {
     let engine = move_after_a_fade_onto_the_model_scene(600);
     let (from, to) = (framing_across(-300.0), framing_across(300.0));
     let hub = engine.render_hub().load();
     let shot = hub.shot();
+    assert!(!shot.transitioning(), "the scene is drawn as it is");
     for (ms, k) in [(0.0, 0.0), (100.0, 0.25), (400.0, 1.0)] {
         let want = jstream_render::transition::lerp_camera(&from, &to, k);
-        let cameras = shot.track_cameras(ms).expect("a transition runs");
-        assert!(!cameras.is_empty(), "the model is a track");
-        assert!(
-            cameras.iter().all(|camera| *camera == Some(want)),
-            "at {ms} ms, every item through the moving camera: {cameras:?}, want {want:?}"
-        );
         assert_eq!(
-            shot.sky_cameras(ms),
-            Some((Some(want), Some(want))),
-            "at {ms} ms"
+            shot.gliding_camera(&SceneId::new("k"), ms),
+            Some(want),
+            "at {ms} ms, through the moving camera"
         );
     }
 }

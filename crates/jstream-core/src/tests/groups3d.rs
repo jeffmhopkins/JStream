@@ -365,6 +365,121 @@ fn a_3d_groups_children_stay_in_its_space_during_a_move() {
     );
 }
 
+/// A Move between two views of a 3D scene with a video chain that differ only in their
+/// camera draws the scene as it is, chain and all, through a camera that glides from one
+/// view to the other (ADR-0226), rather than track by track with its chain paused
+/// (ADR-0180), an item that can't glide included. Once the Move ends, the keyframe's own
+/// camera is drawn.
+#[test]
+fn a_camera_only_move_in_a_3d_family_keeps_its_chain() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    let start = SceneCamera::framing(Canvas::DEFAULT);
+    let end = {
+        let mut camera = start;
+        camera.position.z = finite(camera.position.z.get() + 300.0);
+        camera
+    };
+    batch(
+        &control,
+        edits(vec![
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            // The wall's effect runs over the canvas, as a model's layer does, so it
+            // can't glide (ADR-0106): it goes and comes back the same.
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("wall"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("wall_fx"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("wall"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            // Only the camera differs: it steps back.
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(end),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("move"),
+                name: "Move".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ]),
+    )
+    .expect("a keyframe and a move");
+    let action = Action::SceneSwitch {
+        scene_id: SceneId::new("k"),
+        preset_id: Some(TransitionPresetId::new("move")),
+        via: Vec::new(),
+    };
+    super::block_on(control.call(Call::Action { action })).expect("switch");
+    clock.advance(200_000);
+    engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
+    let k = SceneId::new("k");
+    assert!(
+        !shot.transitioning(),
+        "no tracks: the scene is drawn as it is"
+    );
+    assert!(shot.scene_chain(&k).is_some(), "with its chain");
+    let half = shot.gliding_camera(&k, 200.0).expect("its camera glides");
+    let z = half.position.z.get();
+    let (from, to) = (start.position.z.get(), end.position.z.get());
+    assert!(
+        (z - (from + to) / 2.0).abs() < 1.0,
+        "half-way between the views at half-time: {z} from {from} to {to}"
+    );
+    if pixel(&control, 960, 540).is_some() {
+        assert_eq!(
+            pixel(&control, 960, 540),
+            Some(RED),
+            "the child is still in front of the wall half-way"
+        );
+    }
+    clock.advance(400_000);
+    engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
+    assert!(!shot.transitioning());
+    assert!(
+        shot.gliding_camera(&k, 600.0).is_none(),
+        "the glide is over"
+    );
+    assert!(shot.scene_chain(&k).is_some(), "the chain stays");
+}
+
 /// An item with an effect shown with a Fade on a keyframe scene of a 3D scene is drawn
 /// through the keyframe's camera while it appears: the red card, 400 px square, fades in
 /// at its place, and the wall around it stays as it is.
@@ -559,7 +674,7 @@ fn an_effect_setting_changed_later_reaches_a_3d_card() {
 
 /// #1632: a Move between two views of a 3D scene drawn as one picture through its chain,
 /// started once the Fade onto it from a 2D scene has ended but before a plan let that
-/// go, moves item by item as from the scene at rest, so the group's red child, 200 px
+/// go, moves as from the scene at rest (here, its camera alone glides, ADR-0226), so the group's red child, 200 px
 /// nearer than the wall, stays in front of it half-way; it is not the Fade's flat
 /// picture of the scene leaving under the keyframe's items.
 #[test]
@@ -633,8 +748,15 @@ fn a_3d_groups_children_stay_in_its_space_in_a_move_after_a_fade() {
     switch("k", Some("move"));
     clock.advance(200_000);
     engine.replan();
+    // The views differ only in their camera, so the Move runs as the scene gliding its
+    // camera (ADR-0226).
     assert!(
-        engine.render_hub().load().shot().transitioning(),
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .gliding_camera(&SceneId::new("k"), 200.0)
+            .is_some(),
         "the Move runs"
     );
     assert_eq!(
