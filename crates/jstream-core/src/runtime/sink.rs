@@ -35,9 +35,9 @@ pub(crate) enum Destination {
 
 /// What the stream carries, which both containers describe in their headers.
 pub(crate) struct StreamInfo {
-    /// The video codec. H.264 goes in legacy FLV tags and MP4; HEVC and AV1 go in
-    /// enhanced RTMP tags, and can't be recorded yet. Either way the muxer takes the
-    /// decoder configuration from the parameter sets in the first keyframe.
+    /// The video codec. H.264 goes in legacy FLV tags, HEVC and AV1 in enhanced RTMP
+    /// tags, and all three in MP4 (`avc1`, `hvc1`, `av01`). Either way the muxer takes
+    /// the decoder configuration from the parameter sets in the first keyframe.
     pub(crate) codec: Codec,
     pub(crate) size: FrameSize,
     pub(crate) origin: MediaTime,
@@ -110,12 +110,13 @@ impl Sink {
                 })
             }
             Destination::Record(path) => {
-                if info.codec != Codec::H264 {
-                    return Err(format!(
-                        "recording {:?} video is not supported yet; record in H.264",
-                        info.codec
-                    ));
-                }
+                // From the first keyframe: the init segment waits for it (#746).
+                let video = match info.codec {
+                    Codec::H264 => fmp4::VideoConfig::Avc(None),
+                    Codec::Hevc => fmp4::VideoConfig::Hevc(None),
+                    Codec::Av1 => fmp4::VideoConfig::Av1(None),
+                    other => return Err(format!("MP4 recording can't carry {other:?} video")),
+                };
                 // The collection's check is the same on every platform, so `/show.mp4`
                 // passes it on Windows and `C:\show.mp4` on Linux, where it would be a
                 // relative name in the working directory.
@@ -136,8 +137,7 @@ impl Sink {
                     video: Some(fmp4::VideoTrack {
                         width: u16::try_from(info.size.width()).map_err(|_| too_big())?,
                         height: u16::try_from(info.size.height()).map_err(|_| too_big())?,
-                        // From the first keyframe: the init segment waits for it (#746).
-                        avc: None,
+                        config: video,
                     }),
                     audio: Some(fmp4::AudioTrack {
                         config: info.aac()?,
@@ -384,7 +384,6 @@ fn discard(recorder: Recorder) {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicU64};
 
@@ -634,24 +633,44 @@ mod tests {
         );
     }
 
-    /// MP4 recording is H.264 only for now, so another codec fails the start with a
-    /// reason, before any file is opened.
+    /// HEVC and AV1 record to MP4 under their own sample entries, with the decoder
+    /// configuration from the first keyframe, and the file is renamed into place.
     #[test]
-    fn refuses_to_record_hevc_or_av1() {
-        let path = PathBuf::from(if cfg!(windows) {
-            r"C:\no-such-dir\show.mp4"
-        } else {
-            "/no-such-dir/show.mp4"
-        });
-        for codec in [Codec::Hevc, Codec::Av1] {
-            let err = Sink::open(
+    fn records_hevc_and_av1() {
+        let dir = std::env::temp_dir().join(format!("jstream-sink-codecs-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("temp dir");
+        for (codec, keyframe, entry, record) in [
+            (Codec::Hevc, hevc_keyframe(), b"hvc1", b"hvcC"),
+            (Codec::Av1, av1_keyframe(), b"av01", b"av1C"),
+        ] {
+            let path = dir.join(format!("{codec:?}.mp4"));
+            let _ = fs::remove_file(&path);
+            let mut sink = Sink::open(
                 Destination::Record(path.clone()),
                 &info(codec),
-                Arc::new(AtomicBool::new(false)),
+                Arc::new(AtomicBool::new(true)),
             )
-            .err()
-            .expect("refused");
-            assert!(err.contains("not supported yet"), "{err}");
+            .expect("open");
+            sink.start().expect("start");
+            let pts = MediaTime::zero(Timebase::MPEG_90K);
+            let packet = Packet::new(codec, true, pts, pts, keyframe).expect("packet");
+            let drops = AtomicU64::new(0);
+            assert!(sink.forward(&packet, &drops).expect("forward"), "{codec:?}");
+            sink.finish();
+            let file = fs::read(&path).expect("recording");
+            assert_eq!(drops.into_inner(), 0, "{codec:?}");
+            for kind in [&entry[..], &record[..], b"moof", b"mdat"] {
+                assert!(
+                    file.windows(4).any(|w| w == kind),
+                    "{codec:?}: the file has a {}",
+                    String::from_utf8_lossy(kind)
+                );
+            }
+            assert!(
+                !file.windows(4).any(|w| w == b"avcC"),
+                "{codec:?}: no H.264 record"
+            );
         }
+        let _ = fs::remove_dir_all(&dir);
     }
 }

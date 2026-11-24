@@ -77,8 +77,9 @@ Contents ([Design](#design) explains the choices):
   opens and shows a dismissable notice only when a newer release exists. A failure is
   quiet there and reported by the menu. A page that isn't the desktop app says the
   check runs there. Nothing is downloaded. The comparison is tested natively.
-- **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
-  around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
+- **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: the `Zone`s
+  around the canvas, four inner ones and each outer `Edge`'s bands, as many as are in
+  use, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing, Live and Show built in; a stored dock
   that predates one gains it). Every change goes
   through it (`place`, `close`, `toggle`, `click_tab`, `resize_zone`, `resize_between`,
@@ -88,7 +89,9 @@ Contents ([Design](#design) explains the choices):
 - **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas
   (in studio mode, the canvas beside the studio controls and the program monitor, or
   over them for a portrait canvas when that shows the pictures larger, `stacks`, tested
-  natively; while a show runs in the Show panel's Run view, beside its Next monitor),
+  natively, decided again whenever the stage row changes size, which a
+  `ResizeObserver` follows; while a show runs in the Show panel's Run view, beside its
+  Next monitor),
   with the splitters, dividers, tabs and close buttons (and the mixer's meter flip in
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
@@ -210,7 +213,8 @@ Contents ([Design](#design) explains the choices):
   `TriggerList`, the rows with a chip per action; `ActionPicker`, which adds an action
   to a `When`; and `MidiTriggerForm`, a typed trigger or one Learn fills from
   `midi.last_controls`. Each is public so another panel can show the same list.
-- **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
+- **Menus, dialogs and icons**: `chrome.rs` (the browser's own right-click menu and text
+  selection, kept to text fields and readable text), `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
@@ -278,8 +282,12 @@ Contents ([Design](#design) explains the choices):
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
   natively, and its Follow pointer note and Camera motion in `camera_moves.rs`:
-  `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
-  modifier tested natively), the Filters
+  `CameraMoves`, with the followable items, the Follow pointer note, adding a camera
+  modifier and the MIDI, DAW data and Channel kinds it offers tested natively), the
+  fields that say which live data a reader reads (`data_read.rs`: `DataReads`, shared by
+  the channel card and Camera motion, with a JTunnel sender's Mod slots and their names
+  tested natively), the audio fields beside them (`audio_read.rs`: `AudioReads`, what an
+  `audio` input hears and follows, with its names and fields tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
   Properties dialogs' list and pane, and `FilterUndo`, what the Properties dialogs
   opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
@@ -340,14 +348,17 @@ Contents ([Design](#design) explains the choices):
   `edit/geom.rs` for where things are drawn, `edit/gesture.rs` for what a drag does,
   `edit/zoom.rs` for the zoom bar and `edit/drops.rs` for scenes and files dropped on
   the tracks), `run.rs` the Run view, `edits.rs` each tool's change to a show,
-  `drop.rs` what a dropped media file becomes, `inspector.rs` the Inspector's Show page
+  `drop.rs` what a dropped media file becomes, `prompter.rs` the Run view's notes as a
+  teleprompter (its size, rate and where the text has rolled to, kept by the browser),
+  `inspector.rs` the Inspector's Show page
   and `inspect_edits.rs` its fields' changes; `NextPane` and `next_monitor_shown` are
-  the Next monitor beside the canvas. Every one of those but the components is a pure
+  the Next monitor beside the canvas. `ShowPanel::carry_source` lets the Sources panel and
+  a mixer strip carry a source's audio onto the tracks. Every one of those but the components is a pure
   function tested natively, `drop.rs` against `MockEngine` too. It sends `show.set`
   (every edit, as one undo step) and `show.delete`, in a batch with `source.create`,
   `scene.create` and the folder and item edits a media drop needs, and the actions
-  `show.play` (`rehearse` for Rehearse), `show.stop`, `show.continue`, `show.back`,
-  `show.go_to` and `show.arm`; it reads the shows from `state.get` and the running
+  `show.play`, `show.pause`, `show.stop`, `show.continue`, `show.back`,
+  `show.go_to`, `show.seek` and `show.arm`; it reads the shows from `state.get` and the running
   show from `studio.get`'s `show`, kept current by `show.changed`.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
   Settings…, Video settings… and Plugins… open, with its pages (`SettingsPage`: General,
@@ -707,6 +718,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   call's does. While it lists any kinds, a Shader type under Generated writes a custom
   shader source first and opens its Properties with the shader editor (ADR-0135, under
   Filters below), and each custom shader source's kind is listed after it.
+- **The browser's own menu and selection** (`chrome.rs`, [CM-09](../../docs/UI-FEATURES.md#menus)).
+  A window listener swallows every right-click no menu answered, so the browser's
+  generic menu never opens over the app, and an element that keeps a right-click from
+  the menu behind it (a dialog, a panel's tool bar) swallows it with `chrome::swallow`.
+  Text keeps the browser's menu and its selection: `chrome::TEXT` lists text fields,
+  code, links, errors (toasts and settings errors too), the connection details, About's
+  facts and the agent's activity log, the style sheet
+  turns `user-select` off elsewhere, and `Menus::open` leaves a right-click in a text
+  field to the browser. A `selectstart` outside text is cancelled, and a press on the
+  chrome clears a stray selection, captured so a drag that stops its press still does.
 - **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
   A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
   and on a nested scene's item), any other single object's (Source in a window or full
@@ -993,7 +1014,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`Studio::channel`): its name, switch (`channel.switch`), a meter that also sets the value
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
-  0 to 1; "+ Channel" adds a `channel` input; each input that reads something shows its
+  0 to 1; "+ Channel" adds a `channel` input; "+ Data" opens `DataReads` on a `data`
+  input of the first Mod no channel reads yet (`next_mod`), and "+ Audio" `AudioReads` on
+  an `audio` input of the program mix's level (ADR-0206), each added on Add input; each input that reads something shows its
   `smoothing_ms`, set with `learn::set_smoothing`), its shaping, the value bindings that follow
   it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one
@@ -1112,10 +1135,24 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   6 px, else 0.1 s, Shift free): the view draws that show in place of the engine's
   (`ShowPanel::preview`) and sends it once on release, and Escape drops it. The preview
   stays until the engine's answer brings the new show in, or 1.5 s pass. A refused drag
-  says why in its tip and sends nothing. A scene dragged from the Scenes panel reaches
-  the panel as a `Carry` the Scenes panel sets as the pointer moves (a pointer drag, as
-  the rows' own reorder is), and the Edit view finds the track under it with
-  `host::element_at`. Files arrive as a browser drop's `text/uri-list`
+  says why in its tip and sends nothing. A scene dragged from the Scenes panel, or a
+  source's audio dragged from a Sources row or a mixer strip's name, reaches the panel
+  as a `Carry` the other panel sets as the pointer moves (a pointer drag, as the rows'
+  own reorder is), and the Edit view finds the track under it with
+  `host::element_at`; a source's audio goes on the A track it is let go on, or a new
+  one (`edits::place_source_audio`). A track head drags to reorder its kind's rows
+  (`edits::move_track`, refused across kinds by `geom::reorder_refusal`), and its menu
+  renames and deletes overlay and audio tracks. A scene clip's own audio is never
+  stored ([ADR-0216](../../docs/adr/0216-a-scene-clips-audio-is-drawn-linked-under-it.md)):
+  `wire::heard_in` finds the sources a scene is heard through when shown, and
+  `view_of` draws a read-only `TrackKind::Linked` row per video track whose clips keep
+  their scene clips' IDs, so a press on one grabs the scene clip. The play head is the
+  runner's while the open show is the running one, else the panel's `cursor` (where Play
+  starts, [ADR-0215](../../docs/adr/0215-the-edit-views-ruler-moves-the-play-head.md)):
+  `ShowPanel::move_head` seeks a running show or moves the cursor, and Play then seeks
+  to it. The Run view's notes are the note of the bookmark the show is at (`run::notes`),
+  split into lines to say and `*directions*` (`run::paragraphs`), and the run of show
+  marks each bookmark done, NOW or NEXT. Files arrive as a browser drop's `text/uri-list`
   (`drop::dropped_paths`) or as the desktop app's `host::on_file_drop`; **one batch per
   drop** makes each file's "Show media" folder, media source, scene and item
   (`drop::plan_drop`, reusing a file's scene or source when it is there already) and
@@ -1384,9 +1421,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)). They show with
   `font-display: swap`, so the system font stands in until they load.
 - **The workspace** follows the prototype's dock
-  ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
+  ([UI features › docking](../../docs/UI-FEATURES.md#docking)): zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
-  the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
+  the canvas. Each outer edge holds bands (`dock::Edge`, `Zone::Bottom(n)` and so on, 0
+  nearest the canvas) as many as are in use: `EdgeView` draws them outwards and, while
+  a panel is dragged, one more past the last, laid over the edge (`.new-band`), whose
+  drop `Arrangement::state_mut` makes the next band; `Arrangement::tidy` removes an
+  emptied band after every change and moves the outer ones in. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
   Sources (`Sources`), the Inspector (`Inspector`), Arrange (the prototype's
   Transform), Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and

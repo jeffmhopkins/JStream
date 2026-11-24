@@ -653,6 +653,7 @@ fn drift_x(item: &str, rate: f32) -> Edit {
         item_id: ItemId::new(item),
         scene_id: None,
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "drift".into(),
             property: jstream_protocol::MotionProperty::X,
             effect: None,

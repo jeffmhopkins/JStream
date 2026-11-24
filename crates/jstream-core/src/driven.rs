@@ -121,38 +121,55 @@ impl Driven {
     /// `tint` says which modifiers paint (ADR-0171 decision 5): `Some` for one, with the
     /// colour it sets now, if any. A colour setting takes the last one's colour before
     /// the others add to it, and a painting modifier adds nothing.
+    ///
+    /// `value` gives what a modifier makes of a setting's own value: the value plus its
+    /// own for an `add` modifier, the value it sets (pulled toward the own one by its
+    /// amount) for a `replace` one (ADR-0203). A number's last `replace` modifier sets it
+    /// before the `add` ones add to it; on a colour, a `replace` modifier does nothing.
     pub(crate) fn settings<T>(
         &self,
         base: &[T],
         of: impl Fn(&T) -> &Settings,
-        value: impl Fn(&Modifier) -> f64,
+        value: impl Fn(&Modifier, f64) -> f64,
         tint: impl Fn(&Modifier) -> Option<Option<[f32; 3]>>,
     ) -> Option<Vec<Settings>> {
         let mut out: Option<Vec<Settings>> = None;
         for setting in &self.settings {
+            let Some(at) = base.get(setting.filter).map(|s| setting.at(of(s))) else {
+                continue;
+            };
+            let own = at.as_f64();
             let mut set = None;
+            let mut replaced = None;
             let mut add = 0.0;
             for modifier in &setting.modifiers {
                 match tint(modifier) {
                     Some(color) => set = color.or(set),
-                    None => add += value(modifier),
+                    None if modifier.replace => {
+                        if let (Some(own), Target::Number { .. }, true) =
+                            (own, setting.target, modifier.enabled)
+                        {
+                            replaced = Some(value(modifier, own));
+                        }
+                    }
+                    None => add += value(modifier, 0.0),
                 }
             }
             if setting.target != Target::Color {
                 set = None;
             }
+            // What the number moves by: to its replaced value, then the adds.
+            if let (Some(own), Some(to)) = (own, replaced) {
+                add += to - own;
+            }
             if !add.is_finite() || (add == 0.0 && set.is_none()) {
                 continue;
             }
-            let Some(v) = base
-                .get(setting.filter)
-                .map(|s| setting.at(of(s)))
-                .map(|at| match set {
-                    Some(color) => painted(at, color),
-                    None => at.clone(),
-                })
-                .and_then(|at| moved(setting.target, &at, add))
-            else {
+            let at = match set {
+                Some(color) => painted(at, color),
+                None => at.clone(),
+            };
+            let Some(v) = moved(setting.target, &at, add) else {
                 continue;
             };
             let settings = out.get_or_insert_with(|| base.iter().map(|s| of(s).clone()).collect());
@@ -175,11 +192,24 @@ impl Driven {
             let Some(at) = base.get(setting.filter).map(|s| setting.at(s)) else {
                 continue;
             };
-            let (low, high) = setting
+            let (mut low, mut high) = setting
                 .modifiers
                 .iter()
+                .filter(|m| !m.replace)
                 .map(reach)
                 .fold((0.0, 0.0), |(l, h), (ml, mh)| (l + ml, h + mh));
+            // A `replace` modifier takes it anywhere between its own value and its reach.
+            if let Some(own) = at.as_f64() {
+                for (from, to) in setting
+                    .modifiers
+                    .iter()
+                    .filter(|m| m.replace && m.enabled)
+                    .map(reach)
+                {
+                    low += (from - own).min(0.0);
+                    high += (to - own).max(0.0);
+                }
+            }
             for (settings, add) in [(&mut least, low), (&mut most, high)] {
                 if let Some(v) = moved(setting.target, at, add) {
                     settings[setting.filter].0.insert(setting.param.clone(), v);
@@ -282,6 +312,7 @@ mod tests {
             kind,
             clock: Clock::Engine,
             enabled: true,
+            replace: false,
         }
     }
 
@@ -316,7 +347,7 @@ mod tests {
         let base = settings(json!({"width": 4.0, "color": "#ffffff"}));
         let at = |each: f64| {
             width
-                .settings(&base, |s| s, |_| each, |_| None)
+                .settings(&base, |s| s, |_, own| own + each, |_| None)
                 .expect("it moves")
         };
         assert_eq!(at(1.5)[0].0["width"], json!(7.0));
@@ -324,20 +355,28 @@ mod tests {
         assert_eq!(at(100.0)[0].0["width"], json!(64.0));
         assert_eq!(at(1.5)[0].0["color"], json!("#ffffff"), "the rest stays");
         // Nothing added: the chain keeps its settings.
-        assert_eq!(width.settings(&base, |s| s, |_| 0.0, |_| None), None);
+        assert_eq!(
+            width.settings(&base, |s| s, |_, own| own + 0.0, |_| None),
+            None
+        );
         let steps = driven("steps", (1.0, 8.0), true, vec![drift(1.0)]);
         let base = settings(json!({"steps": 3}));
         let moved = steps
-            .settings(&base, |s| s, |_| 1.6, |_| None)
+            .settings(&base, |s| s, |_, own| own + 1.6, |_| None)
             .expect("it moves");
         assert_eq!(moved[0].0["steps"], json!(5));
         // A setting that isn't a number, or a filter the base doesn't have, adds nothing.
         assert_eq!(
-            steps.settings(&settings(json!({"steps": "x"})), |s| s, |_| 1.0, |_| None),
+            steps.settings(
+                &settings(json!({"steps": "x"})),
+                |s| s,
+                |_, own| own + 1.0,
+                |_| None
+            ),
             None
         );
         assert_eq!(
-            steps.settings::<Settings>(&[], |s| s, |_| 1.0, |_| None),
+            steps.settings::<Settings>(&[], |s| s, |_, own| own + 1.0, |_| None),
             None
         );
     }
@@ -357,7 +396,7 @@ mod tests {
         );
         width.settings[0].default = json!(4.0);
         let moved = width
-            .settings(&settings(json!({})), |s| s, |_| 2.0, |_| None)
+            .settings(&settings(json!({})), |s| s, |_, own| own + 2.0, |_| None)
             .expect("it moves");
         assert_eq!(moved[0].0["width"], json!(6.0));
     }
@@ -373,7 +412,7 @@ mod tests {
             tint.settings(
                 &settings(json!({ "color": color })),
                 |s| s,
-                |_| add,
+                |_, own| own + add,
                 |_| None,
             )
             .map(|s| s[0].0["color"].clone())
@@ -425,5 +464,32 @@ mod tests {
             json!(64.0),
             "without end, to its largest"
         );
+    }
+
+    #[test]
+    fn a_replace_modifier_sets_a_number_before_the_adds() {
+        let drift = Kind::Drift {
+            rate_per_s: 1.0,
+            wrap: None,
+        };
+        let mut width = driven("width", (0.0, 10.0), false, vec![drift, drift, drift]);
+        width.settings[0].modifiers[1].replace = true;
+        width.settings[0].modifiers[2].replace = true;
+        width.settings[0].modifiers[2].id = "last".into();
+        let base = settings(json!({"width": 4.0}));
+        // Each add adds 1; the first replace sets 2, the last 6.
+        let value = |m: &Modifier, own: f64| match (m.replace, m.id.as_str()) {
+            (false, _) => own + 1.0,
+            (true, "last") => 6.0,
+            (true, _) => 2.0,
+        };
+        let moved = width
+            .settings(&base, |s| s, value, |_| None)
+            .expect("moves");
+        assert_eq!(moved[0].0["width"], json!(7.0));
+        // It may take the number anywhere from its own value to the replace's reach.
+        let [least, most] = width.extremes(&base);
+        assert_eq!(least[0].0["width"], json!(0.0));
+        assert_eq!(most[0].0["width"], json!(10.0));
     }
 }
