@@ -46,10 +46,15 @@ focus. ADR-0176 named this limit and a depth readback as one way past it (#1770)
 4. A model whose mesh the frame doesn't have yet, or whose hierarchy is still being
    built, is not met, so the focus holds (at first `focus_px`), as for nothing at the
    centre.
+5. **Every pass that draws the family is measured**: the program's, each mix's, the
+   show scene's, and a chain phase's. A scene with a video chain (a scene filter) is
+   drawn by a chain phase's pass, and the measure used to look at the program's passes
+   only, so such a scene's autofocus met nothing at all and held its first focus.
 
 <a id="consequences"></a>
 ## Consequences
-- **Easier:** a camera inside or near a model focuses on what fills its frame.
+- **Easier:** a camera inside or near a model focuses on what fills its frame, and a
+  3D scene with a scene filter autofocuses at all.
 - **Harder:** a model measured by autofocus keeps a copy of its triangles on the CPU
   (about 40 bytes a triangle, with the hierarchy), and for a few frames after its first
   measure it isn't met; a rigged model playing a clip is measured in time linear in

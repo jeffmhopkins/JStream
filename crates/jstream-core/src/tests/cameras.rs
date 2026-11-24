@@ -264,6 +264,32 @@ fn autofocus_measures_the_item_at_the_centre() {
     };
     assert_eq!(shot.centre_distance(&family, away, at), None);
     assert_eq!(shot.centre_distance(&SceneId::new("b"), framing, at), None);
+    // With a video chain, the scene is drawn by a chain phase's pass, not the program's,
+    // and autofocus measures it there.
+    batch(
+        &control,
+        Batch::single(Edit::FilterAdd {
+            owner: jstream_protocol::FilterOwner::Scene {
+                scene_id: SceneId::new("a"),
+            },
+            chain: jstream_protocol::FilterChain::Video,
+            filter_id: jstream_protocol::FilterId::new("look"),
+            kind: "sharpen".into(),
+            settings: Default::default(),
+            enabled: None,
+            index: None,
+        }),
+    )
+    .expect("a scene chain");
+    let snapshot = hub.load();
+    let met = snapshot
+        .shot()
+        .centre_distance(&family, framing, at)
+        .expect("the screen is at the centre, through the chain");
+    assert!(
+        (met - f64::from(framing.target_distance())).abs() < 0.5,
+        "{met}"
+    );
 }
 
 /// ADR-0218: autofocus meets a model at the surface it draws, not at its item's flat box:

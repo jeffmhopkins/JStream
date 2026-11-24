@@ -9693,7 +9693,8 @@ fn moved_camera(
 }
 
 /// How far along `camera`'s viewing axis the nearest item that the passes of scene family
-/// `family` draw meets it, at `at` with each item's motion: what autofocus focuses on
+/// `family` draw meets it (the program's, a mix's, the show scene's, or a chain phase's,
+/// which draws a scene with a video chain), at `at` with each item's motion: what autofocus focuses on
 /// (ADR-0176 decision 5). An item placed through a 3D group, or with no opacity left, is
 /// passed over; a model is met at the surface it draws (ADR-0218), and a model whose
 /// mesh this frame doesn't have, or whose search isn't built yet, isn't met. `None` when
@@ -9707,7 +9708,12 @@ fn centre_distance(
     let view = camera.view(shot.canvas).ok()?;
     let (origin, forward) = (view.position(), view.axes()[2]);
     let mut nearest: Option<f64> = None;
-    for pass in &shot.passes {
+    // A scene with a video chain is drawn by a chain phase's pass, not the program's.
+    let chain_passes = shot.chain_steps.iter().filter_map(|step| match step {
+        ChainStep::Pass(pass) => Some(&**pass),
+        ChainStep::Run(_) | ChainStep::Box(_) => None,
+    });
+    for pass in shot.drawn_passes().chain(chain_passes) {
         if pass.camera.as_ref().is_none_or(|c| c.family != *family) {
             continue;
         }

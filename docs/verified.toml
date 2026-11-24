@@ -2145,7 +2145,7 @@ stamp = { hash = "b3:007a4485cc30e462", by = "agent:claude", note = "Re-read and
 stamp = { hash = "b3:63718a8c34101c1f", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): Re-read: the only live.rs change counts a browser page's new GPU frame as a paint in look_timed; no other sources-thread behaviour changed." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:1d955b63715a1384", by = "agent:claude", note = "round 2: model_distance passes a 1 px minimum into ray_hit and no longer reads the placement's mirroring; the section lists snapshot.rs's roles and names no autofocus measure, so it holds" }
+stamp = { hash = "b3:935fac3ba71d6ec6", by = "agent:claude", note = "centre_distance now walks drawn_passes and the chain phase's passes, so a scene with a video chain is measured; the section lists snapshot.rs's roles and doesn't describe the measure, so it holds" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:21fd4f392d245f9c", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
@@ -2184,7 +2184,7 @@ stamp = { hash = "b3:1dcbe24c87fbdbcc", by = "agent:smooth-paths", note = "keyfr
 stamp = { hash = "b3:b240b3ee178cd690", by = "agent:plugin-uninstall", note = "re-read: tests.rs's differential script now also sends plugin.uninstall for an uninstalled plugin, and tests/automation.rs gains two uninstall tests; the section's description of the differential run and parity still holds" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/cameras.rs"]
-stamp = { hash = "b3:b5567dcb085db5b8", by = "agent:claude", note = "round 2: autofocus_meets_a_model_at_its_surface adds a flipped-cube case; cameras.rs is listed" }
+stamp = { hash = "b3:7a63512df11ca71f", by = "agent:claude", note = "autofocus_measures_the_item_at_the_centre adds a scene-chain case; cameras.rs is listed" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/channels.rs"]
 stamp = { hash = "b3:4a73549d7b58962a", by = "agent:claude", note = "Re-read: test files only gained the mode field on literals (ADR-0203); the test map holds" }
@@ -2568,7 +2568,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:1d955b63715a1384", by = "agent:claude", note = "round 2: autofocus's model measure no longer swaps faces for a flip and takes the 1 px minimum per triangle; the section doesn't describe autofocus's measure, so it holds" }
+stamp = { hash = "b3:935fac3ba71d6ec6", by = "agent:claude", note = "autofocus measures every pass of the family, chain phases included (ADR-0218 decision 5); the section doesn't describe autofocus's measure, so it holds" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:91eb9c92b1aec749", by = "agent:claude", note = "Re-read: chain.rs test literal and source_value's own-value argument (ADR-0203) change nothing the snapshot section says | kept from the merged side: probe capture now pushes arrival_light after scene_lights, which the section's arrival sentence now names" }
