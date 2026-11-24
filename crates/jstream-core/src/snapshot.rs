@@ -1709,6 +1709,16 @@ impl Shot {
         })
     }
 
+    /// Whether the running transition moves its held screen's camera as its shown
+    /// scene's motion moves that scene's, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn held_camera_moves(&self) -> Option<bool> {
+        self.transition.as_ref().map(|t| match &t.moves {
+            (Some(from), Some(to)) => Arc::ptr_eq(from, to),
+            _ => false,
+        })
+    }
+
     /// The cameras the sky backdrops of the running transition's ends, the scene it
     /// leaves's first, are seen through `elapsed_ms` into it, or `None` without one, for
     /// tests.
@@ -2217,19 +2227,28 @@ fn plan_inner(
                 transition::From::Scene(from) => planner.background(from),
                 transition::From::OnScreen(_) => Some(to),
             };
+            // What was on screen is held through its camera before its motion: within
+            // one family (an item shown or hidden, or a keyframe placed, on program) the
+            // family's motion moved it there, so it moves it here too, and the Move
+            // starts from the camera the screen showed rather than gliding in from the
+            // camera without it.
+            let to_moves = planner.camera_moves(&running.to, &mut shot);
+            let to_family = planner.family(&running.to);
             let moves = (
                 match &running.from {
                     transition::From::Scene(from) => planner.camera_moves(from, &mut shot),
+                    transition::From::OnScreen(_) if running.by_item => to_moves.clone(),
                     transition::From::OnScreen(_) => None,
                 },
-                planner.camera_moves(&running.to, &mut shot),
+                to_moves,
             );
             let families = (
                 match &running.from {
                     transition::From::Scene(from) => planner.family(from),
+                    transition::From::OnScreen(_) if running.by_item => to_family.clone(),
                     transition::From::OnScreen(_) => None,
                 },
-                planner.family(&running.to),
+                to_family,
             );
             shot.transition = Some(Transitioning {
                 start: running.start,
@@ -10055,12 +10074,18 @@ fn moving_cameras(
             None => camera,
         })
     };
+    // A screen held within the family is moved as the scene it moves to is, from the
+    // same time, so the two ends agree where the screen and the scene do.
+    let held = match (&transition.moves.0, &transition.moves.1) {
+        (Some(from), Some(to)) if Arc::ptr_eq(from, to) => Some(transition.start),
+        _ => None,
+    };
     cameras.ends = (
         moved(
             &transition.moves.0,
             &transition.families.0,
             cameras.ends.0,
-            None,
+            held,
         ),
         moved(
             &transition.moves.1,
