@@ -40,6 +40,7 @@ pub fn camera_anim_modifiers(motion: &[CameraMotionModifier]) -> Vec<(CameraProp
         .filter(|m| m.property != CameraProperty::Unknown)
         .filter_map(|m| {
             let as_item = MotionModifier {
+                mode: m.mode,
                 modifier_id: m.modifier_id.clone(),
                 property: MotionProperty::X,
                 effect: None,
@@ -109,6 +110,7 @@ fn modifier(m: &MotionModifier) -> Option<Modifier> {
             _ => return None,
         },
         enabled: m.enabled,
+        replace: m.mode.is_replace(),
     })
 }
 
@@ -375,6 +377,7 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(n, kind)| MotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: format!("m-{half}{n}_{}", "x".repeat(50)),
                     property: MotionProperty::ALL[n],
                     effect: None,

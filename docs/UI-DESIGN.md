@@ -44,6 +44,19 @@ The one exception is a series: the Sequence panel's lanes take `--accent`, `--ok
 apart. A sequence's own mark is teal, `--code-type`: its icon in the Scenes panel and the
 edge of an event chip, as a keyframe's is its purple diamond.
 
+A source's kind has a mark too, a dot on its chip in the Mappings panel: MIDI
+`--code-keyword`, JTunnel and other live data `--code-type`, a channel `--accent` and a key
+`--warn`, only to tell the kinds apart.
+
+The Show panel's timeline is the other: its `--show-*` tokens tell its elements apart,
+each with one job. Bookmarks and Continue are yellow (`--show-bookmark`), loops and
+keyframes violet (`--show-loop`, `--show-keyframe`), the armed spot light blue
+(`--show-armed`) and the play head white (`--show-head`); program clips take five dark
+colours in turn (`--show-clip-c0` to `c4`, and the Run view's strip `--show-seg-0` to
+`4`), and overlay, sequence and audio clips have their own (`--show-overlay`,
+`--show-seq`, `--show-audio`). A pausing bookmark's line is dashed and one that plays
+through is solid, so the difference isn't colour alone.
+
 <a id="buttons"></a>
 ## Buttons
 <!-- @section
@@ -81,6 +94,8 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/menu.rs"]
 
 The header's menus and the right-click menus are one family:
 
+- A header menu hangs flush under the bar, its top corners square, as a desktop menu
+  bar's does. A right-click menu opens at the pointer.
 - 28 px lines. A 20 px leading slot is always kept, so labels line up in every menu.
   The slot holds a check for a shown panel, a checked option or the current layout.
   Toggle state is never shown as words.
@@ -206,16 +221,23 @@ The property grid, as OBS's Properties lay a source's settings out:
 
 - In a dialog, labels sit in a 120 px column on the left, top-aligned with the first line
   of their control, in 12 px `--muted`.
-- Controls are at most 360 px wide. A number field is 88 px with its unit beside it; a
-  slider fills the row with a 64 px number after it.
+- Controls are at most 360 px wide. A number field is 88 px with its unit inside its
+  box; a slider fills the row with a 64 px number after it.
 - A setting's reset (↺) sits in a 20 px column of its own and shows only once the value
   differs from its default, so the right edges line up.
 - A setting a controller can drive (live, a number with both ends or a switch) has a
   learn button (`button.learn`, the MIDI icon) after its reset, in a third column that
   takes only its width: `--muted` and borderless at rest, `--accent` with a border when
-  bound (with its control's short name, `CC 7`) or while it is learning. A click opens
-  its one menu (learn, make or follow a channel, remove). A setting that follows a
-  channel shows the channel's name as a `--selected` chip in `--link` instead.
+  bound (with its control's short name, `CC 7` or `Mod 20`) or while it is learning. A
+  click on it, or a right-click anywhere on the setting's row, opens its one menu (Map
+  control…, Learn, and for a mapped setting what drives it, Edit and Remove). A setting
+  that follows a channel shows the channel's name as a `--selected` chip in `--link`
+  instead. In mapping mode the button shows the armed source's amount on that setting
+  (`+15 %`) in `--accent`, and a bar under the header in `--selected` with an `--accent`
+  edge names the armed source. An Inspector number that takes mappings has no button:
+  its mappings' offset is a 10 px `--accent` tag on a `--selected` pill over the
+  field's top right corner, its border turns `--accent`, and a right-click on the number
+  opens its menu.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for
@@ -231,7 +253,9 @@ The property grid, as OBS's Properties lay a source's settings out:
   (Position's X and Y), each field's short caption sits inside its box before the
   number, and a drag on the caption scrubs too. A pair leaves a 20 px gap between its
   fields, where Size's link sits, so every pair lines up. Only the mixer's gain fields
-  keep steppers, for a single step without the keyboard.
+  keep steppers, for a single step without the keyboard. Every numeric input, in a
+  panel, a dialog or a kind's settings form, is this field, never a browser number
+  input (#1734).
 
 <a id="copy"></a>
 ## Copy

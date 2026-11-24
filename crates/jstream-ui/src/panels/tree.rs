@@ -316,7 +316,10 @@ pub fn ToolBar(
             class="tool-bar"
             role="toolbar"
             aria-label=label
-            on:contextmenu=|event: leptos::ev::MouseEvent| event.stop_propagation()
+            on:contextmenu=|event: leptos::ev::MouseEvent| {
+                event.stop_propagation();
+                crate::chrome::swallow(&event);
+            }
         >
             {buttons}
         </div>

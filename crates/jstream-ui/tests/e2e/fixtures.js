@@ -333,3 +333,46 @@ export async function sourceSizes(page, sizes) {
     socket.send(JSON.stringify({ type: 'event', event }));
   };
 }
+
+/** Lets a test say what is arriving at the engine, which the mock engine never hears: the
+ * page's WebSocket goes through a route that answers `data.list`, `data.get` and
+ * `midi.last_controls` from what the test last gave the returned function, and passes
+ * every other message on. `senders` is each JTunnel sender's messages by key, such as
+ * `{ Bitwig: { params: { values: [...], names: [...] } } }`, and `controls` the MIDI
+ * inputs' latest control changes, as `midi.last_controls` reports them. Call it before
+ * `connect`. */
+export async function liveSources(page) {
+  let now = { senders: {}, controls: [] };
+  const answer = (id, result) => JSON.stringify({ type: 'response', id, result: { kind: 'query', result } });
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      let query = null;
+      let id = null;
+      if (typeof message === 'string') {
+        try {
+          const parsed = JSON.parse(message);
+          id = parsed.id;
+          query = parsed.call?.kind === 'query' ? parsed.call.query : null;
+        } catch {
+          // Not JSON: pass it on.
+        }
+      }
+      if (query?.type === 'data.list') {
+        const inputs = Object.entries(now.senders).map(([input, keys]) => ({ input, remote_keys: Object.keys(keys).sort() }));
+        ws.send(answer(id, { type: 'data.list', inputs }));
+      } else if (query?.type === 'data.get') {
+        const value = now.senders[query.input]?.[query.key];
+        ws.send(answer(id, value === undefined ? { type: 'data.get' } : { type: 'data.get', remote_value: value }));
+      } else if (query?.type === 'midi.last_controls') {
+        ws.send(answer(id, { type: 'midi.last_controls', controls: now.controls }));
+      } else {
+        server.send(message);
+      }
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+  return (next) => {
+    now = { senders: {}, controls: [], ...next };
+  };
+}

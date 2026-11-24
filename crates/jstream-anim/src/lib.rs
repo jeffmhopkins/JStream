@@ -45,6 +45,7 @@ mod audio;
 mod keyframe;
 mod midi;
 mod modifier;
+pub mod show;
 mod switch;
 mod timeline;
 

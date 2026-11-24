@@ -189,10 +189,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
-├── hotkeys        [{ chord, action, labels }]   chord → protocol action request
-├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
+├── hotkeys        [{ chord, action, labels }]   chord → protocol action request; a chord repeats once per action, in bind order (ADR-0208)
+├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request, repeated likewise (ADR-0122, ADR-0208)
 ├── value_bindings [{ binding_id, kind, …, target, amount? }]   a control or data field → a setting, fader or send (ADR-0178)
 ├── channels       [{ channel_id, name, inputs, combine, fades, curve, on, … }]   controls → one live 0..1 value (ADR-0183)
+├── shows          [{ show_id, name, program, overlays, keyframes, sequences, audio, bookmarks, loops, end, … }]   a run order of scenes in show time (ADR-0210)
+├── show_scene     scene_id?   the engine's internal scene that draws overlays over program (ADR-0210)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -215,6 +217,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scene, set by `studio.set_preview`; a switch doesn't move it. The collection's first
   scene goes on program and on preview when it is created, and a deleted program or
   preview scene gives way to the first scene left.
+- The **show scene** is an ordinary scene the engine marks as internal
+  (`State::show_scene`, not a revision; the collection file keeps it in its `show_scene`
+  marker, ADR-0210): wherever `Program`
+  is drawn (every output, recording and virtual camera, and the program monitor), it is
+  drawn over program, with program, any transition included, as its bottom layer and
+  its items above, so overlays are its nested-scene items. Scene lists (`scene.list`,
+  `state.get`) leave it out, and nothing may show it: a `scene` source, a settings
+  reference, a `VideoMix`, program or preview naming it is `invalid_argument`, so no
+  scene can contain it and program never contains itself. A `Scene(id)` mix, the
+  editing canvas and a scene's preview never draw it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
   Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
   shares everything with the other placements of that source except its own placement,
@@ -500,16 +512,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), controller bindings (protocol 0.96,
-  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20), as the organisation bullet above describes.
+  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20) and shows with the show scene marker (protocol 0.180, schema version 22), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions for built-in kinds (a source or
   preset saved at another version is refused on load; a source or filter of an effect
   pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
   `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
-  `hotkeys`, `bindings`, `value_bindings`, `channels` and `transitions`. The collection file saves everything built so far,
+  `hotkeys`, `bindings`, `value_bindings`, `channels`, `shows`, `show_scene` and `transitions`. The collection file saves everything built so far,
   encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
-  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller and value bindings, channels and
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller and value bindings, channels, shows and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -644,7 +656,8 @@ frame it last drew until teardown. The audio and outputs snapshots are not built
 
 **Live-value handover** (decided; built for the render thread: its generation, its reader
 slot, its parameter channel and the gesture release. The mixer's channel and generation
-are not, so audio faders have no live values yet): the engine learns that a
+are not, so a live fader or send is heard through the collection with its value applied
+instead, as a stored change is, [ADR-0213](adr/0213-number-drags-follow-live.md)): the engine learns that a
 real-time thread holds a committed snapshot through a **generation counter per
 subsystem**. Each time the control side publishes a subsystem's snapshot it bumps that
 subsystem's generation and stores it in the snapshot. Each real-time thread that reads
@@ -769,10 +782,16 @@ The wire format, versioning, error codes and compatibility policy are designed i
   for a controller `Trigger` (a MIDI note, controller or program change), with the
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
   No input fires them yet.
+  A chord or trigger runs several actions in the order they were bound, and a clear can
+  name the one action to unbind (protocol 0.181,
+  [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
+  `output.toggle`, the start-or-stop a "go live" key binds.
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
   [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
   a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
-  setting, a fader or a send, drawn and heard without being stored; `midi.last_controls`
+  setting, a fader or a send, drawn and heard without being stored, or since 0.182 one
+  axis of a PTZ head, aimed rather than stored
+  ([ADR-0209](adr/0209-value-bindings-aim-ptz-cameras.md)); `midi.last_controls`
   reports each input's latest control change, for learning one.
   `channel.set` and `channel.delete` (protocol 0.169,
   [ADR-0183](adr/0183-virtual-control-channels.md)) set and remove a channel: up to eight
@@ -780,6 +799,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   into one live value, 0 to 1, that a `channel` modifier or value binding follows and an
   `amount` scales by; `channel.set_value`, `channel.nudge` and `channel.switch` move it
   with no `rev`, and `channel.values` reads every channel's level.
+  `show.set` and `show.delete` (protocol 0.180,
+  [ADR-0210](adr/0210-shows-a-run-order-with-bookmarks.md)) set and remove a show: a
+  saved run order of scenes on program, overlay, keyframe, sequence and audio tracks in
+  show time, with pausing and non-pausing bookmarks and loops; the `show.*` actions
+  (`show.continue` among them) run one as studio state with no `rev`, `studio.get`
+  reports it in `show`, and `show.changed` says what it did; `overlay.show`,
+  `overlay.hide` and `overlay.toggle` put a scene over program with or without a show.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
@@ -869,8 +895,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a timeline action. The objects a cue names aren't checked, so a deleted one leaves the
   cue inert and its firing reports the error in `timeline.cue_fired`;
   `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
-  `source.restart` reloads a page or plays a file from its start, and `source.seek`
-  (0.177) plays a file on from a point, holding through the switch that shows it; it
+  `source.restart` reloads a page, plays a file from its start or starts a timer's count
+  again (0.183, ADR-0214: a countdown or stopwatch also starts again each time the
+  program shows it again), and `source.seek` (0.177) plays a file on from a point, holding through the switch that shows it; it
   is runtime state a hotkey, MCP or a `live` plugin can run, but not a cue. Since 0.170
   ([ADR-0184](adr/0184-sequences-lanes-and-triggers.md)) a timeline with `lanes` is a
   sequence: each lane moves one channel through points as one more input of it, from
@@ -1009,8 +1036,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   placements and crops, since 0.67 a source's settings that its kind marks `live`,
   so a Properties dialog applies as you edit
   ([ADR-0091](adr/0091-source-settings-as-live-values.md)), and since 0.70 a 3D
-  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)); audio faders follow with
-  the mixer's parameter channel.
+  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)), and since 0.184 a filter's
+  `live` settings, an item's opacity, the source and bus faders and the sends, drawn and
+  heard through the collection with the values applied, so every number drag follows
+  live ([ADR-0213](adr/0213-number-drags-follow-live.md)).
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
@@ -1183,7 +1212,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `channel`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `channel`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `overlay`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `show`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1212,7 +1241,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 1.45 MB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 2 MB
   of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
   `hotkey` and `binding` each carry every action's, because `hotkey.set` and
@@ -1238,7 +1267,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   `pack` (writes and deletes files undo never reaches), `pairing`, `ptz` (moves physical
   cameras, [ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md)), `timeline` (its cues
   may set a shared value a page may send off the machine,
-  [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
+  [ADR-0115](adr/0115-timelines-on-the-wire.md)), `show` (its run actions fire such cues,
+  [ADR-0210](adr/0210-shows-a-run-order-with-bookmarks.md)), `ui_settings` and `values` (`values.set`
   is not an undoable edit, and a page granted the value may send it off,
   [ADR-0102](adr/0102-page-api-for-browser-sources.md));
   `openWorldHint` for `output`, `ptz`, which moves physical cameras, `source`, whose
@@ -1285,8 +1315,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound, a
   `midi` one to follow a controller, a `data` one to follow a sender's live data, and a
-  value binding, `binding.set_value`, for a filter's or source's setting, a fader or a send,
-  and a channel, `channel.set`, gathering controls into one value anything follows)
+  value binding, `binding.set_value`, for a filter's or source's setting, a fader, a send
+  or a PTZ head's axis, and a channel, `channel.set`, gathering controls into one value anything follows)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), the hologram effect, borders
   and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live
@@ -1771,7 +1801,13 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (ADR-0183) adds `channels`, an `amount` on a modifier or value binding, the `channel`
   motion kind and the `note` MIDI control, each refused the same way, and version 21
   (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
-  `delay_ms`, refused the same way. `jstream-core`
+  `delay_ms`, refused the same way. Version 22 (ADR-0210) adds `shows`, the
+  `show_scene` marker and the `show.*` actions a binding may run, refused the same way;
+  a marker naming a scene the file doesn't hold, or one something shows, is dropped on load. A chord or trigger
+  with several actions (ADR-0208) is stored as one entry per action with no version
+  bump: an older file loads as before, and an older engine refuses a newer file that
+  repeats a chord with `already_exists`, as it does any collection it can't rebuild.
+  `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

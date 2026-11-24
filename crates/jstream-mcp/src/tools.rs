@@ -127,11 +127,12 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// and the media clock held for a frame-by-frame render (ADR-0172: `clock.release` lets
 /// it run again, and it never holds while an output runs), and a channel's live value
 /// (ADR-0183: nothing stores it, and another `channel.set_value` or `channel.switch` puts
-/// it back). A tool whose actions are all
+/// it back), and an overlay put up or taken down (ADR-0210: nothing stores it, and the
+/// opposite `overlay.*` action puts it back). A tool whose actions are all
 /// here is not `destructiveHint`. Every other action is: going live or stopping, setting
 /// or clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 27] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 30] = [
     "audio.reset_loudness",
     "channel.nudge",
     "channel.set_value",
@@ -145,6 +146,9 @@ pub(crate) const REVERSIBLE_ACTIONS: [&str; 27] = [
     "item.trigger_motion",
     "live.cancel",
     "live.set",
+    "overlay.hide",
+    "overlay.show",
+    "overlay.toggle",
     "preview.report",
     "preview.subscribe",
     "preview.unsubscribe",
@@ -1143,7 +1147,7 @@ mod tests {
         // that undo never reaches (ADR-0097), `ui_settings.set` replaces a person's
         // settings, `values.set` replaces a value that a page granted it may send off
         // the machine (ADR-0102), `timeline.play` runs cues that may set such a value
-        // (ADR-0115), `ptz` moves cameras and `ptz.store` overwrites a camera's preset
+        // (ADR-0115), `show.play` and the run actions do too (ADR-0210), `ptz` moves cameras and `ptz.store` overwrites a camera's preset
         // (ADR-0146), and an undo past an `output.create` removes a stream key redo doesn't
         // restore.
         let destructive: Vec<&str> = all
@@ -1161,6 +1165,7 @@ mod tests {
                 "pack",
                 "pairing",
                 "ptz",
+                "show",
                 "timeline",
                 "ui_settings",
                 "values"

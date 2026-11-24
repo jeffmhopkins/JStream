@@ -21,15 +21,15 @@ use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::menu::Entry;
 use crate::panels::curve::CurveEditor;
-use crate::panels::number::NumberField;
+use crate::panels::number::{NumberField, number_or_default, number_spec};
 use crate::panels::outputs::{action, edit};
 use crate::session::Session;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
     Action, Bezier, CUT, Call, CallResult, Easing, Edit, Event, KindCategory, KindDescriptor,
-    MAX_DURATION_MS, ParamDescriptor, ParamType, Query, QueryResult, Rev, SceneId, SceneRole,
-    Settings, TransitionPresetId, TransitionPresetInfo, TransitionsInfo, builtin_transition_kinds,
-    check_preset_timing,
+    MAX_DURATION_MS, ParamDescriptor, ParamType, Query, QueryResult, Reference, Rev, SceneId,
+    SceneRole, Settings, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
+    builtin_transition_kinds, check_preset_timing,
 };
 use jstream_control::{Control, ControlError};
 use leptos::prelude::*;
@@ -547,6 +547,12 @@ pub fn param_value(param: &ParamDescriptor, typed: &str) -> Result<Value, String
             .map(|option| Value::String(option.value.clone()))
             .ok_or_else(|| format!("{label} has no option {typed}.")),
         ParamType::String { .. } => Ok(Value::String(typed.to_owned())),
+        // A scene list's value is the scene's ID, empty for none (a stinger's scene, A10).
+        ParamType::Scene if typed.is_empty() => Ok(Value::Null),
+        ParamType::Scene => Ok(Reference::Scene {
+            scene_id: SceneId::new(typed),
+        }
+        .to_value()),
         _ => Err(format!("{label} can't be edited on this page.")),
     }
 }
@@ -1760,8 +1766,17 @@ fn PresetEditor(panel: Panel, preset_id: TransitionPresetId) -> impl IntoView {
     }
 }
 
-/// One of the kind's parameters in the preset editor. Enum parameters are a list,
-/// booleans a checkbox, numbers and text a field; others are shown read-only. A value it
+/// The scene a scene reference names, as a scene list's value: empty for none.
+fn scene_of(value: Option<&Value>) -> String {
+    match value.and_then(Reference::from_value) {
+        Some(Reference::Scene { scene_id }) => scene_id.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// One of the kind's parameters in the preset editor. Enum parameters and scenes (a
+/// stinger's) are a list, booleans a checkbox, numbers and text a field; others are
+/// shown read-only. A value it
 /// takes goes into the draft, then `saved` runs.
 #[component]
 fn ParamField(
@@ -1802,6 +1817,8 @@ fn ParamField(
     };
     let label = param.with_value(|p| p.label.clone());
     let hint = param.with_value(|p| p.description.clone());
+    // A number field labels its own input, so its row is no label around it.
+    let is_number = param.with_value(|p| number_spec(&p.ty).is_some());
     let control = match param.with_value(|p| p.ty.clone()) {
         ParamType::Enum { options } => {
             let current = current.clone();
@@ -1824,6 +1841,48 @@ fn ParamField(
             }
             .into_any()
         }
+        ParamType::Scene => {
+            let id = StoredValue::new(param.with_value(|p| p.id.clone()));
+            let picked = move || id.with_value(|id| draft.with(|d| scene_of(d.settings.get(id))));
+            let set = set.clone();
+            let studio = use_context::<crate::store::Studio>();
+            // Every scene but a keyframe, by name; one the collection no longer holds
+            // stays a choice, so the list still shows what the preset names.
+            let choices = move || {
+                let mut list: Vec<(String, String)> = studio
+                    .map(|studio| {
+                        studio.collection.with(|c| {
+                            c.iter()
+                                .flat_map(|c| &c.scenes)
+                                .filter(|s| s.variant_of.is_none())
+                                .map(|s| (s.scene_id.to_string(), s.name.clone()))
+                                .collect()
+                        })
+                    })
+                    .unwrap_or_default();
+                let now = picked();
+                if !now.is_empty() && !list.iter().any(|(id, _)| *id == now) {
+                    list.push((now.clone(), format!("{now} (missing)")));
+                }
+                list
+            };
+            view! {
+                <select prop:value=picked on:change=move |event| set(event_target_value(&event))>
+                    <option value="">"None"</option>
+                    {move || {
+                        let now = picked();
+                        choices()
+                            .into_iter()
+                            .map(|(id, name)| {
+                                let on = id == now;
+                                view! { <option value=id prop:selected=on>{name}</option> }
+                            })
+                            .collect_view()
+                    }}
+                </select>
+            }
+            .into_any()
+        }
         ParamType::Bool => {
             let current = current.clone();
             let set = set.clone();
@@ -1839,22 +1898,43 @@ fn ParamField(
             }
             .into_any()
         }
-        ParamType::Int { min, max, step, .. } => {
-            let current = current.clone();
-            let set = set.clone();
+        ty @ (ParamType::Int { .. } | ParamType::Float { .. }) => {
+            // The shared click-drag field (#1734), sent once on release: each value
+            // saves the preset, one undo step.
+            let Some(spec) = number_spec(&ty) else {
+                return ().into_any();
+            };
+            let whole = matches!(ty, ParamType::Int { .. });
+            // An absent or `null` setting starts from its default (#1740's review, N1).
+            let default = param.with_value(|p| p.default.clone());
+            let value = {
+                let current = current.clone();
+                Signal::derive(move || {
+                    Some(number_or_default(
+                        current().trim().parse::<f64>().ok(),
+                        &default,
+                        spec,
+                    ))
+                })
+            };
+            let set = Callback::new({
+                let set = set.clone();
+                move |v: f64| {
+                    set(if whole {
+                        format!("{}", v.round() as i64)
+                    } else {
+                        format!("{:.*}", spec.decimals, v)
+                    });
+                    true
+                }
+            });
             view! {
-                <input
-                    type="number"
-                    min=min.map(|n| n.to_string())
-                    max=max.map(|n| n.to_string())
-                    step=step.map(|n| n.to_string())
-                    prop:value=current
-                    on:change=move |event| set(event_target_value(&event))
-                />
+                <NumberField named=Signal::stored(label.clone()) value step=spec.step
+                    decimals=spec.decimals min=spec.min max=spec.max send=move |v| set.run(v) />
             }
             .into_any()
         }
-        ParamType::Float { .. } | ParamType::String { .. } => {
+        ParamType::String { .. } => {
             let current = current.clone();
             let set = set.clone();
             view! {
@@ -1868,11 +1948,26 @@ fn ParamField(
         ParamType::Int { unit, .. } | ParamType::Float { unit, .. } => unit.clone(),
         _ => None,
     });
-    view! {
-        <label class="prop-row" title=hint>
-            <span class="prop-label">{label}{unit.map(|unit| format!(" ({unit})"))}</span>
-            <span class="prop-control">{control}</span>
-        </label>
+    let caption = format!(
+        "{label}{}",
+        unit.map(|unit| format!(" ({unit})")).unwrap_or_default()
+    );
+    if is_number {
+        view! {
+            <div class="prop-row" title=hint>
+                <span class="prop-label">{caption}</span>
+                <span class="prop-control">{control}</span>
+            </div>
+        }
+        .into_any()
+    } else {
+        view! {
+            <label class="prop-row" title=hint>
+                <span class="prop-label">{caption}</span>
+                <span class="prop-control">{control}</span>
+            </label>
+        }
+        .into_any()
     }
 }
 
@@ -1983,8 +2078,8 @@ mod tests {
         Draft, Reason, SceneRow, Side, Snapshot, cut_preset, default_settings, expected_label,
         expected_preset, initial_pick, keep_newer_studio, load, new_preset_edit, next_preset_id,
         override_counts, override_lines, override_note, param_value, parse_duration, parse_easing,
-        picker_label, preset_hint, stage_label, swap_action, switch_action, switch_blocker,
-        transition_kinds, update_edit,
+        picker_label, preset_hint, scene_of, stage_label, swap_action, switch_action,
+        switch_blocker, transition_kinds, update_edit,
     };
     use jstream_control::protocol::{
         Action, Easing, Edit, FADE, Hello, MOVE, PROTOCOL_VERSION, Rev, SceneId, Settings,
@@ -2411,6 +2506,15 @@ mod tests {
         assert!(param_value(stagger, "-1").is_err());
         assert!(param_value(stagger, "10001").is_err());
         assert!(param_value(stagger, "1.5").is_err());
+        let scene = jstream_control::protocol::ParamDescriptor {
+            ty: jstream_control::protocol::ParamType::Scene,
+            ..stagger.clone()
+        };
+        assert_eq!(param_value(&scene, ""), Ok(json!(null)), "none");
+        let picked = param_value(&scene, "s1").expect("a scene");
+        assert_eq!(picked, json!({"type": "scene", "scene_id": "s1"}));
+        assert_eq!(scene_of(Some(&picked)), "s1", "the list shows what it set");
+        assert_eq!(scene_of(Some(&json!(null))), "");
     }
 
     #[test]

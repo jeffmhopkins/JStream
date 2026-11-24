@@ -5,11 +5,12 @@ use crate::command::Edit;
 use crate::error::ProtocolError;
 use crate::history::HistoryDirection;
 use crate::id::{
-    ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TimelineId,
+    ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId, ShowId, SourceId, TimelineId,
 };
 use crate::live::LiveOutcome;
 use crate::plugin::{PluginDisabledReason, PluginState};
 use crate::query::PixelSize;
+use crate::show::ShowChange;
 use crate::timeline::TimelineChange;
 use crate::transition::TransitionStarted;
 use crate::youtube::{AudienceStatsInfo, HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
@@ -345,6 +346,26 @@ pub enum Event {
         /// Which pass it is on: 0 the first.
         pass: u64,
     },
+    /// A show started, paused, continued, jumped, looped, went off script, ended or
+    /// stopped (ADR-0210, since 0.180): never once a frame. Running a show is studio
+    /// state, so it carries no `rev`; `studio.get` reports the running show in full.
+    #[serde(rename = "show.changed")]
+    ShowChanged {
+        /// The show.
+        show_id: ShowId,
+        /// What happened.
+        change: ShowChange,
+        /// Whether it runs now: `false` after `ended` and `stopped`.
+        running: bool,
+        /// Where its play head is now, in milliseconds of show time.
+        at_ms: u32,
+        /// The bookmark it paused at or jumped to. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bookmark_id: Option<String>,
+        /// The loop it wrapped in. Omitted unless `change` is `looped`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        loop_id: Option<String>,
+    },
     /// A timeline's cue fired (ADR-0115, since 0.87), once per cue on each pass, and once
     /// for each cue `timeline.seek` runs. The cue's action has its own events (a
     /// `scene.switch` cue's `studio.changed` follows).
@@ -444,6 +465,7 @@ impl Event {
             Event::ValuesChanged { .. } => Some("values.changed"),
             Event::TimelineChanged { .. } => Some("timeline.changed"),
             Event::TimelineCueFired { .. } => Some("timeline.cue_fired"),
+            Event::ShowChanged { .. } => Some("show.changed"),
             Event::CollectionFileChanged { .. } => Some("collection.file_changed"),
             Event::KindsChanged { .. } => Some("kinds.changed"),
             Event::AgentApprovalRequested { .. } => Some("agent.approval_requested"),

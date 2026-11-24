@@ -749,10 +749,15 @@ fn layer_of(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format,
-        // `COPY_SRC` for a blend mode that reads what is below the item (ADR-0082).
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-            | wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_SRC,
+        // `COPY_SRC` for a blend mode that reads what is below the item (ADR-0082),
+        // which no draw into a depth layer does.
+        usage: if format == DEPTH_LAYER_FORMAT {
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING
+        } else {
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+        },
         view_formats: &[],
     });
     let target = texture.create_view(&wgpu::TextureViewDescriptor::default());

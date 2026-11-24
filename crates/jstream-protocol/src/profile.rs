@@ -414,6 +414,12 @@ pub struct DrawerProfile {
     /// out. Always 0 for the preview.
     #[serde(default)]
     pub preview_skipped: u64,
+    /// The average number of GPU submits the thread made per frame. Each submit costs
+    /// the thread a fixed time in the driver however little work it carries, so a high
+    /// count with a low `gpu_ms` is CPU time that batching would save. The compositor's
+    /// own submits only: a platform's or a browser's on the same queue are not counted.
+    #[serde(default)]
+    pub submits: Finite32,
     /// The average time per frame in each phase.
     #[serde(default)]
     pub phases: PhaseProfile,

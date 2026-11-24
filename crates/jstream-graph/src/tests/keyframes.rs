@@ -1211,6 +1211,7 @@ fn a_keyframe_effects_undo_conflicts_with_a_later_filter_edit_there() {
 
 fn wiggle(id: &str, amplitude: f32) -> jstream_protocol::MotionModifier {
     jstream_protocol::MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: id.into(),
         property: jstream_protocol::MotionProperty::X,
         effect: None,

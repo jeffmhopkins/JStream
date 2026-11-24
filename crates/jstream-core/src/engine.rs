@@ -7,6 +7,8 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+mod shows;
+
 use crate::activity_log::{self, Activity};
 use crate::audio::{AudioRouting, MixerHandles};
 use crate::audio_sources::AudioSources;
@@ -66,7 +68,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
 use std::task::Waker;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -117,6 +119,9 @@ struct Shared {
     /// Whether the `jstream-tempo` thread has started: once per engine, however often
     /// JTunnel starts again (ADR-0147 §1).
     tempo: AtomicBool,
+    /// Wakes the live ticker early, on the collection lock, when a call moves its next
+    /// due time earlier than the one it is waiting for ([`State::start_ticker`]).
+    ticker: Condvar,
     /// Every JTunnel sender's live data (ADR-0171 decision 2), which the receiver puts
     /// state messages in and `data.list` and `data.get` read. Its lock is its own, a
     /// leaf: never taken under the collection lock by its writer, the receive thread.
@@ -239,6 +244,7 @@ impl Default for Engine {
                     sheets: AtomicUsize::new(0),
                     hearing: Mutex::new(SceneHearing::default()),
                     tempo: AtomicBool::new(false),
+                    ticker: Condvar::new(),
                     data,
                     keys: Mutex::new(None),
                     audit: Audit::default(),
@@ -308,6 +314,40 @@ impl Engine {
         drop(state);
         wake_all(wake);
         Ok(())
+    }
+
+    /// Makes `scene_id` the internal show scene, or clears it with `None`: the scene
+    /// every output, recording, virtual camera and the program monitor draw over
+    /// program, with program (its transitions included) as its bottom layer and its
+    /// items above. Its items are ordinary items: what they show, where, and whether
+    /// they are shown is edited as any scene's. Clients never see it in the scene lists,
+    /// and nothing may show it: no `scene` source, settings reference, video mix,
+    /// program or preview. It is runtime state, not a revision, and emits no event; if
+    /// program or preview was on it, they move to the first other scene.
+    ///
+    /// Returns `false`, and changes nothing, for a scene the collection doesn't have or
+    /// that something already shows ([`Graph::set_show_scene`]).
+    pub fn set_show_scene(&self, scene_id: Option<SceneId>) -> bool {
+        let mut guard = lock(&self.shared.state);
+        if !guard.graph.set_show_scene(scene_id) {
+            return false;
+        }
+        let state = &mut *guard;
+        let moved = state.studio.reconcile(state.graph.state());
+        state.publish_warm();
+        state.redraw();
+        let mut wake = Vec::new();
+        if moved {
+            state.emit_studio(
+                &ClientId::new("engine"),
+                &RequestId::new("show"),
+                None,
+                &mut wake,
+            );
+        }
+        drop(guard);
+        wake_all(wake);
+        true
     }
 
     /// Adds an output in the `stopped` state, so `output.start`, `output.stop` and
@@ -2201,6 +2241,15 @@ impl Engine {
             .cloned()
     }
 
+    /// `read` of the collection as the engine draws and hears it, with open gestures'
+    /// drawn values applied (ADR-0091, ADR-0213).
+    #[cfg(test)]
+    pub(crate) fn drawn<R>(&self, read: impl FnOnce(&jstream_graph::State) -> R) -> R {
+        let state = lock(&self.shared.state);
+        let graph = state.shown.as_ref().unwrap_or(&state.graph);
+        read(graph.state())
+    }
+
     /// Sets how many undo steps each client keeps (100 by default). The oldest steps
     /// are dropped first, and 0 keeps none.
     #[must_use]
@@ -2344,6 +2393,25 @@ impl Engine {
             request_id = %request_id,
         );
         let _entered = span.enter();
+        // `output.toggle` runs as the `output.start` or `output.stop` it resolves to,
+        // with that action's events, audit entry and errors (ADR-0208).
+        if let Call::Action {
+            action: Action::OutputToggle { output_id },
+        } = &call
+        {
+            let running = lock(&self.shared.state)
+                .outputs
+                .running()
+                .contains(output_id);
+            let output_id = output_id.clone();
+            let action = if running {
+                Action::OutputStop { output_id }
+            } else {
+                Action::OutputStart { output_id }
+            };
+            drop(_entered);
+            return self.execute(client_id, request_id, Call::Action { action }, previews);
+        }
         if matches!(
             call,
             Call::Query {
@@ -4960,6 +5028,11 @@ struct State {
     fired: crate::motion::Fired,
     /// The timelines playing (ADR-0115): studio state, like the program scene.
     timelines: crate::timelines::Timelines,
+    /// The show running (ADR-0210): studio state, like the program scene.
+    show: Option<shows::Run>,
+    /// Whether the running show is switching scenes, so the switch isn't taken as a
+    /// hand switch that sends it off script.
+    show_switching: bool,
     /// While a timeline's cue runs, its exact time on the animation clock, which a
     /// transition, a fire or a `source.restart` it starts takes as its start
     /// (ADR-0099 decision 4).
@@ -4997,6 +5070,9 @@ struct State {
     /// Whether the live ticker thread is running: it sends coalesced `live.changed`
     /// events and releases committed live values ([`live_ticker`]).
     ticking: bool,
+    /// Counts the calls that may have moved the live ticker's next due time while it
+    /// runs: it waits only while this is the count it planned with ([`live_ticker`]).
+    ticker_rev: u64,
     /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
     driver: crate::value_bindings::ValueDriver,
     /// Whether the `jstream-values` thread is running: it ticks [`State::channels`] and
@@ -5296,6 +5372,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.reconcile_timelines(wake);
+        self.reconcile_show(wake);
         self.reconcile_keyframes(client_id, request_id, wake);
         self.refresh_shown();
         self.name_jtunnel_params();
@@ -5325,13 +5402,10 @@ impl State {
         self.route_audio();
         self.publish_render();
         let state = self.graph.state();
-        if self.gestures.drop_missing(
-            |item_id, keyframe| {
-                state.item(item_id).is_some() && keyframe.is_none_or(|id| is_keyframe(state, id))
-            },
-            |source_id| state.source(source_id).is_some(),
-            |scene_id| state.scene(scene_id).is_some(),
-        ) {
+        if self
+            .gestures
+            .drop_missing(state, |id| is_keyframe(state, id))
+        {
             self.publish_live();
             if self.refresh_shown() {
                 self.redraw();
@@ -5382,6 +5456,7 @@ impl State {
             );
         }
         self.sequences.restart();
+        self.show_stop(jstream_protocol::ShowChange::Stopped, wake);
         for timeline_id in self.timelines.ids() {
             if let Some(playing) = self.timelines.stop(&timeline_id) {
                 self.subscribers.emit(
@@ -5547,8 +5622,12 @@ impl State {
         {
             // A channel the collection has just gained is followed before a lane takes it.
             let midi = self.live.midi();
-            self.channels
-                .keep(&self.graph, midi.as_deref(), &engine.data);
+            self.channels.keep(
+                &self.graph,
+                midi.as_deref(),
+                &engine.data,
+                self.live.filter_assets().motion_heard(),
+            );
         }
         self.channels
             .lanes_start(timeline_id, &info, start, from_ms.is_some());
@@ -5600,6 +5679,8 @@ impl State {
     fn clock_moved(&mut self, wake: &mut Vec<Waker>) {
         self.live.clock_moved();
         if self.cue_at.is_none() {
+            // The show first: a sequence it starts is then ticked with the others.
+            self.show_tick(wake);
             self.timeline_tick(wake);
             self.start_ticker();
         }
@@ -5911,10 +5992,17 @@ impl State {
         }
     }
 
-    /// Starts the live ticker if a timeline plays and it isn't running, so the timeline's
-    /// cues fire when they fall due.
+    /// Starts the live ticker if a timeline plays or a show runs and it isn't running, so
+    /// their cues fire when they fall due. If it is running, wakes it, so it plans again
+    /// from what this call changed: a timeline started or a show jumped while it waits
+    /// for a later cue is not left late.
     fn start_ticker(&mut self) {
-        if !self.timelines.is_empty() && !self.ticking {
+        if self.ticking {
+            self.ticker_rev = self.ticker_rev.wrapping_add(1);
+            if let Some(shared) = self.shared.upgrade() {
+                shared.ticker.notify_all();
+            }
+        } else if !self.timelines.is_empty() || self.show_ticking() {
             self.ticking = spawn_live_ticker(self.shared.clone());
         }
     }
@@ -6110,6 +6198,10 @@ impl State {
         }
         if let Some((field, reason)) = action.play_problem() {
             return Err(ProtocolError::invalid_argument(field, reason));
+        }
+        if let Some(done) = self.show_action(client_id, request_id, &action, wake) {
+            done?;
+            return Ok(CallResult::action());
         }
         if jstream_protocol::camera_aim_scene(&action).is_some() {
             self.aim_camera(client_id, &action)?;
@@ -6438,6 +6530,9 @@ impl State {
                     }
                 }
                 Query::StudioGet => QueryResult::StudioGet {
+                    show: self.show_report(),
+                    // Overlays come with the show scene's overlay items (ST5).
+                    overlays: Vec::new(),
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
                     warm_scenes: Some(
@@ -6582,6 +6677,7 @@ impl State {
             _ => None,
         };
         self.studio.switch(scene_id, running);
+        self.show_hand_switch(wake);
         let end_ms = self.publish_render();
         // The new scene's `when_shown` audio follows at the switch, ramping over one
         // mixer block; it doesn't follow the transition's timing yet (D29).
@@ -6968,6 +7064,11 @@ impl State {
         self.render.publish_warm(warm);
         self.render.publish_warm_models(self.warm.models());
         self.live.set_warm(self.warm.sources());
+        // Their stills too, so a switch to one draws them at once (ADR-0212).
+        let stills = self
+            .live
+            .warm_stills(&self.frames, &mut self.frame_versions);
+        self.render.publish_warm_stills(stills);
         // A source that left the warm scenes rests now if nothing drew it in the
         // latest plans, as it would after one.
         self.live.rest_undrawn();
@@ -7070,6 +7171,7 @@ impl State {
         render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets, &limit));
         render.publish_warm_models(warm.models());
         live.set_warm(warm.sources());
+        render.publish_warm_stills(live.warm_stills(frames, frame_versions));
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
         let previewed: BTreeSet<SourceId> = previews
@@ -7136,16 +7238,24 @@ impl State {
             .clone()
             .apply(&values, None)
             .map_err(values_error)?;
-        let settings = values
-            .iter()
-            .any(|v| matches!(v, Edit::SourceSetSettings { .. }));
+        // A value the collection is drawn with (a setting, an opacity, a gain), rather
+        // than one the render parameter channel carries (ADR-0213).
+        let drawn = values.iter().any(|v| {
+            !matches!(
+                v,
+                Edit::ItemSetTransform { .. }
+                    | Edit::ItemSetGeometry { .. }
+                    | Edit::ItemSetCrop { .. }
+                    | Edit::SceneSetCamera { .. }
+            )
+        });
         // A value addressed to a keyframe scene is a parameter of that keyframe's: it
         // shows only where the keyframe draws the item (#846).
         let state = self.graph.state();
         self.gestures
             .set(client_id, gesture_id, values, |id| is_keyframe(state, id));
         self.publish_live();
-        if settings && self.refresh_shown() {
+        if drawn && self.refresh_shown() {
             self.redraw();
         }
         self.live_tick(Instant::now(), wake);
@@ -7228,12 +7338,13 @@ impl State {
         self.jtunnel_names = names;
     }
 
-    /// Rebuilds [`shown`](Self::shown) from the open gestures' source settings. Returns
+    /// Rebuilds [`shown`](Self::shown) from the open gestures' drawn values: source and
+    /// filter settings, opacities and gains (ADR-0091, ADR-0213). Returns
     /// whether what is drawn may have changed: it had or has settings applied. A placed
     /// keyframe does not build a copy: it lives on [`graph`](Self::graph), which a
     /// settings copy carries because it clones the graph (ADR-0118).
     fn refresh_shown(&mut self) -> bool {
-        let mut settings = self.gestures.settings();
+        let mut settings = self.gestures.drawn();
         // The value bindings' settings, after the gestures': a moved control wins
         // (ADR-0178).
         settings.extend(self.driver.edits().iter().cloned());
@@ -7440,7 +7551,12 @@ impl State {
         for event in self.gestures.due(now) {
             self.subscribers.emit(&event, wake);
         }
-        let cues = self.timeline_tick(wake).map(|due| {
+        // The show first: a sequence it starts is then ticked with the others.
+        let cues = [self.show_tick(wake), self.timeline_tick(wake)]
+            .into_iter()
+            .flatten()
+            .min();
+        let cues = cues.map(|due| {
             let wait = crate::timelines::ns(due)
                 .saturating_sub(crate::timelines::ns(self.live.now()))
                 .max(0);
@@ -7475,8 +7591,12 @@ impl State {
         // A channel the collection has just gained is followed before it is set.
         if let Some(engine) = self.shared.upgrade() {
             let midi = self.live.midi();
-            self.channels
-                .keep(&self.graph, midi.as_deref(), &engine.data);
+            self.channels.keep(
+                &self.graph,
+                midi.as_deref(),
+                &engine.data,
+                self.live.filter_assets().motion_heard(),
+            );
         }
         let missing = |channel_id: &str| ProtocolError::NotFound {
             entity: EntityKind::Channel,
@@ -7547,11 +7667,20 @@ impl State {
                 self.channels.scene_live(program);
             }
         }
-        let settling = self.channels.tick(&self.graph, midi.as_deref(), data, now);
-        let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
+        // The scopes the collection's audio inputs hear (ADR-0206).
+        let assets = self.live.filter_assets();
+        let heard = assets.motion_heard();
+        let settling = self
+            .channels
+            .tick(&self.graph, midi.as_deref(), data, heard, now);
+        let changed = self
+            .driver
+            .tick(&self.graph, midi.as_deref(), data, heard, now);
         if changed && self.refresh_shown() {
             self.redraw();
         }
+        // The PTZ axes the bindings drive (ADR-0209): aims, never edits.
+        self.ptz.follow_axes(self.driver.aims());
         // The triggers last, so a channel trigger sees this tick's value.
         let program = self.studio.program().cloned();
         let orders = self.sequences.check(
@@ -8108,36 +8237,97 @@ fn live_ticker(shared: &Weak<Shared>) {
             return;
         };
         let mut wake = Vec::new();
-        let next = {
+        let (next, rev) = {
             let mut state = lock(&engine.state);
             let next = state.live_tick(Instant::now(), &mut wake);
             if next.is_none() {
                 state.ticking = false;
             }
-            next
+            (next, state.ticker_rev)
         };
         drop(engine);
         wake_all(wake);
-        match next {
-            Some(at) => thread::sleep(at.saturating_duration_since(Instant::now())),
-            None => return,
+        let Some(at) = next else {
+            return;
+        };
+        if !wait_for_tick(shared, at, rev) {
+            return;
         }
     }
 }
 
-/// Refuses a `source.set_settings` value that names a setting its kind doesn't mark
-/// `live` (ADR-0091), as `values.<n>.patch.<param>`. A source or setting that doesn't
-/// exist is left to the collection's own check.
+/// The longest the live ticker waits holding the engine alive: past it, it lets go and
+/// takes it again, so an engine being dropped is not kept for a far cue.
+const TICKER_HOLD: Duration = Duration::from_millis(250);
+
+/// Waits until `at`, or until a call moves the ticker's plan ([`State::start_ticker`]
+/// counts it in `ticker_rev`, which was `rev` when the plan was made). False once the
+/// engine is gone.
+fn wait_for_tick(shared: &Weak<Shared>, at: Instant, rev: u64) -> bool {
+    loop {
+        let Some(engine) = shared.upgrade() else {
+            return false;
+        };
+        let now = Instant::now();
+        let state = lock(&engine.state);
+        if state.ticker_rev != rev || now >= at {
+            return true;
+        }
+        let wait = at.saturating_duration_since(now).min(TICKER_HOLD);
+        let (state, _) = engine
+            .ticker
+            .wait_timeout(state, wait)
+            .unwrap_or_else(PoisonError::into_inner);
+        if state.ticker_rev != rev {
+            return true;
+        }
+    }
+}
+
+/// Why a live `send.set` to a send that doesn't exist is refused.
+const NO_SEND: &str = "names no send from this source to this bus; a live value only \
+                       changes an existing send's gain, so add the send in a batch";
+
+/// Refuses a `source.set_settings` or `filter.set_settings` value that names a setting
+/// its kind doesn't mark `live` (ADR-0091, ADR-0213), as `values.<n>.patch.<param>`, and
+/// a `send.set` to a send that doesn't exist, as `values.<n>.bus_id`, since a live value
+/// would otherwise route the source into a new bus with no undo step. A source, filter
+/// or setting that doesn't exist is left to the collection's own check.
 fn check_live_settings(graph: &Graph, values: &[Edit]) -> Result<(), ProtocolError> {
     for (at, value) in values.iter().enumerate() {
-        let Edit::SourceSetSettings { source_id, patch } = value else {
-            continue;
-        };
-        let Some(source) = graph.state().source(source_id) else {
-            continue;
-        };
-        let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
-            continue;
+        let (kind, patch) = match value {
+            Edit::SourceSetSettings { source_id, patch } => {
+                let Some(source) = graph.state().source(source_id) else {
+                    continue;
+                };
+                let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
+                    continue;
+                };
+                (kind.as_str(), patch)
+            }
+            Edit::FilterSetSettings {
+                owner,
+                filter_id,
+                patch,
+            } => {
+                let Some(filter) = graph.state().filter(owner, filter_id) else {
+                    continue;
+                };
+                (filter.kind(), patch)
+            }
+            Edit::SendSet {
+                source_id, bus_id, ..
+            } => {
+                // A live value changes a send's gain; it never adds a send (ADR-0213).
+                if graph.state().send(source_id, bus_id).is_none() {
+                    return Err(ProtocolError::invalid_argument(
+                        format!("values.{at}.bus_id"),
+                        NO_SEND,
+                    ));
+                }
+                continue;
+            }
+            _ => continue,
         };
         let Some(descriptor) = graph.kind(kind) else {
             continue;

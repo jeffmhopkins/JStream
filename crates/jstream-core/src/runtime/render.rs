@@ -32,7 +32,7 @@ use crate::audio::{MonitorRoute, ScopeTap};
 use crate::profile::DrawerTotals;
 use crate::runtime::pipeline::{PictureInput, VideoTap};
 use crate::runtime::vcam::VcamTap;
-use crate::snapshot::{CaptureKey, LiveParams, Shot};
+use crate::snapshot::{CaptureKey, Frame, GpuKey, LiveParams, Shot};
 
 /// What each monitored scene draws (ADR-0117 §6): the scenes a preview stream shows,
 /// planned after the program, which the program stage's render thread draws as extra
@@ -42,6 +42,11 @@ pub(crate) type SceneShots = BTreeMap<SceneId, Arc<RenderSnapshot>>;
 /// The 3D models the warm scenes' sources show (ADR-0177 decision 5), which the program stage's
 /// render thread keeps uploaded.
 pub(crate) type WarmModels = BTreeMap<SourceId, Arc<jstream_media::model::Model>>;
+
+/// The still images the warm scenes' sources show (ADR-0212), each under the key the
+/// program stage uploads it at, which the program stage's render thread keeps uploaded
+/// ([`crate::snapshot::keep_warm_stills`]).
+pub(crate) type WarmStills = Vec<(GpuKey, Frame)>;
 
 /// The reader slot's value while no render thread is adopting snapshots: the thread is
 /// stopped, or never ran. A gesture waits on nothing while it is set.
@@ -96,6 +101,8 @@ pub(crate) struct RenderHub {
     warm: ArcSwap<BTreeSet<CaptureKey>>,
     /// The models the warm scenes' sources show (ADR-0177 decision 5), published when they change.
     warm_models: ArcSwap<WarmModels>,
+    /// The stills the warm scenes' sources show (ADR-0212), published when they change.
+    warm_stills: ArcSwap<WarmStills>,
     /// The generation the render thread adopted last, or [`STOPPED`] / [`STARTING`].
     adopted: AtomicU64,
     /// Ticks the render thread has composited since the engine started, across every
@@ -114,6 +121,7 @@ impl Default for RenderHub {
             scenes: ArcSwap::from_pointee(SceneShots::new()),
             warm: ArcSwap::from_pointee(BTreeSet::new()),
             warm_models: ArcSwap::from_pointee(WarmModels::new()),
+            warm_stills: ArcSwap::from_pointee(WarmStills::new()),
             adopted: AtomicU64::new(STOPPED),
             drawn: AtomicU64::new(0),
         }
@@ -186,6 +194,20 @@ impl RenderHub {
         }
     }
 
+    /// Publishes the stills the warm scenes' sources show, unless they are the ones
+    /// published. Called with the collection lock held, like [`publish`](Self::publish).
+    pub(crate) fn publish_warm_stills(&self, stills: &Arc<WarmStills>) {
+        if !Arc::ptr_eq(&self.warm_stills.load(), stills) {
+            self.warm_stills.store(Arc::clone(stills));
+        }
+    }
+
+    /// The warm scenes' stills published last, for tests.
+    #[cfg(test)]
+    pub(crate) fn load_warm_stills(&self) -> Arc<WarmStills> {
+        self.warm_stills.load_full()
+    }
+
     /// The warm scenes' models published last, for tests.
     #[cfg(test)]
     pub(crate) fn load_warm_models(&self) -> Arc<WarmModels> {
@@ -240,6 +262,8 @@ pub(crate) struct RenderReader {
     warm: Option<Arc<BTreeSet<CaptureKey>>>,
     /// The warm scenes' models it read last, loaded with `held`.
     warm_models: Option<Arc<WarmModels>>,
+    /// The warm scenes' stills it read last, loaded with `held`.
+    warm_stills: Option<Arc<WarmStills>>,
     collector: Collector,
 }
 
@@ -252,6 +276,7 @@ impl RenderReader {
             scenes: None,
             warm: None,
             warm_models: None,
+            warm_stills: None,
             collector,
         }
     }
@@ -324,6 +349,18 @@ impl RenderReader {
         {
             self.collector.free(Garbage::WarmModels(old));
         }
+        let stills = self.hub.warm_stills.load();
+        let fresh = !self
+            .warm_stills
+            .as_ref()
+            .is_some_and(|held| Arc::ptr_eq(held, &stills));
+        if fresh
+            && let Some(old) = self
+                .warm_stills
+                .replace(arc_swap::Guard::into_inner(stills))
+        {
+            self.collector.free(Garbage::WarmStills(old));
+        }
         self.held
             .as_deref()
             .expect("invariant: the first adopt always stores a snapshot")
@@ -363,6 +400,13 @@ impl RenderReader {
             .expect("invariant: adopt always stores the warm models")
     }
 
+    /// The warm scenes' stills the last [`adopt`](Self::adopt) read.
+    pub(crate) fn warm_stills(&self) -> &WarmStills {
+        self.warm_stills
+            .as_deref()
+            .expect("invariant: adopt always stores the warm stills")
+    }
+
     /// Counts one composited tick in the hub's [`drawn`](RenderHub::drawn): one
     /// relaxed atomic add, so it is fine on the render thread.
     pub(crate) fn count_drawn(&self) {
@@ -393,6 +437,9 @@ impl RenderReader {
         if let Some(models) = self.warm_models.take() {
             self.collector.free(Garbage::WarmModels(models));
         }
+        if let Some(stills) = self.warm_stills.take() {
+            self.collector.free(Garbage::WarmStills(stills));
+        }
     }
 }
 
@@ -414,6 +461,9 @@ pub(crate) enum Garbage {
     Warm(Arc<BTreeSet<CaptureKey>>),
     /// The warm scenes' models the render thread replaced, for the same reason.
     WarmModels(Arc<WarmModels>),
+    /// The warm scenes' stills the render thread replaced, for the same reason: they
+    /// may hold the last reference to a still's pixels.
+    WarmStills(Arc<WarmStills>),
     /// The captures the render thread started for the program, the monitored scenes and
     /// the warm scenes,
     /// replaced when they change, with the scenes they were read from.
@@ -498,6 +548,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Scenes(scenes) => drop(scenes),
             Garbage::Warm(warm) => drop(warm),
             Garbage::WarmModels(models) => drop(models),
+            Garbage::WarmStills(stills) => drop(stills),
             Garbage::Wanted(wanted, scenes) => drop((wanted, scenes)),
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),

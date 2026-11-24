@@ -19,6 +19,7 @@
 
 use crate::icons::Icon;
 use crate::panels::codec_downloads::{CodecDownloads, Downloads, Offer, offer_reason};
+use crate::panels::number::{NumberField, into_draft};
 use jstream_control::protocol::{
     AudioCodec, AudioEncoding, Edit, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
     HardwarePreference, MixInput, MixResolution, OutputId, OutputInfo, RateControl, SceneId,
@@ -389,6 +390,11 @@ fn number(event: &leptos::ev::Event, fallback: u32) -> u32 {
     event_target_value(event).trim().parse().unwrap_or(fallback)
 }
 
+/// A number field's value as a whole number of the draft's: rounded, and never below 0.
+fn whole(v: f64) -> u32 {
+    v.round().clamp(0.0, f64::from(u32::MAX)) as u32
+}
+
 /// What the Encoders & mixes dialog's editor has open: an encoder profile or a video
 /// mix, by ID, or a new one (`None`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -722,6 +728,12 @@ fn EncoderForm(
         })
         .unwrap_or_default();
     let draft = RwSignal::new(start);
+    // A number field's value into the draft; a drag puts each value in as it goes, and
+    // Save sends the draft (#1734).
+    let put = move |v: f64, set: fn(&mut EncoderDraft, u32)| {
+        draft.update(|d| set(d, whole(v)));
+        true
+    };
     let problem = RwSignal::new(None::<String>);
     let saving = RwSignal::new(Saving::Idle);
     // Any change after a save takes its "Saved." away.
@@ -839,50 +851,26 @@ fn EncoderForm(
                     <option value="vbr" prop:selected=move || draft.with(|d| d.vbr)>"Variable (VBR)"</option>
                 </select>
             </label>
-            <label class="profile-field">
+            <div class="profile-field">
                 <span class="label">"Bit rate (kbps)"</span>
-                <input
-                    type="number"
-                    aria-label="Bit rate"
-                    min="100"
-                    max="100000"
-                    prop:value=move || draft.with(|d| d.kbps.to_string())
-                    on:change=move |event| {
-                        let kbps = number(&event, 0);
-                        draft.update(|d| d.kbps = kbps);
-                    }
-                />
-            </label>
+                <NumberField named=Signal::stored("Bit rate".to_owned()) value=Signal::derive(move || Some(f64::from(draft.with(|d| d.kbps))))
+                    step=1.0 decimals=0 min=100.0 max=100000.0
+                    send=move |v| put(v, |d, n| d.kbps = n) live=into_draft(move |v| _ = put(v, |d, n| d.kbps = n)) />
+            </div>
             <Show when=move || draft.with(|d| d.vbr)>
-                <label class="profile-field">
+                <div class="profile-field">
                     <span class="label">"Peak (kbps)"</span>
-                    <input
-                        type="number"
-                        aria-label="Peak bit rate"
-                        min="100"
-                        max="200000"
-                        prop:value=move || draft.with(|d| d.max_kbps.to_string())
-                        on:change=move |event| {
-                            let max = number(&event, 0);
-                            draft.update(|d| d.max_kbps = max);
-                        }
-                    />
-                </label>
+                    <NumberField named=Signal::stored("Peak bit rate".to_owned()) value=Signal::derive(move || Some(f64::from(draft.with(|d| d.max_kbps))))
+                        step=1.0 decimals=0 min=100.0 max=200000.0
+                        send=move |v| put(v, |d, n| d.max_kbps = n) live=into_draft(move |v| _ = put(v, |d, n| d.max_kbps = n)) />
+                </div>
             </Show>
-            <label class="profile-field">
+            <div class="profile-field">
                 <span class="label">"Keyframe every (s)"</span>
-                <input
-                    type="number"
-                    aria-label="Keyframe every"
-                    min="1"
-                    max="10"
-                    prop:value=move || draft.with(|d| d.keyframe_s.to_string())
-                    on:change=move |event| {
-                        let s = number(&event, 0);
-                        draft.update(|d| d.keyframe_s = s);
-                    }
-                />
-            </label>
+                <NumberField named=Signal::stored("Keyframe every".to_owned()) value=Signal::derive(move || Some(f64::from(draft.with(|d| d.keyframe_s))))
+                    step=1.0 decimals=0 min=1.0 max=10.0
+                    send=move |v| put(v, |d, n| d.keyframe_s = n) live=into_draft(move |v| _ = put(v, |d, n| d.keyframe_s = n)) />
+            </div>
             <label class="profile-field">
                 <span class="label">"Hardware encoder"</span>
                 <select
@@ -912,20 +900,12 @@ fn EncoderForm(
                         .collect_view()}
                 </select>
             </label>
-            <label class="profile-field">
+            <div class="profile-field">
                 <span class="label">"Audio bit rate (kbps, AAC)"</span>
-                <input
-                    type="number"
-                    aria-label="Audio bit rate"
-                    min="32"
-                    max="320"
-                    prop:value=move || draft.with(|d| d.audio_kbps.to_string())
-                    on:change=move |event| {
-                        let kbps = number(&event, 0);
-                        draft.update(|d| d.audio_kbps = kbps);
-                    }
-                />
-            </label>
+                <NumberField named=Signal::stored("Audio bit rate".to_owned()) value=Signal::derive(move || Some(f64::from(draft.with(|d| d.audio_kbps))))
+                    step=1.0 decimals=0 min=32.0 max=320.0
+                    send=move |v| put(v, |d, n| d.audio_kbps = n) live=into_draft(move |v| _ = put(v, |d, n| d.audio_kbps = n)) />
+            </div>
             {move || problem.get().map(|p| view! { <p class="problem" role="alert">{p}</p> })}
             <p class="hint">"A running output keeps its encoding until it starts again."</p>
             <div class="buttons profile-buttons">
@@ -984,6 +964,11 @@ fn MixForm(
         })
         .unwrap_or_default();
     let draft = RwSignal::new(start);
+    // A size field's value into the draft, as the encoder's fields do (#1734).
+    let put = move |v: f64, set: fn(&mut MixDraft, u32)| {
+        draft.update(|d| set(d, whole(v)));
+        true
+    };
     let problem = RwSignal::new(None::<String>);
     let saving = RwSignal::new(Saving::Idle);
     Effect::new(move |first: Option<()>| {
@@ -1109,36 +1094,18 @@ fn MixForm(
                 </select>
             </label>
             <div class="profile-field size-pair">
-                <label>
+                <div>
                     <span class="label">"Width"</span>
-                    <input
-                        type="number"
-                        aria-label="Width"
-                        min="16"
-                        max="8192"
-                        step="2"
-                        prop:value=move || draft.with(|d| d.width.to_string())
-                        on:change=move |event| {
-                            let w = number(&event, 0);
-                            draft.update(|d| d.width = w);
-                        }
-                    />
-                </label>
-                <label>
+                    <NumberField named=Signal::stored("Width".to_owned()) value=Signal::derive(move || Some(f64::from(draft.with(|d| d.width))))
+                        step=2.0 decimals=0 min=16.0 max=8192.0
+                        send=move |v| put(v, |d, n| d.width = n) live=into_draft(move |v| _ = put(v, |d, n| d.width = n)) />
+                </div>
+                <div>
                     <span class="label">"Height"</span>
-                    <input
-                        type="number"
-                        aria-label="Height"
-                        min="16"
-                        max="8192"
-                        step="2"
-                        prop:value=move || draft.with(|d| d.height.to_string())
-                        on:change=move |event| {
-                            let h = number(&event, 0);
-                            draft.update(|d| d.height = h);
-                        }
-                    />
-                </label>
+                    <NumberField named=Signal::stored("Height".to_owned()) value=Signal::derive(move || Some(f64::from(draft.with(|d| d.height))))
+                        step=2.0 decimals=0 min=16.0 max=8192.0
+                        send=move |v| put(v, |d, n| d.height = n) live=into_draft(move |v| _ = put(v, |d, n| d.height = n)) />
+                </div>
             </div>
             <label class="profile-field">
                 <span class="label">"Rate"</span>

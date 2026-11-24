@@ -2,7 +2,7 @@
 //! pages (properties, then outputs) on the right, and the audio mixer (`mixer.rs`) along
 //! the bottom. The scene list and the sources list share their search, filter, star and
 //! drag reordering (`tree.rs`). The Filters panel shows the selected source's filter chains
-//! (`filters.rs`). The Agent activity panel lists what agents did (`agent.rs`), and the Stream stats panel one output's live stats (`stats.rs`). The Add source, Properties and Add filter dialogs and the Filters window open
+//! (`filters.rs`). The Agent activity panel lists what agents did (`agent.rs`), and the Stream stats panel one output's live stats (`stats.rs`). The Show panel runs and edits a show (`show/`). The Add source, Properties and Add filter dialogs and the Filters window open
 //! over them. They read the
 //! shared state from [`Studio`](crate::store::Studio) context and call the engine through the open session from
 //! [`SessionContext`](crate::app::SessionContext); the mixer reads its own state.
@@ -11,36 +11,48 @@
 
 pub mod add_source;
 pub mod agent;
+pub mod audio_read;
 pub mod camera_moves;
 pub mod channels;
 pub mod codec_downloads;
 mod confirm;
 pub mod curve;
 pub mod custom_shader;
+pub mod data_read;
 pub mod device_preview;
 pub mod encoders;
 pub mod events;
 pub mod filter_presets;
 pub mod filters;
+pub mod gesture;
 pub mod inspector;
+pub mod item_map;
 pub mod keyframe_timing;
 pub mod labels;
+pub mod lane_offers;
 pub mod learn;
 pub mod looks;
+pub mod map_control;
+pub mod map_target;
+pub mod mapping_mode;
+pub mod mappings;
 pub mod mixer;
 pub mod motion;
 pub mod number;
 pub mod outputs;
 pub mod properties;
+pub mod ptz;
 pub mod scene_properties;
 pub(crate) mod scenes;
 pub mod sequence;
+pub mod show;
 pub mod source_properties;
 mod sources;
 pub mod stats;
 pub mod studio;
 pub mod transform;
 mod tree;
+pub mod triggers;
 
 pub use add_source::AddSource;
 pub use agent::AgentActivity;

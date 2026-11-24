@@ -258,6 +258,58 @@ pub enum ValueTarget {
         /// The bus it sends into.
         bus_id: BusId,
     },
+    /// One axis of a PTZ camera's position (ADR-0209, since 0.182), in the head's own
+    /// counts (ADR-0146 §5): the engine aims the head there as the value moves. The
+    /// camera is named as `ptz.*` actions and shots name it, so a collection carries
+    /// the mapping to a machine that lists a camera by that name; on a machine that
+    /// doesn't, it drives nothing.
+    PtzAxis {
+        /// The camera's name on the machine's PTZ camera list.
+        camera: String,
+        /// Which axis.
+        axis: PtzAxis,
+    },
+}
+
+/// An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.182).
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PtzAxis {
+    /// The pan position, -524287 to 524287.
+    Pan,
+    /// The tilt position, -32767 to 32767.
+    Tilt,
+    /// The zoom position, 0 (the widest) to 65535.
+    Zoom,
+    /// The focus position, 0 to 65535. Driving it puts the head's focus in manual.
+    Focus,
+}
+
+impl PtzAxis {
+    /// Every axis, in this order.
+    pub const ALL: [PtzAxis; 4] = [PtzAxis::Pan, PtzAxis::Tilt, PtzAxis::Zoom, PtzAxis::Focus];
+
+    /// The lowest and highest counts the protocol carries for it. A head's own range is
+    /// usually narrower: a mapping's `from` and `to` pick the part it uses.
+    pub fn range(self) -> (i32, i32) {
+        match self {
+            PtzAxis::Pan => (-crate::ptz::MAX_PTZ_PAN, crate::ptz::MAX_PTZ_PAN),
+            PtzAxis::Tilt => (-crate::ptz::MAX_PTZ_TILT, crate::ptz::MAX_PTZ_TILT),
+            PtzAxis::Zoom | PtzAxis::Focus => (0, i32::from(u16::MAX)),
+        }
+    }
+
+    /// Its name on the wire.
+    pub fn name(self) -> &'static str {
+        match self {
+            PtzAxis::Pan => "pan",
+            PtzAxis::Tilt => "tilt",
+            PtzAxis::Zoom => "zoom",
+            PtzAxis::Focus => "focus",
+        }
+    }
 }
 
 impl ValueTarget {
@@ -269,7 +321,8 @@ impl ValueTarget {
             }
             ValueTarget::SourceGain { .. }
             | ValueTarget::BusGain { .. }
-            | ValueTarget::SendGain { .. } => None,
+            | ValueTarget::SendGain { .. }
+            | ValueTarget::PtzAxis { .. } => None,
         }
     }
 }
@@ -288,6 +341,9 @@ impl fmt::Display for ValueTarget {
             ValueTarget::SendGain { source_id, bus_id } => {
                 write!(f, "the send of source {source_id} into bus {bus_id}")
             }
+            ValueTarget::PtzAxis { camera, axis } => {
+                write!(f, "the {} of PTZ camera {camera}", axis.name())
+            }
         }
     }
 }
@@ -305,8 +361,8 @@ pub struct ValueBinding {
     /// Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII
     /// letters, digits, `_` and `-`.
     pub binding_id: String,
-    /// What it reads: a `midi`, `data` or (since 0.169) `channel` modifier's kind and
-    /// parameters.
+    /// What it reads: a `midi`, `data`, (since 0.169) `channel` or (since 0.186,
+    /// ADR-0206) `audio` modifier's kind and parameters.
     #[serde(flatten)]
     pub input: MotionKind,
     /// What it drives.
@@ -317,6 +373,26 @@ pub struct ValueBinding {
     /// fully. Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
+    /// Whether it replaces its target's value or adds to it (ADR-0203, since 0.186).
+    /// Default `replace`, omitted. Each target takes its stored value, or the last moved
+    /// `replace` binding's by ID, plus every moved `add` binding's, kept in its range.
+    #[serde(
+        default = "crate::MappingMode::replace",
+        skip_serializing_if = "crate::MappingMode::is_replace"
+    )]
+    pub mode: crate::MappingMode,
+    /// Whether it drives (ADR-0203, since 0.186): false bypasses it, its target showing
+    /// what the others give. Default `true`, omitted.
+    #[serde(default = "enabled", skip_serializing_if = "is_true")]
+    pub enabled: bool,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 impl ValueBinding {
@@ -328,11 +404,20 @@ impl ValueBinding {
         }
         if !matches!(
             self.input,
-            MotionKind::Midi { .. } | MotionKind::Data { .. } | MotionKind::Channel { .. }
+            MotionKind::Midi { .. }
+                | MotionKind::Data { .. }
+                | MotionKind::Channel { .. }
+                | MotionKind::Audio { .. }
         ) {
             return Some((
                 "kind".into(),
-                "a value binding reads a `midi` control, a `data` field or a `channel`".into(),
+                "a value binding reads a `midi` control, a `data` field, a `channel` or an `audio` level".into(),
+            ));
+        }
+        if self.mode == crate::MappingMode::Unknown {
+            return Some((
+                "mode".into(),
+                "is not one this version of the protocol knows".into(),
             ));
         }
         if let Some(reason) = crate::motion::amount_problem(self.amount.as_deref()) {
@@ -340,6 +425,11 @@ impl ValueBinding {
         }
         if let Some((field, reason)) = self.input.problem() {
             return Some((field.into(), reason.into()));
+        }
+        if let ValueTarget::PtzAxis { camera, .. } = &self.target
+            && let Some(reason) = crate::ptz::camera_name_problem(camera)
+        {
+            return Some(("target.camera".into(), reason));
         }
         if let Some(param) = self.target.param()
             && (param.is_empty()
@@ -463,5 +553,42 @@ mod tests {
         }))
         .expect("an unknown action still parses");
         assert_eq!(later.action(), None);
+    }
+
+    /// ADR-0209: a PTZ axis target names a camera and an axis, on the wire as
+    /// `ptz_axis`, and its camera name is checked as `ptz.*` checks one.
+    #[test]
+    fn a_value_binding_can_aim_a_ptz_axis() {
+        use super::{PtzAxis, ValueBinding, ValueTarget};
+        let target = ValueTarget::PtzAxis {
+            camera: "wide".into(),
+            axis: PtzAxis::Zoom,
+        };
+        assert_eq!(
+            serde_json::to_value(&target).expect("serializes"),
+            json!({"type": "ptz_axis", "camera": "wide", "axis": "zoom"})
+        );
+        assert_eq!(target.to_string(), "the zoom of PTZ camera wide");
+        assert_eq!(target.param(), None);
+        let binding: ValueBinding = serde_json::from_value(json!({
+            "binding_id": "zoom_knob", "kind": "midi", "controller": 1,
+            "from": 0, "to": 16384,
+            "target": {"type": "ptz_axis", "camera": "wide", "axis": "zoom"}
+        }))
+        .expect("parses");
+        assert_eq!(binding.problem(), None);
+        let unnamed = ValueBinding {
+            target: ValueTarget::PtzAxis {
+                camera: String::new(),
+                axis: PtzAxis::Pan,
+            },
+            ..binding
+        };
+        assert_eq!(
+            unnamed.problem().map(|p| p.0),
+            Some("target.camera".to_owned())
+        );
+        assert_eq!(PtzAxis::Pan.range(), (-0x7_FFFF, 0x7_FFFF));
+        assert_eq!(PtzAxis::Focus.range(), (0, 65535));
     }
 }
