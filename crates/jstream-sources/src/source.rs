@@ -69,6 +69,22 @@ pub trait Source: Send {
         let _ = at;
     }
 
+    /// How long one play of the source lasts, for a kind with a length: a `media` file
+    /// whose container says, or once a play has reached its end (`SourceSize`'s
+    /// `duration_ms`). `None`, the default, for every other kind.
+    fn duration(&self) -> Option<MediaTime> {
+        None
+    }
+
+    /// Plays the source on from `to` into its timeline at `at`, on the same clock as
+    /// [`frame`](Self::frame) (`source.seek`): a `media` file goes there and plays on.
+    /// The default starts it again as [`restart`](Self::restart) does, for a kind with
+    /// nothing to seek: where it can't go to a point, it starts over.
+    fn seek(&mut self, at: MediaTime, to: MediaTime) {
+        let _ = to;
+        self.restart(at);
+    }
+
     /// Whether any mix draws the source now: the program, a video mix or a preview
     /// (#1071). The engine says so when it changes. A kind that costs something to keep
     /// drawing (a `browser` page) can rest while it isn't drawn; the default does
