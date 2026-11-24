@@ -1346,9 +1346,15 @@ fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
     use crate::effect_packs::test_pack::{self, KIND, Temp};
     use jstream_protocol::{Event, FilterChain, FilterId, FilterOwner, Query, QueryResult};
 
-    /// Far more than half a 30 fps frame on any adapter, at the size below.
+    /// Far more than half a 30 fps frame on a software adapter at [`SOFTWARE_SIZE`], and
+    /// on a GPU at [`HARDWARE_SIZE`].
     const SLOW: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    var c = src(in.uv);\n    for (var i = 0; i < 20000; i++) {\n        c = fract(c * 1.0001 + vec4<f32>(0.0001));\n    }\n    return c;\n}\n";
-    const SIZE: u32 = 128;
+    /// About 0.4 s a pass on lavapipe and 1.3 s on WARP.
+    const SOFTWARE_SIZE: u32 = 128;
+    /// 64 times the pixels: a Radeon 780M runs the pass over 128 × 128 in under half a
+    /// frame, so the guard never tripped there (#1723). Not more, so that a pass stays
+    /// well inside Windows' 2 s GPU timeout on a slower GPU.
+    const HARDWARE_SIZE: u32 = 1024;
 
     let _gpu = one_gpu_test_at_a_time();
     if !have_software_gpu() {
@@ -1356,9 +1362,12 @@ fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
     }
     // The adapter the render thread opens on: one without timestamp queries times
     // nothing, and only a device loss guards it.
-    let timed = Compositor::open(OpenOptions::hardware())
-        .map(|mut compositor| compositor.time_passes())
-        .unwrap_or(false);
+    let (timed, software) = Compositor::open(OpenOptions::hardware())
+        .map(|mut compositor| {
+            let software = compositor.adapter().get_info().device_type == wgpu::DeviceType::Cpu;
+            (compositor.time_passes(), software)
+        })
+        .unwrap_or((false, true));
     if !timed {
         let _ = writeln!(
             std::io::stderr(),
@@ -1413,9 +1422,14 @@ fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
         },
     )
     .expect("a scene drawing a pack filter");
-    let pixels = vec![255; (SIZE * SIZE * 4) as usize];
+    let size = if software {
+        SOFTWARE_SIZE
+    } else {
+        HARDWARE_SIZE
+    };
+    let pixels = vec![255; (size * size * 4) as usize];
     engine
-        .set_source_frame(&SourceId::new("bg"), SIZE, SIZE, &pixels)
+        .set_source_frame(&SourceId::new("bg"), size, size, &pixels)
         .expect("a frame for bg");
     block_on(control.call(switch_call("main"))).expect("scene.switch");
 
