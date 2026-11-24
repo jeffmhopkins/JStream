@@ -12,6 +12,7 @@
 //! Docs: crates/jstream-ui/README.md#design
 
 pub mod edit;
+pub mod edits;
 pub mod model;
 pub mod run;
 pub mod time;
