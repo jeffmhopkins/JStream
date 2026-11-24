@@ -41,7 +41,7 @@ platform-independent helpers, which are tested on every platform.
 |---|---|---|---|
 | `MonotonicClock` | `MediaClock` | `clock.rs` | `CLOCK_MONOTONIC` in 100 ns ticks, the unit every platform uses |
 | `Session` | | `session.rs` | Wayland, X11 or headless, the desktop, and its ADR-0060 support tier |
-| `PortalCapture` | `Capture` | `portal/`, `pipewire/stream.rs` | display and window capture through the ScreenCast portal's picker and a PipeWire video stream, with restore tokens kept per source |
+| `PortalCapture` | `Capture` | `portal/`, `pipewire/stream.rs` | display and window capture through the ScreenCast portal's picker and a PipeWire video stream, with restore tokens kept per source. The pointer comes from the portal's cursor metadata where it offers that mode: its picture beside the frames when asked for, and its position (`pointer`) when it is sent or left out, never drawn in; a pointer drawn into the frames (the portal's embedded mode) has no position |
 | (D-Bus client) | | `dbus.rs` | the crate's own minimal D-Bus client; received messages are untrusted input |
 | `LinuxGpu` | `GpuInterop` | `gpu/` | the engine's wgpu device on Vulkan, DMA-BUF import of captures and webcams, and NV12 encode targets exported for VA-API |
 | `LinuxSecrets` | `StreamKeyStore`, `OAuthTokenStore` | `secrets.rs` | the Secret Service, else a `0600` file ([ADR-0071](../../docs/adr/0071-linux-secret-store.md), [R-SEC-001](../../docs/RULES.md#R-SEC-001)) |
