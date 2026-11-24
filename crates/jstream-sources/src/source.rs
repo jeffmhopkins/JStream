@@ -69,6 +69,15 @@ pub trait Source: Send {
         let _ = at;
     }
 
+    /// Plays the source on from `to` into its timeline at `at`, on the same clock as
+    /// [`frame`](Self::frame) (`source.seek`): a `media` file goes there and plays on.
+    /// The default starts it again as [`restart`](Self::restart) does, for a kind with
+    /// nothing to seek: where it can't go to a point, it starts over.
+    fn seek(&mut self, at: MediaTime, to: MediaTime) {
+        let _ = to;
+        self.restart(at);
+    }
+
     /// Whether any mix draws the source now: the program, a video mix or a preview
     /// (#1071). The engine says so when it changes. A kind that costs something to keep
     /// drawing (a `browser` page) can rest while it isn't drawn; the default does

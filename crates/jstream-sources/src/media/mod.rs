@@ -560,6 +560,17 @@ impl Source for MediaSource {
         }
     }
 
+    /// Plays the file on from `to` (`source.seek`). The player lands a point past the
+    /// end where that many plays reach on a looping file, else on the last frame.
+    fn seek(&mut self, at: MediaTime, to: MediaTime) {
+        let mut head = self.head.lock();
+        head.held = false;
+        if head.player.is_some() {
+            let to = micros(to).unwrap_or(0).max(0);
+            head.restart_at(micros(at).unwrap_or(0).max(0), to);
+        }
+    }
+
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
         if let Some(param) = changed_non_live(&self.descriptor, &self.settings, settings) {
             return Err(SourceError::NotLive {

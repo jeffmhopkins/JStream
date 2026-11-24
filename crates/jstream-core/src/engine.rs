@@ -3865,6 +3865,13 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// [`State::set_upcoming`], for tests until the show runner calls it.
+    #[cfg(test)]
+    pub(crate) fn set_upcoming(&self, scene_id: Option<&str>) -> Result<(), ProtocolError> {
+        let scene_id = scene_id.map(SceneId::new);
+        lock(&self.shared.state).set_upcoming(scene_id.as_ref())
+    }
+
     /// How many plans of the program mix ran (ADR-0103's meters), for tests.
     #[cfg(test)]
     pub(crate) fn plans(&self) -> u64 {
@@ -4606,6 +4613,8 @@ struct WarmLimit<'a> {
     bytes: Option<u64>,
     /// The Preview scene, which no limit leaves cold.
     preview: Option<&'a SceneId>,
+    /// The scene a show runs to next, which no limit leaves cold either.
+    upcoming: Option<&'a SceneId>,
     /// The frames stored with `set_source_frame`.
     frames: &'a BTreeMap<SourceId, Frame>,
 }
@@ -4818,7 +4827,7 @@ impl WarmCaptures {
                     bytes = bytes.saturating_add(capture);
                 }
             }
-            let preview = limit.preview == Some(&scene.id);
+            let preview = limit.preview == Some(&scene.id) || limit.upcoming == Some(&scene.id);
             if !preview
                 && limit
                     .bytes
@@ -6257,6 +6266,20 @@ impl State {
                 self.live.restart(&source_id, self.action_now());
                 return Ok(CallResult::action());
             }
+            Action::SourceSeek { source_id, at_ms } => {
+                if self.graph.state().source(&source_id).is_none() {
+                    return Err(ProtocolError::NotFound {
+                        entity: EntityKind::Source,
+                        id: source_id.to_string(),
+                    });
+                }
+                let to = jstream_media::MediaTime::new(
+                    i64::try_from(at_ms).unwrap_or(i64::MAX),
+                    jstream_media::Timebase::MILLIS,
+                );
+                self.live.seek(&source_id, self.action_now(), to);
+                return Ok(CallResult::action());
+            }
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::AgentApprove { .. }
@@ -6864,12 +6887,29 @@ impl State {
 
     /// Publishes the warm scenes' captures and sources (ADR-0117 §7) after the warm scenes changed
     /// with no plan of the program mix, as a new Preview scene does.
+    /// Names the scene a show runs to next, or `None` when no show runs (alpha.13
+    /// ST6): it is kept warm past the budget and the GPU limit, beside Preview, so a
+    /// media file on it is held at its first frame and the cut to it starts nothing.
+    /// The warm scenes are published again when it changed. A scene the collection
+    /// doesn't hold is `not_found`.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the show runner (alpha.13 ST1) calls it")
+    )]
+    pub(crate) fn set_upcoming(&mut self, scene_id: Option<&SceneId>) -> Result<(), ProtocolError> {
+        if self.studio.set_upcoming(self.graph.state(), scene_id)? {
+            self.publish_warm();
+        }
+        Ok(())
+    }
+
     fn publish_warm(&mut self) {
         let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
         let assets = self.live.filter_assets();
         let limit = WarmLimit {
             bytes: self.studio.gpu_limit(),
             preview: self.studio.preview(),
+            upcoming: self.studio.upcoming(),
             frames: &self.frames,
         };
         let warm = self.warm.update(
@@ -6978,6 +7018,7 @@ impl State {
         let limit = WarmLimit {
             bytes: studio.gpu_limit(),
             preview: studio.preview(),
+            upcoming: studio.upcoming(),
             frames,
         };
         render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets, &limit));

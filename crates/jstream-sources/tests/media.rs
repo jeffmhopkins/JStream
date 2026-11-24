@@ -214,6 +214,70 @@ fn a_restart_plays_it_from_the_start() {
     assert_eq!(shown(&mut source, 340), 1);
 }
 
+/// `source.seek` plays the file on from a point into it, forward or back.
+#[test]
+fn a_seek_plays_it_on_from_that_point() {
+    let (dir, fake) = setup("seek", clip());
+    let mut source = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), false, 1.0, true),
+    )
+    .expect("a source");
+    assert_eq!(shown(&mut source, 40), 1);
+    source.seek(ms(100), ms(280));
+    assert_eq!(shown(&mut source, 100), 7, "it went ahead to 280 ms");
+    assert_eq!(shown(&mut source, 140), 8, "and plays on from there");
+    source.seek(ms(200), ms(80));
+    assert_eq!(shown(&mut source, 200), 2, "it went back to 80 ms");
+    assert_eq!(shown(&mut source, 240), 3);
+}
+
+/// Past the end, a looping file lands where that many plays reach; one that doesn't
+/// loop holds its last frame.
+#[test]
+fn a_seek_past_the_end_wraps_or_holds_the_last_frame() {
+    let (dir, fake) = setup("seek-end", clip());
+    let mut looping = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), true, 1.0, true),
+    )
+    .expect("a source");
+    let mut once = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), false, 1.0, true),
+    )
+    .expect("a source");
+    // The length is learned by playing to the end once.
+    assert_eq!([shown(&mut looping, 440), shown(&mut once, 440)], [1, 9]);
+    // 2 * 400 + 120 ms: frame 3 of the third play.
+    looping.seek(ms(500), ms(920));
+    once.seek(ms(500), ms(920));
+    assert_eq!(shown(&mut looping, 500), 3);
+    assert_eq!(shown(&mut once, 500), 9);
+    assert_eq!(
+        once.next_change(ms(500)),
+        None,
+        "it stays on its last frame"
+    );
+}
+
+/// A file cued to be shown (held at its start) and then sought plays from the seek,
+/// and showing it afterwards plays it on rather than from the hold.
+#[test]
+fn a_seek_ends_a_cue() {
+    let (dir, fake) = setup("seek-cued", clip());
+    let mut source = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), true, 1.0, true),
+    )
+    .expect("a source");
+    source.cue();
+    assert_eq!(shown(&mut source, 200), 0, "held at its start");
+    source.seek(ms(200), ms(160));
+    assert_eq!(shown(&mut source, 200), 4);
+    assert_eq!(shown(&mut source, 280), 6, "it plays on, no longer held");
+}
+
 #[test]
 fn turning_loop_on_after_the_end_plays_on() {
     let (dir, fake) = setup("loop-on", clip());
