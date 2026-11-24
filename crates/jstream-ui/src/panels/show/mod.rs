@@ -11,6 +11,7 @@
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
+pub mod drop;
 pub mod edit;
 pub mod model;
 pub mod run;
