@@ -212,4 +212,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0199](0199-a-carried-pass-compares-file-modes.md) | A carried review pass also compares the PR's file modes | accepted | agent |  |
 | [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
 | [ADR-0210](0210-shows-a-run-order-with-bookmarks.md) | Shows: a saved run order of scenes, with bookmarks, loops and Continue | accepted | agent |  |
+| [ADR-0212](0212-the-edit-views-ruler-moves-the-play-head.md) | The Show panel's Edit view ruler moves the play head; the Run view's strip arms | accepted | agent |  |
 <!-- @generated end adr-index -->
