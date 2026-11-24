@@ -69,10 +69,7 @@ ADR-0197 stands, with these changes to its decisions 4 and 6.
    case and nothing. The time the larger size is expected to take is the frame's time
    divided by that. Until a step down to a size has been timed, it is the worst case,
    as before.
-7. **The first seconds.** The render thread decides nothing for its first 3 seconds,
-   nor for the 3 seconds after an output draws its first frame: making that output's
-   pipelines and encode targets keeps the GPU behind for a moment that fewer pixels
-   would not shorten.
+7. **The first seconds.** The render thread decides nothing for its first 3 seconds.
 
 The marks of ADR-0197 decision 4 (88% to step down, 78% to step up) stand. In the
 scene measured, 100 costs 87% of the budget: the render thread may still settle at 85

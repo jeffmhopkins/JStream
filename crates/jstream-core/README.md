@@ -5226,7 +5226,8 @@ growing with the model's pixels) has stayed under 78% for 5 seconds, a wait that
 up to 80 seconds, each time a step up is undone within 15; and it decides nothing for 10
 ticks after a change, while the frames in flight are the old size, and nothing for its
 first 3 seconds, whose frames upload and compile, nor for the 3 seconds after an output
-draws its first frame (`Governor::output_started`), whose making keeps the GPU behind for a
+draws its first frame (`Governor::output_started`,
+[ADR-0236](../../docs/adr/0236-an-outputs-start-is-part-of-the-first-seconds.md)), whose making keeps the GPU behind for a
 moment that fewer pixels would not shorten. A device that can't
 time its frames steps on the first signal alone. It steps down only while a model is
 drawn, since fewer pixels gain nothing without one, and each change logs one line

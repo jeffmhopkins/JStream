@@ -108,7 +108,8 @@ impl Mode {
 /// after it over its time before; until a step down has been timed it is the worst
 /// case, all of the frame's GPU time growing with the model's pixels. It decides
 /// nothing for the first [`START_S`] seconds, whose frames upload and compile, nor for
-/// the [`START_S`] seconds after an output starts ([`Self::output_started`]).
+/// the [`START_S`] seconds after an output starts ([`Self::output_started`],
+/// ADR-0236).
 ///
 /// It steps down only while the frames before drew a model: with none there is nothing
 /// to gain. On a device that can't time its frames it has only the first signal, and

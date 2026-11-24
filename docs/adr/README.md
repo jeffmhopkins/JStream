@@ -239,4 +239,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0233](0233-announce-the-network-listener-on-mdns.md) | Announce the network listener on mDNS, behind its own setting | accepted | maintainer |  |
 | [ADR-0234](0234-network-access-applies-at-once.md) | Network access applies at once | accepted | agent |  |
 | [ADR-0235](0235-pair-a-device-by-approving-it-on-the-host.md) | Pair a device by approving it on the host | accepted | maintainer |  |
+| [ADR-0236](0236-an-outputs-start-is-part-of-the-first-seconds.md) | An output's start is part of the first seconds the model size governor waits out | accepted | agent |  |
 <!-- @generated end adr-index -->
