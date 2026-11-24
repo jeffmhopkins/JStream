@@ -512,7 +512,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), controller bindings (protocol 0.96,
-  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20) and shows with the show scene marker (protocol 0.179, schema version 22), as the organisation bullet above describes.
+  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20) and shows with the show scene marker (protocol 0.180, schema version 22), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions for built-in kinds (a source or
   preset saved at another version is refused on load; a source or filter of an effect
   pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
@@ -783,13 +783,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
   No input fires them yet.
   A chord or trigger runs several actions in the order they were bound, and a clear can
-  name the one action to unbind (protocol 0.180,
+  name the one action to unbind (protocol 0.181,
   [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
   `output.toggle`, the start-or-stop a "go live" key binds.
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
   [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
   a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
-  setting, a fader or a send, drawn and heard without being stored, or since 0.181 one
+  setting, a fader or a send, drawn and heard without being stored, or since 0.182 one
   axis of a PTZ head, aimed rather than stored
   ([ADR-0209](adr/0209-value-bindings-aim-ptz-cameras.md)); `midi.last_controls`
   reports each input's latest control change, for learning one.
@@ -799,7 +799,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   into one live value, 0 to 1, that a `channel` modifier or value binding follows and an
   `amount` scales by; `channel.set_value`, `channel.nudge` and `channel.switch` move it
   with no `rev`, and `channel.values` reads every channel's level.
-  `show.set` and `show.delete` (protocol 0.179,
+  `show.set` and `show.delete` (protocol 0.180,
   [ADR-0210](adr/0210-shows-a-run-order-with-bookmarks.md)) set and remove a show: a
   saved run order of scenes on program, overlay, keyframe, sequence and audio tracks in
   show time, with pausing and non-pausing bookmarks and loops; the `show.*` actions
@@ -896,7 +896,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   cue inert and its firing reports the error in `timeline.cue_fired`;
   `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
   `source.restart` reloads a page, plays a file from its start or starts a timer's count
-  again (0.182, ADR-0214: a countdown or stopwatch also starts again each time the
+  again (0.183, ADR-0214: a countdown or stopwatch also starts again each time the
   program shows it again), and `source.seek` (0.177) plays a file on from a point, holding through the switch that shows it; it
   is runtime state a hotkey, MCP or a `live` plugin can run, but not a cue. Since 0.170
   ([ADR-0184](adr/0184-sequences-lanes-and-triggers.md)) a timeline with `lanes` is a
@@ -1036,7 +1036,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   placements and crops, since 0.67 a source's settings that its kind marks `live`,
   so a Properties dialog applies as you edit
   ([ADR-0091](adr/0091-source-settings-as-live-values.md)), and since 0.70 a 3D
-  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)), and since 0.183 a filter's
+  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)), and since 0.184 a filter's
   `live` settings, an item's opacity, the source and bus faders and the sends, drawn and
   heard through the collection with the values applied, so every number drag follows
   live ([ADR-0213](adr/0213-number-drags-follow-live.md)).

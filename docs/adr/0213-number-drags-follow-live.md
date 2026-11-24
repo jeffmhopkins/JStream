@@ -42,7 +42,7 @@ about 30 times a second, and 60 while a value moves (ADR-0190).
 
 <a id="decision"></a>
 ## Decision
-1. **More setters are live-adjustable** in `live.set` (protocol 0.183):
+1. **More setters are live-adjustable** in `live.set` (protocol 0.184):
    `filter.set_settings`, for the parameters the filter kind's descriptor marks `live`,
    with any other parameter refused at `values.<n>.patch.<param>` as for a source's
    settings; `item.set_opacity`; and the gains: `source.set_audio`, `bus.set_fader` and

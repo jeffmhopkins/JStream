@@ -1,5 +1,5 @@
 //! Shows ([ADR-0210](../../../docs/adr/0210-shows-a-run-order-with-bookmarks.md), since
-//! 0.179): a saved run order of scenes, laid out on tracks in show time, with bookmarks
+//! 0.180): a saved run order of scenes, laid out on tracks in show time, with bookmarks
 //! the show pauses at or jumps to, and loops.
 //!
 //! A show is a collection object (`show.set`, `show.delete`, listed in `state.get`'s

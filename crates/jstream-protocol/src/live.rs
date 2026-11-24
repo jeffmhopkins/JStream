@@ -56,7 +56,7 @@ pub struct GestureInfo {
 /// real-time threads take from a parameter channel, and since 0.67 a source's settings
 /// (`source.set_settings`, ADR-0091), of which the engine accepts only the parameters
 /// its kind marks `live`, and since 0.70 a scene's camera (`scene.set_camera`,
-/// ADR-0094). Since 0.183 (ADR-0213) also a filter's settings (`filter.set_settings`),
+/// ADR-0094). Since 0.184 (ADR-0213) also a filter's settings (`filter.set_settings`),
 /// again only the parameters its kind marks `live`, an item's opacity
 /// (`item.set_opacity`), and the gains: a source's fader (`source.set_audio`), a bus's
 /// (`bus.set_fader`) and a send's (`send.set`), of which [`live_problem`] says which

@@ -258,7 +258,7 @@ pub enum ValueTarget {
         /// The bus it sends into.
         bus_id: BusId,
     },
-    /// One axis of a PTZ camera's position (ADR-0209, since 0.181), in the head's own
+    /// One axis of a PTZ camera's position (ADR-0209, since 0.182), in the head's own
     /// counts (ADR-0146 §5): the engine aims the head there as the value moves. The
     /// camera is named as `ptz.*` actions and shots name it, so a collection carries
     /// the mapping to a machine that lists a camera by that name; on a machine that
@@ -271,7 +271,7 @@ pub enum ValueTarget {
     },
 }
 
-/// An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.181).
+/// An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.182).
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]

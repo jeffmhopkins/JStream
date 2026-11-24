@@ -1277,7 +1277,7 @@ unlocks, and it settles `active` only while that generation is the one in flight
 dropped any threads it opened, then settles `stopped`. The start answers
 `action_failed` and does not settle `active`. Once the pipeline is `active`, stop
 takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
-`output.toggle` (0.180, ADR-0208) reads whether the output runs under the state lock,
+`output.toggle` (0.181, ADR-0208) reads whether the output runs under the state lock,
 then runs as the `output.start` or `output.stop` that resolves to, with its events,
 audit entry and errors.
 
@@ -1498,7 +1498,7 @@ the render parameter channel, never through the collection:
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)) are live values
   too, for the parameters the source's kind marks `live`; a patch naming any other is
   refused at `values.<n>.patch.<param>` (`check_live_settings`). Each key of each
-  source is a parameter of its own. So are, since protocol 0.183
+  source is a parameter of its own. So are, since protocol 0.184
   ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)), each `live` setting of
   each filter (`filter.set_settings`, checked against the filter kind's descriptor the
   same way, the filter found by `State::filter`), each item's opacity
