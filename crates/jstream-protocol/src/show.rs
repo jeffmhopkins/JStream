@@ -377,6 +377,11 @@ pub enum ShowEnd {
         /// The bookmark.
         bookmark_id: String,
     },
+    /// An end a newer server sends that this version doesn't know. Never sent; the
+    /// engine refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 impl ShowEnd {
@@ -503,6 +508,9 @@ impl ShowInfo {
             && self.bookmark(bookmark_id).is_none()
         {
             return problem("end.bookmark_id", "must name one of the show's bookmarks");
+        }
+        if self.end == ShowEnd::Unknown {
+            return problem("end.type", "must be `stop`, `loop` or `go_to`");
         }
         None
     }
@@ -869,7 +877,8 @@ pub struct RunningShow {
     pub at_ms: u32,
     /// Whether it plays, waits at a pausing bookmark, or was taken off script.
     pub state: ShowState,
-    /// The pausing bookmark it waits at. Omitted unless `state` is `paused`.
+    /// The pausing bookmark it waits at. Omitted unless `state` is `paused`, and when
+    /// `show.pause` paused it between bookmarks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bookmark_id: Option<String>,
     /// How long it has waited at `bookmark_id`, in milliseconds. Omitted unless `state`
@@ -902,7 +911,8 @@ pub struct RunningShow {
 pub enum ShowState {
     /// Its play head moves.
     Playing,
-    /// It waits at a pausing bookmark for `show.continue`. Program keeps running.
+    /// It waits for `show.continue`: at a pausing bookmark, or where `show.pause` held
+    /// it. Program keeps running.
     Paused,
     /// A scene was switched by hand while it ran: it waits where it was, and
     /// `show.continue` goes on to the next clip.
@@ -920,7 +930,7 @@ pub enum ShowState {
 pub enum ShowChange {
     /// `show.play` started it.
     Started,
-    /// It reached a pausing bookmark and waits.
+    /// It reached a pausing bookmark, or `show.pause` held it, and waits.
     Paused,
     /// It plays on from a pause, by `show.continue` or a bookmark's own wait.
     Continued,

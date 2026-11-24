@@ -86,7 +86,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
-  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
+  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.pause`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
@@ -94,7 +94,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   wheel chord may run it, 0.104),
   which every implementation uses to check and follow a hotkey's action, and
   `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
-  and say what state it sets ([Timelines](#timelines)); `Batch`, whose
+  and say what state it sets ([Timelines](#timelines)), and `Action::show_problem`,
+  the range checks of the `show.*` actions ([Shows](#shows)); `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 
@@ -205,7 +206,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `camera_anchor` (since 0.127, ADR-0164, omitted while absent), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
-  (`warm_scenes`, with `warm_gpu_mib` since 0.117), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  (`warm_scenes`, with `warm_gpu_mib` since 0.117), `ItemInfo` its `transition` and `state.get` the presets, and
+  since 0.177 `state.get` the `shows` and `studio.get` the running `show` and the
+  `overlays` up ([Shows](#shows)). `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
@@ -326,7 +329,7 @@ covers = ["crates/jstream-protocol/src/error.rs", "crates/jstream-protocol/src/i
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs (`BusId::master()` is
-  the one fixed ID, `master`; a `GestureId` and a `TimelineId` are chosen by the client), `Rev`, and
+  the one fixed ID, `master`; a `GestureId`, a `TimelineId` and a `ShowId` are chosen by the client), `Rev`, and
   `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
   NaN, infinity and out-of-range numbers at construction and deserialization. Computed
@@ -2669,7 +2672,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
   `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, and `channel.set_value`,
-  `channel.nudge` and `channel.switch`, ADR-0183) and `outputs` (`output.start`, `output.stop`). Everything else is
+  `channel.nudge` and `channel.switch`, ADR-0183, and `overlay.show`, `overlay.hide` and
+  `overlay.toggle`, ADR-0210) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
   client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), `channel.values` (what the person plays, ADR-0183), creating, deleting and retargeting outputs, their encoders and stream
@@ -2678,7 +2682,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
   `privacy.set`, `youtube.*`, pairing and devices, `plugin.*` itself, and the
   `timeline.*` edits and actions, whose cues run actions the `edit` class can't
-  (ADR-0115).
+  (ADR-0115), and the `show.*` edits and actions, for the same reason (ADR-0210).
   `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
   `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
   command can't reach plugins unreviewed.
@@ -3003,7 +3007,11 @@ after 1.0:
   `collection.save_as` names it.
   0.96 adds `binding` the same way, named only by an error answering a `binding.*`
   edit. 0.169 adds `channel` the same way, named only by an error answering a
-  `channel.*` edit or action.
+  `channel.*` edit or action. 0.177 adds `show` the same way, named only by an error
+  answering a `show.*` edit or action, or a binding naming a show; a show's cue holds its
+  action as plain JSON, as a timeline's does, and its enums (`ShowEnd`, `LoopLeave`,
+  `NextMonitor`, `ShowState`, `ShowChange`) parse an unknown value as `Unknown`, which
+  `ShowInfo::problem` refuses in an edit.
   0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
@@ -3276,13 +3284,15 @@ is a saved run order of scenes in show time, in milliseconds. `show.set` stores 
   naming a scene, source, sequence, keyframe or preset the collection lacks is kept and
   does nothing. `ShowInfo::problem` is the shape check every implementation shares.
 
-Running a show is studio state: the `show.*` actions (`show.play`, `show.stop`,
+Running a show is studio state: the `show.*` actions (`show.play`, `show.stop`, `show.pause`,
 `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`,
 `show.seek`, `show.arm`), all bindable and checked by `Action::show_problem`, drive it,
 `studio.get`'s `show` reports it and `show.changed` says what it did. `show.delete` takes
 the bindings that name the show with it. `overlay.show`, `overlay.hide` and
 `overlay.toggle` put a scene over program as an overlay, or take it down, with or without
 a show running; `studio.get` lists the scenes up in `overlays`. Both are runtime state.
+Until the engine's show runner lands, the engine and the mock store and refuse shows but
+answer the run and overlay actions with `internal`, and `studio.get` reports no `show`.
 
 <a id="media-clock"></a>
 ## Holding the media clock

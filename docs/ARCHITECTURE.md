@@ -1187,7 +1187,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `channel`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `channel`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `overlay`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `show`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1216,7 +1216,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 1.45 MB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 2 MB
   of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
   `hotkey` and `binding` each carry every action's, because `hotkey.set` and
@@ -1242,7 +1242,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   `pack` (writes and deletes files undo never reaches), `pairing`, `ptz` (moves physical
   cameras, [ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md)), `timeline` (its cues
   may set a shared value a page may send off the machine,
-  [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
+  [ADR-0115](adr/0115-timelines-on-the-wire.md)), `show` (its run actions fire such cues,
+  [ADR-0210](adr/0210-shows-a-run-order-with-bookmarks.md)), `ui_settings` and `values` (`values.set`
   is not an undoable edit, and a page granted the value may send it off,
   [ADR-0102](adr/0102-page-api-for-browser-sources.md));
   `openWorldHint` for `output`, `ptz`, which moves physical cameras, `source`, whose

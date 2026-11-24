@@ -606,6 +606,10 @@ fn fixture_graph() -> Graph {
             Edit::CanvasSetBlending {
                 blending: Blending::Linear,
             },
+            // The fixtures before version 22 hold no show (ADR-0210).
+            Edit::ShowDelete {
+                show_id: jstream_protocol::ShowId::new("evening"),
+            },
         ]
         .into_iter()
         .chain(

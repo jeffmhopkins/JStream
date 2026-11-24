@@ -101,10 +101,11 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r102","call":{"kind":"action","action":{"type":"show.seek","at_ms":95000}}}
 {"type":"request","id":"r103","call":{"kind":"action","action":{"type":"show.arm","at_ms":120000}}}
 {"type":"request","id":"r104","call":{"kind":"action","action":{"type":"show.arm"}}}
-{"type":"request","id":"r105","call":{"kind":"action","action":{"type":"show.stop"}}}
-{"type":"request","id":"r106","call":{"kind":"action","action":{"type":"overlay.show","scene_id":"scn_panels"}}}
-{"type":"request","id":"r107","call":{"kind":"action","action":{"type":"overlay.hide","scene_id":"scn_panels"}}}
-{"type":"request","id":"r108","call":{"kind":"action","action":{"type":"overlay.toggle","scene_id":"scn_panels"}}}
+{"type":"request","id":"r105","call":{"kind":"action","action":{"type":"show.pause"}}}
+{"type":"request","id":"r106","call":{"kind":"action","action":{"type":"show.stop"}}}
+{"type":"request","id":"r107","call":{"kind":"action","action":{"type":"overlay.show","scene_id":"scn_panels"}}}
+{"type":"request","id":"r108","call":{"kind":"action","action":{"type":"overlay.hide","scene_id":"scn_panels"}}}
+{"type":"request","id":"r109","call":{"kind":"action","action":{"type":"overlay.toggle","scene_id":"scn_panels"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}

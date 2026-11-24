@@ -100,7 +100,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `overlay`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `show`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -135,8 +135,9 @@ today `collection` (an open or a new stops every output and clears every client'
 `output`, `pack` (whose writes and deletes change files on
 disk that undo never reaches), `pairing`, `ptz` (which moves physical cameras, and whose
 `ptz.store` overwrites a preset in the camera, ADR-0146), `ui_settings`, `values` (whose values a
-browser source page granted them may send off the machine) and `timeline` (whose cues
-may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)). `history` stays
+browser source page granted them may send off the machine), `timeline` (whose cues
+may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)) and `show`
+(whose run actions fire such cues, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch` (and `scene.switch_and_watch`, which adds only a frame sheet), `studio.set_preview`, `live.set`,
 `live.cancel`, `audio.reset_loudness`, `item.trigger_motion` (a shake that stills
@@ -154,7 +155,8 @@ ready, which another call puts back), `studio.set_rendering`
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md): which
 costly 3D effects draw, which another call puts back) and `clock.hold`, `clock.step` and `clock.release`
 ([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md), which a
-release takes back and nothing stores) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
+release takes back and nothing stores) and `overlay.show`, `overlay.hide` and
+`overlay.toggle` (ADR-0210, which the opposite action takes back and nothing stores) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
 back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
 either. `openWorldHint` is true for the
