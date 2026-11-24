@@ -487,10 +487,23 @@ pub fn EditView() -> impl IntoView {
     };
     let state = move || {
         let now = panel.clock.get();
-        let text = panel
-            .run
-            .with(|r| show.with(|s| s.as_ref().map(|s| status(s, r, now))));
-        let glyph = paused().then_some("❚❚ ");
+        let text = if running.get() {
+            panel
+                .run
+                .with(|r| show.with(|s| s.as_ref().map(|s| status(s, r, now))))
+        } else {
+            // Another show may be running; this one isn't.
+            let other = panel.run.with(|r| r.show.clone()).and_then(|id| {
+                panel
+                    .shows
+                    .with(|shows| shows.iter().find(|s| s.id == id).map(|s| s.name.clone()))
+            });
+            Some(match other {
+                Some(name) => format!("Stopped · {name} is running"),
+                None => "Stopped".to_owned(),
+            })
+        };
+        let glyph = (running.get() && paused()).then_some("❚❚ ");
         view! {
             <span class="show-state" class:idle=move || !running.get()>{glyph}{text}</span>
         }
