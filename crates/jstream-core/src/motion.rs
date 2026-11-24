@@ -60,7 +60,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use jstream_anim::{Modifier, Offsets};
+use jstream_anim::{Modifier, Offsets, Property};
 use jstream_graph::Item as GraphItem;
 use jstream_media::MediaTime;
 use jstream_protocol::{Finite32, ItemId, MAX_OPACITY, Size, Vec2};
@@ -222,14 +222,16 @@ pub(crate) fn apply(
                 let size = Size::try_new(width, height).ok()?;
                 Some(jstream_protocol::ItemGeometry {
                     center: Vec2::new(
-                        geometry.center.x.get() + by.x,
-                        geometry.center.y.get() + by.y,
+                        by.on(Property::X, geometry.center.x.get()),
+                        by.on(Property::Y, geometry.center.y.get()),
                     )?,
                     size,
-                    rotation_deg: Finite32::new(geometry.rotation_deg.get() + by.rotation)?,
-                    tilt_deg: Finite32::new(geometry.tilt_deg.get() + by.tilt)?,
-                    turn_deg: Finite32::new(geometry.turn_deg.get() + by.turn)?,
-                    depth_px: Finite32::new(geometry.depth_px.get() + by.depth)?,
+                    rotation_deg: Finite32::new(
+                        by.on(Property::Rotation, geometry.rotation_deg.get()),
+                    )?,
+                    tilt_deg: Finite32::new(by.on(Property::Tilt, geometry.tilt_deg.get()))?,
+                    turn_deg: Finite32::new(by.on(Property::Turn, geometry.turn_deg.get()))?,
+                    depth_px: Finite32::new(by.on(Property::Depth, geometry.depth_px.get()))?,
                     ..geometry
                 })
             })();
@@ -240,14 +242,14 @@ pub(crate) fn apply(
         }
         Placement::Legacy(transform) => {
             let mut moved = transform;
-            moved.position[0] += by.x;
-            moved.position[1] += by.y;
+            moved.position[0] = by.on(Property::X, moved.position[0]);
+            moved.position[1] = by.on(Property::Y, moved.position[1]);
             // A legacy scale is signed, a negative one flipping its axis: motion scales
             // the size and keeps the flip.
             let [width, height] = by.size_of(moved.scale[0].abs(), moved.scale[1].abs());
             moved.scale[0] = moved.scale[0].signum() * width;
             moved.scale[1] = moved.scale[1].signum() * height;
-            moved.rotation_deg += by.rotation;
+            moved.rotation_deg = by.on(Property::Rotation, moved.rotation_deg);
             // One past `ItemTransform::check_drawable`'s bounds (stacked scales past
             // `MAX_LEGACY_SCALE`, a value that isn't finite) stays where it is (#1130),
             // so a stored transform already past them moves only where the moved one
@@ -262,12 +264,12 @@ pub(crate) fn apply(
         // from the canvas's top-left; its geometry only sorts it, so motion leaves it.
         layer @ Placement::Layer(_) => layer,
     };
-    let edge = |px: u32, add: f32| (px as f32 + add).round().max(0.0) as u32;
+    let edge = |px: u32, edge: Property| by.on(edge, px as f32).round().max(0.0) as u32;
     let crop = Crop {
-        left: edge(crop.left, by.crop[0]),
-        top: edge(crop.top, by.crop[1]),
-        right: edge(crop.right, by.crop[2]),
-        bottom: edge(crop.bottom, by.crop[3]),
+        left: edge(crop.left, Property::CropLeft),
+        top: edge(crop.top, Property::CropTop),
+        right: edge(crop.right, Property::CropRight),
+        bottom: edge(crop.bottom, Property::CropBottom),
     };
     (placement, crop, opacity_of(by, opacity))
 }
@@ -275,7 +277,7 @@ pub(crate) fn apply(
 /// `opacity` multiplied by `by`'s factor, within 0 and [`MAX_OPACITY`]: an opacity above
 /// 1 is a gain on the item's light (#1101), so motion keeps it rather than clamp it to 1.
 pub(crate) fn opacity_of(by: &Offsets, opacity: f32) -> f32 {
-    (opacity * by.opacity).clamp(0.0, MAX_OPACITY)
+    (by.base(Property::Opacity, opacity) * by.opacity).clamp(0.0, MAX_OPACITY)
 }
 
 /// A track's endpoint moved by `by`: [`apply`] on its box, crop and opacity.
@@ -421,6 +423,7 @@ mod tests {
             },
             clock,
             enabled: true,
+            replace: false,
         }
     }
 

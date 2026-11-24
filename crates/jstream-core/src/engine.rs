@@ -1818,6 +1818,17 @@ impl Engine {
             .is_some_and(|host| lock(&host.gate).program().is_some())
     }
 
+    /// How many encoder sessions the stage's preview streams hold between them, for
+    /// tests of what they share.
+    #[cfg(test)]
+    pub(crate) fn preview_encodes_open(&self) -> usize {
+        self.media.as_ref().map_or(0, |host| {
+            lock(&host.gate)
+                .program()
+                .map_or(0, |program| program.preview_encodes().open())
+        })
+    }
+
     /// Encoder and subscriber counters for `output_id`, if it is running.
     pub fn output_stats_of(&self, output_id: &OutputId) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
@@ -3029,7 +3040,12 @@ impl Engine {
             }
         }
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        let hardware = count(sessions.iter().filter(|e| e.hardware()).count());
+        // The preview streams' hardware sessions count too (#1691): they are among the
+        // sessions a capped encoder has given out.
+        let preview = gate
+            .program()
+            .map_or(0, |program| program.preview_hardware().taken());
+        let hardware = count(sessions.iter().filter(|e| e.hardware()).count() + preview);
         let encoder = gate
             .running
             .get(output_id)
@@ -3047,7 +3063,7 @@ impl Engine {
                 hardware: own.hardware(),
                 dedicated: own.dedicated(),
             });
-        (encoder, count(sessions.len()), hardware)
+        (encoder, count(sessions.len() + preview), hardware)
     }
 
     fn host(&mut self) -> Arc<MediaHost> {
@@ -5662,8 +5678,12 @@ impl State {
         {
             // A channel the collection has just gained is followed before a lane takes it.
             let midi = self.live.midi();
-            self.channels
-                .keep(&self.graph, midi.as_deref(), &engine.data);
+            self.channels.keep(
+                &self.graph,
+                midi.as_deref(),
+                &engine.data,
+                self.live.filter_assets().motion_heard(),
+            );
         }
         self.channels
             .lanes_start(timeline_id, &info, start, from_ms.is_some());
@@ -7749,8 +7769,12 @@ impl State {
         // A channel the collection has just gained is followed before it is set.
         if let Some(engine) = self.shared.upgrade() {
             let midi = self.live.midi();
-            self.channels
-                .keep(&self.graph, midi.as_deref(), &engine.data);
+            self.channels.keep(
+                &self.graph,
+                midi.as_deref(),
+                &engine.data,
+                self.live.filter_assets().motion_heard(),
+            );
         }
         let missing = |channel_id: &str| ProtocolError::NotFound {
             entity: EntityKind::Channel,
@@ -7821,8 +7845,15 @@ impl State {
                 self.channels.scene_live(program);
             }
         }
-        let settling = self.channels.tick(&self.graph, midi.as_deref(), data, now);
-        let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
+        // The scopes the collection's audio inputs hear (ADR-0206).
+        let assets = self.live.filter_assets();
+        let heard = assets.motion_heard();
+        let settling = self
+            .channels
+            .tick(&self.graph, midi.as_deref(), data, heard, now);
+        let changed = self
+            .driver
+            .tick(&self.graph, midi.as_deref(), data, heard, now);
         if changed && self.refresh_shown() {
             self.redraw();
         }

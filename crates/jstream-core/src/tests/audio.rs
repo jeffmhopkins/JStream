@@ -1907,6 +1907,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
         palette: std::collections::BTreeMap::new(),
     };
     let modifier = |id: &str, kind: MotionKind, enabled: bool| MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: id.into(),
         property: MotionProperty::X,
         effect: None,
@@ -1951,6 +1952,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             Edit::SceneSetCameraMotion {
                 scene_id: SceneId::new("a"),
                 motion: vec![CameraMotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: "pan".into(),
                     property: CameraProperty::Pan,
                     kind: data(None, 0),
@@ -1961,6 +1963,8 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             },
             Edit::BindingSetValue {
                 binding: ValueBinding {
+                    enabled: true,
+                    mode: jstream_protocol::MappingMode::Replace,
                     binding_id: "master".into(),
                     input: data(None, 4),
                     target: ValueTarget::BusGain {
@@ -1971,6 +1975,8 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             },
             Edit::BindingSetValue {
                 binding: ValueBinding {
+                    enabled: true,
+                    mode: jstream_protocol::MappingMode::Replace,
                     binding_id: "master-2".into(),
                     input: data(None, 1),
                     target: ValueTarget::BusGain {

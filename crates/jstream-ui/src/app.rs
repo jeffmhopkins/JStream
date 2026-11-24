@@ -84,6 +84,8 @@ fn default_engine_url() -> String {
 /// The app: a connect form until a session is open, then the shell.
 #[component]
 pub fn App() -> impl IntoView {
+    // No browser right-click menu or stray text selection on the chrome.
+    crate::chrome::install();
     let status = RwSignal::new(Status::Disconnected(None));
     let info = RwSignal::new(SessionInfo::default());
     let session = SessionContext(StoredValue::new_local(None));

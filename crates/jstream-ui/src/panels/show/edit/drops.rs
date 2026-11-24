@@ -69,7 +69,7 @@ pub fn place_scene(
                 ));
             }
         }
-        (TrackKind::Sequences(_) | TrackKind::Audio(_), false) => {
+        (TrackKind::Sequences(_) | TrackKind::Audio(_) | TrackKind::Linked(_), false) => {
             panel.refuse(format!("A scene goes on a V track, not {tag}."));
         }
     }

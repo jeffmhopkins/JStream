@@ -118,6 +118,17 @@ impl HevcDecoderConfig {
     /// `parallelismType`, `avgFrameRate` and `constantFrameRate` are written as 0
     /// (unknown), which the record allows.
     pub fn to_bytes(&self) -> Vec<u8> {
+        self.record(false)
+    }
+
+    /// The same record with every array marked complete (`array_completeness` 1), as an
+    /// MP4 `hvc1` sample entry requires: the record holds every parameter set the stream
+    /// uses, and any in the frames repeat them.
+    pub fn to_bytes_complete(&self) -> Vec<u8> {
+        self.record(true)
+    }
+
+    fn record(&self, complete: bool) -> Vec<u8> {
         let info = &self.info;
         let mut out = vec![1, info.profile_byte]; // configurationVersion
         out.extend_from_slice(&info.compatibility_flags.to_be_bytes());
@@ -141,8 +152,8 @@ impl HevcDecoderConfig {
             (NAL_SPS, &self.sps),
             (NAL_PPS, &self.pps),
         ] {
-            // array_completeness 0, reserved 0, NAL_unit_type
-            out.push(nal_type);
+            // array_completeness, reserved 0, NAL_unit_type
+            out.push((u8::from(complete) << 7) | nal_type);
             // Counts and lengths were checked in `new`.
             out.extend_from_slice(&(list.len() as u16).to_be_bytes());
             for set in list {
@@ -341,6 +352,23 @@ pub(crate) mod tests {
             expected.extend_from_slice(set);
         }
         assert_eq!(cfg.to_bytes(), expected);
+    }
+
+    /// An MP4 `hvc1` entry needs every array marked complete; FLV's stays incomplete.
+    #[test]
+    fn complete_record_sets_array_completeness() {
+        let cfg = config();
+        let (incomplete, complete) = (cfg.to_bytes(), cfg.to_bytes_complete());
+        assert_eq!(incomplete.len(), complete.len());
+        let arrays = [23, 23 + 5 + VPS.len(), 23 + 10 + VPS.len() + SPS.len()];
+        for (at, t) in arrays.into_iter().zip([0x20, 0x21, 0x22]) {
+            assert_eq!(incomplete[at], t);
+            assert_eq!(complete[at], 0x80 | t);
+        }
+        let differs: Vec<_> = (0..complete.len())
+            .filter(|&i| complete[i] != incomplete[i])
+            .collect();
+        assert_eq!(differs, arrays, "only the completeness bits differ");
     }
 
     #[test]
