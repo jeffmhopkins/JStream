@@ -6,6 +6,9 @@
 
 const PLUGIN = "io.github.jeffmhopkins.jstream";
 
+/** Whether this panel has looked for JStream by itself already. */
+let searched = false;
+
 /** Each key's fields. `list` names a list the plugin sends; `modes` the labels for toggle, on, off. */
 const FORMS = {
 	show: [
@@ -294,6 +297,11 @@ function drawConnection(c) {
 		if (!$("host").value) $("host").value = c.host || "";
 		if (!$("device-name").value) $("device-name").value = c.deviceName;
 		$("connection").open = true;
+		// Not paired and no address yet: look for JStream once, without being asked.
+		if (!$("host").value && !searched) {
+			searched = true;
+			$("find").click();
+		}
 	} else if (state !== "connected") {
 		$("connection").open = true;
 	}
@@ -309,6 +317,14 @@ function drawFound(found) {
 		none.className = "none";
 		none.textContent = "None found. Is announcing on in JStream's Settings? You can type the address instead.";
 		box.append(none);
+		return;
+	}
+	// One JStream on the network: it is the one, so it is filled in and probed at once.
+	if (found.length === 1) {
+		$("host").value = found[0].host;
+		$("port").value = found[0].port;
+		say(`Found ${found[0].name}.`, true);
+		probe();
 		return;
 	}
 	for (const f of found) {

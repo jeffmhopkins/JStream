@@ -33,10 +33,11 @@ Stream Deck and JStream can run on different computers on the same network.
    unless that was changed. The daemon's flag is `--lan`
    ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)). The first time, the
    operating system may ask whether JStream may accept connections.
-3. **Connect.** Drag any JStream key onto the deck and open its settings. Under the
-   connection line, press **Find JStream** and pick the computer, or type its name or IP
-   address. Then press **Connect**. The plugin shows the certificate fingerprint JStream
-   offered.
+3. **Connect.** Drag any JStream key onto the deck and open its settings. The panel
+   looks for JStream by itself the first time; when it finds exactly one, it fills in its
+   address and connects. Otherwise press **Find JStream** and pick the computer, or type
+   its name or IP address and press **Connect**. The plugin shows the certificate
+   fingerprint JStream offered.
 4. **Pair.** In JStream, open **Settings › Devices** and press **Pair a device**. Check
    that the fingerprint JStream shows matches the one in the plugin, then type the
    8-character code into the plugin and press **It matches: pair**. The code works once
