@@ -1377,6 +1377,13 @@ spike S6 does, written by step 4's passes. Its staged write signals the same eve
 VideoToolbox encoder waits on the CPU for that value (`waitUntilSignaledValue`), hands
 the IOSurface's pixel buffer itself to the session, and keeps the frame until the
 session's output callback for it, so render never rewrites a target being encoded.
+Spike S6 has run once, on a CI virtual Mac (Apple M1 with Metal's paravirtual GPU,
+1080p60, hardware H.264, loads 64, 256 and 1024). With no sync, every run read targets
+before they were written (82 to 437 stale exports and 7 or 8 garbled frames per 20 s). With
+the `completion` wait, the `event` design built here, or `event-strict`, there were none,
+and no sync timeouts. Every output decoded. `event` kept the render tick's own work at a
+p50 of about 0.5 ms, where `completion` blocked it for 8 to 55 ms. A paravirtual GPU's
+timings say nothing about real Apple Silicon, so the run on a Mac is still to come.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
