@@ -642,7 +642,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   (`camera_of`, ADR-0164); `check_via` checks a switch's path through keyframes
   (ADR-0166 decision 2), and `Run::orbit` is a `move` preset's `camera_path` of
   `orbit` (decision 3). `ShowFade` is a show scene item's own appear or disappear,
-  sampled over its pose as an unpaired track is (`ShowFade::sample`).
+  sampled over its pose as an unpaired track is (`ShowFade::sample`), and also an item
+  that only appears or goes in a Move that draws a 3D scene as it is (ADR-0237).
 
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
@@ -919,7 +920,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   flat group sits under, moving and fading with the group item, a camera anchored to
   the group riding with it, its children staying in its space through a Move, also one
   started after a Fade onto the scene ended but before a plan let it go, and an
-  item shown with a Fade on a filtered 3D keyframe drawn through its camera, and an
+  item shown and hidden with a Fade on a filtered 3D keyframe drawn through its camera
+  in the keyframe's pass with the chain still running, and an
   effect setting changed after the first frame reaching a 3D card, a legacy-transform
   child placed through its group; and, from the planned shot, a group's motion and a
   child's own moving it in the group's space during a Move, and a Move splitting the
@@ -2707,12 +2709,18 @@ transition is planned: the program scene is planned at rest, chain and all, and 
 camera of its family carries a `CameraGlide` (`PassCamera::glide`, set through
 `Planner::glide`) that `moved_camera` draws in place of the committed camera until the
 Move ends, so the chain runs through the glide
-(`a_camera_only_move_in_a_3d_family_keeps_its_chain`). A 3D
+(`a_camera_only_move_in_a_3d_family_keeps_its_chain`). An item of the scene itself
+that only appears or goes in such a Move, where the scene places it (an item shown or
+hidden on a 3D scene), doesn't stop the glide
+([ADR-0237](../../docs/adr/0237-an-item-shown-or-hidden-on-a-3d-scene-keeps-its-chain.md)):
+`moves_only_the_camera` hands back its track's effect and timing as a `ShowFade`, set
+through `Planner::appearing`, and `Planner::fading` samples it on the item's layer in
+the program scene's own pass, as the show scene's items fade, so the chain runs while
+it appears or goes (`an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera`). A 3D
 scene's picture was drawn through its own camera, so its track is drawn flat, through
 no camera (`Visual::is_whole_scene`, `Transitioning::whole`): a Fade into or out of a
-filtered 3D scene, and an item shown or hidden there with a transition, which
-crossfades the scene, show it as it is (`a_3d_scene_with_a_chain_fades_as_a_flat_picture`,
-`an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera`). A model's layer that a
+filtered 3D scene shows it as it is
+(`a_3d_scene_with_a_chain_fades_as_a_flat_picture`). A model's layer that a
 track draws is drawn through that track's camera (`track_camera`), so a glide turns
 it with the rest.
 

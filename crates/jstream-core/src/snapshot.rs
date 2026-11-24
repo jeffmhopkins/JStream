@@ -2194,6 +2194,7 @@ fn plan_inner(
         quiet: false,
         fades: None,
         glide: None,
+        appearing: None,
     };
     let mut finished = running.is_some();
     let mut end_ms = None;
@@ -2202,11 +2203,14 @@ fn plan_inner(
     {
         let (planned, pairs) = planner.transition(running, &mut shot);
         let end = end_time(running.start, planned.end_ms);
-        let glides = end.is_some_and(|end| now < end)
-            && planner.moves_only_the_camera(running, &planned, &shot);
-        if glides {
-            // Only the camera moves (ADR-0226): the program scene is drawn as it is,
-            // with its chain, through a camera that follows the Move's.
+        let glides = end
+            .is_some_and(|end| now < end)
+            .then(|| planner.moves_only_the_camera(running, &planned, &shot))
+            .flatten();
+        if let Some(fades) = glides {
+            // Only the camera moves (ADR-0226), and items only appear or go where they
+            // are (ADR-0237): the program scene is drawn as it is, with its chain,
+            // through a camera that follows the Move's, those items fading in its pass.
             finished = false;
             end_ms = Some(planned.end_ms);
             let glide = CameraGlide {
@@ -2226,6 +2230,7 @@ fn plan_inner(
             };
             planner.wake = end;
             planner.glide = family.map(|family| (family, Arc::new(glide)));
+            planner.appearing = Some((running.to.clone(), fades));
         } else if end.is_some_and(|end| now < end) {
             finished = false;
             end_ms = Some(planned.end_ms);
@@ -2511,6 +2516,7 @@ fn on_screen_until_end(
         quiet: false,
         fades: None,
         glide: None,
+        appearing: None,
     };
     let (planned, pairs) = planner.transition(running, &mut shot);
     // Ended as [`plan_program`] finds it.
@@ -2694,18 +2700,25 @@ struct Planner<'a, 'f> {
     /// The family whose camera glides, and along what, while a Move moves only its
     /// camera (ADR-0226): every camera of that family planned meanwhile carries it.
     glide: Option<(SceneId, Arc<CameraGlide>)>,
+    /// The program scene and its items that appear or go where they are, while a Move
+    /// that draws it as it is runs (ADR-0237): each fades in the scene's own pass as
+    /// its track would draw it.
+    appearing: Option<(SceneId, ShowFades)>,
 }
 
 impl<'a> Planner<'a, '_> {
-    /// The fade of `item_id` when it is an item of the show scene's own pass, placed
-    /// from the scene itself (never through a 3D group), and fading on its own; its end
-    /// wakes the plan, which then plans the item at rest.
+    /// The fade of `item_id` when it is an item of the show scene's own pass, or of the
+    /// program scene's while a Move draws it as it is (ADR-0237), placed from the scene
+    /// itself (never through a 3D group), and fading on its own; its end wakes the
+    /// plan, which then plans the item at rest.
     fn fading(&mut self, scene: &SceneId, from: &SceneId, item_id: &ItemId) -> Option<ShowFade> {
-        let (show, fades) = self.fades?;
-        if scene != show || from != show {
-            return None;
-        }
-        let fade = *fades.get(item_id)?;
+        let show = self.fades;
+        let appearing = self.appearing.as_ref().map(|(scene, fades)| (scene, fades));
+        let fade = [show, appearing]
+            .into_iter()
+            .flatten()
+            .find(|(owner, _)| scene == *owner && from == *owner)
+            .and_then(|(_, fades)| fades.get(item_id).copied())?;
         self.wake = earliest(self.wake, end_time(fade.start, fade.end_ms()));
         Some(fade)
     }
@@ -2992,10 +3005,19 @@ impl<'a> Planner<'a, '_> {
     /// within a 3D scene's family whose scene has a video chain (ADR-0226): a Move
     /// within the family ([`Self::moves_within_3d_family`]) whose every track is an item
     /// staying where it is (or, for one that can't glide, going and coming back the
-    /// same), with no effect to blend, and whose camera rides with no 3D
-    /// group. Such a Move is drawn as the scene itself, chain and all, through a
-    /// gliding camera, rather than track by track with its chain paused (ADR-0180).
-    fn moves_only_the_camera(&self, running: &Running, planned: &Planned, out: &Shot) -> bool {
+    /// same), or one of the scene's own items appearing or going on its own where the
+    /// shown scene places it (ADR-0237), with no effect to blend, and whose camera rides
+    /// with no 3D group. Such a Move is drawn as the scene itself, chain and all,
+    /// through a gliding camera, rather than track by track with its chain paused
+    /// (ADR-0180). `Some` gives the items that appear or go, each with its fade, which
+    /// its layer in the scene's pass samples as its track would; `None` when the Move
+    /// is drawn track by track.
+    fn moves_only_the_camera(
+        &self,
+        running: &Running,
+        planned: &Planned,
+        out: &Shot,
+    ) -> Option<ShowFades> {
         // An item that can't glide (one whose effects cover the canvas, such as a
         // model's layer, ADR-0106) goes and comes back: still when it comes back as it
         // went, with the same effects.
@@ -3006,6 +3028,12 @@ impl<'a> Planner<'a, '_> {
                     && other.effects == visual.effects
                     && other.inside.is_none()
             })
+        }
+        // Whether another track of `tracks` draws the item `visual` draws.
+        fn partnered(tracks: &[(Visual, Track)], visual: &Visual, track: &Track) -> bool {
+            tracks
+                .iter()
+                .any(|(other, theirs)| other.item_id == visual.item_id && theirs != track)
         }
         fn still(tracks: &[(Visual, Track)]) -> bool {
             tracks.iter().all(|(visual, track)| match track {
@@ -3032,14 +3060,52 @@ impl<'a> Planner<'a, '_> {
             })
         }
         if !self.moves_within_3d_family(running) || self.scene_chain(&running.to).is_none() {
-            return false;
+            return None;
         }
-        let Some(camera) = self.camera(&running.to) else {
-            return false;
-        };
+        let camera = self.camera(&running.to)?;
         let mut blends = Vec::new();
         effect_blends(&planned.tracks, &out.chains, &mut blends);
-        camera.anchor.is_none() && blends.is_empty() && still(&planned.tracks)
+        if camera.anchor.is_some() || !blends.is_empty() {
+            return None;
+        }
+        // An item of the scene itself that appears or goes on its own, where the shown
+        // scene places it, fades in the scene's pass (ADR-0237); every other track
+        // stays still.
+        let shown: BTreeSet<ItemId> = self
+            .items_of(&running.to)
+            .iter()
+            .map(|item| item.as_ref().id().clone())
+            .collect();
+        let mut fades = ShowFades::new();
+        let mut rest = Vec::with_capacity(planned.tracks.len());
+        for (visual, track) in &planned.tracks {
+            let alone = visual.inside.is_none()
+                && visual.groups.is_none()
+                && shown.contains(&visual.item_id)
+                && !partnered(&planned.tracks, visual, track);
+            let fade = match track {
+                Track::Appear { effect, timing, .. } if alone => Some((true, *effect, *timing)),
+                Track::Disappear { effect, timing, .. } if alone => {
+                    Some((false, *effect, *timing))
+                }
+                _ => None,
+            };
+            match fade {
+                Some((visible, effect, timing)) => {
+                    fades.insert(
+                        visual.item_id.clone(),
+                        ShowFade {
+                            start: running.start,
+                            visible,
+                            effect,
+                            timing,
+                        },
+                    );
+                }
+                None => rest.push((visual.clone(), track.clone())),
+            }
+        }
+        still(&rest).then_some(fades)
     }
 
     /// Whether `running` is a Move within the family of a 3D scene (ADR-0180): from one

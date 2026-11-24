@@ -482,7 +482,9 @@ fn a_camera_only_move_in_a_3d_family_keeps_its_chain() {
 
 /// An item with an effect shown with a Fade on a keyframe scene of a 3D scene is drawn
 /// through the keyframe's camera while it appears: the red card, 400 px square, fades in
-/// at its place, and the wall around it stays as it is.
+/// at its place, and the wall around it stays as it is. The scene has a chain, which
+/// keeps running while the card appears (ADR-0237): the keyframe is drawn as it is, the
+/// card fading in its pass, rather than track by track with the chain paused.
 #[test]
 fn an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera() {
     use jstream_media::Timebase;
@@ -582,12 +584,18 @@ fn an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera() {
     });
     clock.advance(200_000);
     engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
     assert!(
-        engine.render_hub().load().shot().transitioning(),
-        "it appears"
+        !shot.transitioning(),
+        "no tracks: the keyframe is drawn as it is"
     );
-    // The scene has a chain, so it crossfades as one picture (ADR-0065 §6): the wall
-    // is still there, seen through k's camera, not the picture seen through it again.
+    assert!(
+        shot.scene_chain(&SceneId::new("k")).is_some(),
+        "with its chain, while the card appears"
+    );
+    // The wall is still there, seen through k's camera, and the card fades in at its
+    // place in the keyframe's pass.
     let [red, green, blue, _] = pixel(&control, 200, 200).expect("an adapter");
     assert!(
         red == 0 && green == 0 && blue > 150,
@@ -602,6 +610,28 @@ fn an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera() {
     engine.replan();
     assert_eq!(pixel(&control, 200, 200), Some(BLUE), "the wall, after");
     assert_eq!(pixel(&control, 960, 540), Some(RED), "the card, after");
+    // Hidden, it fades out the same way, the chain still running.
+    call(Action::ItemHide {
+        item_id: ItemId::new("card"),
+        scene_id: None,
+    });
+    clock.advance(200_000);
+    engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
+    assert!(!shot.transitioning(), "no tracks while it goes");
+    assert!(
+        shot.scene_chain(&SceneId::new("k")).is_some(),
+        "with its chain, while the card goes"
+    );
+    let [red, green, blue, _] = pixel(&control, 960, 540).expect("an adapter");
+    assert!(
+        red > 64 && green == 0 && blue > 64,
+        "the card half gone over the wall: {red} {green} {blue}"
+    );
+    clock.advance(400_000);
+    engine.replan();
+    assert_eq!(pixel(&control, 960, 540), Some(BLUE), "the wall, once it has gone");
 }
 
 /// An effect's setting changed after its first frame reaches the card in a 3D scene:
