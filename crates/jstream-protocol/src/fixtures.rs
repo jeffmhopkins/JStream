@@ -1707,6 +1707,58 @@ fn controller_bindings() -> Vec<Binding> {
                 output_id: OutputId::new("out_yt"),
             },
         ),
+        // Bitwig's scene 3 selected, any track's playing scene changing, and a Mod
+        // crossing up and down (ADR-0202).
+        Binding::new(
+            Trigger::Data {
+                input: Some("Bitwig".into()),
+                key: "grid".into(),
+                field: "selectedScene".into(),
+                on: crate::DataOn::Equals { value: "3".into() },
+            },
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+                via: Vec::new(),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "track/*".into(),
+                field: "playing".into(),
+                on: crate::DataOn::Changes,
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "params".into(),
+                field: "values.19".into(),
+                on: crate::DataOn::Rises {
+                    level: Finite32::new(0.5).expect("finite"),
+                },
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "params".into(),
+                field: "values.20".into(),
+                on: crate::DataOn::Falls {
+                    level: Finite32::new(0.25).expect("finite"),
+                },
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
     ]
 }
 
@@ -2608,6 +2660,7 @@ pub(crate) fn queries() -> Vec<Query> {
             key: "track/0".into(),
         },
         Query::MidiLastControls,
+        Query::MidiLastNotes,
         Query::ChannelValues,
     ]
 }
@@ -4004,6 +4057,15 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 controller: 7,
                 value: 96,
                 count: 41,
+            }],
+        },
+        QueryResult::MidiLastNotes {
+            notes: vec![crate::MidiNoteInfo {
+                input: "Pads".into(),
+                channel: 10,
+                note: 36,
+                velocity: 112,
+                count: 18,
             }],
         },
         QueryResult::DataList {

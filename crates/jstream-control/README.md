@@ -187,7 +187,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     bindings naming what they delete, listed in `removed_bindings`.
   - value bindings (ADR-0178): `binding.set_value`'s `ValueBinding::problem` only, since
     the mock describes no kinds' settings, and `binding.clear_value` of an unknown ID.
-    `midi.last_controls` answers the controls `MockEngine::move_control` moved.
+    `midi.last_controls` answers the controls `MockEngine::move_control` moved. `midi.last_notes`
+    answers no notes: no MIDI input plays here.
   - channels (ADR-0183): `channel.set`'s `ChannelInfo::problem`, `channel.delete` of an
     unknown ID, and `channel.values`, which answers each channel at its default (its
     `off_value` while off) with no driver, since the mock follows no controls.

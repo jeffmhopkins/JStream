@@ -1652,6 +1652,8 @@ impl State {
             Query::MidiLastControls => QueryResult::MidiLastControls {
                 controls: self.midi_controls.clone(),
             },
+            // No MIDI input plays a note here.
+            Query::MidiLastNotes => QueryResult::MidiLastNotes { notes: Vec::new() },
             // No control moves a channel here: each reads as it starts (ADR-0183).
             Query::ChannelValues => QueryResult::ChannelValues {
                 channels: self

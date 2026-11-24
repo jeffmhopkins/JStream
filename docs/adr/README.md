@@ -211,5 +211,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0198](0198-an-arrival-can-be-a-planet-with-its-sun.md) | An arrival can be several pictures pinned around one another, the last lighting the scene | accepted | agent |  |
 | [ADR-0199](0199-a-carried-pass-compares-file-modes.md) | A carried review pass also compares the PR's file modes | accepted | agent |  |
 | [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
+| [ADR-0202](0202-live-data-triggers-and-note-learn.md) | Live data triggers fire bindings, and a client learns notes | accepted | agent |  |
 | [ADR-0207](0207-mute-actions-and-held-triggers.md) | Mute actions, held triggers that release, and switches as value targets | accepted | agent |  |
 <!-- @generated end adr-index -->

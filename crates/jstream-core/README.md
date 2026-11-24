@@ -503,6 +503,17 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   note pressed and let go between ticks, a control crossing 64 both ways, a program
   change, a toggle ignoring its note-off, an input not let run bindings, and a held
   press let go by each of those four, and kept held for a port.
+- **Data triggers** (`data_triggers.rs`,
+  [ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)): `DataTriggers`
+  runs each binding whose trigger is `data`, right after the MIDI bindings on each
+  `jstream-values` tick. It reads the trigger's field from `LiveData`, which holds only
+  the state of senders whose state is used (ADR-0171 decision 1), across every key a `*`
+  segment matches. `equals`, `rises` and `falls` run the action when the condition
+  starts to hold for any key and its release when it stops; `changes` runs it on each
+  new value. A trigger's first read and a key's first arrival fire nothing, a key that
+  goes counts as not holding, a trigger fires at most once every `MIN_GAP` (50 ms), and
+  a held press is let go when its binding changes or goes. `ActionBindings` skips data
+  triggers. `midi.last_notes` answers from `MidiInputs::last_notes`.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
   each channel's inputs with the same readers and smoothing, in an order where a
@@ -4380,9 +4391,10 @@ the MIDI state and the live data's watches (atomics) under it, and sleeps withou
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
 takes the live data's lock briefly, last, to find or make its watch, as a plan does. A
 `jstream-values` tick also plays the timelines whose wait is over and those a trigger
-fired, moves the lanes, and runs the MIDI action bindings that fired, each as its call
-would, all under the same collection lock; the note and control logs it reads are
-lock-free. A
+fired, moves the lanes, and runs the MIDI action bindings and data triggers that fired,
+each as its call would, all under the same collection lock; the note and control logs it
+reads are lock-free, and a data trigger takes the live data's leaf lock briefly, last, to
+read its key's message (ADR-0202). A
 channel's level is one atomic (`ChannelCell`); the cell map's lock is a leaf, taken
 briefly to find or make a cell, by a plan, a binding or the channel driver. A channel
 action takes the collection lock, then the channel driver's state under it. The WASM plugins' registry lock

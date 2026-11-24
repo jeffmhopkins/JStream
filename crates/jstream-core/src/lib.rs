@@ -33,6 +33,7 @@ mod channels;
 mod clock;
 mod codec_downloads;
 mod collection;
+mod data_triggers;
 mod driven;
 mod drops;
 mod effect_packs;

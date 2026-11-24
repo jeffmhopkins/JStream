@@ -235,7 +235,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)), and its latest control
   change with how many it has had (`last_control`), which `MidiInputs::last_controls` lists
   per named input for learning a value binding
-  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)). Beside the note log
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)), as
+  `MidiInputs::last_notes` lists each named input's latest note-on from its note log
+  with how many note events it has pushed, for learning a note
+  ([ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)). Beside the note log
   it keeps a log of its control and program changes (`ControlEvent`, `ControlKind`), and
   both count what was pushed (`pushed`, `controls_pushed`) so a reader can ask for what
   came since a count (`notes_since`, `controls_since`), as the engine's MIDI action

@@ -390,7 +390,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.177 because a source's or bus's mute can be set by an action,
+`PROTOCOL_VERSION` is 0.178 because a binding's trigger may be `data`, one field of a
+JTunnel sender's live data that is `equals` a value, `changes`, `rises` to a level or
+`falls` below it, with `*` key segments matching any (`DataOn`), and `midi.last_notes`
+answers each MIDI input's latest note-on (`MidiNoteInfo`)
+([ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)); 0.177 because a source's or bus's mute can be set by an action,
 `source.mute` and `bus.mute`, whose `to` (`MuteTo`) mutes, unmutes, toggles, or holds it
 for push to talk or push to mute; `channel.switch` gains `hold_on` and `hold_off`; a key
 or note bound to one of those runs `Action::on_release` when it is let go; and a value
@@ -1552,6 +1556,17 @@ once the person turns on its "Use this sender's MIDI", off by default
   the same exactly when they are equal, so channel 1 and any channel are two bindings,
   and a message matching both fires both. Anything else is `invalid_argument` on
   `trigger.<field>`, with `Trigger::problem`'s reason.
+- **Data triggers** (0.178,
+  [ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)): `data {input?,
+  key, field, on}` reads what a `data` motion modifier reads, from senders whose state is
+  used. `key` is 1 to 63 bytes, where a whole `*` segment matches any one segment
+  (`track/*`); `field` is a dotted path, empty for the whole message. `on` is tagged by
+  `type`: `equals {value}` (the same text, or the number or `true`/`false` it spells, at
+  most 255 bytes), `changes`, `rises {level}` (a number at the level or above) or `falls
+  {level}` (below it). Each fires when its condition starts to hold, for any matching key,
+  and releases when it stops; `changes` fires on each new value and never releases. What
+  a field holds when the engine starts following it, or when a key first arrives, fires
+  nothing, and a trigger fires at most once every 50 ms.
 - **Releases** (0.177): a note's note-off (or note-on at velocity 0), and a control
   change falling back from 64 or above to 63 or below, run the bound action's
   `Action::on_release`, if it has one: `source.mute` and `bus.mute` with `push_to_talk`
@@ -1598,6 +1613,10 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - **`midi.last_controls`** answers `MidiControlInfo {input, channel, controller, value,
   count}` for each MIDI input that has sent a control change, for a client that learns
   one: the control whose `count` grows is the one moved.
+- **`midi.last_notes`** (0.178, ADR-0202) answers `MidiNoteInfo {input, channel, note,
+  velocity, count}` for each MIDI input whose latest notes hold a note-on, for a client
+  that learns a note: the input whose `count` (its note events, on and off) grows played
+  it.
 - A value binding's input may also be `kind` `channel` (since 0.169), and its optional
   `amount` names a channel that scales it: its value is `from + (value - from) ×
   amount`, so a channel at 0 holds it at `from` (a missing channel scales by 1).
