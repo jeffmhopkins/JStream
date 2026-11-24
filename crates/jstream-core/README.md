@@ -1819,7 +1819,8 @@ preset changed in one batch that one undo takes back.
   if the channel is still on that side. The values thread runs while any timeline has a
   trigger or a wait. `src/tests/sequences.rs` checks a lane gliding down from where its
   channel was, never rising and passing through several values, and holding its end,
-  driven by the sequence; a channel rising (from a value a tick saw) playing a timeline
+  driven by the sequence (on a fake media clock stepped 50 ms at a time, so a slow
+  runner still samples the glide's middle, #1749); a channel rising (from a value a tick saw) playing a timeline
   after its delay, listed in `waiting` meanwhile, falling
   stopping it, and a stop cancelling a delayed play; and a seek to 0 returning a lane to
   the value it started from.
