@@ -69,6 +69,13 @@ pub trait Source: Send {
         let _ = at;
     }
 
+    /// How long one play of the source lasts, for a kind with a length: a `media` file
+    /// whose container says, or once a play has reached its end (`SourceSize`'s
+    /// `duration_ms`). `None`, the default, for every other kind.
+    fn duration(&self) -> Option<MediaTime> {
+        None
+    }
+
     /// Plays the source on from `to` into its timeline at `at`, on the same clock as
     /// [`frame`](Self::frame) (`source.seek`): a `media` file goes there and plays on.
     /// The default starts it again as [`restart`](Self::restart) does, for a kind with

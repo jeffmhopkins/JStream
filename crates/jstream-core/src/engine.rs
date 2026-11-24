@@ -5008,6 +5008,9 @@ struct State {
     /// size has no entry. Beside it, the depth of a source with depth (a 3D model,
     /// ADR-0107 decision 8).
     sizes: BTreeMap<SourceId, (FrameSize, Option<u32>)>,
+    /// Each source's length in milliseconds as `source.size_changed` last announced it,
+    /// for a source with a known length (a `media` file): runtime state like `sizes`.
+    durations: BTreeMap<SourceId, u64>,
     /// The size of each capture the program stage runs, as its render thread reports
     /// it: what a `display`, `window` or `webcam` source's size comes from.
     capture_sizes: BTreeMap<CaptureKey, FrameSize>,
@@ -6460,6 +6463,7 @@ impl State {
                                 source_id: source.id().clone(),
                                 size: known.map(|(size, _)| pixel_size(size)),
                                 depth: known.and_then(|(_, depth)| depth),
+                                duration_ms: self.durations.get(source.id()).copied(),
                             }
                         })
                         .collect(),
@@ -6770,28 +6774,36 @@ impl State {
             frames,
             live,
             sizes,
+            durations,
             capture_sizes,
             subscribers,
             ..
         } = self;
         let state = graph.state();
-        let mut emit = |source_id: &SourceId, known: Option<(FrameSize, Option<u32>)>| {
+        let mut emit = |source_id: &SourceId,
+                        known: Option<(FrameSize, Option<u32>)>,
+                        duration_ms: Option<u64>| {
             subscribers.emit(
                 &Event::SourceSizeChanged {
                     source_id: source_id.clone(),
                     size: known.map(|(size, _)| pixel_size(size)),
                     depth: known.and_then(|(_, depth)| depth),
+                    duration_ms,
                 },
                 wake,
             );
         };
-        sizes.retain(|source_id, _| {
-            let kept = state.source(source_id).is_some();
-            if !kept {
-                emit(source_id, None);
-            }
-            kept
-        });
+        let gone: BTreeSet<SourceId> = sizes
+            .keys()
+            .chain(durations.keys())
+            .filter(|id| state.source(id).is_none())
+            .cloned()
+            .collect();
+        for source_id in &gone {
+            sizes.remove(source_id);
+            durations.remove(source_id);
+            emit(source_id, None, None);
+        }
         for source in state.sources() {
             let source_id = source.id();
             let now = match frames.get(source_id) {
@@ -6804,14 +6816,21 @@ impl State {
                         .map(|size| (*size, None)),
                 },
             };
-            if sizes.get(source_id) == now.as_ref() {
+            let duration_ms = live.duration_ms(source_id);
+            if sizes.get(source_id) == now.as_ref()
+                && durations.get(source_id).copied() == duration_ms
+            {
                 continue;
             }
             match now {
                 Some(size) => sizes.insert(source_id.clone(), size),
                 None => sizes.remove(source_id),
             };
-            emit(source_id, now);
+            match duration_ms {
+                Some(ms) => durations.insert(source_id.clone(), ms),
+                None => durations.remove(source_id),
+            };
+            emit(source_id, now, duration_ms);
         }
     }
 

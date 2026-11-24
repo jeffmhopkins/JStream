@@ -1489,6 +1489,7 @@ impl State {
                         source_id: source_id.clone(),
                         size: None,
                         depth: None,
+                        duration_ms: None,
                     })
                     .collect(),
             },

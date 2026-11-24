@@ -1212,6 +1212,12 @@ pub struct SourceSize {
     /// (ADR-0107 decision 8, 0.157). Omitted for every other source and while `size` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub depth: Option<u32>,
+    /// How long one play of it lasts, in milliseconds, for a `media` file whose length
+    /// is known: from its container, or once a play has reached its end (since 0.177).
+    /// A file with only audio has one and no `size`. Omitted for every other source and
+    /// while the length isn't known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
 }
 
 /// One scene in a `scene.list` result.

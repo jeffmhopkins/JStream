@@ -1014,6 +1014,15 @@ impl LiveSources {
         ))
     }
 
+    /// How long one play of `source_id`'s running instance lasts in milliseconds, for a
+    /// kind with a length ([`Source::duration`]): a `media` file's.
+    pub(crate) fn duration_ms(&self, source_id: &SourceId) -> Option<u64> {
+        let running = self.entries.get(source_id)?.running.as_ref()?;
+        let duration = running.source.duration()?;
+        let ms = duration.rescale(Timebase::MILLIS, Rounding::Nearest).ok()?;
+        u64::try_from(ms.ticks()).ok()
+    }
+
     /// The 3D model `source_id`'s running instance shows (ADR-0107), if it shows one.
     /// It reaches nothing: the source is neither shown nor heard for it.
     pub(crate) fn model(

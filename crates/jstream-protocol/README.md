@@ -385,8 +385,9 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 -->
 
 `PROTOCOL_VERSION` is 0.177 because of `source.seek`, which plays a `media` file on
-from a point into it and holds through the program showing it (a placeholder number the
-release queue sets); 0.176 because `profile.get`'s drawers report
+from a point into it and holds through the program showing it, and `SourceSize`'s and
+`source.size_changed`'s `duration_ms`, a `media` file's length (a placeholder number
+the release queue sets); 0.176 because `profile.get`'s drawers report
 `preview_skipped`, the pictures only preview streams take that the program skipped,
 which `stats.tick`'s `render_ticks` no longer counts (#1690); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
@@ -2098,7 +2099,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pixels of its `size`: a 3D model's bounds front to back, at the scale its width and
   height are reported at (the larger 512), so an editor can outline and hit it by its 3D
   bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
-  other source.
+  other source. Since 0.177 a `media` file whose length is known also reports
+  `duration_ms`, one play's length in milliseconds: from its container, or once a play
+  has reached its end. A file with only audio reports it with no `size`.
 - `activity.list {after_seq?, limit?}`: the engine's recent activity, newest first
   ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)): one
   `ActivityEntry` for each batch, undo, redo and action the audit log records (not
@@ -2454,7 +2457,9 @@ After `welcome`, the server pushes every event to every client.
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
-  `depth`, as `source.sizes` reports it, since 0.157.
+  `depth`, as `source.sizes` reports it, since 0.157; `duration_ms`, likewise, since
+  0.177: a length becoming known is a change too, so a file with only audio announces
+  its length with no `size`.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

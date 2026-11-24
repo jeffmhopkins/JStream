@@ -7584,6 +7584,15 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "duration_ms": {
+              "description": "Its length, as [`SourceSize::duration_ms`](crate::SourceSize::duration_ms)\nreports it (since 0.177): the length becoming known is a size change too.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "size": {
               "anyOf": [
                 {
@@ -16775,6 +16784,15 @@ source: crates/jstream-protocol/src/fixtures.rs
         "depth": {
           "description": "Its depth, in the same pixels as `size`, for a source with depth: a 3D model's\nbounds, front to back, at the scale its width and height are reported at\n(ADR-0107 decision 8, 0.157). Omitted for every other source and while `size` is.",
           "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long one play of it lasts, in milliseconds, for a `media` file whose length\nis known: from its container, or once a play has reached its end (since 0.177).\nA file with only audio has one and no `size`. Omitted for every other source and\nwhile the length isn't known.",
+          "format": "uint64",
           "minimum": 0,
           "type": [
             "integer",

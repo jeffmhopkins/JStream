@@ -1194,6 +1194,20 @@ fn a_seek_holds_through_the_switch_that_shows_the_file() {
     )
     .expect("created");
     assert!(engine.settle_sources(), "the file is open");
+    engine.replan();
+    // Its length, as the container says: 10 frames of 100 ms.
+    let sizes = super::query(&control, jstream_protocol::Query::SourceSizes).expect("the sizes");
+    let jstream_protocol::QueryResult::SourceSizes { sources } = sizes else {
+        panic!("not sizes: {sizes:?}");
+    };
+    assert_eq!(
+        sources
+            .iter()
+            .find(|s| s.source_id.as_str() == "video")
+            .and_then(|s| s.duration_ms),
+        Some(1_000),
+        "{sources:?}"
+    );
     let switch = |scene| {
         block_on(control.call(super::switch_call(scene))).expect("switched");
     };
@@ -1840,6 +1854,7 @@ fn an_asset_install_announces_the_sizes_its_plan_changed() {
                 height: 2,
             }),
             depth: None,
+            duration_ms: None,
         }]
     );
     let _ = fs::remove_dir_all(dir);

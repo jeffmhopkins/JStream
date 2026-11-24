@@ -232,6 +232,23 @@ fn a_seek_plays_it_on_from_that_point() {
     assert_eq!(shown(&mut source, 240), 3);
 }
 
+/// A file reports its container's length; no file has none.
+#[test]
+fn a_file_reports_its_length() {
+    let (dir, fake) = setup("length", clip());
+    let source = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), false, 1.0, true),
+    )
+    .expect("a source");
+    assert_eq!(
+        source.duration(),
+        Some(MediaTime::new(400_000, Timebase::MICROS))
+    );
+    let empty = create(&ctx(&dir, &fake), &settings(None, false, 1.0, true)).expect("a source");
+    assert_eq!(empty.duration(), None);
+}
+
 /// Past the end, a looping file lands where that many plays reach; one that doesn't
 /// loop holds its last frame.
 #[test]

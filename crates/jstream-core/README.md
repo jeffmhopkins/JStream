@@ -1278,8 +1278,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md): no `rev`
   and no undo step; they move the family's live aim from now, checked as the mock checks
   them),
-  `timeline.play`, `timeline.seek`, `timeline.stop` and `source.restart` (see
-  [Timelines](#timelines)), `scene.set_keyframe` (see
+  `timeline.play`, `timeline.seek`, `timeline.stop`, `source.restart` and
+  `source.seek` (see [Timelines](#timelines)), `scene.set_keyframe` (see
   [Keyframe tracks](#keyframe-tracks)),
   and `item.show`, `item.hide` and `item.toggle`
   ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
@@ -1537,7 +1537,10 @@ reads the collection): the Preview scene, then the scenes whose `keep_warm` opti
 on, in display order, then the scenes a hotkey's or a trigger binding's `scene.switch`
 names, then the scenes most recently on program, never the program scene, each once,
 at most the warm budget in all. The Preview scene is warm even past the budget, so a budget of 0 keeps
-only it. A deleted scene is forgotten. The budget is `studio.set_warm`'s (0 to
+only it. Right after it comes the scene a show runs to next, which the show runner names
+with `State::set_upcoming` (`Studio::upcoming`): it is warm past the budget and the GPU
+limit too, so a media file on it is held at its first frame and the cut to it starts
+nothing; a deleted scene stops being upcoming. A deleted scene is forgotten. The budget is `studio.set_warm`'s (0 to
 `MAX_WARM_SCENES`, `DEFAULT_WARM_SCENES` until set, `invalid_argument` past it), an
 application setting: it changes no `rev` and emits nothing, a newly opened collection's
 studio keeps it (`Studio::fresh`), and `studio.get` reports it. The engine answers it
@@ -1757,6 +1760,13 @@ preset changed in one batch that one undo takes back.
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
   an effect pack's stand-in starts its program again. A source with no running instance
   has nothing to restart.
+- **`source.seek`** (since 0.177; not a cue) calls `LiveSources::seek` at `action_now`,
+  which plays the running instance on from the point (`Source::seek`: a `media` file
+  restarts its timeline there; a kind with nothing to seek restarts) and marks it
+  sought. A sought source isn't started again by the next plan that shows it
+  (`Source::show`), nor cued at its start meanwhile, so a switch to its scene and the
+  seek may come in either order. Its length, when it has one (`Source::duration`), is
+  reported beside its size (`source.sizes`' `duration_ms`, `Engine::sync_sizes`).
 
 <a id="privacy"></a>
 ## No privacy screen
