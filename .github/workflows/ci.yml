@@ -10,9 +10,10 @@ name: ci
 
 # Linux only. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
 # after-review.yml, which runs on main and, on a PR, once review passes (ADR-0054).
-# A PR into a `wave/*` branch runs the quick jobs (fmt, Linux clippy, docs, lint-deps,
-# gate-test, pr-title) and the Linux tests (ADR-0070); it skips doc, deny and wasm, which
-# the wave's own PR into main runs with everything else (ADR-0055).
+# A PR into any branch but main (a `wave/*` branch, a train branch, or the PR below it in a
+# stack) runs the quick jobs (fmt, Linux clippy, docs, lint-deps, gate-test, pr-title) and
+# the Linux tests (ADR-0070); it skips doc, deny, wasm and the end-to-end and desktop jobs,
+# which the branch's own PR into main runs with everything else (ADR-0055, ADR-0231).
 on:
   pull_request:
     # ready_for_review: draft PRs skip every job below, so CI runs when a draft is marked ready.
@@ -104,7 +105,7 @@ jobs:
   # pin's SHA-256 values (ADR-0061), then streams on the copy the harness downloads. Not
   # required: it reports, and a failure is looked into, but it doesn't block a merge.
   e2e-stream:
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 20   # the harness's own waits are bounded, but not every call in it
     steps:
@@ -125,7 +126,7 @@ jobs:
   # checking their colours. The module is built by DKMS against the runner's kernel, so
   # the job is not required: it reports, and a failure is looked into.
   vcam-linux:
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -157,7 +158,7 @@ jobs:
   # The laid-out folder is kept as an artifact. Not required: it reports, and a failure is
   # looked into.
   browser-linux:
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -192,11 +193,11 @@ jobs:
   # lints and tests the app with the feature, builds the UI, then opens the window on Xvfb
   # and checks that WebKitGTK loads the UI, connects it to the in-process engine and that
   # the X11 global hotkeys start (`tests/webkitgtk.rs`). The screenshot is kept as an
-  # artifact. Runs on wave PRs too, as it is the only check of the Linux window. Not
-  # required: it reports, and a failure is looked into. The trunk and wasm-bindgen pins
-  # are the `wasm` job's: change them together.
+  # artifact. A PR into a branch other than main skips it; that branch's PR into main runs
+  # it (ADR-0231). Not required: it reports, and a failure is looked into. The trunk and
+  # wasm-bindgen pins are the `wasm` job's: change them together.
   desktop-linux:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -252,7 +253,7 @@ jobs:
           retention-days: 14
 
   doc:
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -D warnings
@@ -263,7 +264,7 @@ jobs:
       - run: cargo doc --workspace --no-deps --locked
 
   deny:
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -278,7 +279,7 @@ jobs:
   # `ui-e2e` and `dist-ui` in after-review.yml pin the same versions: change them together.
   # The debug bundle's wasm must fit under the cap jstream-server serves files up to (#678).
   wasm:
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     env:
       TRUNK_VERSION: 0.21.14

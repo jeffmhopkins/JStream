@@ -213,4 +213,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0200](0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md) | The size 3D models are drawn at is a rendering switch | accepted | agent |  |
 | [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
 | [ADR-0211](0211-a-filters-pixel-settings-count-in-its-inputs-extent.md) | A built-in filter's pixel settings count in its input's extent | accepted | agent |  |
+| [ADR-0231](0231-prs-into-any-branch-but-main-run-the-light-ci.md) | PRs into any branch but main run the light CI | accepted | agent |  |
 <!-- @generated end adr-index -->
