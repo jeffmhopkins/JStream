@@ -2878,6 +2878,22 @@ button.map-key:hover { background: var(--hover); }
 .map-heard { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 button.map-key.on { border-color: var(--accent); background: var(--selected); color: var(--text); }
 .map-body .section-head { padding: 0; }
+.map-dialog .modal-footer button { flex: none; white-space: nowrap; }
+.map-foot-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.map-audio { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.map-audio.idle { display: none; }
+.map-audio-start { align-self: flex-start; }
+/* A mapping's row: its name opens it, Bypass keeps it but stops it counting. */
+button.map-row-name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; border: none; background: none; padding: 0;
+  color: var(--text); text-align: left; white-space: nowrap; text-overflow: ellipsis;
+}
+button.map-row-name:hover { color: var(--link); }
+button.map-bypass { height: 20px; padding: 0 8px; border: 1px solid var(--border); border-radius: 10px; background: none; color: var(--muted); font-size: 11px; }
+button.map-bypass:hover { color: var(--text); }
+button.map-bypass.on { border-color: var(--warn, var(--accent)); color: var(--text); background: var(--hover); }
+.map-row.bypassed .map-row-name, .map-row.bypassed .hint { opacity: 0.5; text-decoration: line-through; }
+button.learn.bound.bypassed { color: var(--dim); text-decoration: line-through; }
 
 /* Mapping mode (UI-FEATURES VC-04): a bar naming the armed source, every mappable
    setting marked as a drag target, and a mapping's amount in the accent colour. */

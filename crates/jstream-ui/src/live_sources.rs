@@ -156,6 +156,10 @@ pub fn reader_name(collection: Option<&Collection>, kind: &MotionKind) -> String
         MotionKind::Channel { channel_id, .. } => {
             collection.map_or_else(|| channel_id.clone(), |c| c.channel_name(channel_id))
         }
+        MotionKind::Audio { .. } => collection.map_or_else(
+            || "Audio".into(),
+            |c| crate::panels::audio_read::audio_name(c, kind),
+        ),
         _ => "A motion".into(),
     }
 }

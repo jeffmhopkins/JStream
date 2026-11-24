@@ -112,10 +112,14 @@ impl ItemMapper {
                     offset.0,
                     offset.1,
                 );
+                // A mapping the source has already keeps its mode; a new one is an offset.
+                let blend = existing
+                    .as_ref()
+                    .map_or(jstream_control::protocol::MappingMode::Add, |m| m.mode);
                 let amount = existing.and_then(|m| m.amount);
                 let edits = studio.collection.with_untracked(|c| {
                     c.as_ref()
-                        .map(|c| target.set(c, input, amount, None))
+                        .map(|c| target.set(c, input, amount, blend, None))
                         .unwrap_or_default()
                 });
                 if let (false, Some(s)) = (edits.is_empty(), session.0.get_value()) {
@@ -208,7 +212,12 @@ impl ItemMapper {
                                 let offset = target
                                     .amount_label(&m.input, (0.0, 0.0))
                                     .unwrap_or_default();
-                                (m.key, source, offset)
+                                let offset = if m.overrides() {
+                                    format!("override {offset}")
+                                } else {
+                                    offset
+                                };
+                                (m.key, source, offset, m.enabled)
                             })
                             .collect::<Vec<_>>()
                     })
@@ -216,8 +225,22 @@ impl ItemMapper {
             });
             let rows = mappings
                 .into_iter()
-                .map(|(key, source, offset)| {
+                .map(|(key, source, offset, enabled)| {
                     let target = target.clone();
+                    let bypass = {
+                        let (target, key) = (target.clone(), key.clone());
+                        move |_| {
+                            close();
+                            let edits = studio.collection.with_untracked(|c| {
+                                c.as_ref()
+                                    .map(|c| target.set_enabled(c, &key, !enabled))
+                                    .unwrap_or_default()
+                            });
+                            if let (false, Some(s)) = (edits.is_empty(), session.0.get_value()) {
+                                studio.apply(&s, edits);
+                            }
+                        }
+                    };
                     let remove = move |_| {
                         close();
                         let edits = studio.collection.with_untracked(|c| {
@@ -230,10 +253,15 @@ impl ItemMapper {
                         }
                     };
                     view! {
-                        <button type="button" class="menuitem" role="menuitem" on:click=remove>
+                        <div class="menu-sep"></div>
+                        <div class="ctx-head">{source} " · " {offset}</div>
+                        <button type="button" class="menuitem" role="menuitemcheckbox" aria-checked=(!enabled).to_string() on:click=bypass>
+                            <span class="ctx-check">{(!enabled).then_some("✓")}</span>
+                            <span class="ctx-label">"Bypass"</span>
+                        </button>
+                        <button type="button" class="menuitem danger" role="menuitem" on:click=remove>
                             <span class="ctx-check"></span>
-                            <span class="ctx-label">"Remove " {source}</span>
-                            <span class="hint">{offset}</span>
+                            <span class="ctx-label">"Remove"</span>
                         </button>
                     }
                 })

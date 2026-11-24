@@ -259,6 +259,14 @@ fn in_bar(event: &web_sys::Event) -> bool {
     target_of(event).is_some_and(|el| matches!(el.closest(".mapping-bar"), Ok(Some(_))))
 }
 
+/// Whether a menu or a dialog is open in front of the page.
+fn something_in_front() -> bool {
+    matches!(
+        document().query_selector(".modal, .context-menu, .ctx-catcher"),
+        Ok(Some(_))
+    )
+}
+
 /// The bar that says which source is armed, shown while one is, and the drags it turns
 /// into mappings. Mounted once, in the shell.
 #[component]
@@ -275,16 +283,35 @@ pub fn MappingBar() -> impl IntoView {
             }
         });
     };
+    // Ends the drag under way after `gone` pixels of travel: a mapping, or nothing for
+    // what was only a click.
+    let finish = move |gone: f64| {
+        last.set_value(None);
+        if gone < CLICK_SLOP {
+            mode.drag.set(None);
+        } else {
+            mode.drag.update(|d| {
+                if let Some(d) = d {
+                    d.done = true;
+                }
+            });
+        }
+    };
     let listen = move || {
         let down = Captured::add("pointerdown", move |e: web_sys::PointerEvent| {
             if e.button() != 0 || in_bar(&e) {
                 return;
             }
-            let Some(setting) = target_of(&e).and_then(setting_at) else {
+            let Some(pressed) = target_of(&e) else {
+                return;
+            };
+            let Some(setting) = setting_at(pressed.clone()) else {
                 return;
             };
             e.prevent_default();
             e.stop_propagation();
+            // The drag keeps the pointer, so its release is heard outside the window.
+            _ = pressed.set_pointer_capture(e.pointer_id());
             last.set_value(Some((f64::from(e.client_y()), 0.0)));
             mode.drag.set(Some(Drag {
                 setting,
@@ -296,6 +323,11 @@ pub fn MappingBar() -> impl IntoView {
             let Some((y, gone)) = last.get_value() else {
                 return;
             };
+            // The button came up where it wasn't heard: the drag ends where it got to.
+            if e.buttons() & 1 == 0 {
+                finish(gone);
+                return;
+            }
             let now = f64::from(e.client_y());
             let dy = now - y;
             last.set_value(Some((now, gone + dy.abs())));
@@ -306,18 +338,16 @@ pub fn MappingBar() -> impl IntoView {
             });
         });
         let up = Captured::add("pointerup", move |_: web_sys::PointerEvent| {
-            let Some((_, gone)) = last.get_value() else {
-                return;
-            };
-            last.set_value(None);
-            if gone < CLICK_SLOP {
+            if let Some((_, gone)) = last.get_value() {
+                finish(gone);
+            }
+        });
+        // The browser took the pointer away (a touch that became a scroll, a lost
+        // capture): nothing is mapped.
+        let cancel = Captured::add("pointercancel", move |_: web_sys::PointerEvent| {
+            if last.get_value().is_some() {
+                last.set_value(None);
                 mode.drag.set(None);
-            } else {
-                mode.drag.update(|d| {
-                    if let Some(d) = d {
-                        d.done = true;
-                    }
-                });
             }
         });
         // A press on a setting never reaches it while a source is armed, so neither
@@ -337,9 +367,14 @@ pub fn MappingBar() -> impl IntoView {
             });
             let step = match e.key().as_str() {
                 "Escape" => {
+                    let dragging = last.get_value().is_some();
+                    // A menu or a dialog in front takes its own Escape first.
+                    if !dragging && something_in_front() {
+                        return;
+                    }
                     e.prevent_default();
                     e.stop_propagation();
-                    if last.get_value().is_some() {
+                    if dragging {
                         last.set_value(None);
                         mode.drag.set(None);
                     } else {
@@ -363,7 +398,7 @@ pub fn MappingBar() -> impl IntoView {
                 mode.arm(reader);
             }
         });
-        listeners.set_value(vec![down, moving, up, click, keys]);
+        listeners.set_value(vec![down, moving, up, cancel, click, keys]);
     };
     let is_armed = Memo::new(move |_| mode.armed.with(Option::is_some));
     Effect::new(move |_| {

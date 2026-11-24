@@ -938,17 +938,22 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   click on it, or a right-click on the setting's row, opens the control menu. The Shell and
   every `Modal` hand a right-click to the row's own button (`row_context`: the nearest
   ancestor with exactly one `button.learn` child, found by its `data-learn`, through
-  `ControlMenuAt`); a free-text field keeps the browser's menu (`keeps_own_menu`).
+  `ControlMenuAt`); a free-text field keeps the browser's menu (`keeps_own_menu`), a
+  `NumberField` doesn't though its input is typed as text, and a right-click something
+  nearer has already answered (`default_prevented`) is left alone.
   The menu: for a learned MIDI control or Mod, a Smoothing field first, which sends the
   binding again with its `smoothing_ms`; Map control…, which opens the dialog below;
   Learn, which opens `LearnPopover` in place; for a mapped setting "Mapped to" with what
-  drives it, Edit mapping…, Open channel when it follows one, and Remove mapping; and Add
+  drives it (the override, or else the first offset, and how many more), Edit mapping…,
+  Open channel when it follows one, Bypass (every binding on the target sent again with
+  `enabled` switched) and Remove mapping (every one cleared); and Add
   to sequence ›, which lists the selected scene's sequences (the open one first) and New
   sequence: it makes the channel if the setting follows none, adds its lane holding where
   the setting is (`sequence::with_lane`), all in one batch, and opens the sequence. A
   sequence that already has the lane gets no `timeline.set`; it only opens. A mapping is
   one `binding.set_value` over the setting's whole range (a fader's over -60 to +6 dB),
-  50 ms smoothed, as `learn_<hash of the target>`, so mapping again replaces it. A bound
+  50 ms smoothed, as `learn_<hash of the target>`, the setting's one override, so
+  learning again replaces it. A bound
   button shows its control (`CC 7`, `Mod 20`), and one that follows a channel shows the
   channel's name as a chip. Enter or Space opens the menu under the button (a click with
   no pointer, `detail` 0) with its first item focused; Escape or Tab closes it and gives
@@ -964,13 +969,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   for picking a field, texts cut to 40 characters with control characters removed.
 - **Map control** (`panels/map_control.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
   `MapControlHost`, mounted once in the Shell, shows the dialog for the
-  `MapControlRequest` in `MapControlDialog` (the setting's `ValueTarget`, range, label
+  `MapControlRequest` in `MapControlDialog` (the setting's `MapTarget`, range, label
   and value). Tabs pick the source: Hotkey, JTunnel (each sender's Mod grid), MIDI (each
-  input's latest control, or one named by hand), Channel (`ChannelSearch`) and Other data
-  (a sender's keys, then a key's fields). The lists' structure is memoized apart from
+  input's latest control, or one named by hand), Channel (`ChannelSearch`), Audio
+  (`AudioReads` over the draft once "Follow the program mix" made it an `audio` reader,
+  [ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)) and Other
+  data (a sender's keys, then a key's fields). The draft is a reader and a mode, Offset
+  or Override ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)); changing the
+  mode gives the reader that mode's first ends and the fields its limits
+  (`MapTarget::shape`). "Mapped to" lists `MapTarget::mappings`: a row's name loads it
+  into the draft, Bypass sends `set_enabled` and × `clear`, each at once. The lists' structure is memoized apart from
   their live values, so a row doesn't redraw under the pointer. `picked` gives a new
-  source the From, To, Smoothing and Curve already set. Nothing is sent until Use: one
-  `binding.set_value`, or for a hotkey `key_edits` in one batch (a channel whose default
+  source the From, To, Smoothing and Curve already set. Nothing is sent until Use:
+  `MapTarget::set` with the draft's mode, or for a hotkey `key_edits` in one batch (a channel whose default
   is 1 with the Fade as its rise and fall, the binding following it from Off to On, and
   the key bound to `channel.switch` `toggle`; a key that already switches a channel just
   gets the setting following that channel). `LearnPopover` takes the one source heard
@@ -985,19 +996,30 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   control, `dragged` turns pointer travel into the amount (200 px the whole range, a
   tenth as fast with Shift), letting go after less than 3 px is a click that maps
   nothing, the click that follows a press is swallowed, Escape cancels the drag or
-  disarms, and `[` and `]` step the armed Mod (`stepped_in`: a Mod named in the Mappings panel is armed as its channel, and stepping goes on from it). The body carries
+  disarms (a menu or a dialog in front gets its own Escape first, `something_in_front`),
+  and `[` and `]` step the armed Mod (`stepped_in`: a Mod named in the Mappings panel is armed as its channel, and stepping goes on from it). The press captures the pointer, so the
+  release is heard outside the window; a move with no button down ends the drag where it
+  got to, and `pointercancel` drops it. The body carries
   `mapping-mode` for the styles. The setting's control button (`learn.rs`) watches
-  `drag` for its own ID: it shows `amount_label` of `ends_after` while the drag runs, and
-  on `done` writes one `binding.set_value` reading the armed source from where the
-  setting is to the dragged amount, kept in range; a setting the source maps already
-  keeps its start, smoothing, curve and amount channel.
+  `drag` for its own ID: it shows `amount_label` of the ends while the drag runs, and on
+  `done` writes through `MapTarget::set`. A new mapping is an offset from 0 to the
+  dragged share of the range (`reach_after`); a setting the source maps already keeps
+  its mode, start, smoothing, curve and amount channel, and an override stays in range
+  (`ends_after`).
 - **Mapping targets** (`panels/map_target.rs`, `panels/item_map.rs`). `MapTarget` is what
-  the Map control dialog and mapping mode write through: `Value`, a setting one value
-  binding takes over (`learn_<hash>`), or `Item`, a placement property of an item as a
-  scene shows it, which reader motion modifiers add to. `mappings` lists what drives it,
-  `set` writes a mapping (a setting's binding is replaced; a property's modifier from the
-  same source is changed, else one is added as `map_<n>` after the item's others, in one
-  `item.set_motion`) and `clear` removes one. `ItemUnit` gives a property's offset its
+  the Map control dialog and mapping mode write through: `Value`, a setting value
+  bindings drive, or `Item`, a placement property of an item as a scene shows it, which
+  reader motion modifiers (`midi`, `data`, `channel`, `audio`) drive. Either takes one
+  mapping per source, each with a mode (`add`, an offset, or `replace`, an override) and
+  `enabled`. `mappings` lists what drives it. `set` writes a mapping in a mode: the one
+  from the same source is rewritten and keeps `enabled`, else one is added; a target
+  keeps one override, so a new one removes the other. A setting's override is the
+  binding `learn_<hash>` and its offsets are `map_<hash>_<n>`, so a mapping whose mode
+  changes is cleared under one name and set under the other in the same batch; a
+  property's are modifiers `map_<n>` after the item's others, in one `item.set_motion`.
+  `set_enabled` bypasses one or brings it back, `clear` removes one, `first_mode` is the
+  mode a mapping made without a drag gets (a setting Override, a property Offset) and
+  `shape` the first ends and limits of either mode. `ItemUnit` gives a property's offset its
   unit, label and drag span (1000 px, 360°, or 100 % for the properties the engine
   multiplies by one plus the value), and `offset_after` the ends a drag leaves. A
   `NumberField` takes a `MapMark` (`map`): its root carries `data-map`, which
