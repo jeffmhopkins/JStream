@@ -653,7 +653,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
   readout, sends live values, and commits one `scene.set_camera` with a moved camera as
-  one revision, which one undo puts back. With a window capture in the scene, the
+  one revision, which one undo puts back. In camera mode the live aim's buttons send no
+  `scene.drive_camera` while the pointer only passes over them; a press on Pan right
+  sends pan 12 once, nothing more while the held pointer wanders off the button, and pan
+  0 once on release; Space on a focused Tilt up drives tilt once whatever its repeats and
+  stops on keyup, and Shift+Enter on Zoom in drives zoom 2 and stops once when the focus
+  moves away. With a window capture in the scene, the
   camera and Depth of field on, Follow pointer offering Add Follow pointer… (a filter on
   the capture, ADR-0120), and a camera-motion row added, the settings column's
   `scrollWidth` stays within its `clientWidth` at the dialog's width and when a
