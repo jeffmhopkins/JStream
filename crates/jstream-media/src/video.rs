@@ -93,18 +93,12 @@ impl Plane {
     }
 
     /// The plane's buffer, giving up the plane: for a producer that fills it again for
-    /// its next frame instead of allocating one. A plane whose bytes are still shared,
-    /// or a range of a longer buffer, gives a copy of its own bytes.
-    pub fn into_data(self) -> Vec<u8> {
+    /// its next frame instead of allocating one. `None` for a plane whose bytes are
+    /// still shared, or a range of a longer buffer: its bytes are not copied to make a
+    /// buffer the producer is about to overwrite.
+    pub fn into_data(self) -> Option<Vec<u8>> {
         let whole = self.range == (0..self.data.len());
-        match Arc::try_unwrap(self.data) {
-            Ok(data) if whole => data,
-            Ok(data) => data.get(self.range).map(<[u8]>::to_vec).unwrap_or_default(),
-            Err(shared) => shared
-                .get(self.range)
-                .map(<[u8]>::to_vec)
-                .unwrap_or_default(),
-        }
+        Arc::try_unwrap(self.data).ok().filter(|_| whole)
     }
 }
 

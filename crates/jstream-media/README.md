@@ -39,7 +39,8 @@ Contents:
   `Plane` owns its bytes or is a range of a buffer shared with other planes and frames
   (`Plane::shared`), so one frame can go to several readers without a copy; writing a
   shared plane copies it first. A frame gives up its planes (`into_planes`) and a plane
-  its buffer (`Plane::into_data`), for a producer that fills them again.
+  its buffer (`Plane::into_data`), for a producer that fills them again; a plane still
+  shared gives none, so nothing is copied for it.
 - **Audio:** `AudioFormat` (non-zero sample rate, `ChannelLayout`, `f32` interleaved or
   planar `SampleFormat`) and `AudioBuffer`, whose sample count is always whole frames.
 - **3D models** (`model`, [ADR-0107](../../docs/adr/0107-3d-models.md)): a checked
