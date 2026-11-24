@@ -531,6 +531,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   animation clock as their actions' calls ([Timelines](#timelines)). `source.restart`
   restarts a live source at the action's time (`LiveSources::restart`), and
   `source.seek` plays it on from a point (`LiveSources::seek`); neither is a cue.
+- **Shows** (`engine/shows.rs`, ADR-0210): the show running, studio state beside the
+  program scene, whose program clips, keyframe markers, sequence clips and cues the
+  live ticker runs on the animation clock as those actions' calls ([Shows](#shows)).
 - **Keyframe tracks** (`engine.rs`,
   [ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
   [ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)): the keyframe each
@@ -778,7 +781,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
-  `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
+  `src/tests/timelines.rs`, `src/tests/shows.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
   `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`,
   `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `src/tests/show_scene.rs`,
   `tests/mcp.rs`, `tests/scenarios.rs`):
@@ -1139,8 +1142,9 @@ depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md",
 
 ### Engine and sessions
 
-`Engine` is a handle around one `Arc` of shared state: the collection mutex, and
-the queue to the snapshot thread. The drop ledger is a second mutex, outside that
+`Engine` is a handle around one `Arc` of shared state: the collection mutex, the
+condvar the live ticker waits on (`Shared::ticker`, see *Timelines*), and the queue to
+the snapshot thread. The drop ledger is a second mutex, outside that
 `Arc`. Cloning it shares the engine, so a
 host can give one clone to the server's connector and another to an MCP session.
 `Engine::connect()` opens an `InProcessControl`, which holds a clone too: the engine
@@ -1249,7 +1253,7 @@ Batches and the collection queries run under the collection lock, so those calls
 are serialized across sessions and their events are queued in the order the changes
 happened. Placeholder output actions do too: they only step the state machine.
 `clock.hold`, `clock.step` and `clock.release` (ADR-0172) do too: they hold or step the
-media clock, wake the sources' thread and run the timelines' tick, so a cue a step
+media clock, wake the sources' thread and run the running show's tick and then the timelines', so a cue a step
 passed fires before it returns; an `output.start` while the clock is held or still
 ahead of real time, or a hold while an output runs, is `action_failed`.
 `video.snapshot` reads `rev`, the published render snapshot, the live values and the
@@ -1381,10 +1385,11 @@ audit entry and errors.
   and may call back into the engine, while its install or enable waits (see *WASM
   plugins*).
 - A call, query or action this engine does not implement answers `internal`, as the
-  mock does: so far the `show.*` run actions and `overlay.*`
-  ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)), until the show
-  runner lands, and `studio.get` omits `show` and `overlays`. `show.set` and
-  `show.delete` are edits, applied by the graph like any other.
+  mock does: so far `overlay.*`
+  ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)), until overlay
+  tracks land, and `studio.get`'s `overlays` stays empty. The `show.*` run actions are
+  the show runner's ([Shows](#shows)); the mock still answers them `internal`.
+  `show.set` and `show.delete` are edits, applied by the graph like any other.
 
 The engine's answers are the mock's for the differential script: `tests.rs` runs one
 script of calls against both and compares results, error codes and fields, and events.
@@ -1765,8 +1770,9 @@ preset changed in one batch that one undo takes back.
   pass (`looped`) or the end of a `once` timeline (`ended`, which stops it);
   `next_due` is the next cue or pass boundary.
 - **Ticks:** the live ticker (`live_tick`, which also sends coalesced `live.changed`
-  events) runs `timeline_tick`, then sleeps until the next timeline is due, as well as
-  until its gestures are. A tick runs every playing timeline's due cues in time order
+  events) runs the running show's tick ([Shows](#shows)), then `timeline_tick`, so a
+  sequence the show started is ticked with the others, then waits until the next
+  timeline or show point is due, as well as until its gestures are. A tick runs every playing timeline's due cues in time order
   across timelines, in up to `MAX_ROUNDS` (16) rounds: a cue that plays a timeline starts
   it at the cue's time, so that timeline's first cues are due in the next round. A
   round sends each loop or end in time order with its cues, once the cues due at or
@@ -1781,8 +1787,13 @@ preset changed in one batch that one undo takes back.
   itself, at 0), the next tick waits at least `CAPPED_WAIT_NS` (a frame at 60 fps), so
   such a cycle fires at most 16 cues a frame instead of spinning the ticker.
   `timeline.play` and `timeline.seek` from a client run a tick before they return and
-  start the ticker while a timeline plays (`start_ticker`). So do `clock.hold`,
-  `clock.step` and `clock.release` (ADR-0172): the ticker sleeps in real time, so on a
+  start the ticker while a timeline plays (`start_ticker`), or, if it is already
+  waiting, wake it to plan again: it waits on `Shared::ticker`, a condvar of the
+  collection lock, and goes on waiting only while `ticker_rev`, which `start_ticker`
+  counts up, is the count it planned with, so a timeline started while it waits for a
+  later cue is not held back. It holds the engine at most `TICKER_HOLD` (250 ms) a
+  wait, so a dropped engine is not kept for a far cue. So do `clock.hold`,
+  `clock.step` and `clock.release` (ADR-0172): the ticker waits in real time, so on a
   held clock a cue a step passed fires in that step's call, before the next snapshot.
 - **A cue** runs through `State::action`, as the call would (with no audit or activity
   entry of its own, and nothing logged), credited to the client and request that
@@ -1839,6 +1850,55 @@ preset changed in one batch that one undo takes back.
   (`Source::show`), nor cued at its start meanwhile, so a switch to its scene and the
   seek may come in either order. Its length, when it has one (`Source::duration`), is
   reported beside its size (`source.sizes`' `duration_ms`, `Engine::sync_sizes`).
+
+<a id="shows"></a>
+## Shows
+<!-- @section
+covers = ["crates/jstream-core/src/engine/shows.rs", "crates/jstream-core/src/tests/shows.rs"]
+depends_on = ["crates/jstream-anim/README.md#purpose"]
+-->
+
+The engine runs one show at a time (ADR-0210) as studio state beside the program scene
+(`engine/shows.rs`): `show.play` builds `jstream-anim`'s show `Plan` from the
+collection's `ShowInfo` (overlay tracks flattened by start, a `timeline.play` cue as a
+sequence clip as long as its sequence, every other cue an event) and starts a `Runner`
+from the start or as a jump to a bookmark would land. The plan is built again on every
+call and tick, and when an edit (`show.set`) changes it the runner re-plans onto it at
+the same show time (`Runner::replan`), so a clip changed or removed under the play head
+takes effect at once. The live ticker advances
+it before the timelines (`show_tick`), as do `clock.step` and `clock.release`, so a
+sequence clip's cues fire on time. A show call ends by ticking the show and the
+timelines and waking the ticker (`show_settle`), so after a jump it plans from the
+landing, not the point it was waiting for. `show.play` at a bookmark lands as a jump
+there would, with its arrive transition; `show.play` with no bookmark of the show the
+runner holds by hand (`show.pause`, `Runner::pause`) plays it on from where it holds
+instead of from the start. `show.pause` holds a playing show's play head where it is,
+stops the sequences it started and keeps program as it is; `show.continue` plays on
+from there too. Program, its media included, runs on through the pause (ADR-0210). Each
+`Effect` runs as of its own time (`cue_at`) as the call a key or pad would make:
+`scene.switch` with the clip's preset; for a keyframe marker, a `scene.switch` of program
+to that keyframe scene (or back to its family's own scene for none), with the marker's
+preset, when the keyframe is of the scene on program (a placed keyframe,
+`scene.set_keyframe`, only changes how other scenes draw a scene, never program
+itself), else `scene.set_keyframe` on the program scene;
+`timeline.play` or `timeline.seek` and `timeline.stop`, or the cue's own action (a
+`show.*` action in a cue is skipped, so a cue can't re-enter the runner). Overlay
+clips and media seeks are not run yet. `show.continue` is ignored while a scene
+switch's transition plays. A `scene.switch` that the show didn't make takes the
+running show off script. `show.stop`, deleting the show and opening a collection stop
+it. A show that starts on the scene already on program restarts every `timer` source
+that scene draws (`source.restart`), as the cut to it would have.
+`studio.get`'s `show` reports it, and `show.changed` says what it did.
+`src/tests/shows.rs` checks playing through, pausing before a pausing bookmark's
+point and continuing, a cue firing, a non-pausing bookmark playing through, the end,
+going to bookmarks by ID and number, Back, early Continue, arming, a hand switch going
+off script, stopping, deleting, refused calls, a sequence clip's cue firing within the
+`clock.step` that starts it, a jump waking the live ticker in real time, and
+`show.pause` holding show time until `show.continue` or `show.play` plays on, and
+keyframe markers moving program to a keyframe scene and back, and an edit of the
+running show cutting program to the clip now under the play head.
+`src/tests/timelines.rs` checks that a timeline played while the ticker waits for a
+later cue fires on time.
 
 <a id="privacy"></a>
 ## No privacy screen
@@ -4472,8 +4532,10 @@ lock (which makes the control side its one writer) and loaded by the render thre
 with no lock at all, as are the live values on the parameter channel. `video.snapshot`
 reads both under the collection lock and the snapshot thread only receives them. The
 `jstream-live` thread takes the collection lock only to send due `live.changed` events,
-release committed values and fire due timeline cues (each runs as its action's call
-would under that lock, [Timelines](#timelines)), and sleeps without it. The
+release committed values, fire due timeline cues (each runs as its action's call
+would under that lock, [Timelines](#timelines)) and advance the running show
+([Shows](#shows)), and waits without it (on the lock's `Shared::ticker` condvar,
+which releases it). The
 `jstream-values` thread does the same: it takes the collection lock for each tick, reads
 the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
@@ -4540,7 +4602,7 @@ everything else (the new `rev`, or the error code). A refused `hello`, with the 
 name and protocol version, and a call before `hello` are `debug`. Only names, IDs,
 revisions and error codes are logged, never a call's arguments
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). A timeline's cues are not calls, so they
-log nothing: `timeline.cue_fired` reports each, with its error. A CLAP scan, at start
+log nothing: `timeline.cue_fired` reports each, with its error. A running show's effects aren't calls either and log nothing; `show.changed` reports what the show did. A CLAP scan, at start
 or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its path and
 the host's error) and an `info` with how many effects it found. A `tempo.*` value the
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a

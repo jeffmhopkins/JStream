@@ -29,6 +29,7 @@ mod ptz;
 mod rendering;
 mod sequences;
 mod show_scene;
+mod shows;
 mod source_sizes;
 mod sources;
 mod timelines;
