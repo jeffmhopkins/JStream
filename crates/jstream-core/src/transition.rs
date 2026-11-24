@@ -252,6 +252,10 @@ pub(crate) struct Running {
     /// The members of its family a Move passes through on its way, in order
     /// (ADR-0166 decision 2); empty for a straight one.
     pub(crate) via: Vec<SceneId>,
+    /// Whether it shows or hides an item of the program scene where it is, from that
+    /// scene as it was drawn (ADR-0237): its other items are where the scene places
+    /// them, though their live values may have moved since it started.
+    pub(crate) in_place: bool,
 }
 
 impl Running {

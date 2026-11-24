@@ -45,7 +45,15 @@ is drawn and nothing on the wire.
    start, as the show scene's items fade on their own. One that goes is still drawn
    until its fade ends. The plan wakes at the end of each fade and at the end of the
    Move, and then plans the scene at rest.
-2. **Everything else is unchanged.** A Move whose items also move, re-crop, blend an
+2. **Its other items are as the scene draws them now.** Such a Move starts from the
+   program scene as it was drawn, at rest or partway through another item's showing
+   or hiding (`Running::in_place`). Its other items can still differ at their two ends,
+   and in their effects' settings, because the live values that drive them (a
+   sequence's channel lanes, mappings) have moved since the cue. Those differences
+   don't count as the Move moving them: the scene drawn as it is shows them as they
+   are now, as it would at rest. On a streaming PC, a hologram's hide ran its lanes
+   while its cards went, and without this its Move dropped the chain.
+3. **Everything else is unchanged.** A Move whose items also move, re-crop, blend an
    effect or leave a camera anchored to a group, an item that appears or goes inside a
    group, a Move between families, a Fade and a cut are drawn as ADR-0180 and ADR-0226
    say.

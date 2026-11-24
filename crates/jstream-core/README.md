@@ -921,7 +921,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   the group riding with it, its children staying in its space through a Move, also one
   started after a Fade onto the scene ended but before a plan let it go, and an
   item shown and hidden with a Fade on a filtered 3D keyframe drawn through its camera
-  in the keyframe's pass with the chain still running, and an
+  in the keyframe's pass with the chain still running, two items hidden one after the
+  other while another moves keeping it too, and an
   effect setting changed after the first frame reaching a 3D card, a legacy-transform
   child placed through its group; and, from the planned shot, a group's motion and a
   child's own moving it in the group's space during a Move, and a Move splitting the
@@ -1835,7 +1836,8 @@ one from those items, so nothing jumps
 though no plan has let it go yet (the clock held, [ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)) isn't sampled:
 `snapshot::still_on_screen` finds it ended, and the switch, `set_keyframe` and
 `item.show` start from the program scene at rest, as after the plan that lets it go
-(#1598, #1632). A switch to the scene already on program, even
+(#1598, #1632). An `item.show` or `item.hide` that starts from program at rest, or
+while another of them runs, is marked `Running::in_place` (ADR-0237). A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
 Beside it the studio keeps the show scene's items fading in or out on their own
 (`Studio::fades`, one `ShowFade` per item: its start, direction, effect and timing),
@@ -2721,7 +2723,11 @@ hidden on a 3D scene), doesn't stop the glide
 `moves_only_the_camera` hands back its track's effect and timing as a `ShowFade`, set
 through `Planner::appearing`, and `Planner::fading` samples it on the item's layer in
 the program scene's own pass, as the show scene's items fade, so the chain runs while
-it appears or goes (`an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera`). A 3D
+it appears or goes (`an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera`). An
+item's show or hide that starts from the program scene as drawn (`Running::in_place`)
+lets its other items differ at their ends, and in their effects' settings, by the live
+values that moved since the cue
+(`items_hidden_one_after_another_on_a_3d_keyframe_keep_its_chain`). A 3D
 scene's picture was drawn through its own camera, so its track is drawn flat, through
 no camera (`Visual::is_whole_scene`, `Transitioning::whole`): a Fade into or out of a
 filtered 3D scene shows it as it is

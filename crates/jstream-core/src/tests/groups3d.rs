@@ -1086,3 +1086,112 @@ fn a_3d_groups_legacy_transform_child_is_placed_through_it() {
         "not where it is in the group's own canvas"
     );
 }
+
+/// Two items hidden one after the other on a filtered 3D keyframe, the second while the
+/// first still fades, keep the scene's chain running throughout (ADR-0237): the second
+/// Move starts from what is on screen, the first card part way gone, and is drawn as
+/// the scene too. Another item that a sequence's lane moves meanwhile, here by an edit,
+/// differs at its ends only by that, so the Moves still draw the scene as it is.
+#[test]
+fn items_hidden_one_after_another_on_a_3d_keyframe_keep_its_chain() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    let call = |action: Action| {
+        super::block_on(control.call(Call::Action { action })).expect("action");
+    };
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("rig_item"),
+            },
+            place(
+                "main",
+                "card",
+                "red",
+                boxed(700.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            place(
+                "main",
+                "beam",
+                "red",
+                boxed(1220.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ]),
+    )
+    .expect("two cards and a keyframe");
+    call(Action::SceneSwitch {
+        scene_id: SceneId::new("k"),
+        preset_id: None,
+        via: Vec::new(),
+    });
+    batch(
+        &control,
+        edits(vec![Edit::TransitionSetDefault {
+            preset_id: TransitionPresetId::new("fade"),
+        }]),
+    )
+    .expect("fade by default");
+    let k = SceneId::new("k");
+    let check = |when: &str| {
+        engine.replan();
+        let loaded = engine.render_hub().load();
+        let shot = loaded.shot();
+        assert!(!shot.transitioning(), "no tracks {when}");
+        assert!(shot.scene_chain(&k).is_some(), "the chain runs {when}");
+    };
+    call(Action::ItemHide {
+        item_id: ItemId::new("card"),
+        scene_id: None,
+    });
+    clock.advance(100_000);
+    batch(
+        &control,
+        edits(vec![Edit::ItemSetGeometry {
+            item_id: ItemId::new("beam"),
+            scene_id: Some(SceneId::new("k")),
+            geometry: boxed(1260.0, 540.0, (300.0, 300.0), 200.0),
+        }]),
+    )
+    .expect("the beam moves on");
+    clock.advance(100_000);
+    check("while the card goes and the beam moves on");
+    call(Action::ItemHide {
+        item_id: ItemId::new("beam"),
+        scene_id: None,
+    });
+    clock.advance(100_000);
+    check("while the beam goes after it");
+    clock.advance(200_000);
+    check("once the card has gone");
+}

@@ -6328,6 +6328,7 @@ impl State {
                     by_item: true,
                     from_camera,
                     via: Vec::new(),
+                    in_place: false,
                 }),
             );
         }
@@ -6838,6 +6839,7 @@ impl State {
                     from_camera,
                     // Only a Move within the family follows a path (ADR-0166 decision 2).
                     via: if by_item { via } else { Vec::new() },
+                    in_place: false,
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
@@ -7012,6 +7014,9 @@ impl State {
             let shown = self.graph.state().visible_in(&item_id, Some(program));
             (self.screen_now(program, run, now), shown)
         });
+        // From the program scene as it was drawn: at rest, or partway through another
+        // item's showing or hiding there, never a Move between views (ADR-0237).
+        let in_place = self.studio.running().is_none_or(|running| running.in_place);
         let applied = self
             .graph
             .apply_with_running(&edits, None, &running)
@@ -7040,6 +7045,7 @@ impl State {
                     by_item: true,
                     from_camera,
                     via: Vec::new(),
+                    in_place,
                 }),
             );
         }
@@ -7176,6 +7182,7 @@ impl State {
             by_item: true,
             from_camera: transition::camera_of(&self.graph, program),
             via: Vec::new(),
+            in_place: false,
         };
         let Self {
             graph,

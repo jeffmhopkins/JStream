@@ -3035,16 +3035,19 @@ impl<'a> Planner<'a, '_> {
                 .iter()
                 .any(|(other, theirs)| other.item_id == visual.item_id && theirs != track)
         }
-        fn still(tracks: &[(Visual, Track)]) -> bool {
+        // `in_place`: an item shown or hidden where the program scene was drawn, whose
+        // other items differ at their ends only by the live values that moved since it
+        // started; the scene drawn as it is shows them as they are now.
+        fn still(tracks: &[(Visual, Track)], in_place: bool) -> bool {
             tracks.iter().all(|(visual, track)| match track {
                 Track::Pair { from, to, via, .. } => {
-                    from == to
+                    (in_place || from == to)
                         && via.iter().all(|stop| stop == to)
-                        && visual.blend_from.is_none()
+                        && (in_place || visual.blend_from.is_none())
                         && visual
                             .inside
                             .as_ref()
-                            .is_none_or(|inside| still(&inside.planned.tracks))
+                            .is_none_or(|inside| still(&inside.planned.tracks, in_place))
                 }
                 Track::Disappear { from, .. } => {
                     visual.inside.is_none() && comes_back(tracks, visual, from)
@@ -3065,7 +3068,7 @@ impl<'a> Planner<'a, '_> {
         let camera = self.camera(&running.to)?;
         let mut blends = Vec::new();
         effect_blends(&planned.tracks, &out.chains, &mut blends);
-        if camera.anchor.is_some() || !blends.is_empty() {
+        if camera.anchor.is_some() || (!blends.is_empty() && !running.in_place) {
             return None;
         }
         // An item of the scene itself that appears or goes on its own, where the shown
@@ -3103,7 +3106,7 @@ impl<'a> Planner<'a, '_> {
                 None => rest.push((visual.clone(), track.clone())),
             }
         }
-        still(&rest).then_some(fades)
+        still(&rest, running.in_place).then_some(fades)
     }
 
     /// Whether `running` is a Move within the family of a 3D scene (ADR-0180): from one
