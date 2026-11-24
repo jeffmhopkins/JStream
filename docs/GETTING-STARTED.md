@@ -129,8 +129,8 @@ adds, which makes soft glows and veils brighter.
    and tilts it. Press K, or the camera button, for camera mode: a left drag orbits
    (or looks around, or moves, as its buttons pick), a right drag moves, the wheel zooms,
    and **◆ Save view** keeps the shot as a new keyframe scene. Beside it, the arrow and
-   **−** **+** buttons pan, tilt and zoom the camera live while you hold them, as a
-   camera operator would, and **⌂ Home** brings it back; nothing of that is saved.
+   **−** **+** buttons pan, tilt and zoom the camera live while you hold them (or hold Space or Enter on
+   one), as a camera operator would, and **⌂ Home** brings it back; nothing of that is saved.
    Esc leaves camera mode.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.

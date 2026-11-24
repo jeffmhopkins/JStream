@@ -2100,7 +2100,11 @@ each time its scene changes.
   live aim (`live_aim.rs`, `LiveAim`): pan, tilt and zoom buttons send
   `scene.drive_camera` for their axis alone while held and 0 on release, Home sends
   `scene.aim_camera` to the stored camera, and a readout reads `scene.camera_aim` every
-  300 ms while camera mode is on; none of it is an edit.
+  300 ms while camera mode is on; none of it is an edit. A button keeps whether it holds
+  its axis, so a press sends one drive and a release one stop: the press captures the
+  pointer, which lets go on `pointerup`, `pointercancel` or `lostpointercapture` and never
+  on leaving, and Space or Enter holds it from the keyboard (repeats ignored) until
+  `keyup` or `blur`.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos
