@@ -753,7 +753,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   `jstream_render::submits_on_this_thread` at the end of a frame), which `profile.get`
   reports per frame as `submits`. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
-  source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
+  source's look and each plan, and each new GPU frame a browser page painted that a plan
+  took as a paint of it (#1556), in the live sources' `SourceMeters`. The `Profiler`
   reads all of them, the threads from the host's `ThreadCpu`
   (`Engine::set_thread_cpu`) and the process CPU into a sample on each `stats.tick`
   and each `profile.get`, keeps a minute of samples, and answers a window as the

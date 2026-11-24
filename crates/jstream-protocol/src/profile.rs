@@ -544,8 +544,9 @@ pub enum ProfileUnit {
 pub struct SourceProfile {
     /// The source.
     pub source_id: SourceId,
-    /// How many times the `jstream-sources` thread painted it: a source that draws its
-    /// own frames as they come due (`waveform`, `spectrum`, `timer`).
+    /// How many times it painted: the `jstream-sources` thread's paints of a source that
+    /// draws its own frames as they come due (`waveform`, `spectrum`, `timer`), and each
+    /// new frame a `browser` page painted on the GPU that a plan took (#1556).
     #[serde(default)]
     pub paints: u64,
     /// The average time a paint took, in milliseconds.
