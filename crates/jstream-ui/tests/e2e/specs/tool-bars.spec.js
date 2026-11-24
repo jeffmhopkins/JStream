@@ -50,8 +50,9 @@ test('the Scenes bar adds a scene, moves it, and opens the selected scene\'s pro
   await expect(dialog).toBeHidden();
   // Scene filters opens the same dialog on its Filters segment.
   await scenes.getByRole('button', { name: 'Scene filters' }).click();
-  await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Outro');
   await expect(dialog.getByRole('tab', { name: /^Filters/ })).toHaveAttribute('aria-selected', 'true');
+  await dialog.getByRole('tab', { name: 'Settings' }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Outro');
 });
 
 test('the Sources bar adds, restacks, opens and removes the selected source', async ({ page, daemon }) => {
