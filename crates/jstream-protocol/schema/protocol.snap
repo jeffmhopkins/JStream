@@ -17939,7 +17939,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "paints": {
           "default": 0,
-          "description": "How many times the `jstream-sources` thread painted it: a source that draws its\nown frames as they come due (`waveform`, `spectrum`, `timer`).",
+          "description": "How many times it painted: the `jstream-sources` thread's paints of a source that\ndraws its own frames as they come due (`waveform`, `spectrum`, `timer`), and each\nnew frame a `browser` page painted on the GPU that a plan took (#1556).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -19555,7 +19555,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "VideoCodec": {
-      "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP; a recording takes H.264 only so far, and its start fails with another.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
+      "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP, and a recording writes each in MP4.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
       "oneOf": [
         {
           "const": "h264",

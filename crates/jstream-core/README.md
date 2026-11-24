@@ -753,7 +753,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   `jstream_render::submits_on_this_thread` at the end of a frame), which `profile.get`
   reports per frame as `submits`. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
-  source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
+  source's look and each plan, and each new GPU frame a browser page painted that a plan
+  took as a paint of it (#1556), in the live sources' `SourceMeters`. The `Profiler`
   reads all of them, the threads from the host's `ThreadCpu`
   (`Engine::set_thread_cpu`) and the process CPU into a sample on each `stats.tick`
   and each `profile.get`, keeps a minute of samples, and answers a window as the
@@ -4199,9 +4200,10 @@ holding up a stream on the same session.
 
 **Video codecs.** The encoder profile's video codec picks the encoder and the FLV
 track (`video_codec` in `runtime/pipeline.rs`, `runtime/sink.rs`). H.264 goes in legacy
-FLV tags and HEVC and AV1 in enhanced RTMP tags, named by FourCC. For every codec the
-muxers take the decoder configuration (the AVC sequence header and MP4 `avcC`, the
-enhanced `SequenceStart`) from the first keyframe, which every real encoder sends with
+FLV tags and HEVC and AV1 in enhanced RTMP tags, named by FourCC. A recording takes all
+three, in MP4 under `avc1`, `hvc1` or `av01`. For every codec the muxers take the decoder
+configuration (the AVC sequence header, the enhanced `SequenceStart`, MP4's `avcC`,
+`hvcC` or `av1C`) from the first keyframe, which every real encoder sends with
 its parameter sets in-band. A configuration made up ahead of it would not match the
 stream: a stand-in Baseline 3.0 SPS with no frame size made Windows refuse the
 recordings and YouTube drop the publish. Only the fake encoder sends a bare first
@@ -4209,8 +4211,7 @@ H.264 keyframe; until the muxer has a decoder configuration, such a keyframe get
 stand-in parameter sets in front (`with_parameter_sets`). A later one goes out as it
 is, since a stand-in SPS would replace the encoder's own, which shares its id. The
 protocol's `VideoCodec` names H.264, HEVC and AV1 (the last two since 0.41), and each
-maps to the platform codec of the same name. MP4 recording takes H.264 only: another
-codec fails the start with `recording … is not supported yet`. The open decides
+maps to the platform codec of the same name. The open decides
 whether a video encoder is there. When it fails (`video_open_failure`), a missing
 component keeps the platform's own error and its remedy: a VA-API driver package, or
 the OpenH264 download ([ADR-0060](../../docs/adr/0060-linux-platform-support.md) §6).
