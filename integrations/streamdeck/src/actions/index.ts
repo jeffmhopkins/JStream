@@ -18,11 +18,12 @@ export const PLUGIN = "io.github.jeffmhopkins.jstream";
 // ---- Show controls ----
 
 /** What a show key does: the transport of ADR-0210's shows. */
-export type ShowCommand = "play" | "continue" | "pause" | "stop" | "back" | "skip" | "go_to" | "number";
+export type ShowCommand = "restart" | "play" | "continue" | "pause" | "stop" | "back" | "skip" | "go_to" | "number";
 
 type ShowSettings = { show_id?: string; command?: ShowCommand; bookmark_id?: string; number?: string; rehearse?: string };
 
 const SHOW_GLYPHS: Record<ShowCommand, Glyph> = {
+	restart: "back",
 	play: "play",
 	continue: "continue",
 	pause: "pause",
@@ -34,9 +35,12 @@ const SHOW_GLYPHS: Record<ShowCommand, Glyph> = {
 };
 
 /**
- * Runs a show: play it (or rehearse it on preview), continue, pause, stop, step back or
- * skip, or jump to a bookmark. Play lights while the show plays and is ringed while it
- * waits; Continue lights while the show waits for it; Pause while it's paused.
+ * Runs a show: restart it, play it (or rehearse it on preview), continue, pause, stop,
+ * go to the previous or next bookmark (Prev and Next: `show.back` and `show.skip`), or
+ * jump to a bookmark. Restart plays it from its start, running or not. Play toggles its show: it plays it, pauses it while it
+ * plays, and continues it while it waits (at a bookmark, paused, or off script). It
+ * lights while the show plays, showing the pause glyph, and is ringed while it waits.
+ * Continue lights while the show waits for it; Pause while it's paused.
  */
 @action({ UUID: `${PLUGIN}.show` })
 export class ShowAction extends JStreamAction<ShowSettings> {
@@ -46,7 +50,7 @@ export class ShowAction extends JStreamAction<ShowSettings> {
 		if (!live) return { glyph, look: "offline" };
 		const shows = live.state.shows ?? [];
 		const show = shows.find((x) => x.show_id === s.show_id);
-		const needsShow = command === "play" || command === "go_to";
+		const needsShow = command === "play" || command === "restart" || command === "go_to";
 		if (needsShow && !show) return { glyph, look: "unset", title: shows.length ? "Pick a\nshow" : "No shows" };
 		const running = live.studio.show ?? undefined;
 		const mine = running && (!show || running.show_id === show.show_id) ? running : undefined;
@@ -59,11 +63,12 @@ export class ShowAction extends JStreamAction<ShowSettings> {
 		} else if (command === "number") {
 			title = `Bookmark\n${s.number || "1"}`;
 		} else if (!show) {
-			title = { continue: "Continue", pause: "Pause", stop: "Stop", back: "Back", skip: "Skip" }[command as "continue"];
+			title = { continue: "Continue", pause: "Pause", stop: "Stop", back: "Prev", skip: "Next" }[command as "continue"];
 		}
 		switch (command) {
 			case "play":
-				return mine ? { glyph, look: waiting ? "busy" : "on", color: COLORS.show, title } : { glyph, look: "off", title };
+				if (!mine) return { glyph, look: "off", title };
+				return waiting ? { glyph: "continue", look: "busy", color: COLORS.show, title } : { glyph: "pause", look: "on", color: COLORS.show, title };
 			case "continue":
 				return { glyph, look: waiting ? "on" : "off", color: COLORS.playing, title };
 			case "pause":
@@ -75,11 +80,28 @@ export class ShowAction extends JStreamAction<ShowSettings> {
 		}
 	}
 
-	protected async press(s: ShowSettings): Promise<void> {
+	protected async press(s: ShowSettings, live: Live): Promise<void> {
 		const command = s.command ?? "play";
 		switch (command) {
 			case "play": {
 				if (!s.show_id) throw new Error("no show picked");
+				// A toggle while this show runs: pause it while it plays, continue it while
+				// it waits.
+				const running = live.studio.show ?? undefined;
+				if (running && running.show_id === s.show_id) {
+					await client.action({ type: running.state === "playing" ? "show.pause" : "show.continue" });
+					return;
+				}
+				const a: Action = { type: "show.play", show_id: s.show_id };
+				if (s.rehearse === "yes") a.rehearse = true;
+				await client.action(a);
+				return;
+			}
+			case "restart": {
+				if (!s.show_id) throw new Error("no show picked");
+				// `show.play` of the show that runs, paused, plays on: stopping first makes
+				// it start over.
+				if (live.studio.show) await client.action({ type: "show.stop" });
 				const a: Action = { type: "show.play", show_id: s.show_id };
 				if (s.rehearse === "yes") a.rehearse = true;
 				await client.action(a);

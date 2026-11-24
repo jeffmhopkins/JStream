@@ -63,7 +63,7 @@ after(() => {
 
 const send = (m: unknown) => socket!.send(JSON.stringify(m));
 const last = (event: string, context = "ctx1") => [...received].reverse().find((m) => m.event === event && m.context === context);
-const image = () => decodeURIComponent(String(last("setImage")?.payload?.image ?? ""));
+const image = (context?: string) => decodeURIComponent(String(last("setImage", context)?.payload?.image ?? ""));
 const toInspector = (type: string) => [...received].reverse().find((m) => m.event === "sendToPropertyInspector" && m.payload?.type === type);
 
 test("a scene key pairs from its property inspector, then switches program and lights up", { skip }, async () => {
@@ -117,4 +117,78 @@ test("a scene key pairs from its property inspector, then switches program and l
 	assert.ok((at.keyframes ?? []).some((k) => k.keyframe_id === "scn_b_wide"), JSON.stringify(at.keyframes));
 	assert.equal(last("showAlert", "ctx2"), undefined, "the keyframe press didn't fail");
 	assert.deepEqual(toInspector("lists")!.payload.lists.sceneKeyframes, { scn_b: [{ value: "scn_b_wide", label: "Main, wide" }] });
+});
+
+test("a show's Play key toggles: it plays, pauses, and continues past a bookmark", { skip }, async () => {
+	await call({
+		kind: "batch",
+		edits: [
+			{
+				type: "show.set",
+				show: {
+					show_id: "toggle",
+					name: "Toggle",
+					program: [
+						{ clip_id: "one", scene_id: "scn_a", length_ms: 30000 },
+						{ clip_id: "two", scene_id: "scn_b", length_ms: 30000 },
+					],
+					bookmarks: [{ bookmark_id: "bm_two", name: "Two", at_ms: 30000 }],
+				},
+			},
+		],
+	});
+	const key = { action: `${PLUGIN}.show`, context: "ctx-show", device: "dev1" };
+	const payload = { controller: "Keypad", coordinates: { column: 2, row: 0 }, isInMultiAction: false, settings: { show_id: "toggle", command: "play" } };
+	send({ event: "willAppear", ...key, payload });
+	await until("the show key titled", () => last("setTitle", "ctx-show")?.payload?.title === "Toggle", 8000);
+	const state = async () => (await call({ kind: "query", query: { type: "studio.get" } })).show?.state as string | undefined;
+	// Presses the key, waits for the show to be `want`, then for the key to redraw for it,
+	// so the next press acts on what the key shows.
+	const press = async (want: string) => {
+		const before = image("ctx-show");
+		send({ event: "keyDown", ...key, payload });
+		let at: string | undefined;
+		for (let i = 0; i < 80 && at !== want; i++) {
+			await new Promise((r) => setTimeout(r, 50));
+			at = await state();
+		}
+		assert.equal(at, want);
+		await until("the key redrawn", () => image("ctx-show") !== before);
+		assert.equal(last("showAlert", "ctx-show"), undefined, "the press didn't fail");
+	};
+
+	// Not running: it plays. Playing: it pauses. Paused: it continues.
+	await press("playing");
+	await press("paused");
+	await press("playing");
+	// Waiting at a pausing bookmark: it continues from there.
+	const playing = image("ctx-show");
+	await call({ kind: "action", action: { type: "show.go_to", show_id: "toggle", bookmark_id: "bm_two" } });
+	for (let i = 0; i < 80 && (await state()) !== "paused"; i++) await new Promise((r) => setTimeout(r, 50));
+	await until("the key waiting", () => image("ctx-show") !== playing);
+	await press("playing");
+	const program = async () => (await call({ kind: "query", query: { type: "studio.get" } })).program_scene as string;
+	assert.equal(await program(), "scn_b", "it went on from the bookmark, not from the start");
+
+	// Restart plays it from its start; Next jumps to the next bookmark and waits there.
+	const other = (context: string, command: string, column: number) => {
+		const k = { action: `${PLUGIN}.show`, context, device: "dev1" };
+		const p = { ...payload, coordinates: { column, row: 0 }, settings: { show_id: "toggle", command } };
+		send({ event: "willAppear", ...k, payload: p });
+		return () => send({ event: "keyDown", ...k, payload: p });
+	};
+	const restart = other("ctx-restart", "restart", 3);
+	const next = other("ctx-next", "skip", 4);
+	await until("the Next key titled", () => last("setTitle", "ctx-next")?.payload?.title === "Toggle", 8000);
+	restart();
+	for (let i = 0; i < 80 && (await program()) !== "scn_a"; i++) await new Promise((r) => setTimeout(r, 50));
+	assert.equal(await program(), "scn_a", "restarted from the start");
+	assert.equal(await state(), "playing");
+	next();
+	for (let i = 0; i < 80 && (await program()) !== "scn_b"; i++) await new Promise((r) => setTimeout(r, 50));
+	assert.equal(await program(), "scn_b", "Next went to the bookmark");
+	assert.equal(await state(), "paused");
+	assert.equal(last("showAlert", "ctx-restart"), undefined);
+	assert.equal(last("showAlert", "ctx-next"), undefined);
+	await call({ kind: "action", action: { type: "show.stop" } });
 });

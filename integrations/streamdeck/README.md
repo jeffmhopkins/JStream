@@ -71,7 +71,7 @@ refuses flashes Stream Deck's alert.
 
 | Key | Does | Lit while |
 |---|---|---|
-| **Show** | Play a show (or rehearse it on preview), Continue, Pause, Stop, Back, Skip, go to a bookmark, or go to bookmark 1 to 8 of the running show (`show.*`; a JStream without shows lists none) | Play: the show plays (ringed while it waits). Continue: the show waits for Continue. Pause: paused. Stop: a show runs |
+| **Show** | Restart a show (from its start, running or not: `show.stop`, then `show.play`), Play / Pause / Continue (one key: plays the show, or rehearses it on preview; pauses it while it plays; continues it while it waits at a bookmark or paused), Next and Prev (the next or previous bookmark: `show.skip`, `show.back`), Stop, go to a bookmark, or go to bookmark 1 to 8 of the running show; Continue only and Pause only remain for keys set up with them (`show.*`; a JStream without shows lists none) | Play / Pause / Continue: lit with the pause glyph while the show plays, ringed with the continue glyph while it waits. Continue only: the show waits for Continue. Pause only: paused. Stop: a show runs |
 | **Switch scene** | `scene.switch`, with an optional transition. With a **Keyframe** picked from the scene's own, it first moves the scene to that keyframe (`scene.set_keyframe`), so program lands on it; if the scene is already on program, it moves there with the transition | on program (red; with a keyframe, while the scene is at it) or preview (green) |
 | **Go to keyframe** | `scene.set_keyframe` on the keyframe's scene, with an optional transition. It moves the scene to a keyframe made in JStream and never creates one; on program, the move is seen live | the scene is at that keyframe |
 | **Show or hide source** | `item.toggle`, `item.show` or `item.hide` on one item of a scene | the item is shown |
@@ -153,7 +153,9 @@ npm run pack                # validates, then writes dist/io.github.jeffmhopkins
 - `test/plugin.test.ts` runs the built plugin as the Stream Deck app does, against a
   stand-in for the app's socket. A key appears offline, the property inspector pairs it,
   and a press switches program and lights the key. A second scene key, with a keyframe
-  picked, puts program on its scene at that keyframe.
+  picked, puts program on its scene at that keyframe. A show's Play / Pause / Continue
+  key plays, pauses and continues it, also from a pausing bookmark, and its Restart and
+  Next keys start it over and jump to the next bookmark.
 
 The dependencies are exact pins with the lockfile committed (ADR-0232). Their licences are
 checked by hand against `deny.toml`'s allow list, since `cargo deny` doesn't read npm's

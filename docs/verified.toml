@@ -8538,7 +8538,7 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "ADR-0156 is now maintainer tier and proposed; the Linux steps are unchanged and still match vcam.rs's MODPROBE and PERSIST_HINT" }
 
 ["INTEGRATION-streamdeck#build"."body"]
-stamp = { hash = "b3:d2fcacb2fa4e8117", by = "agent:claude", note = "daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:81ae5ef947e68d2a", by = "agent:claude", note = "plugin.test.ts gained the show test: the toggle (play, pause, continue, and continue from a pausing bookmark) and the Restart and Next keys; the build steps are unchanged. | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/package.json"]
 stamp = { hash = "b3:d67843ed82f78f37", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8556,7 +8556,7 @@ stamp = { hash = "b3:19fdb8c40548a839", by = "agent:claude", note = "daemon test
 stamp = { hash = "b3:33e39cd38e1bb930", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/plugin.test.ts"]
-stamp = { hash = "b3:e127568417f9d866", by = "agent:claude", note = "daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:680aef7a880e2534", by = "agent:claude", note = "plugin.test.ts gained the show test: the toggle (play, pause, continue, and continue from a pausing bookmark) and the Restart and Next keys; the build steps are unchanged. | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/unit.test.ts"]
 stamp = { hash = "b3:4a9bcd854ebb2994", by = "agent:claude", note = "daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -8574,7 +8574,7 @@ stamp = { hash = "b3:4458a76284b426ae", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/actions/index.ts"]
-stamp = { hash = "b3:dc41aebd4487e9c9", by = "agent:claude", note = "client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:e05b12375524ee7e", by = "agent:claude", note = "Re-read the design against ShowAction's toggle and restart: presses still go through client.action and the key still redraws from studio.get's show; nothing in the section names show commands. | kept from the merged side: client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/hub.ts"]
 stamp = { hash = "b3:22c5b9ecf7cda0b5", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8616,16 +8616,16 @@ stamp = { hash = "b3:6890318949d37d88", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:5b005cfdca7e491d", by = "agent:claude", note = "Step 2 no longer says to restart JStream (ADR-0234); the inspector hint drops the restart note and its Address and Code boxes take typing again (the onkeydown handlers returned false for every key). | kept from the merged side: Forget says the device stays paired in JStream until revoked; a changed certificate stops retries; Find JStream names the announcement setting and --lan-quiet; Go to keyframe name (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.js"]
-stamp = { hash = "b3:e3d4a8e9b41332b4", by = "agent:claude", note = "Step 2 no longer says to restart JStream (ADR-0234); the inspector hint drops the restart note and its Address and Code boxes take typing again (the onkeydown handlers returned false for every key). | kept from the merged side: Forget says the device stays paired in JStream until revoked; a changed certificate stops retries; Find JStream names the announcement setting and --lan-quiet; Go to keyframe name (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:14a49a11ce22bdd3", by = "agent:claude", note = "Re-read the install steps against the inspector's new Show command list (Restart, Play / Pause / Continue, Next, Prev); the steps name no show commands and still hold. | kept from the merged side: Forget says the device stays paired in JStream until revoked; a changed certificate stops retries; Find JStream names the announcement setting and --lan-quiet; Go to keyframe name (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#keys"."body"]
-stamp = { hash = "b3:b1a8ec4be4728779", by = "agent:claude", note = "Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:69b0d284fe92a8f5", by = "agent:claude", note = "Show row: Restart (stop then play), Play / Pause / Continue as one toggling key with the pause glyph while playing and the continue glyph while waiting, Next and Prev (skip and back), Continue only and Pause only kept for existing keys. | kept from the merged side: Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/base.ts"]
 stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/index.ts"]
-stamp = { hash = "b3:dc41aebd4487e9c9", by = "agent:claude", note = "Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:e05b12375524ee7e", by = "agent:claude", note = "Show row: Restart (stop then play), Play / Pause / Continue as one toggling key with the pause glyph while playing and the continue glyph while waiting, Next and Prev (skip and back), Continue only and Pause only kept for existing keys. | kept from the merged side: Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/lists.ts"]
 stamp = { hash = "b3:335639140afddd29", by = "agent:claude", note = "Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
