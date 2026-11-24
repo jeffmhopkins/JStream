@@ -3096,7 +3096,7 @@ stamp = { hash = "b3:95dbeb7275d807fb" }
 stamp = { hash = "b3:c0b3f9957eef6931", by = "agent:st4-show-scene", note = "Added State::show_scene, Graph::set_show_scene, not_the_show_scene refusals and the scene.list/state.get filtering" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
-stamp = { hash = "b3:f45c5e55650f162d", by = "agent:st4-show-scene", note = "Added State::show_scene, Graph::set_show_scene, not_the_show_scene refusals and the scene.list/state.get filtering" }
+stamp = { hash = "b3:0fb0c976e74aa6b7", by = "agent:st4-show-scene", note = "Doc comment of Graph::set_show_scene reworded to drop a private intra-doc link; the purpose text still holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/audio.rs"]
 stamp = { hash = "b3:aef5b4773071e6a3", by = "agent:bus-outputs", note = "Re-read for output.set_audio_buses (checks in order, then a running output may not move, inverse), apply_with_running naming the move, the output blocker on bus.delete and delete.plan's move to master, touched sets, Output.audio_bus, to_info and persistence of audio_bus; the merge added keyframe_children (#970) and without_kinds (#971), unrelated to buses" }

@@ -99,7 +99,7 @@ impl Graph {
     ///
     /// Returns `false`, and leaves the marker as it was, for a scene that doesn't exist
     /// or that something already shows: a `scene` source, a settings reference or a
-    /// video mix ([`deps::blockers`]). Its keyframe scenes don't count.
+    /// video mix (what `scene.delete` lists as blockers). Its keyframe scenes don't count.
     pub fn set_show_scene(&mut self, scene_id: Option<SceneId>) -> bool {
         if let Some(id) = &scene_id
             && (self.state.scene(id).is_none()
