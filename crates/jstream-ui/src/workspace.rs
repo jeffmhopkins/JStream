@@ -12,7 +12,7 @@
 use crate::app::SessionContext;
 use crate::canvas::Canvas;
 use crate::canvas::monitor::ProgramMonitor;
-use crate::dock::{Dock, PanelId, Target, Zone};
+use crate::dock::{Dock, Edge, PanelId, Target, Zone};
 use crate::icons::Icon;
 use crate::panels::mixer::MixerFlip;
 use crate::panels::{
@@ -290,10 +290,7 @@ fn target_at(x: f64, y: f64) -> Option<Target> {
         }
         "zone" => {
             let key = area.get_attribute("data-zone")?;
-            Zone::ALL
-                .into_iter()
-                .find(|zone| zone.key() == key)
-                .map(Target::End)
+            Zone::from_key(&key).map(Target::End)
         }
         _ => None,
     }
@@ -331,8 +328,9 @@ pub fn Workspace() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let studio_mode = move || studio.studio_mode.get();
     // A portrait canvas stacks them instead (preview over the controls over program)
-    // when that shows both pictures larger, in a stage much taller than wide. The stage is measured at each resize, which
-    // every dock and studio change also sends (`nudge_canvas`).
+    // when that shows both pictures larger, in a stage much taller than wide. The stage
+    // is measured at each resize, which every dock and studio change also sends
+    // (`nudge_canvas`), and whenever the row itself changes size.
     let stage_row = NodeRef::<html::Div>::new();
     let stage = RwSignal::new((0.0_f64, 0.0_f64));
     let measure = move || {
@@ -347,7 +345,29 @@ pub fn Workspace() -> impl IntoView {
         }
     };
     let resized = window_event_listener(leptos::ev::resize, move |_| measure());
-    on_cleanup(move || resized.remove());
+    // The row itself too, so a change no `resize` follows (a band collapsing, a panel
+    // growing) still re-decides.
+    let observer = StoredValue::new_local(None::<web_sys::ResizeObserver>);
+    Effect::new(move |_| {
+        use leptos::wasm_bindgen::{JsCast, closure::Closure};
+        let Some(row) = stage_row.get() else {
+            return;
+        };
+        let callback = Closure::<dyn FnMut()>::new(measure).into_js_value();
+        if let Ok(watch) = web_sys::ResizeObserver::new(callback.unchecked_ref()) {
+            watch.observe(&row);
+            if let Some(old) = observer.get_value() {
+                old.disconnect();
+            }
+            observer.set_value(Some(watch));
+        }
+    });
+    on_cleanup(move || {
+        resized.remove();
+        if let Some(watch) = observer.try_get_value().flatten() {
+            watch.disconnect();
+        }
+    });
     let stacked = Memo::new(move |_| {
         let stage = stage.get();
         studio
@@ -415,11 +435,12 @@ pub fn Workspace() -> impl IntoView {
     });
 
     let zone = move |zone: Zone| view! { <ZoneView ui=ui zone=zone /> };
+    let edge = move |edge: Edge| view! { <EdgeView ui=ui edge=edge /> };
     view! {
         <div class="workspace" class:dragging=move || ui.dragging.get().is_some()>
-            {zone(Zone::OuterLeft)}
+            {edge(Edge::OuterLeft)}
             <div class="ws-middle">
-                {zone(Zone::Top)}
+                {edge(Edge::Top)}
                 <div class="ws-row">
                     {zone(Zone::Left)}
                     <div class="ws-centre">
@@ -448,10 +469,35 @@ pub fn Workspace() -> impl IntoView {
                     </div>
                     {zone(Zone::Right)}
                 </div>
-                {zone(Zone::Bottom)}
+                {edge(Edge::Bottom)}
             </div>
-            {zone(Zone::OuterRight)}
+            {edge(Edge::OuterRight)}
         </div>
+    }
+}
+
+/// An outer edge's bands, from the canvas outwards, and past the last one, while a panel
+/// is dragged, the place to drop it in a new band. An edge whose only band is empty
+/// offers that band instead.
+#[component]
+fn EdgeView(ui: Ui, edge: Edge) -> impl IntoView {
+    let dock = ui.dock;
+    let bands = Memo::new(move |_| {
+        dock.with(|d| {
+            let n = d.bands(edge);
+            let last_used = !d.groups(edge.zone(n - 1)).is_empty();
+            let shown = if last_used { n + 1 } else { n };
+            let mut bands: Vec<usize> = (0..shown).collect();
+            if edge.outermost_first() {
+                bands.reverse();
+            }
+            bands
+        })
+    });
+    view! {
+        <For each=move || bands.get() key=|band| *band let:band>
+            <ZoneView ui=ui zone=edge.zone(band) />
+        </For>
     }
 }
 
@@ -494,6 +540,18 @@ fn ZoneView(ui: Ui, zone: Zone) -> impl IntoView {
     let ids =
         Memo::new(move |_| dock.with(|d| d.groups(zone).iter().map(|g| g.id).collect::<Vec<_>>()));
     let empty = move || ids.with(Vec::is_empty);
+    // A band past its edge's last one: the place a drag offers for a new band. It lies
+    // over the edge rather than beside it, so nothing moves under the pointer.
+    let extra = move || {
+        zone.band()
+            .is_some_and(|(edge, band)| band > 0 && dock.with(|d| band >= d.bands(edge)))
+    };
+    let edge = zone.band().map(|(edge, _)| match edge {
+        Edge::OuterLeft => "left",
+        Edge::Top => "top",
+        Edge::Bottom => "bottom",
+        Edge::OuterRight => "right",
+    });
     let zone_ref = NodeRef::<html::Section>::new();
     let size = move || {
         if empty() {
@@ -513,6 +571,8 @@ fn ZoneView(ui: Ui, zone: Zone) -> impl IntoView {
             class:vertical=zone.vertical()
             class:horizontal=!zone.vertical()
             class:drop-zone=move || ui.over.get() == Some(Target::End(zone))
+            class:new-band=extra
+            data-edge=edge
             aria-label=zone.label()
             data-drop="zone"
             data-zone=zone.key()
