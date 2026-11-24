@@ -4993,6 +4993,28 @@ mod tests {
             &[(CANVAS.0 / 2, CANVAS.1 / 2)],
         );
         assert_eq!(chains.picture_means.len(), 1, "only the shown one");
+        // A draw of a mix that shows no arrival (another scene) keeps it: dropped, the
+        // program's next draw asked the let-go still for its pixels again and decoded
+        // it on every frame, its light white meanwhile.
+        let other = snapshot::plan_with(
+            &graph,
+            Some(&arrivals),
+            None,
+            &mut |_| Some(Look::frame(white.clone(), None)),
+            &FilterAssets::default(),
+        )
+        .shot;
+        draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&other, &LiveParams::default()),
+            &[(CANVAS.0 / 2, CANVAS.1 / 2)],
+        );
+        assert_eq!(
+            chains.picture_means.len(),
+            1,
+            "kept while another mix draws"
+        );
         let light = snapshot::arrival_light(
             (&shot, &cache, &chains),
             &main,

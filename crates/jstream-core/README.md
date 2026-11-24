@@ -2325,7 +2325,9 @@ where it is seen, turned into the sky it lays out (`Arrival::relaid`), so it fad
 warp builds;
 `draw_sky_of` passes its pictures to the backdrop, the upload loop takes the average
 colour of the shown arrival's last picture once per version (`note_picture_mean`, kept in
-`Chains::picture_means` for the shown ones only), and `light_scene` and a probe's capture
+`Chains::picture_means`, and kept while another mix or monitored scene draws without
+it, so the program never asks a let-go still for its pixels again on every frame;
+only past 32 kept does a draw drop those it doesn't show), and `light_scene` and a probe's capture
 add a directional light from that picture in that colour (`arrival_light`,
 `an_arrival_picture_shows_ahead_and_lights_the_scene`,
 `an_arrival_of_a_planet_and_its_sun_lights_from_the_sun`).

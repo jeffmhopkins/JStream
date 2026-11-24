@@ -6704,9 +6704,15 @@ pub(crate) fn compose_metered(
     // The arrival pictures shown now (ADR-0188): only theirs light a scene, so only
     // theirs are averaged.
     let arriving = shown_arrivals(shot, chains);
-    chains
-        .picture_means
-        .retain(|source, _| arriving.contains(source));
+    // A mean is kept while another mix, or a monitored scene, draws without its
+    // picture: dropped there, the program's next draw would ask the still's let-go
+    // pixels for it again, and it would be decoded on every frame, its light white
+    // meanwhile. Only a stage that has gathered many lets go of those not shown here.
+    if chains.picture_means.len() > PICTURE_MEANS_KEPT {
+        chains
+            .picture_means
+            .retain(|source, _| arriving.contains(source));
+    }
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
             continue;
@@ -9051,6 +9057,10 @@ fn note_picture_mean(chains: &mut Chains, (source, frame): (&SourceId, &Frame), 
         .picture_means
         .insert(source.clone(), (frame.version, mean.unwrap_or([1.0; 3])));
 }
+
+/// How many arrival pictures' means a drawer keeps before it lets go of those it
+/// doesn't draw now ([`note_picture_mean`]).
+const PICTURE_MEANS_KEPT: usize = 32;
 
 /// The sources of the arrival pictures the scenes' backdrops show now (ADR-0188), as
 /// their sky state picked them.
