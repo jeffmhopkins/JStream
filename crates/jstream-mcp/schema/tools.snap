@@ -1411,6 +1411,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -7542,7 +7567,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.178).",
             "oneOf": [
               {
                 "const": "pan",
@@ -9013,7 +9038,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",
@@ -10582,6 +10607,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -16713,7 +16763,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.178).",
             "oneOf": [
               {
                 "const": "pan",
@@ -18184,7 +18234,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",
@@ -22600,6 +22650,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -28731,7 +28806,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.178).",
             "oneOf": [
               {
                 "const": "pan",
@@ -30202,7 +30277,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",
@@ -34213,6 +34288,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -40340,7 +40440,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.178).",
             "oneOf": [
               {
                 "const": "pan",
@@ -41805,7 +41905,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",
@@ -45280,7 +45380,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.restart` (action), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.restart` (action), `source.seek` (action), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "AudioFollow": {
@@ -45632,6 +45732,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -47183,6 +47308,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -53318,7 +53468,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.178).",
             "oneOf": [
               {
                 "const": "pan",
@@ -54789,7 +54939,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",

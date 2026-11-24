@@ -476,6 +476,8 @@ each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
 or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
 hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
 after a first play read `timeline.cue_fired` in `events` for errors. \
+`source.seek` (a `source_id` and `at_ms`) plays a video on from that point; a hotkey \
+can bind it, but a cue can't run it. \
 A timeline with `lanes` is a sequence: it moves a few channels over time while the \
 scene stays as it is (a keyframe repositions the whole scene instead). Each lane is \
 `{target: {channel}, points: [{at_ms, value, curve}]}`, `value` 0 to 1 and `curve` \
