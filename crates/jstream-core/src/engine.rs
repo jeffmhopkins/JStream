@@ -1813,6 +1813,17 @@ impl Engine {
             .is_some_and(|host| lock(&host.gate).program().is_some())
     }
 
+    /// How many encoder sessions the stage's preview streams hold between them, for
+    /// tests of what they share.
+    #[cfg(test)]
+    pub(crate) fn preview_encodes_open(&self) -> usize {
+        self.media.as_ref().map_or(0, |host| {
+            lock(&host.gate)
+                .program()
+                .map_or(0, |program| program.preview_encodes().open())
+        })
+    }
+
     /// Encoder and subscriber counters for `output_id`, if it is running.
     pub fn output_stats_of(&self, output_id: &OutputId) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
@@ -3020,12 +3031,11 @@ impl Engine {
             }
         }
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        // A preview stream's hardware session counts too (#1691): it is one of the
+        // The preview streams' hardware sessions count too (#1691): they are among the
         // sessions a capped encoder has given out.
-        let preview = usize::from(
-            gate.program()
-                .is_some_and(|program| program.preview_hardware().taken()),
-        );
+        let preview = gate
+            .program()
+            .map_or(0, |program| program.preview_hardware().taken());
         let hardware = count(sessions.iter().filter(|e| e.hardware()).count() + preview);
         let encoder = gate
             .running
