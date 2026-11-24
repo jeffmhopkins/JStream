@@ -107,6 +107,14 @@ body {
 }
 
 ::selection { background: var(--selection); }
+/* The chrome selects no text, so a click or a drag across panels highlights nothing.
+   Text fields and readable text keep it: the same list as `chrome::TEXT`. */
+body { -webkit-user-select: none; user-select: none; }
+input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, .problem,
+.problem-bar > span, .connection dd, .activity-log, .selectable { -webkit-user-select: text; user-select: text; }
+input[type="checkbox"], input[type="radio"], input[type="range"], input[type="button"],
+input[type="submit"], input[type="reset"], input[type="color"], input[type="file"],
+input[type="image"] { -webkit-user-select: none; user-select: none; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; border: 2px solid var(--panel); }
@@ -188,20 +196,23 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .app-header .brand-mark { width: 22px; height: 22px; border-radius: 5px; }
 .app-header .spacer { flex: 1 1 auto; }
 .app-header .readout { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
-.top-menu { position: relative; }
+/* Stretched to the bar's full height, so its dropdown can hang flush under it. */
+.top-menu { position: relative; align-self: stretch; display: flex; align-items: center; }
 .menu-button { position: relative; z-index: 2; padding: 6px 10px; border: none; border-radius: 5px; background: transparent; color: var(--muted); }
 .menu-button:hover:not(:disabled), .menu-button.open { background: var(--hover); color: var(--text); }
 .menu-catcher { position: fixed; inset: 0; z-index: 1; }
 .dropdown {
   position: absolute;
-  top: 36px;
+  /* Flush under the bar: the header's bottom padding and border below the button. */
+  top: calc(100% + 9px);
   left: 0;
   z-index: 3;
   min-width: 240px;
   padding: 6px;
   background: var(--menu);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 .menu-head { margin: 4px 8px 6px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -2639,10 +2650,14 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .chan-level { flex: 0 0 48px; text-align: right; }
 .chan-driver { margin: 0; }
 .chan-head { margin-top: 8px; }
-.chan-adds { display: flex; gap: 4px; }
-.chan-add { border: none; background: none; color: var(--link); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.chan-head .eyebrow { white-space: nowrap; }
+.chan-adds { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 4px; min-width: 0; }
+.chan-add { white-space: nowrap; border: none; background: none; color: var(--link); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .chan-add.learning { color: var(--accent); }
 .chan-popover { padding: 6px; background: var(--menu); border: 1px solid var(--border); border-radius: 8px; }
+/* The "+ Data" popover: DataReads' fields stacked, then Cancel and Add input. */
+.chan-data { display: flex; flex-direction: column; gap: 6px; }
+.chan-data-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .chan-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .chan-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 6px 0 10px; border-radius: 5px; background: var(--raised); }
 .chan-row.link { cursor: pointer; }

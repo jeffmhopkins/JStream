@@ -514,6 +514,21 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
             "type": "string"
           },
+          "MappingMode": {
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.186): it adds to it, or\nreplaces it.",
+            "oneOf": [
+              {
+                "const": "add",
+                "description": "An offset: its value is added to the stored value (multiplied into a scale), so\nthe stored value, keyframes and other mappings still count.",
+                "type": "string"
+              },
+              {
+                "const": "replace",
+                "description": "An override: its value is the value, in the property's or setting's own unit;\n`add` mappings still add on top.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionColorFrom": {
             "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
             "oneOf": [
@@ -1241,6 +1256,14 @@ source: crates/jstream-mcp/src/tests.rs
               "binding_id": {
                 "description": "Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII\nletters, digits, `_` and `-`.",
                 "type": "string"
+              },
+              "enabled": {
+                "description": "Whether it drives (ADR-0203, since 0.186): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
+                "type": "boolean"
+              },
+              "mode": {
+                "$ref": "#/$defs/MappingMode",
+                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.186).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
               },
               "target": {
                 "$ref": "#/$defs/ValueTarget",
@@ -2016,7 +2039,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "inputs": {
-                "description": "What sets it: at most 8 readers, each a `midi`, `data` or `channel` modifier's kind\nand parameters, whose `from` and `to` map the reading onto the channel's 0 to 1.\nA `channel` input can't lead back to this channel. Default none.",
+                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.186,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
                 "items": {
                   "$ref": "#/$defs/MotionKind"
                 },
@@ -5002,6 +5025,21 @@ source: crates/jstream-mcp/src/tests.rs
             },
             "type": "object"
           },
+          "MappingMode": {
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.186): it adds to it, or\nreplaces it.",
+            "oneOf": [
+              {
+                "const": "add",
+                "description": "An offset: its value is added to the stored value (multiplied into a scale), so\nthe stored value, keyframes and other mappings still count.",
+                "type": "string"
+              },
+              {
+                "const": "replace",
+                "description": "An override: its value is the value, in the property's or setting's own unit;\n`add` mappings still add on top.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionClock": {
             "description": "Where a modifier's time starts.",
             "oneOf": [
@@ -5596,6 +5634,10 @@ source: crates/jstream-mcp/src/tests.rs
               "enabled": {
                 "description": "Whether it applies. Default `true`; omitted when `true`.",
                 "type": "boolean"
+              },
+              "mode": {
+                "$ref": "#/$defs/MappingMode",
+                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.186). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
               },
               "modifier_id": {
                 "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
@@ -9116,6 +9158,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "description": "Whether it runs. Default `true`, which isn't written.",
                 "type": "boolean"
               },
+              "mode": {
+                "$ref": "#/$defs/MappingMode",
+                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.186).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+              },
               "modifier_id": {
                 "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
                 "type": "string"
@@ -9221,6 +9267,21 @@ source: crates/jstream-mcp/src/tests.rs
           "LabelId": {
             "description": "A label that sources carry (ADR-0024 §4).",
             "type": "string"
+          },
+          "MappingMode": {
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.186): it adds to it, or\nreplaces it.",
+            "oneOf": [
+              {
+                "const": "add",
+                "description": "An offset: its value is added to the stored value (multiplied into a scale), so\nthe stored value, keyframes and other mappings still count.",
+                "type": "string"
+              },
+              {
+                "const": "replace",
+                "description": "An override: its value is the value, in the property's or setting's own unit;\n`add` mappings still add on top.",
+                "type": "string"
+              }
+            ]
           },
           "MotionClock": {
             "description": "Where a modifier's time starts.",
