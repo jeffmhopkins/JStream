@@ -87,6 +87,9 @@ pub struct ShowPanel {
     engine: Option<(Studio, SessionContext)>,
     /// The key bound to Continue, as its key cap shows it ("Space"), if any.
     pub continue_key: RwSignal<Option<String>>,
+    /// The element selected in the Edit view (a clip, marker, cue, bookmark or loop),
+    /// by its ID within the open show: what the Inspector's Show page edits.
+    pub selected: RwSignal<Option<String>>,
 }
 
 impl ShowPanel {
@@ -103,6 +106,7 @@ impl ShowPanel {
             viewport: RwSignal::new(Viewport::fit(0)),
             clock: RwSignal::new(0.0),
             continue_key: RwSignal::new(None),
+            selected: RwSignal::new(None),
         }
     }
 
