@@ -775,8 +775,8 @@ merged with it, so the maintainer can audit them
 **How the check works.** `cargo xtask governance --base <rev>` compares `HEAD` with its
 merge base with `<rev>` (`git diff <rev>...HEAD`; committed changes only, and a rename
 counts as a delete plus an add) and lists the governance changes. Run locally, it only
-lists them. The `governance` workflow runs it on every PR event, label and description
-edits included, against `origin/<base branch>`, and passes it the PR's labels,
+lists them. The `governance` workflow runs it on every event of a ready PR, label and
+description edits included, and when a draft is marked ready, against `origin/<base branch>`, and passes it the PR's labels,
 description and author from the event payload. Then:
 
 - **Justification:** the first `##` heading that starts with "Governance change" (any

@@ -573,7 +573,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   channel's `channel` inputs come first, combines, switches, averages, fades and curves
   them, and stores each level in its `ChannelCell` in `LiveData::channels`, which the
   `channel` kind and `amount` read on any thread. The `jstream-values` thread ticks it
-  before the value bindings while the collection holds a channel, and puts a scene's
+  before the value bindings while the collection holds a channel (from the moment
+  `with_collection_file` loads one, not only from the first action or edit; a channel
+  not followed yet reads 0 to what follows it), and puts a scene's
   channels back to their defaults when that scene goes on program. `channel.set_value`,
   `channel.nudge` and `channel.switch` take over until an input moves; `channel.values`
   reads the levels. A scene's reset is immediate, with no fade. A timeline's lane is one
@@ -1165,8 +1167,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   listening to every input. These tests name their inputs bindable.
   Channels (`src/tests/channels.rs`, ADR-0183): a held note drives a channel to 1 and
   its release to 0, `channel.set_value` takes over, `channel.switch` holds the off value,
-  a missing channel's action fails, and a binding's `amount` gives half the throw at
-  0.5; `channels.rs`'s own tests cover combining, fades, averaging, the order of
+  a missing channel's action fails, a binding's `amount` gives half the throw at
+  0.5, and a collection file's channel reads its default as soon as the file loads;
+  `channels.rs`'s own tests cover combining, fades, averaging, the order of
   channels reading channels and a scene's reset. Mutes (`src/tests/mute.rs`,
   ADR-0207): `source.mute` and `bus.mute` move `rev` with no undo step, an unchanged
   mute emits nothing, a missing or soundless target is refused, a binding goes with its
@@ -1459,7 +1462,10 @@ audit entry and errors.
   quietly so the probe reaches none) and puts a Move toward the program scene on the
   studio, by item, with the default preset's duration and easing and its `unmatched`
   (none for a `cut`): every other item pairs with itself and holds still, and only the
-  changed one appears or disappears with its effect. A preset that lasts no time, the
+  changed one appears or disappears with its effect. In a 3D scene whose camera moves on
+  its own, the screen's camera is moved by the family's camera motion as the scene's is,
+  so the Move starts from the camera on screen and doesn't jump to the camera without
+  its motion and glide back. A preset that lasts no time, the
   initial cut included, starts no run, so the item shows or hides on the next frame
   even when it has its own effect. A `cut` that stores a duration still plays that
   effect over it. A transition in flight is
@@ -2254,7 +2260,13 @@ width scales `sky_picture_deg`, `picture_scale`, and its turn and tilt from the 
 which `part_direction` places), and the state keeps the arrival shown
 and where it is pinned (`Arrival`): none while the deep sky is gone at warp
 (`deep_shown`), and another, at random, picked once as it starts to show again with the
-warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
+warp still, dropping or lower than the step before
+([ADR-0224](../../docs/adr/0224-an-arrival-picture-fades-with-the-warp-it-follows.md),
+so a warp that follows a channel down fades it in too;
+`a_backdrop_arrives_at_another_picture_after_each_warp`,
+`a_warp_followed_down_picks_its_arrival_as_the_sky_shows`); a warp aimed ahead keeps it
+where it is seen, turned into the sky it lays out (`Arrival::relaid`), so it fades as the
+warp builds;
 `draw_sky_of` passes its pictures to the backdrop, the upload loop takes the average
 colour of the shown arrival's last picture once per version (`note_picture_mean`, kept in
 `Chains::picture_means` for the shown ones only), and `light_scene` and a probe's capture
@@ -4980,7 +4992,9 @@ collection there at once, with `Graph::with_sample_labels`'s four labels when it
 none, still at its `rev`, and keeps that as the engine's collection, so the file and the
 engine agree and an unwritable path fails at startup rather than at the first change.
 A file that doesn't read or load is refused with `CollectionFileError` (`Read`, `Load`
-or `Create`, each naming the path but never the contents) and left as it is. It is
+or `Create`, each naming the path but never the contents) and left as it is. A loaded
+collection's channels, bindings and triggers are followed at once (the `jstream-values`
+thread starts with it), as an opened one's are. It is
 configured before `connect`, like the other builders.
 
 After each applied batch, undo or redo, `Engine::execute` saves the collection before

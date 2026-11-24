@@ -274,6 +274,9 @@ Contents ([Design](#design) explains the choices):
   what moved and a Mod's reader tested natively, over `mapping_index.rs`, every
   reader grouped by source with the edits that write one back, bypass it, name a Mod and
   list and remove what starts and stops a sequence, tested natively),
+  the Sequence panel's zoom bar (`seq_zoom.rs`: the Show panel's `Viewport` over a
+  sequence counted as one length, each time column's frame and the ruler's step tested
+  natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
   point order, the lane's drawn path, each trigger's sentence, the loop button's steps and
   range and a menu line's trigger toggle tested natively; `lane_offers.rs`: the settings
@@ -1122,6 +1125,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   as the lane; its trigger bar shows `starts` and `stops` as sentences
   (`trigger_text`) and each group's "+ Trigger" opens an editor beside it for each kind,
   which never offers a channel the sequence's own lanes drive (the engine refuses one).
+  Its zoom bar (`seq_zoom.rs`) is the Show panel's: the view is a `Viewport` over a
+  sequence counted as `SEQ_LEN` long, so it zooms in to a fiftieth of any length. The
+  ruler, each lane's area, the Events lane and the play head draw the whole sequence in a
+  frame `seq_zoom::frame` widens and slides left inside a clipping `.seq-clip`, so a
+  press still finds its time from the element it lands on and no gesture changes with
+  the zoom.
   Every edit is built on the sequence as the panel's edits still on their way leave it
   (`Pending`): the panel draws that draft at once and drops it once every edit is
   answered and the collection has caught up, or at once when one is refused. Built on
@@ -1194,7 +1203,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `host::element_at`; a source's audio goes on the A track it is let go on, or a new
   one (`edits::place_source_audio`). A track head drags to reorder its kind's rows
   (`edits::move_track`, refused across kinds by `geom::reorder_refusal`), and its menu
-  renames and deletes overlay and audio tracks. A scene clip's own audio is never
+  renames and deletes overlay and audio tracks. Labels keep out of each other's way
+  from the rows' measured width: `geom::place_marks` stacks markers closer than
+  `CLUSTER_PX` and gives each stack's first marker the room up to the next stack (its
+  name cut short with a CSS ellipsis, left out under `MIN_LABEL_PX`, "+N" for the rest),
+  `geom::cut_room` gives a cut badge half the gap each side, and a clip too narrow to
+  name draws none; hover and tooltips show the whole name. A scene clip's own audio is never
   stored ([ADR-0216](../../docs/adr/0216-a-scene-clips-audio-is-drawn-linked-under-it.md)):
   `wire::heard_in` finds the sources a scene is heard through when shown, and
   `view_of` draws a read-only `TrackKind::Linked` row per video track whose clips keep

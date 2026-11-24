@@ -2731,7 +2731,14 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .seq-point-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; padding: 6px 10px; }
 .seq-tick { position: absolute; top: 4px; padding-left: 4px; border-left: 1px solid var(--line); color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .seq-body { position: relative; }
-.seq-head-layer { position: absolute; top: 0; bottom: 0; left: 220px; right: 0; pointer-events: none; }
+.seq-head-layer { position: absolute; top: 0; bottom: 0; left: 220px; right: 0; pointer-events: none; overflow: hidden; }
+/* A time column clips the sequence's frame, which seq_zoom widens and slides to the part
+   in view; the zoom bar along the foot is the Show panel's (.show-zoom). */
+.seq-clip { position: relative; min-width: 0; overflow: hidden; }
+.seq-head-frame { position: relative; height: 100%; }
+.seq-zoom-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: center; height: 34px; padding-right: 8px; border-top: 1px solid var(--line); }
+.seq-zoom-row .show-zoom { margin-left: 8px; }
+.seq-zoom-label { padding-left: 10px; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seq-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text-soft); }
 .seq-lane { border-bottom: 1px solid var(--line); }
 .seq-lane.lane-0 { --lane: var(--accent); }
@@ -3000,7 +3007,7 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
   --show-tag: #6aa5ff;
   --show-seq: #0f2b28; --show-seq-edge: #2a7a6b; --show-seq-line: #2dd4bf; --show-seq-text: #c9f3ec; --show-event: #12332f;
   --show-audio: #10233a; --show-audio-edge: #34588c; --show-audio-fill: #3b82c4; --show-audio-line: #7cc0ff; --show-audio-text: #d6e9ff; --show-audio-detail: #9cc3ea;
-  --show-keyframe: #a78bfa; --show-keyframe-text: #cfc3ff;
+  --show-keyframe: #a78bfa; --show-keyframe-text: #cfc3ff; --show-keyframe-count: rgba(167, 139, 250, 0.22); --show-event-count: rgba(45, 212, 191, 0.18);
   --show-loop-ink: #170f2e;
   --show-armed: #7cc0ff;
   --show-played: rgba(10, 13, 18, 0.38);
@@ -3012,7 +3019,10 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-btn.on { background: var(--selected); }
 /* A locked show stands out: the show accent marks the Edit and Run bars' Lock while it is on. */
 .show-btn.show-lock.on { border-color: var(--show-bookmark); color: var(--show-bookmark); }
-.show-next { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* "Next:" is a button: a click skips the play head ahead to it. */
+.show-next { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; border: none; background: none; padding: 2px 4px; border-radius: 4px; font: inherit; cursor: pointer; }
+.show-next:hover { background: var(--hover); }
+.show-next:hover b { text-decoration: underline; }
 .show-next b { color: var(--text); font-weight: 600; }
 .show-bar-gap { flex: 1; }
 .show-state { color: var(--show-bookmark); font-weight: 600; white-space: nowrap; }
@@ -3081,6 +3091,29 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-au span { position: relative; font-size: 11px; color: var(--show-audio-detail); }
 .show-clip.missing, .show-seq.missing, .show-au.missing { border-style: dashed; border-color: var(--danger-text); background: repeating-linear-gradient(135deg, rgba(255, 107, 107, 0.12) 0 6px, transparent 6px 12px); }
 .show-kf.missing, .show-ev.missing { opacity: 0.6; text-decoration: line-through; }
+/* Labels that keep out of each other's way (geom::place_marks, cut_room): a marker's or a
+   cut's name is cut short with an ellipsis where the next one starts, left out when it has
+   no room (a cut keeps its icon), and a stack of markers names only its first, with "+N".
+   Hovering a marker or cut shows its whole name over its neighbours. A clip names itself
+   with an ellipsis, and too narrow a clip draws no name; every name is in the tooltip. */
+.show-mk-name, .show-cut-name { font-style: normal; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.show-mk-name.hide, .show-cut-name.hide { display: none; }
+.show-mk-more { font-style: normal; flex: none; padding: 0 4px; border-radius: 7px; font-size: 10px; line-height: 14px; background: var(--show-keyframe-count); color: var(--show-keyframe-text); }
+.show-ev .show-mk-more { margin-left: 5px; background: var(--show-event-count); color: var(--show-seq-text); }
+.show-ev span.bare { padding-left: 2px; padding-right: 2px; min-height: 13px; }
+.show-ev.named { z-index: 2; }
+/* A stack's bare pills lie over its named one, so each stays reachable to a click. */
+.show-ev:not(.named) { z-index: 3; }
+.show-kf:hover, .show-ev:hover, .show-cut:hover { z-index: 7; }
+.show-kf:hover .show-mk-name, .show-ev:hover .show-mk-name, .show-cut:hover .show-cut-name { display: inline-block; max-width: none !important; }
+.show-kf:hover .show-mk-name { background: var(--panel); border-radius: 3px; padding: 0 3px; margin: 0 -3px; }
+.show-ev:hover span.bare { padding-left: 7px; padding-right: 7px; }
+.show-cut.bare { padding-right: 4px; }
+.show-cut.bare i { margin-right: 0; }
+.show-clip b, .show-seq b, .show-au b { min-width: 0; max-width: 100%; }
+.show-clip-name { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.show-clip.tight, .show-seq.tight, .show-au.tight { padding-left: 0; padding-right: 0; }
+.show-clip.tight b, .show-clip.tight span, .show-seq.tight b, .show-au.tight b, .show-au.tight span { visibility: hidden; }
 .show-flag-row, .show-loop-row { height: 24px; }
 .show-marks { position: absolute; left: 130px; right: 0; top: 0; bottom: 0; overflow: hidden; pointer-events: none; }
 .show-played { position: absolute; left: 0; top: 46px; bottom: calc(24px + var(--loops-h)); background: var(--show-played); z-index: 1; }

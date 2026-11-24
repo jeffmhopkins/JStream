@@ -17189,7 +17189,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
       "properties": {
         "autofocus": {
-          "description": "Whether the focus follows whatever is at the centre of the frame (since 0.167,\nADR-0176 decision 5): with a depth of field, each frame the engine measures the\nnearest item the viewing axis meets and glides `focus_px` there, holding the last\ndistance (at first `focus_px`) while nothing is there. Off, `focus_px` is where it\nfocuses. Default `false`, which isn't written.",
+          "description": "Whether the focus follows whatever is at the centre of the frame (since 0.167,\nADR-0176 decision 5): with a depth of field, each frame the engine measures the\nnearest item the viewing axis meets that hides what is behind it (a `normal`\nitem at least half opaque, a model at its opaque surface) and glides `focus_px` there, holding the last\ndistance (at first `focus_px`) while nothing is there. Off, `focus_px` is where it\nfocuses. Default `false`, which isn't written.",
           "type": "boolean"
         },
         "blur_px": {

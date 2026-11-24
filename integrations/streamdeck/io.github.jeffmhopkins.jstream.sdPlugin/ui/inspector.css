@@ -1,0 +1,148 @@
+:root {
+	color-scheme: dark;
+	--bg: #2d2d2d;
+	--field: #3d3d3d;
+	--text: #d8d8d8;
+	--dim: #969696;
+	--accent: #3b7ddd;
+	--bad: #d93636;
+	--good: #2f9e44;
+	--busy: #e8890c;
+}
+body {
+	margin: 0;
+	padding: 8px 12px 16px 8px;
+	background: var(--bg);
+	color: var(--text);
+	font: 9pt -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 4px 0;
+	min-height: 26px;
+}
+.row > label {
+	flex: 0 0 30%;
+	text-align: right;
+	color: var(--dim);
+}
+.row > input,
+.row > select,
+.row > textarea,
+.row > .value,
+.row > .buttons {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+input,
+select,
+textarea {
+	box-sizing: border-box;
+	width: 100%;
+	background: var(--field);
+	color: var(--text);
+	border: 1px solid transparent;
+	border-radius: 3px;
+	padding: 4px 6px;
+	font: inherit;
+}
+input:focus,
+select:focus,
+textarea:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+textarea {
+	min-height: 70px;
+	resize: vertical;
+}
+.buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+button {
+	background: var(--field);
+	color: var(--text);
+	border: 1px solid #4d4d4d;
+	border-radius: 3px;
+	padding: 4px 10px;
+	font: inherit;
+	cursor: pointer;
+}
+button:hover {
+	border-color: var(--accent);
+}
+button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+details {
+	margin-top: 10px;
+	border-top: 1px solid #3d3d3d;
+	padding-top: 6px;
+}
+summary {
+	cursor: pointer;
+	color: var(--dim);
+	list-style-position: inside;
+	margin-left: 4px;
+}
+.dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin: 0 6px 0 2px;
+	background: var(--dim);
+}
+.dot.connected {
+	background: var(--good);
+}
+.dot.error {
+	background: var(--bad);
+}
+.dot.connecting {
+	background: var(--busy);
+}
+.hint {
+	color: var(--dim);
+	margin: 6px 4px 6px calc(30% + 8px);
+	line-height: 1.4;
+}
+.message {
+	margin: 6px 4px 6px calc(30% + 8px);
+	color: var(--bad);
+	line-height: 1.4;
+}
+.message.ok {
+	color: var(--good);
+}
+.mono {
+	font-family: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+}
+.small {
+	font-size: 8pt;
+	word-break: break-all;
+}
+.fingerprint {
+	margin: 4px 4px 8px calc(30% + 8px);
+	padding: 6px;
+	background: #252525;
+	border-radius: 3px;
+}
+.found {
+	margin-left: calc(30% + 8px);
+}
+.found button {
+	display: block;
+	width: 100%;
+	text-align: left;
+	margin: 3px 0;
+}
+.found .none {
+	color: var(--dim);
+	margin: 4px 0;
+}

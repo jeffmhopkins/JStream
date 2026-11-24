@@ -5,6 +5,8 @@
 # checks the dnf package names. The pins in scripts/install-tools.txt are checked by
 # mac-install's `pins` job. Not a required check: it runs only when the installer or what
 # it builds could change.
+# On a pull request it skips drafts and PRs into any branch but main (a wave, a train or a
+# stack): that branch's own PR into main runs it (ADR-0231).
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
@@ -46,7 +48,7 @@ concurrency:
 
 jobs:
   lint:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,7 +59,7 @@ jobs:
           shellcheck --severity=style scripts/linux/install.sh scripts/linux/jstream
 
   ubuntu:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -163,7 +165,7 @@ jobs:
   # which the installer refuses for testers (Chromium won't run its sandbox as root), so
   # JSTREAM_ALLOW_ROOT lets it build there.
   fedora:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     container: fedora:43

@@ -2,6 +2,8 @@
 # `pins` checks the scripts on Linux; `install` runs the installer end to end on
 # macos-latest from this checkout, then runs the installed launcher and loads the UI.
 # Not a required check: it runs only when the installer or what it pins could change.
+# On a pull request it skips drafts and PRs into any branch but main (a wave, a train or a
+# stack): that branch's own PR into main runs it (ADR-0231).
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
@@ -43,7 +45,7 @@ concurrency:
 
 jobs:
   pins:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -87,7 +89,7 @@ jobs:
           exit "$fail"
 
   install:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: macos-latest
     timeout-minutes: 60
     steps:

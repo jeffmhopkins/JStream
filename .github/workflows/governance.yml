@@ -15,7 +15,8 @@ name: governance
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+    # ready_for_review: a draft skips the job (a draft can't merge), so it runs when marked ready.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
 
 permissions:
   contents: read
@@ -30,6 +31,7 @@ env:
 
 jobs:
   governance:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
       # The PR's base commit, with full history for the merge base.
