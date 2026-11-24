@@ -2145,6 +2145,23 @@ pub enum Action {
         /// The source to restart.
         source_id: SourceId,
     },
+    /// Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to
+    /// that point of its timeline and plays on from there, as `source.restart` plays it
+    /// from its start. On a looping file a point past the end lands where that many
+    /// plays would reach; on one that doesn't loop, on its last frame. A kind with
+    /// nothing to seek starts over as `source.restart` starts it (a `browser` page loads
+    /// again), and a kind with nothing to restart does nothing. A seek made before the
+    /// program shows the source holds: being shown doesn't start it again from its
+    /// start, as `restart_on_show` would, so a switch and a seek may come in either
+    /// order. Runtime state like `source.restart`: it changes no `rev` and is never
+    /// undone. Fails with `not_found` for a source the collection doesn't hold.
+    #[serde(rename = "source.seek")]
+    SourceSeek {
+        /// The source to seek.
+        source_id: SourceId,
+        /// Where to play on from, in milliseconds from the start of its timeline.
+        at_ms: u64,
+    },
     /// Opens pairing for one more device (ADR-0044): the server draws a one-time
     /// pairing code and answers with it, to this client only (a `result` of type
     /// `pairing.start`). A device that posts the code with a name to `POST
@@ -2468,6 +2485,7 @@ impl Action {
             Action::ClockStep { .. } => "clock.step",
             Action::ClockRelease => "clock.release",
             Action::SourceRestart { .. } => "source.restart",
+            Action::SourceSeek { .. } => "source.seek",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
@@ -2557,7 +2575,9 @@ impl Action {
             | Action::ChannelNudge { channel_id, .. } => {
                 vec![(EntityKind::Channel, channel_id.as_str())]
             }
-            Action::SourceRestart { source_id } => vec![(EntityKind::Source, source_id.as_str())],
+            Action::SourceRestart { source_id } | Action::SourceSeek { source_id, .. } => {
+                vec![(EntityKind::Source, source_id.as_str())]
+            }
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
             // A PTZ camera belongs to the machine, not the collection (ADR-0146 §1).
@@ -2739,6 +2759,7 @@ impl Action {
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. }
             | Action::SourceRestart { .. }
+            | Action::SourceSeek { .. }
             | Action::PrivacySet { .. } => None,
             Action::TimelinePlay { .. } => self.play_problem(),
             // Bindable, but checked as the call would be, so a saved binding never fails
@@ -2813,6 +2834,7 @@ impl Action {
             | Action::ChannelSwitch { .. }
             | Action::ChannelNudge { .. }
             | Action::SourceRestart { .. }
+            | Action::SourceSeek { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }
