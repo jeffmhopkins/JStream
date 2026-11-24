@@ -8466,7 +8466,7 @@ stamp = { hash = "b3:a6d2c5fe33765ea1", by = "agent:scene-folders", note = "Re-r
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#transitions"]
-stamp = { hash = "b3:e1b24236a5e79d23", by = "agent:release-alpha13", note = "Re-read step 3 against the canvas live aim (added one sentence) and the menus, dialogs, inspector and transitions changes, which add options without changing the first-scene steps | merge: Merged main after #1726 landed there (7fd6d0a: studio mode stacks preview over the controls over program for a portrait canvas when that shows them larger). It merged cleanly beside the train's #1738 and #1697 changes in workspace.rs, style.css, the UI README, the e2e README and UI-FEATURES (the studio-mode row now has both). Re-read: #1726's added lines are in the merged text and nothing in the train contradicts them; sections whose only conflict was their stamp hold as the train had them. jstream-ui clippy and tests pass | kept from the merged side: Re-read after TR-03's delete-question change: the scene steps only say the Transitions panel sets up the presets Transition uses; holds | kept from the merged side: Re-read against TR-06's portrait-stacking sentence: this section's steps don't depend on it and still hold." }
+stamp = { hash = "b3:e1b24236a5e79d23", by = "agent:claude-audit-gaps", note = "Re-read step 3 against the canvas live aim (added one sentence) and the menus, dialogs, inspector and transitions changes, which add options without changing the first-scene steps | merge: #1726 (7fd6d0a) adds the stacked studio two-up for a portrait canvas (workspace.rs stacks, .stage-row.two-up.stacked rules in style.css, TR-06); re-read beside this PR's .seq-range, .seq-point-fields, .seq-bar and .live-aim-readout rules and live aim, which it doesn't touch; holds | kept from the merged side: Re-read after TR-03's delete-question change: the scene steps only say the Transitions panel sets up the presets Transition uses; holds | kept from the merged side: Re-read against TR-06's portrait-stacking sentence: this section's steps don't depend on it and still hold." }
 
 ["GETTING-STARTED#show"."body"]
 stamp = { hash = "b3:b23662934de62e25", by = "agent:claude", note = "New section: Show layout, + New show, V1 scene drops, file drops, overlay and audio tracks, Bookmark tool (B), Run view's Play show and Continue, run-of-show jumps, Keys & MIDI picks Continue the show and Go to bookmark 1 to 8; checked against UI-FEATURES SH-01 to SH-19, DK-08 and KB-08 | merge: Train merge touched none of this section's inputs (it brought macOS GPU docs, a toast text-selection fix and HD-01/CM-09 wording); re-read, still holds" }
@@ -8500,6 +8500,102 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: 
 
 ["GETTING-STARTED#vcam"."dep:docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
 stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "ADR-0156 is now maintainer tier and proposed; the Linux steps are unchanged and still match vcam.rs's MODPROBE and PERSIST_HINT" }
+
+["INTEGRATION-streamdeck#build"."body"]
+stamp = { hash = "b3:3b6ea036f1685810", by = "agent:streamdeck-thread", note = "added the show test (play, pause, continue, go_to, stop against the train's daemon); the section names it and its skip" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/package.json"]
+stamp = { hash = "b3:d67843ed82f78f37", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/scripts/icons-png.mjs"]
+stamp = { hash = "b3:71c171caa84ac726", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/scripts/icons.ts"]
+stamp = { hash = "b3:91d8b1042b9fc2de", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.test.ts"]
+stamp = { hash = "b3:b275071e92e34826", by = "agent:streamdeck-thread", note = "added the show test (play, pause, continue, go_to, stop against the train's daemon); the section names it and its skip" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.ts"]
+stamp = { hash = "b3:33e39cd38e1bb930", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/plugin.test.ts"]
+stamp = { hash = "b3:94be2533d4672455", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/unit.test.ts"]
+stamp = { hash = "b3:5f31c14d7cdead5e", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."body"]
+stamp = { hash = "b3:af2bcf956450fbcb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."dep:docs/adr/0044-pairing-remote-browsers.md"]
+stamp = { hash = "b3:5670e6a5758601b2", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."dep:docs/adr/0104-network-listener-over-tls.md"]
+stamp = { hash = "b3:4458a76284b426ae", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/actions/base.ts"]
+stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/actions/index.ts"]
+stamp = { hash = "b3:badafd07ab70c4ce", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/hub.ts"]
+stamp = { hash = "b3:22c5b9ecf7cda0b5", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/client.ts"]
+stamp = { hash = "b3:3664d88d5c05e290", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/discovery.ts"]
+stamp = { hash = "b3:d65185eb4dff3671", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/protocol.ts"]
+stamp = { hash = "b3:68b84d51d14515c9", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/studio.ts"]
+stamp = { hash = "b3:83d2f4ba8bf1d569", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/tls.ts"]
+stamp = { hash = "b3:7099247b3b19db3f", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/lists.ts"]
+stamp = { hash = "b3:351ffd57d84fb195", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/plugin.ts"]
+stamp = { hash = "b3:202a0b83abd0d76b", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/render.ts"]
+stamp = { hash = "b3:deafc942594334d1", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."body"]
+stamp = { hash = "b3:3dcabdc0fb68c15e", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/manifest.json"]
+stamp = { hash = "b3:ab7094435b31befe", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.css"]
+stamp = { hash = "b3:6890318949d37d88", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.html"]
+stamp = { hash = "b3:8f3f80f5d7199d4f", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/ui/inspector.js"]
+stamp = { hash = "b3:fb6aa42bf1da6a0e", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."body"]
+stamp = { hash = "b3:6e3b2ce0823d19e6", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/base.ts"]
+stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/index.ts"]
+stamp = { hash = "b3:badafd07ab70c4ce", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/lists.ts"]
+stamp = { hash = "b3:351ffd57d84fb195", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/render.ts"]
+stamp = { hash = "b3:deafc942594334d1", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["PERF-SUITE#runner"."body"]
 stamp = { hash = "b3:6ef2740094e0f29b", by = "agent:claude-perf-suite", note = "run() now writes report.json before running the bench, and reports both the bench and the threshold failures before returning false; the text says the bench runs after the report is written" }
@@ -9468,7 +9564,7 @@ stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading 
 stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#transitions"."body"]
-stamp = { hash = "b3:e1b24236a5e79d23", by = "agent:release-alpha13", note = "TR-02 notes a stinger's scene list, checked against studio.rs ParamField and param_value | merge: Merged main after #1726 landed there (7fd6d0a: studio mode stacks preview over the controls over program for a portrait canvas when that shows them larger). It merged cleanly beside the train's #1738 and #1697 changes in workspace.rs, style.css, the UI README, the e2e README and UI-FEATURES (the studio-mode row now has both). Re-read: #1726's added lines are in the merged text and nothing in the train contradicts them; sections whose only conflict was their stamp hold as the train had them. jstream-ui clippy and tests pass | kept from the merged side: TR-03 now says Delete… deletes only the preset it was chosen on and closes on a pick, add, duplicate or another shown preset (review N1) | kept from the merged side: Re-read with TR-06's new sentence: a portrait canvas stacks preview over the controls over program when that's larger (workspace::stacks, 10% margin), stays side by side on a widescreen window; landscape and square unchanged." }
+stamp = { hash = "b3:e1b24236a5e79d23", by = "agent:claude-audit-gaps", note = "TR-02 notes a stinger's scene list, checked against studio.rs ParamField and param_value | merge: #1726 (7fd6d0a) adds the stacked studio two-up for a portrait canvas (workspace.rs stacks, .stage-row.two-up.stacked rules in style.css, TR-06); re-read beside this PR's .seq-range, .seq-point-fields, .seq-bar and .live-aim-readout rules and live aim, which it doesn't touch; holds | kept from the merged side: TR-03 now says Delete… deletes only the preset it was chosen on and closes on a pick, add, duplicate or another shown preset (review N1) | kept from the merged side: Re-read with TR-06's new sentence: a portrait canvas stacks preview over the controls over program when that's larger (workspace::stacks, 10% margin), stays side by side on a widescreen window; landscape and square unchanged." }
 
 ["UI-FEATURES#transitions"."file:crates/jstream-ui/src/panels/studio.rs"]
 stamp = { hash = "b3:59349c97299022e7", by = "agent:release-alpha13", note = """merge: The alpha.13 train merged #1740, #1742 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it. model_resolution renumbered to 0.180. | merge: Merged #1744 (ADR-0213: live filter settings, opacity, source and master faders and sends) into the alpha.13 train at bd7644b; its protocol 0.180 is renumbered 0.183 after the train's 0.178 to 0.182. Checked that every line #1744 added to this section is in the merged text, apart from the renumbered version mentions and the WS-05 row, which now carries both #1744's live-drag text and #1697's mapping text | kept from the merged side: TR-02 notes a stinger's scene list, checked against studio.rs ParamField and param_value | kept from the merged side: Only a rustdoc fix in studio.rs (duplicate_edit's "<name> copy" in backticks, for invalid_html_tags); no behaviour change; holds | kept from the merged side: studio.rs: preset number fields of absent settings start from the default (N1); TR rows hold | kept from the merged side: Re-read TR rows against #1734: a preset's kind settings, now the shared number field for whole and decimal settings, still each save the preset on change (on release for a drag); duration slider and field are unchanged.""" }

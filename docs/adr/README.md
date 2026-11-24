@@ -234,4 +234,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0223](0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md) | A camera with a fixed aperture blurs like a real lens as it zooms and focuses | accepted | agent |  |
 | [ADR-0224](0224-an-arrival-picture-fades-with-the-warp-it-follows.md) | An arrival picture fades out and in with a warp that follows a channel or turns ahead | accepted | agent |  |
 | [ADR-0231](0231-prs-into-any-branch-but-main-run-the-light-ci.md) | PRs into any branch but main run the light CI | accepted | agent |  |
+| [ADR-0232](0232-integrations-outside-the-workspace.md) | Integrations for other apps live in integrations/, outside the Cargo workspace | accepted | agent |  |
 <!-- @generated end adr-index -->
