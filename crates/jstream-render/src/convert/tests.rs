@@ -340,6 +340,159 @@ fn submit_stages_the_frame_and_converts_into_it() {
     );
 }
 
+/// A two-plane encode target (`GpuFrame::planar`, as on Metal, which has no NV12
+/// texture format): `Nv12Target::gpu_frame` picks its two plane textures, the frame's
+/// one sync is staged once, both planes are handed back in the submit, and they hold
+/// what the planes path converts.
+#[test]
+fn a_planar_frame_converts_as_the_planes_path_does() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let c = &opened.compositor;
+    let (w, h) = (18, 6);
+    let rgba = pattern(w, h);
+    let texture = source(c.device(), c.queue(), w, h, &rgba);
+    let converter = Nv12Converter::new(c.device());
+    // The planes path, the one every adapter has.
+    let expected = convert(&converter, c.device(), c.queue(), &texture, LIMITED);
+    // The platform's two textures over one surface, standing in for an IOSurface's
+    // planes.
+    let planes = converter.planes(size(w, h)).expect("planes");
+    let sync = Arc::new(LockSync {
+        lock: c.submit_lock().clone(),
+        held: std::sync::Mutex::new(Vec::new()),
+    });
+    let info = VideoFrameInfo {
+        size: size(w, h),
+        format: PixelFormat::Nv12,
+        color: LIMITED,
+        pts: MediaTime::zero(Timebase::MICROS),
+    };
+    let frame = GpuFrame::planar(
+        planes.y().clone(),
+        planes.uv().clone(),
+        info,
+        Arc::clone(&sync) as Arc<dyn FrameSync>,
+    );
+    assert!(
+        frame
+            .planes()
+            .is_some_and(|(y, uv)| y == planes.y() && uv == planes.uv()),
+        "the frame's planes are the two textures"
+    );
+    let target = Nv12Target::gpu_frame(&frame).expect("planar target");
+    assert_eq!((target.width(), target.height()), (w, h));
+    let pass = converter.bind(&texture, &target, LIMITED).expect("bind");
+    converter.submit(c, &pass, &frame).expect("submit");
+    assert_eq!(
+        *sync.held.lock().unwrap(),
+        [true],
+        "staged once, under the lock"
+    );
+    let out = planes.read(c.device(), c.queue()).expect("read");
+    assert_eq!(
+        out, expected,
+        "the planar target holds the planes path's bytes"
+    );
+    assert_within_one(
+        &out,
+        &rgba8_to_nv12(&rgba, w as usize, h as usize, ColorRange::Limited),
+        w as usize,
+    );
+}
+
+/// `plane_textures` takes an `R8Unorm` Y plane and an `Rg8Unorm` CbCr plane of half its
+/// even size, and nothing else; a one-texture frame that is not NV12 is refused as
+/// before.
+#[test]
+fn plane_textures_check_formats_and_sizes() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let c = &opened.compositor;
+    let converter = Nv12Converter::new(c.device());
+    let planes = converter.planes(size(8, 4)).expect("planes");
+    let other = converter.planes(size(4, 4)).expect("planes");
+    assert!(Nv12Target::plane_textures(planes.y(), planes.uv()).is_ok());
+    // Swapped planes.
+    assert!(matches!(
+        Nv12Target::plane_textures(planes.uv(), planes.y()),
+        Err(RenderError::UnsupportedFormat { .. })
+    ));
+    // A CbCr plane of another frame's size.
+    assert!(matches!(
+        Nv12Target::plane_textures(planes.y(), other.uv()),
+        Err(RenderError::Invalid { .. })
+    ));
+    // An odd Y plane.
+    let odd = c.device().create_texture(&wgpu::TextureDescriptor {
+        label: Some("nv12 odd y"),
+        size: wgpu::Extent3d {
+            width: 9,
+            height: 4,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    assert!(matches!(
+        Nv12Target::plane_textures(&odd, planes.uv()),
+        Err(RenderError::Invalid { .. })
+    ));
+    // A plane that can't be rendered to.
+    let sampled = c.device().create_texture(&wgpu::TextureDescriptor {
+        label: Some("nv12 sampled uv"),
+        size: wgpu::Extent3d {
+            width: 4,
+            height: 2,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rg8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    assert!(matches!(
+        Nv12Target::plane_textures(planes.y(), &sampled),
+        Err(RenderError::UnsupportedTexture { .. })
+    ));
+    let info = VideoFrameInfo {
+        size: size(8, 4),
+        format: PixelFormat::Nv12,
+        color: LIMITED,
+        pts: MediaTime::zero(Timebase::MICROS),
+    };
+    let sync: Arc<dyn FrameSync> = Arc::new(LockSync {
+        lock: c.submit_lock().clone(),
+        held: std::sync::Mutex::new(Vec::new()),
+    });
+    // One `R8Unorm` texture is not an NV12 target.
+    let single = GpuFrame::new(planes.y().clone(), info, Arc::clone(&sync));
+    assert!(single.planes().is_none());
+    assert!(matches!(
+        Nv12Target::gpu_frame(&single),
+        Err(RenderError::UnsupportedFormat { .. })
+    ));
+    // Equality covers both planes.
+    let planar = GpuFrame::planar(
+        planes.y().clone(),
+        planes.uv().clone(),
+        info,
+        Arc::clone(&sync),
+    );
+    assert!(planar == planar.clone());
+    assert!(planar != single, "a planar frame is not its Y plane alone");
+    let mixed = GpuFrame::planar(planes.y().clone(), other.uv().clone(), info, sync);
+    assert!(planar != mixed, "another CbCr plane is another frame");
+}
+
 /// The native path: an `NV12` texture's plane views as render targets, when the
 /// adapter has `TEXTURE_FORMAT_NV12`. Skips (with a line) where it doesn't, and on
 /// lavapipe, which has the feature but writes plane 1 into plane 0.

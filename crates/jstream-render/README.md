@@ -310,10 +310,13 @@ and calls this crate.
   is not the encoder's NV12 texture.
 - `Nv12Converter` turns that sRGB output into NV12 for the encoders
   ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline) step 4). The target
-  is either the plane views of a native `NV12` texture (`Nv12Target::nv12_texture`,
-  for the platform's `encode_target`) or `Nv12Planes`, an `R8Unorm` Y texture and an
-  `Rg8Unorm` CbCr texture at half size, which every adapter can render to and which
-  `Nv12Planes::read` copies back as packed NV12 for the CPU fallback. The colour is
+  is the plane views of a native `NV12` texture (`Nv12Target::nv12_texture`), two
+  plane textures the platform made over one surface (`Nv12Target::plane_textures`, an
+  `R8Unorm` Y and a half-size `Rg8Unorm` CbCr, where wgpu has no NV12 format, as on
+  Metal), or `Nv12Planes`, an `R8Unorm` Y texture and an `Rg8Unorm` CbCr texture at
+  half size, which every adapter can render to and which `Nv12Planes::read` copies back
+  as packed NV12 for the CPU fallback. `Nv12Target::gpu_frame` picks the first or the
+  second for the platform's `encode_target`, by whether the `GpuFrame` is two-plane. The colour is
   `jstream-media`'s `ColorInfo`: BT.709 only, limited range (the default) or full.
   `Nv12Converter::submit` runs a pass into a platform `GpuFrame` in a submit of its
   own on a compositor's queue, which is how `jstream-core`'s render thread feeds an
@@ -682,7 +685,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    records the pass into its own encoder, after the composite, and stages a shared
    target's `FrameSync` before that submit. `Nv12Converter::submit` does that for a
    platform `GpuFrame`: it stages the frame, records the pass, transitions the frame's
-   texture to `PRESENT` as the composite does with the frames it samples, and submits,
+   texture (both plane textures of a two-plane frame) to `PRESENT` as the composite
+   does with the frames it samples, and submits,
    holding the compositor's `SubmitLock` from the stage through the submit as `render`
    does.
 
@@ -2089,7 +2093,11 @@ taps reach it, which centre-sited chroma would not do. Odd sizes, a size mismatc
 BT.601 and a non-sRGB source are refused. `submit` stages its frame once, with the
 compositor's `SubmitLock` held and free again after the submit, and leaves the
 conversion in the planes, with a plane texture standing in for the platform's
-target. The native path (plane views of an `NV12`
+target. A two-plane frame (`GpuFrame::planar`) converts through
+`Nv12Target::gpu_frame` and `submit` to the same bytes as the planes path, with its one
+hold staged once, and `plane_textures` refuses planes of the wrong format, size or
+usage; a one-texture `R8Unorm` frame is not an NV12 target, and frame equality covers
+both planes. The native path (plane views of an `NV12`
 texture, compared with the planes path) runs where the adapter has
 `TEXTURE_FORMAT_NV12`. It skips on lavapipe, which offers the feature but writes its
 plane-1 render into plane 0's memory (the Y plane's first rows came back holding the
