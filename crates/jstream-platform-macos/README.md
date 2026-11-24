@@ -47,11 +47,12 @@ tested on every platform.
 | (AAC encoder), `AacFramer` | `AudioEncoder` | `audiotoolbox.rs`, `aac.rs` | AudioToolbox AAC-LC (`aac_settings`), framed and timed as on the other platforms |
 | (H.264 and HEVC decoder) | | `vtdecoder.rs`, `decode.rs` | VideoToolbox decoding on CPU frames, packets split by `split_access_unit`, frames ordered by `Reorder` |
 | `AvMediaDecoders` | `MediaDecoders` | `avreader.rs`, `media_file.rs` | local media files through AVFoundation's asset reader (MP4, MOV, M4V; not MKV or WebM) |
-| `ScreenCaptureKitCapture` | `Capture` | `capture/` | display and window capture through ScreenCaptureKit, behind the Screen Recording permission |
+| `ScreenCaptureKitCapture` | `Capture` | `capture/` | display and window capture through ScreenCaptureKit, behind the Screen Recording permission; on a `MetalGpu` context (`Capture::on_context`) it delivers the BGRA frames as GPU frames over their own IOSurfaces |
 | `MacosKeychain` | `StreamKeyStore`, `OAuthTokenStore` | `keychain.rs` | generic-password items in the login keychain (ADR-0063 §9, [R-SEC-001](../../docs/RULES.md#R-SEC-001)); nothing syncs to iCloud |
 | `CoreAudioIo` | `AudioIo` | `audio/` | Core Audio devices, input (behind the Microphone permission), output, and desktop and application audio through process taps (macOS 14.2) |
 | `AvFoundationVideoDevices` | `VideoDevices` | `video_device/` | cameras through AVFoundation, behind the Camera permission (ADR-0063 §10); no camera controls yet (the trait's default, #1196) |
-| `NoGpuInterop` | `GpuInterop` | `unbuilt.rs` | a stand-in until the Metal interop exists, so the engine takes the CPU frame paths |
+| `MetalGpu` | `GpuInterop` | `gpu/metal.rs` | the engine's wgpu device on Metal, and IOSurface-backed BGRA pixel buffers wrapped as its textures with no copy, each held until a `MTLSharedEvent` signalled after the submits that read it says the GPU is done (ADR-0063 §8); encode targets are `Unsupported` for now, so encoding reads the program back |
+| `NoGpuInterop` | `GpuInterop` | `unbuilt.rs` | a stand-in with no device, for hosts that want the engine's own device and the CPU frame paths |
 | `GlobalHotkeys` | | `hotkeys.rs` | the desktop app's hotkeys while another app has the focus ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5): Carbon's `RegisterEventHotKey` for keys, on the main thread, and a Quartz event tap for wheel chords, on its own thread while one is set, behind the Accessibility permission, which `wheel_needs_accessibility` checks without asking so the app can say when wheel chords are focus-only; the key table and the wheel's notch counting are pure |
 | `pick_path`, `Pick` | | `dialog.rs` | the desktop app's Browse dialogs: AppKit's open and save panels, app-modal on the main thread ([ADR-0144](../../docs/adr/0144-the-desktop-app-on-macos.md)) |
 
@@ -62,20 +63,19 @@ holds a tap's start until the user answers its prompt, so a tap starts on its st
 watcher thread and opening it never waits on the prompt (`audio/stream.rs`).
 
 Not here yet, in roughly the order they follow:
-- capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
-  proves the synchronisation, in place of `NoGpuInterop`;
-- IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
-  spike lands;
-- GPU frames (IOSurface pixel buffers imported into Metal) from the VideoToolbox decoder
-  and the media-file reader, once the Metal spike lands.
+- IOSurface encode targets (GPU frames) for the VideoToolbox encoder: wgpu has no `NV12`
+  textures on Metal, so a target is two plane textures over one IOSurface;
+- GPU frames from webcams, the VideoToolbox decoder and the media-file reader.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until its own
 ADR.
 
 **Tests.** Everything that doesn't call macOS (capture targets and frame layouts,
 permission steps, keychain item names, error mapping, the decoder list, the hotkeys' key
-table and wheel counting, the panels' extension and path checks) is tested on
-every platform. The macOS tests that need no permission run in the `macos` CI job. The
+table and wheel counting, the panels' extension and path checks, the GPU frames' release
+list) is tested on every platform. The macOS tests that need no permission run in the
+`macos` CI job, the Metal interop's among them (an IOSurface frame read back through the
+engine's device, on the runner's paravirtual GPU). The
 `hw-tests` feature holds the ones that need the Screen Recording, Camera, Microphone or
 system audio recording permission, speakers, or the hardware encoders, run by hand on a
 Mac, and the media-file tests that need a video file play the one `JSTREAM_TEST_MEDIA`
