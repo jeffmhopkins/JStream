@@ -106,18 +106,23 @@ pub fn seeks(show: &ShowView, at_ms: u32) -> bool {
         .any(|c| c.timed && c.start_ms < at_ms && at_ms < c.end_ms())
 }
 
-/// What the next Continue brings, for "Next:" in the bar: every clip that starts at the
-/// first start from `from_ms` on (after it, or at it too when `at_too`), in track order.
-pub fn next_up(show: &ShowView, from_ms: u32, at_too: bool) -> Vec<String> {
+/// Where the next Continue brings something in, for "Next:" in the bar: the first clip
+/// start from `from_ms` on (after it, or at it too when `at_too`). A click on "Next:"
+/// skips the play head there.
+pub fn next_at(show: &ShowView, from_ms: u32, at_too: bool) -> Option<u32> {
     let ahead = |start: u32| start > from_ms || (at_too && start == from_ms);
-    let Some(first) = show
-        .tracks
+    show.tracks
         .iter()
         .flat_map(|t| &t.clips)
         .map(|c| c.start_ms)
         .filter(|s| ahead(*s))
         .min()
-    else {
+}
+
+/// What the next Continue brings, for "Next:" in the bar: every clip that starts at
+/// [`next_at`], in track order.
+pub fn next_up(show: &ShowView, from_ms: u32, at_too: bool) -> Vec<String> {
+    let Some(first) = next_at(show, from_ms, at_too) else {
         return Vec::new();
     };
     show.tracks
@@ -647,6 +652,12 @@ mod tests {
         assert_eq!(next_up(&show, 330_000, false), ["keyframe Two-up"]);
         assert_eq!(next_up(&show, 0, true)[0], "scene Starting soon");
         assert!(next_up(&show, 660_000, false).is_empty());
+        assert_eq!(next_at(&show, 0, true), Some(0));
+        // The head on a start: Next is what starts after it, so a skip moves on.
+        let on = next_at(&show, 330_000, true).unwrap_or_default();
+        assert_eq!(on, 330_000);
+        assert!(next_at(&show, on, false).is_some_and(|after| after > on));
+        assert_eq!(next_at(&show, 660_000, false), None);
     }
 
     #[test]

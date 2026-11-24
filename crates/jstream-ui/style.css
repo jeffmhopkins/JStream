@@ -3014,7 +3014,10 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-btn.on { background: var(--selected); }
 /* A locked show stands out: the show accent marks the Edit and Run bars' Lock while it is on. */
 .show-btn.show-lock.on { border-color: var(--show-bookmark); color: var(--show-bookmark); }
-.show-next { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* "Next:" is a button: a click skips the play head ahead to it. */
+.show-next { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; border: none; background: none; padding: 2px 4px; border-radius: 4px; font: inherit; cursor: pointer; }
+.show-next:hover { background: var(--hover); }
+.show-next:hover b { text-decoration: underline; }
 .show-next b { color: var(--text); font-weight: 600; }
 .show-bar-gap { flex: 1; }
 .show-state { color: var(--show-bookmark); font-weight: 600; white-space: nowrap; }
