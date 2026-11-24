@@ -119,8 +119,8 @@
 //!   names itself "… (direct)" in `CodecInfo::name`. When it can't open, the MFT opens
 //!   instead and `tracing` logs why; when both refuse, the error names both.
 //!   `JSTREAM_DIRECT_ENCODERS` (read when the backend goes on a context) chooses: `auto`,
-//!   the default, tries only vendors whose hardware run has passed (`Vendor::proven`,
-//!   none yet); `on` tries the GPU's vendor anyway; `off` never does.
+//!   the default, tries only vendors whose hardware run has passed (`Vendor::proven`:
+//!   AMF so far); `on` tries the GPU's vendor anyway; `off` never does.
 //! - **Not yet:** HEVC and AV1 decoders, which report `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.
@@ -250,7 +250,14 @@ mod backend {
             if let Some(gpu) = &self.gpu {
                 let policy = self.direct.unwrap_or(Policy::Off);
                 let refused = match direct::open_direct(config, gpu, policy) {
-                    Ok(Some(encoder)) => return Ok(encoder),
+                    Ok(Some(encoder)) => {
+                        // The engine's status doesn't name the encoder, so the log does.
+                        tracing::info!(
+                            encoder = %encoder.info().name,
+                            "opened the GPU's direct video encoder"
+                        );
+                        return Ok(encoder);
+                    }
                     Ok(None) => None,
                     Err(err) => Some(err),
                 };

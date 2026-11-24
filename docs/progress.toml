@@ -1425,7 +1425,7 @@ milestone = "M3"
 title = "Direct NVENC and AMF encoders, if measurements justify them"
 status = "review"
 prs = [1764]
-note = "ADR-0217: the maintainer chose to build them for alpha.13 and measure alongside: NVENC and AMF first on the Windows GPU path, the MFT as fallback, off by default per vendor until its hw-tests run passes (JSTREAM_DIRECT_ENCODERS=on to try one); needs those runs on AMD and NVIDIA"
+note = "ADR-0217: the maintainer chose to build them for alpha.13 and measure alongside: NVENC and AMF first on the Windows GPU path, the MFT as fallback, off by default per vendor until its hw-tests run passes (JSTREAM_DIRECT_ENCODERS=on to try one); AMF passed on a Radeon 780M and is on by default (0.52 ms vs the MFT's 0.98 ms per frame at 1080p30); NVENC still needs its NVIDIA run"
 needs = ["hardware"]
 
 [[item]]

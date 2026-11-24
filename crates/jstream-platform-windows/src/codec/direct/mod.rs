@@ -75,7 +75,10 @@ impl Vendor {
     /// here, in its own change, once a passing run is posted.
     pub(crate) fn proven(self) -> bool {
         match self {
-            Self::Nvidia | Self::Amd | Self::Other => false,
+            // Passed on a Radeon 780M (RDNA3): H.264, HEVC, AV1, a forced keyframe, and
+            // live 1080p30 at 0.52 ms per frame against the MFT's 0.98 ms (#1764).
+            Self::Amd => true,
+            Self::Nvidia | Self::Other => false,
         }
     }
 }
@@ -288,6 +291,11 @@ mod tests {
         assert_eq!(Policy::named(Some("mf")), (Policy::Off, true));
         assert_eq!(Policy::named(Some("sometimes")), (Policy::Auto, false));
         // Unproven vendors stay on the MFT by default, and `on` tries them anyway.
+        assert!(
+            Policy::Auto.tries(Vendor::Amd),
+            "AMF passed its hardware run"
+        );
+        assert!(!Policy::Auto.tries(Vendor::Nvidia), "NVENC hasn't had one");
         for vendor in [Vendor::Nvidia, Vendor::Amd, Vendor::Other] {
             assert_eq!(Policy::Auto.tries(vendor), vendor.proven());
         }

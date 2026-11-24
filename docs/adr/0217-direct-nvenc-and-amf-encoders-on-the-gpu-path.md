@@ -74,8 +74,13 @@ Linux is reached the same way ([ADR-0060](0060-linux-platform-support.md)).
    GPU's vendor encoder whether proven or not (for the hardware runs and for trying one),
    and `off` keeps every GPU encoder on Media Foundation. Like `JSTREAM_GPU_PRIORITY` ([ADR-0195](0195-the-engine-runs-at-top-priority.md))
    it describes the machine, not a show, so it is an environment variable and not a
-   protocol setting. `CodecInfo::name` says which encoder opened ("… (direct)"), which
-   `output.status` and `profile.get` already report.
+   protocol setting. `CodecInfo::name` says which encoder opened ("… (direct)"), and
+   the engine logs it when a direct encoder opens.
+7. **Where each stands.** AMF passed its run on a Radeon 780M (RDNA3): H.264, HEVC and
+   AV1 from encode targets, a forced keyframe, and the live 1080p30 feed with 299 of 300
+   frames encoded at 0.52 ms per encode call, against 0.98 ms for the MFT on the same
+   GPU path and 4.5 ms on the CPU path, and opening in 57 ms against the MFT's 464 ms.
+   So AMF is on by default. NVENC stays off by default until its run on an NVIDIA GPU.
 
 <a id="consequences"></a>
 ## Consequences
