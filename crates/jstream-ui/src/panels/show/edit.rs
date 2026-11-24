@@ -1,5 +1,5 @@
 //! The Show panel's Edit view: the timeline. Its bar (the show picker and its menu, Edit /
-//! Run, Stop show, Back, Continue and what it will do, Rehearse, Lock, the status, the
+//! Run, Stop show, Back, Continue and what it will do, Lock, the status, the
 //! "+ Overlay track" and "+ Audio track" buttons and Fit show), the tool strip, the ruler
 //! with the play head's flag, the tracks, the bookmark lines with their flags along the bottom, the
 //! loops' bars under them, and the zoom bar over the whole show.
@@ -495,7 +495,6 @@ pub fn EditView() -> impl IntoView {
             <span class="show-state" class:idle=move || !running.get()>{glyph}{text}</span>
         }
     };
-    let rehearsing = move || panel.run.with(|r| r.rehearsing);
     let add_audio_track = move || {
         let mut added = true;
         panel.set_show(&show_id(), |s| added = edits::add_audio_track(s).is_some());
@@ -533,10 +532,6 @@ pub fn EditView() -> impl IntoView {
             {move || panel.continue_key.get().map(|k| view! { <kbd class="show-keycap">{k}</kbd> })}
             {next}
             <span class="show-bar-gap"></span>
-            <button type="button" class="show-btn" class:on=rehearsing
-                aria-pressed=move || rehearsing().to_string()
-                title="Run on preview, leaving program alone"
-                on:click=move |_| send(Command::Rehearse(!rehearsing()))>"Rehearse"</button>
             <button type="button" class="show-btn" class:on=locked
                 aria-pressed=move || locked().to_string()
                 title=move || if locked() { "Editing is locked: unlock it" } else { "Lock the show against edits" }

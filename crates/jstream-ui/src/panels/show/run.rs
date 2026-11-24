@@ -1,5 +1,5 @@
 //! The Show panel's Run view, for show time: its bar (the show picker, Edit / Run, Stop
-//! show, Lock, Rehearse on preview, the Next monitor's Live / Still / Off and the status),
+//! show, Lock, the Next monitor's Live / Still / Off and the status),
 //! the Now and Next cards over a big Continue, the bookmarks as buttons in show order, the
 //! clocks, what is up right now, and the tracks folded into one strip.
 //!
@@ -636,7 +636,6 @@ fn RunBar() -> impl IntoView {
     let id = move || panel.show().map(|s| s.id).unwrap_or_default();
     let running = move || panel.run.with(|r| r.show.is_some());
     let locked = move || panel.show().is_some_and(|s| s.locked);
-    let rehearsing = move || panel.run.with(|r| r.rehearsing);
     let monitor = move || panel.show().map(|s| s.next_monitor).unwrap_or_default();
     let pick = move |m: NextMonitor| move |_| panel.send(Command::NextMonitor(id(), m));
     let mon = move |m: NextMonitor, label: &'static str| {
@@ -664,11 +663,6 @@ fn RunBar() -> impl IntoView {
                 aria-pressed=move || locked().to_string()
                 on:click=move |_| panel.send(Command::Lock(id(), !locked()))>
                 {move || if locked() { "🔒 Edits locked" } else { "🔓 Lock edits" }}
-            </button>
-            <button type="button" class="show-btn"
-                aria-pressed=move || rehearsing().to_string()
-                on:click=move |_| panel.send(Command::Rehearse(!rehearsing()))>
-                {move || if rehearsing() { "Rehearse on preview: on" } else { "Rehearse on preview: off" }}
             </button>
             <div class="show-seg" role="group" aria-label="Next monitor">
                 <span class="show-seg-label">"Next monitor"</span>
