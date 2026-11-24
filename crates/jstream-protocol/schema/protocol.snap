@@ -43,7 +43,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Starts an output that is stopped or failed, and stops one that is starting,\nrunning or reconnecting (since 0.178, ADR-0208), so one key or pad can go live and\nend the stream. The engine runs it as the `output.start` or `output.stop` it\nresolves to, with that action's events, audit entry and errors.",
+          "description": "Starts an output that is stopped or failed, and stops one that is starting,\nrunning or reconnecting (since 0.179, ADR-0208), so one key or pad can go live and\nend the stream. The engine runs it as the `output.start` or `output.stop` it\nresolves to, with that action's events, audit entry and errors.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -559,6 +559,15 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "max_probe_resolution": {
               "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "model_resolution": {
+              "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -4456,6 +4465,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "model_frames_reduced": {
+          "default": 0,
+          "description": "The frames of the window drawn with 3D models at less than 100 (since 0.178).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_resolution": {
+          "default": 100,
+          "description": "The percentage of their canvas's width and of its height the drawer drew 3D\nmodels with at the end of the window (ADR-0197, since 0.178): 100 unless the\nprogram's render thread lowered it, or `RenderFeatures::model_resolution` set it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "over_budget": {
           "default": 0,
           "description": "The frames that took longer than `frame_budget_ms`.",
@@ -6539,7 +6562,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nSince 0.178 (ADR-0208) a chord can run several actions: binding a chord that is\nalready bound adds this action after its others, and a press runs them all, in\nthe order they were bound. Rejected with `invalid_argument` for a chord that isn't\nvalid (see [`Chord`]) or an action that can't be bound (`output.set_key`, whose\nstream key is never stored in the collection), with `already_exists` (entity\n`hotkey`) for a chord already bound to an equal action (before 0.178, for any chord\nalready bound), and with `not_found` for a scene or output the action names that\ndoesn't exist. Deleting that object later removes that action's binding with it\n(ADR-0040 §3), leaving the chord's others. Inverse: `hotkey.clear` naming the\naction.",
+          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nSince 0.179 (ADR-0208) a chord can run several actions: binding a chord that is\nalready bound adds this action after its others, and a press runs them all, in\nthe order they were bound. Rejected with `invalid_argument` for a chord that isn't\nvalid (see [`Chord`]) or an action that can't be bound (`output.set_key`, whose\nstream key is never stored in the collection), with `already_exists` (entity\n`hotkey`) for a chord already bound to an equal action (before 0.179, for any chord\nalready bound), and with `not_found` for a scene or output the action names that\ndoesn't exist. Deleting that object later removes that action's binding with it\n(ADR-0040 §3), leaving the chord's others. Inverse: `hotkey.clear` naming the\naction.",
           "properties": {
             "action": {
               "$ref": "#/$defs/Action",
@@ -6573,7 +6596,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The one action to unbind (since 0.178, ADR-0208). Omitted unbinds them all."
+              "description": "The one action to unbind (since 0.179, ADR-0208). Omitted unbinds them all."
             },
             "chord": {
               "$ref": "#/$defs/Chord",
@@ -6617,7 +6640,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound to an equal\naction (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Since 0.178 (ADR-0208) a trigger can\nrun several actions, as a chord can: binding a trigger that is already bound adds\nthis action after its others, the engine runs them all in that order, and\n`already_exists` is only for a trigger already bound to an equal action. Inverse:\n`binding.clear` naming the action.",
+          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound to an equal\naction (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Since 0.179 (ADR-0208) a trigger can\nrun several actions, as a chord can: binding a trigger that is already bound adds\nthis action after its others, the engine runs them all in that order, and\n`already_exists` is only for a trigger already bound to an equal action. Inverse:\n`binding.clear` naming the action.",
           "properties": {
             "action": {
               "$ref": "#/$defs/Action",
@@ -6651,7 +6674,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The one action to unbind (since 0.178, ADR-0208). Omitted unbinds them all."
+              "description": "The one action to unbind (since 0.179, ADR-0208). Omitted unbinds them all."
             },
             "trigger": {
               "$ref": "#/$defs/Trigger",
@@ -15971,7 +15994,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "RenderFeatures": {
-      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]).",
+      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]). `model_resolution` is not a switch of an effect: it\nsets how many pixels 3D models are drawn with (ADR-0197).",
       "properties": {
         "ambient_occlusion": {
           "default": true,
@@ -15986,6 +16009,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         "max_probe_resolution": {
           "default": 512,
           "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.165). A probe set larger captures at this.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_resolution": {
+          "default": 0,
+          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.178): one of [`MODEL_RESOLUTIONS`]. 0, the\ndefault, lets the engine choose, lowering it while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -19089,5 +19119,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.178"
+  "title": "JStream protocol 0.179"
 }
