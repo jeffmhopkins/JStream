@@ -1204,6 +1204,24 @@ pub fn Scenes() -> impl IntoView {
                 menus.open(
                     &event,
                     vec![
+                        Entry::item("Properties…", move || {
+                            if let Some(dialog) = scene_dialog {
+                                dialog.open(props_id.clone());
+                            }
+                        })
+                        .hint("Double-click")
+                        .disabled_if(scene_dialog.is_none()),
+                        Entry::item("Edit filters…", move || match scene_dialog {
+                            Some(dialog) => dialog.open_filters(filters_id.clone()),
+                            None => show_filters(
+                                filters,
+                                dock,
+                                FilterOwner::Scene {
+                                    scene_id: filters_id.clone(),
+                                },
+                            ),
+                        }),
+                        Entry::Sep,
                         Entry::item("Show in preview", move || {
                             if let Some(s) = session.get() {
                                 studio.act(
@@ -1221,22 +1239,6 @@ pub fn Scenes() -> impl IntoView {
                         override_submenu(studio, session, dock, &id, false),
                         sequence::trigger_submenu(studio, session, id.clone(), scene_watches(&id)),
                         Entry::Sep,
-                        Entry::item("Properties…", move || {
-                            if let Some(dialog) = scene_dialog {
-                                dialog.open(props_id.clone());
-                            }
-                        })
-                        .hint("Double-click")
-                        .disabled_if(scene_dialog.is_none()),
-                        Entry::item("Edit filters…", move || {
-                            show_filters(
-                                filters,
-                                dock,
-                                FilterOwner::Scene {
-                                    scene_id: filters_id.clone(),
-                                },
-                            );
-                        }),
                         crate::projector::pop_out(studio, Some(id.clone())),
                         crate::screenshot::entry(
                             "Screenshot (scene)",
@@ -1940,10 +1942,13 @@ pub fn Scenes() -> impl IntoView {
             "sliders",
             // A keyframe has no chain of its own: the graph refuses filter edits there.
             move || selected().is_none() || selected_keyframe(),
-            move || {
-                if let Some(scene_id) = selected() {
+            // Scene properties on its Filters segment, as the row menu's Edit filters….
+            move || match (scene_dialog, selected()) {
+                (Some(dialog), Some(scene_id)) => dialog.open_filters(scene_id),
+                (None, Some(scene_id)) => {
                     show_filters(filters, dock, FilterOwner::Scene { scene_id });
                 }
+                _ => {}
             },
         ),
         Tool::new("Move up", "up", move || !can_step(true), move || step(true)),

@@ -18,8 +18,16 @@
 //! parameters built in `av1_dec`; all four share `decoder::Core`, the context, surfaces
 //! and read-back.
 
-// Used by the Linux session; built elsewhere for its tests, which use all of it.
+// Used by the Linux session; built elsewhere for its tests, which don't use the
+// parameter buffers the session submits.
 #[cfg(any(target_os = "linux", test))]
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux session; built elsewhere for its tests"
+    )
+)]
 mod av1;
 #[cfg_attr(
     not(target_os = "linux"),
