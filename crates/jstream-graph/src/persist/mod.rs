@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 22;
+pub const SCHEMA_VERSION: u32 = 23;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -65,8 +65,37 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
     v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16, v16_to_v17, v17_to_v18,
-    v18_to_v19, v19_to_v20, v20_to_v21, v21_to_v22,
+    v18_to_v19, v19_to_v20, v20_to_v21, v21_to_v22, v22_to_v23,
 ];
+
+/// Version 23 adds a scene's own folders (ADR-0219): a folder's `scene`, a keyframe
+/// scene's `folder` and a timeline's `folder`. A version 22 file has none of them, so it
+/// upgrades unchanged; any of them there is refused, as version 22 refused it.
+fn v22_to_v23(value: &mut Value) -> Result<(), String> {
+    let folders = value.get("folders").and_then(Value::as_array);
+    if folders
+        .into_iter()
+        .flatten()
+        .any(|f| f.get("scene").is_some())
+    {
+        return Err("a version 22 folder has no `scene`".into());
+    }
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        if scene.get("variant_of").is_some() && scene.get("folder").is_some() {
+            return Err("a version 22 keyframe scene has no `folder`".into());
+        }
+        let timelines = scene.get("timelines").and_then(Value::as_array);
+        if timelines
+            .into_iter()
+            .flatten()
+            .any(|t| t.get("folder").is_some())
+        {
+            return Err("a version 22 timeline has no `folder`".into());
+        }
+    }
+    Ok(())
+}
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
 /// `items[].effects`, ADR-0065). A version 1 file has no scene filters, and its items'
@@ -899,6 +928,10 @@ struct FileFolder {
     /// Omitted at the top level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     parent: Option<FolderId>,
+    /// The scene it belongs to (ADR-0219, schema_version 23); omitted for a folder of
+    /// the scene list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    scene: Option<SceneId>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1309,6 +1342,7 @@ impl Graph {
                     id: folder.id.clone(),
                     name: folder.name.clone(),
                     parent: folder.parent.clone(),
+                    scene: folder.scene.clone(),
                 })
                 .collect(),
             labels: state
@@ -1589,18 +1623,22 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         ));
     }
     // Folders are created top level in folder order, then nested, so a parent may come
-    // after its child in the file.
-    for folder in &file.folders {
+    // after its child in the file. A scene's own folders (ADR-0219) come after the
+    // scenes, the same way, and a reorder then puts every folder back in file order.
+    let (scene_folders, list_folders): (Vec<&FileFolder>, Vec<&FileFolder>) =
+        file.folders.iter().partition(|f| f.scene.is_some());
+    for folder in &list_folders {
         edits.push((
             format!("folder `{}`", folder.id),
             Edit::FolderCreate {
                 folder_id: folder.id.clone(),
                 name: folder.name.clone(),
                 parent: None,
+                scene_id: None,
             },
         ));
     }
-    for folder in file.folders.iter().filter(|f| f.parent.is_some()) {
+    for folder in list_folders.iter().filter(|f| f.parent.is_some()) {
         edits.push((
             format!("folder `{}`", folder.id),
             Edit::FolderSetParent {
@@ -1651,7 +1689,8 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 },
             ));
         }
-        if scene.folder.is_some() {
+        // A keyframe scene's folder is its parent's, made below.
+        if scene.folder.is_some() && scene.variant_of.is_none() {
             edits.push((
                 object.clone(),
                 Edit::SceneSetFolder {
@@ -1703,6 +1742,46 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 },
             ));
         }
+    }
+    for folder in &scene_folders {
+        edits.push((
+            format!("folder `{}`", folder.id),
+            Edit::FolderCreate {
+                folder_id: folder.id.clone(),
+                name: folder.name.clone(),
+                parent: None,
+                scene_id: folder.scene.clone(),
+            },
+        ));
+    }
+    for folder in scene_folders.iter().filter(|f| f.parent.is_some()) {
+        edits.push((
+            format!("folder `{}`", folder.id),
+            Edit::FolderSetParent {
+                folder_id: folder.id.clone(),
+                parent: folder.parent.clone(),
+            },
+        ));
+    }
+    if !scene_folders.is_empty() {
+        for (index, folder) in (0u32..).zip(&file.folders) {
+            edits.push((
+                format!("folder `{}`", folder.id),
+                Edit::FolderReorder {
+                    folder_id: folder.id.clone(),
+                    index,
+                },
+            ));
+        }
+    }
+    for scene in variants.iter().filter(|s| s.folder.is_some()) {
+        edits.push((
+            format!("scene `{}`", scene.id),
+            Edit::SceneSetFolder {
+                scene_id: scene.id.clone(),
+                folder_id: scene.folder.clone(),
+            },
+        ));
     }
     let created: Vec<&SceneId> = parents.iter().chain(&variants).map(|s| &s.id).collect();
     if created.iter().zip(&file.scenes).any(|(a, b)| **a != b.id) {

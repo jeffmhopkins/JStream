@@ -44,6 +44,8 @@ fn set(
     // (ADR-0133).
     let labels =
         crate::organise::checked_labels_in(state, &timeline.labels, at, "timeline.labels")?;
+    // Its folder is one of its scene's family's (ADR-0219).
+    crate::organise::check_timeline_folder(state, scene_id, timeline.folder.as_ref(), at)?;
     let timeline = &TimelineInfo {
         labels: labels.into_iter().collect(),
         ..timeline.clone()

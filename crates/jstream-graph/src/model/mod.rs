@@ -57,8 +57,13 @@
 //! - Folder and label IDs are non-empty and unique within their kind. Every scene's
 //!   folder and every folder's parent exists, and no folder sits inside itself. Every
 //!   label a source carries exists (ADR-0024 §3 and §4).
+//! - A folder that belongs to a scene (ADR-0219) names an existing scene that is not a
+//!   variant, and its parent belongs to the same scene; a folder of the scene list has
+//!   a parent of the scene list. A variant's folder, if any, belongs to its parent, any
+//!   other scene's to none, and a timeline's to its scene's family: the scene, or its
+//!   parent for a variant.
 //! - A keyframe scene's (a variant's, ADR-0024 §2) `variant_of` names an existing scene
-//!   that is not a variant. A variant has no items, no folder and the role `scene`, and
+//!   that is not a variant. A variant has no items and the role `scene`, and
 //!   each of its overrides names an item in its parent's tree ([`State::tree_items`]:
 //!   the parent's own, or a child of a group placed in it, at any depth) and sets at least one
 //!   field, each valid as the item's own would be: a geometry placement, an opacity
@@ -1049,12 +1054,15 @@ impl Scene {
     }
 }
 
-/// One folder of the scene list (ADR-0024 §3): for organising only.
+/// One folder of the scene list (ADR-0024 §3), or of one scene's keyframe scenes and
+/// timelines (ADR-0219): for organising only.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
     pub(crate) id: FolderId,
     pub(crate) name: String,
     pub(crate) parent: Option<FolderId>,
+    /// The scene it belongs to; `None` for a folder of the scene list.
+    pub(crate) scene: Option<SceneId>,
 }
 
 impl Folder {
@@ -1071,6 +1079,12 @@ impl Folder {
     /// The folder it sits in, or `None` at the top level.
     pub fn parent(&self) -> Option<&FolderId> {
         self.parent.as_ref()
+    }
+
+    /// The scene whose keyframe scenes and timelines it organises (ADR-0219), or `None`
+    /// for a folder of the scene list.
+    pub fn scene(&self) -> Option<&SceneId> {
+        self.scene.as_ref()
     }
 }
 

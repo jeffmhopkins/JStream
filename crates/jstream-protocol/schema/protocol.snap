@@ -6353,7 +6353,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders\norganise only: they change no rendering, switching or nesting. Inverse:\n`folder.delete`.",
+          "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3), or, with\n`scene_id`, a folder under one scene for its keyframe scenes and sequences\n(ADR-0219, since 0.189). Folders organise only: they change no rendering,\nswitching or nesting. Inverse: `folder.delete`.",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -6372,7 +6372,18 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The folder it sits in, which must exist, else `not_found`. Omitted means top\nlevel."
+              "description": "The folder it sits in, which must exist, else `not_found`, and belong to the\nsame scene (or, like this one, to none), else `invalid_argument`. Omitted\nmeans top level."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose keyframe scenes and sequences it holds (since 0.189), which\nmust exist, else `not_found`, and not be a keyframe scene, else\n`invalid_argument`. The folder goes with the scene when it is deleted.\nOmitted makes a folder of the scene list."
             },
             "type": {
               "const": "folder.create",
@@ -6410,7 +6421,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself is `invalid_argument` (field\n`parent`), and a parent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
+          "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself, or that belongs to another\nscene than the folder (ADR-0219), is `invalid_argument` (field `parent`), and a\nparent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -6464,7 +6475,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes an empty folder. Rejected with `invalid_argument` while a scene or another\nfolder sits in it, listing them as `blockers`: move them out first, or send the\nbatch `delete.plan` returns, which moves them up to the folder's parent. Inverse:\n`folder.create` with its name and parent, then `folder.reorder` to its old\nposition (unless it was last).",
+          "description": "Deletes an empty folder. Rejected with `invalid_argument` while a scene, a\ntimeline or another folder sits in it, listing them as `blockers`: move them out\nfirst, or send the batch `delete.plan` returns, which moves them up to the\nfolder's parent. Inverse:\n`folder.create` with its name and parent, then `folder.reorder` to its old\nposition (unless it was last).",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -6482,7 +6493,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. Inverse: `scene.set_folder` with the previous folder.",
+          "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. A keyframe scene goes only in a folder of its parent\n(ADR-0219, since 0.189), and any other scene only in a folder of the scene list,\nelse `invalid_argument` on `folder_id`. Inverse: `scene.set_folder` with the\nprevious folder.",
           "properties": {
             "folder_id": {
               "anyOf": [
@@ -9144,6 +9155,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "The folder it sits in. Omitted for a top-level folder."
+        },
+        "scene_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The scene whose keyframe scenes and sequences it organises, under that scene\nin the scene list (ADR-0219, since 0.189). Omitted for a folder of the scene\nlist itself."
         }
       },
       "required": [
@@ -18359,6 +18381,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "folder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FolderId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The folder it is filed in under its scene (ADR-0219, since 0.189): a folder of\nthe scene that holds it, or of that scene's parent for a keyframe scene's, else\n`invalid_argument`. Folders organise only. Omitted for none."
+        },
         "labels": {
           "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",
           "items": {
@@ -20266,5 +20299,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.186"
+  "title": "JStream protocol 0.189"
 }

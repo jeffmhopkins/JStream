@@ -223,4 +223,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0214](0214-a-timer-restarts-when-shown.md) | A timer starts its count again when the program shows it again | accepted | agent |  |
 | [ADR-0215](0215-the-edit-views-ruler-moves-the-play-head.md) | The Show panel's Edit view ruler moves the play head; the Run view's strip arms | accepted | agent |  |
 | [ADR-0216](0216-a-scene-clips-audio-is-drawn-linked-under-it.md) | A scene clip's audio is drawn linked under it on the show timeline, derived, not stored | accepted | agent |  |
+| [ADR-0219](0219-a-scenes-own-folders.md) | A scene's own folders | accepted | agent |  |
 <!-- @generated end adr-index -->

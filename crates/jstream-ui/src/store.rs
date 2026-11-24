@@ -739,7 +739,7 @@ pub fn reset_edits(scene: &SceneInfo) -> Vec<Edit> {
 /// confirmation: `None` when it deletes the target alone.
 pub fn plan_summary(edits: &[Edit]) -> Option<String> {
     let (mut items, mut sources, mut references) = (0_usize, 0_usize, 0_usize);
-    let (mut scenes, mut folders) = (0_usize, 0_usize);
+    let (mut scenes, mut folders, mut sequences) = (0_usize, 0_usize, 0_usize);
     // The last edit is the delete of the target itself.
     for edit in edits.iter().take(edits.len().saturating_sub(1)) {
         match edit {
@@ -748,6 +748,8 @@ pub fn plan_summary(edits: &[Edit]) -> Option<String> {
             Edit::SourceSetSettings { patch, .. } => references += patch.0.len(),
             Edit::SceneSetFolder { .. } => scenes += 1,
             Edit::FolderSetParent { .. } => folders += 1,
+            // A folder's plan moves the sequences filed in it out (ADR-0219).
+            Edit::TimelineSet { .. } => sequences += 1,
             _ => {}
         }
     }
@@ -768,6 +770,7 @@ pub fn plan_summary(edits: &[Edit]) -> Option<String> {
         .map(|p| format!("clears {p}")),
         [
             count(scenes, "scene", "scenes"),
+            count(sequences, "sequence", "sequences"),
             count(folders, "folder", "folders"),
         ]
         .into_iter()

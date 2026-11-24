@@ -755,19 +755,27 @@ pub enum Edit {
         /// The buses, in track order.
         audio_buses: Vec<BusId>,
     },
-    /// Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders
-    /// organise only: they change no rendering, switching or nesting. Inverse:
-    /// `folder.delete`.
+    /// Adds a folder to the scene list, last in folder order (ADR-0024 §3), or, with
+    /// `scene_id`, a folder under one scene for its keyframe scenes and sequences
+    /// (ADR-0219, since 0.189). Folders organise only: they change no rendering,
+    /// switching or nesting. Inverse: `folder.delete`.
     #[serde(rename = "folder.create")]
     FolderCreate {
         /// The new folder's ID, chosen by the client. Rejected if it exists.
         folder_id: FolderId,
         /// Display name.
         name: String,
-        /// The folder it sits in, which must exist, else `not_found`. Omitted means top
-        /// level.
+        /// The folder it sits in, which must exist, else `not_found`, and belong to the
+        /// same scene (or, like this one, to none), else `invalid_argument`. Omitted
+        /// means top level.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<FolderId>,
+        /// The scene whose keyframe scenes and sequences it holds (since 0.189), which
+        /// must exist, else `not_found`, and not be a keyframe scene, else
+        /// `invalid_argument`. The folder goes with the scene when it is deleted.
+        /// Omitted makes a folder of the scene list.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
     },
     /// Renames a folder. Inverse: `folder.rename` back to the previous name.
     #[serde(rename = "folder.rename")]
@@ -778,8 +786,9 @@ pub enum Edit {
         name: String,
     },
     /// Moves a folder into another folder, or to the top level (ADR-0064: folders nest).
-    /// A parent that would put the folder inside itself is `invalid_argument` (field
-    /// `parent`), and a parent that doesn't exist `not_found`. Inverse:
+    /// A parent that would put the folder inside itself, or that belongs to another
+    /// scene than the folder (ADR-0219), is `invalid_argument` (field `parent`), and a
+    /// parent that doesn't exist `not_found`. Inverse:
     /// `folder.set_parent` with the previous parent.
     #[serde(rename = "folder.set_parent")]
     FolderSetParent {
@@ -799,9 +808,10 @@ pub enum Edit {
         /// number of folders, else `invalid_argument`.
         index: u32,
     },
-    /// Deletes an empty folder. Rejected with `invalid_argument` while a scene or another
-    /// folder sits in it, listing them as `blockers`: move them out first, or send the
-    /// batch `delete.plan` returns, which moves them up to the folder's parent. Inverse:
+    /// Deletes an empty folder. Rejected with `invalid_argument` while a scene, a
+    /// timeline or another folder sits in it, listing them as `blockers`: move them out
+    /// first, or send the batch `delete.plan` returns, which moves them up to the
+    /// folder's parent. Inverse:
     /// `folder.create` with its name and parent, then `folder.reorder` to its old
     /// position (unless it was last).
     #[serde(rename = "folder.delete")]
@@ -810,7 +820,10 @@ pub enum Edit {
         folder_id: FolderId,
     },
     /// Puts a scene in a folder, or takes it out of one. The scene keeps its position in
-    /// the flat display order. Inverse: `scene.set_folder` with the previous folder.
+    /// the flat display order. A keyframe scene goes only in a folder of its parent
+    /// (ADR-0219, since 0.189), and any other scene only in a folder of the scene list,
+    /// else `invalid_argument` on `folder_id`. Inverse: `scene.set_folder` with the
+    /// previous folder.
     #[serde(rename = "scene.set_folder")]
     SceneSetFolder {
         /// The scene to file.
