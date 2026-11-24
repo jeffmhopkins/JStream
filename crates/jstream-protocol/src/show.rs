@@ -108,7 +108,7 @@ pub struct ShowInfo {
     )]
     pub image_ms: u32,
     /// What the Run view's Next monitor shows. Default `still`.
-    #[serde(default, skip_serializing_if = "NextMonitor::is_still")]
+    #[serde(default)]
     pub next_monitor: NextMonitor,
     /// How long the show is planned to run, in milliseconds of wall time, for the Run
     /// view's clock. Omitted for no plan.
@@ -340,7 +340,7 @@ pub struct ShowLoop {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset_id: Option<TransitionPresetId>,
     /// How `show.continue` leaves it. Default `at_once`.
-    #[serde(default, skip_serializing_if = "LoopLeave::is_at_once")]
+    #[serde(default)]
     pub leave: LoopLeave,
 }
 
@@ -361,12 +361,6 @@ pub enum LoopLeave {
     Unknown,
 }
 
-impl LoopLeave {
-    fn is_at_once(&self) -> bool {
-        *self == LoopLeave::AtOnce
-    }
-}
-
 /// What a show does when it reaches its end (ADR-0210 decision 11). A show never ends
 /// the stream.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -383,6 +377,11 @@ pub enum ShowEnd {
         /// The bookmark.
         bookmark_id: String,
     },
+    /// An end a newer server sends that this version doesn't know. Never sent; the
+    /// engine refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 impl ShowEnd {
@@ -410,12 +409,6 @@ pub enum NextMonitor {
     #[serde(other)]
     #[schemars(skip)]
     Unknown,
-}
-
-impl NextMonitor {
-    fn is_still(&self) -> bool {
-        *self == NextMonitor::Still
-    }
 }
 
 impl ShowInfo {
@@ -515,6 +508,9 @@ impl ShowInfo {
             && self.bookmark(bookmark_id).is_none()
         {
             return problem("end.bookmark_id", "must name one of the show's bookmarks");
+        }
+        if self.end == ShowEnd::Unknown {
+            return problem("end.type", "must be `stop`, `loop` or `go_to`");
         }
         None
     }

@@ -530,6 +530,16 @@ that does not want to change the graph it has.
   collection file saves them in `channels` (schema version 20) and loads them first,
   before the replayed hotkeys and controller bindings (whose `channel.set_value` or
   `channel.switch` must find its channel, #1671) and the value bindings.
+- **Shows** (`show.rs`, ADR-0210): `show.set` sets one whole by its `show_id` (inverse
+  `show.delete`, or `show.set` with the one it replaced) after `ShowInfo::problem`
+  (`invalid_argument` at `show.<field>`) and the limit of 64 (at `show`). What its clips
+  name is not looked up. `show.delete` is `not_found` (entity `show`) for an ID none has,
+  and takes the hotkeys and controller bindings that name the show with it (their
+  `show.play` or `show.go_to`), which its undo restores. `Graph::shows` and `Graph::show`
+  read them; the collection file saves them in `shows` (schema version 22) and loads them
+  after the channels, before the replayed bindings. The file's `show_scene` marks the
+  engine's internal show scene (`State::show_scene`, set by `Graph::set_show_scene`), and
+  is dropped on load when it names no scene.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its

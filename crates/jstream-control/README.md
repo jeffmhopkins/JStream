@@ -108,7 +108,7 @@ its own, and is used with default features off.
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
 `dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
-mixes, buses, sends, hotkey, controller and value bindings, channels, folders and labels in memory, with an
+mixes, buses, sends, hotkey, controller and value bindings, channels, shows, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -191,6 +191,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - channels (ADR-0183): `channel.set`'s `ChannelInfo::problem`, `channel.delete` of an
     unknown ID, and `channel.values`, which answers each channel at its default (its
     `off_value` while off) with no driver, since the mock follows no controls.
+  - shows (ADR-0210): `show.set`'s `ShowInfo::problem` and the limit of 64, and
+    `show.delete` of an unknown ID, which takes the bindings naming the show with it.
+    The mock runs no show: the `show.*` run actions and `overlay.*` answer `internal`,
+    and `studio.get` reports no `show` and no `overlays`.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;

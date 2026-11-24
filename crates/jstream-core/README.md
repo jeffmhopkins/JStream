@@ -1335,7 +1335,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   and may call back into the engine, while its install or enable waits (see *WASM
   plugins*).
 - A call, query or action this engine does not implement answers `internal`, as the
-  mock does.
+  mock does: so far the `show.*` run actions and `overlay.*`
+  ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)), until the show
+  runner lands, and `studio.get` omits `show` and `overlays`. `show.set` and
+  `show.delete` are edits, applied by the graph like any other.
 
 The engine's answers are the mock's for the differential script: `tests.rs` runs one
 script of calls against both and compares results, error codes and fields, and events.

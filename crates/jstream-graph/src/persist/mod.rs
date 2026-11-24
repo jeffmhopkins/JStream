@@ -502,16 +502,33 @@ fn v20_to_v21(value: &mut Value) -> Result<(), String> {
     walk(value)
 }
 
-/// Version 22 adds shows (`shows`) and the marker naming the internal show scene
-/// (`show_scene`, ADR-0210). A version 21 file has neither, so it upgrades unchanged;
-/// either there is refused, as version 21 refused it.
+/// Version 22 adds shows (`shows`), the marker naming the internal show scene
+/// (`show_scene`) and the `show.*` actions a hotkey or binding may run (ADR-0210). A
+/// version 21 file has none of them, so it upgrades unchanged; any of them there is
+/// refused, as version 21 refused it.
 fn v21_to_v22(value: &mut Value) -> Result<(), String> {
     for key in ["shows", "show_scene"] {
         if value.get(key).is_some() {
             return Err(format!("a version 21 file has no `{key}`"));
         }
     }
-    Ok(())
+    fn walk(value: &Value) -> Result<(), String> {
+        match value {
+            Value::Object(map) => {
+                if map
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .is_some_and(|t| t.starts_with("show."))
+                {
+                    return Err("a version 21 file has no `show.*` action".into());
+                }
+                map.values().try_for_each(walk)
+            }
+            Value::Array(list) => list.iter().try_for_each(walk),
+            _ => Ok(()),
+        }
+    }
+    walk(value)
 }
 
 /// Version 20 adds channels (`channels`), the `channel` motion kind, the `note` MIDI

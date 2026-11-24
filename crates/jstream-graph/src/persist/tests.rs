@@ -101,11 +101,16 @@ const V19: &str = include_str!("fixtures/v19.json");
 /// version 1 must.
 const V20: &str = include_str!("fixtures/v20.json");
 
-/// A collection file at schema version 21, the current one: version 20 with a sequence
-/// on scene `a`, a timeline with a lane on `power` that scene `a` going on program
-/// starts and `power` falling stops (ADR-0184). The same rule applies once version 22
-/// exists.
+/// A collection file at schema version 21: version 20 with a sequence on scene `a`, a
+/// timeline with a lane on `power` that scene `a` going on program starts and `power`
+/// falling stops (ADR-0184). It must keep loading as version 1 must.
 const V21: &str = include_str!("fixtures/v21.json");
+
+/// A collection file at schema version 22, the current one: version 21 with a show that
+/// plays scene `a` then `b` with a pausing bookmark and a cue playing the sequence, a
+/// hotkey bound to its `show.go_to`, and scene `b` marked as the show scene (ADR-0210).
+/// The same rule applies once version 23 exists.
+const V22: &str = include_str!("fixtures/v22.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -601,6 +606,10 @@ fn fixture_graph() -> Graph {
             Edit::CanvasSetBlending {
                 blending: Blending::Linear,
             },
+            // The fixtures before version 22 hold no show (ADR-0210).
+            Edit::ShowDelete {
+                show_id: jstream_protocol::ShowId::new("evening"),
+            },
         ]
         .into_iter()
         .chain(
@@ -951,9 +960,113 @@ fn v21_graph() -> Graph {
     graph
 }
 
+/// [`v21_graph`] with a show, a hotkey that jumps to its bookmark, and the show scene
+/// marker (ADR-0210).
+fn v22_graph() -> Graph {
+    use jstream_protocol::{
+        Action, Chord, ProgramClip, SequenceTrack, ShowBookmark, ShowCue, ShowId, ShowInfo,
+        TimelineId,
+    };
+    let mut graph = v21_graph();
+    let clip = |id: &str, scene: &str| ProgramClip {
+        clip_id: id.into(),
+        scene_id: SceneId::new(scene),
+        length_ms: 10_000,
+        preset_id: None,
+    };
+    let applied = graph.apply(
+        &[
+            Edit::ShowSet {
+                show: ShowInfo {
+                    name: "Evening".into(),
+                    program: vec![clip("open", "a"), clip("close", "b")],
+                    sequences: vec![SequenceTrack {
+                        track_id: "s1".into(),
+                        name: String::new(),
+                        cues: vec![ShowCue::new(
+                            "power",
+                            0,
+                            &Action::TimelinePlay {
+                                timeline_id: TimelineId::new("power_up"),
+                                delay_ms: None,
+                            },
+                        )],
+                    }],
+                    bookmarks: vec![ShowBookmark {
+                        bookmark_id: "break".into(),
+                        name: "Break".into(),
+                        at_ms: 10_000,
+                        pausing: true,
+                        preset_id: None,
+                        continue_after_ms: None,
+                        note: String::new(),
+                    }],
+                    ..ShowInfo::new("evening")
+                },
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F8"),
+                action: Action::ShowGoTo {
+                    show_id: ShowId::new("evening"),
+                    bookmark_id: "break".into(),
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph.set_show_scene(Some(SceneId::new("b")));
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v21_graph().to_collection_json(), V21);
+    assert_eq!(v22_graph().to_collection_json(), V22);
+}
+
+#[test]
+fn the_v22_fixture_loads_exactly() {
+    let expected = v22_graph();
+    let loaded = load(V22);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(20)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+    assert_eq!(
+        loaded.as_ref().ok().and_then(|g| g.state().show_scene()),
+        Some(&SceneId::new("b"))
+    );
+}
+
+/// Version 22 adds shows and the show scene marker (ADR-0210): either in a version 21
+/// file is refused, as version 21 refused it.
+#[test]
+fn a_version_21_show_or_show_scene_is_refused() {
+    let current: Value = serde_json::from_str(V22).expect("the v22 fixture");
+    for key in ["shows", "show_scene"] {
+        let mut file: Value = serde_json::from_str(V21).expect("the v21 fixture");
+        file[key] = current[key].clone();
+        assert!(
+            matches!(
+                load(&file.to_string()),
+                Err(LoadError::Migration { from: 21, .. })
+            ),
+            "a version 21 {key} loaded"
+        );
+    }
+    let mut hotkey: Value = serde_json::from_str(V21).expect("the v21 fixture");
+    hotkey["hotkeys"] = json!([{"chord": "F8", "action": {"type": "show.continue"}}]);
+    assert!(matches!(
+        load(&hotkey.to_string()),
+        Err(LoadError::Migration { from: 21, .. })
+    ));
+}
+
+/// A show scene marker naming a scene the file doesn't hold is dropped, not refused.
+#[test]
+fn a_show_scene_marker_naming_no_scene_is_dropped() {
+    let mut file: Value = serde_json::from_str(V22).expect("the v22 fixture");
+    file["show_scene"] = json!("gone");
+    let loaded = load(&file.to_string()).expect("loads");
+    assert_eq!(loaded.state().show_scene(), None);
 }
 
 #[test]

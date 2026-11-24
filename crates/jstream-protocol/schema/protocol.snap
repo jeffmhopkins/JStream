@@ -1293,6 +1293,227 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+          "properties": {
+            "bookmark_id": {
+              "description": "The bookmark to start at. Omitted for the show's start.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rehearse": {
+              "description": "Whether to rehearse it on preview, leaving program, the channels and the\nmixer alone. Omitted for `false`.",
+              "type": "boolean"
+            },
+            "show_id": {
+              "$ref": "#/$defs/ShowId",
+              "description": "The show."
+            },
+            "type": {
+              "const": "show.play",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Stops the running show where it is (ADR-0210, since 0.177): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+          "properties": {
+            "type": {
+              "const": "show.stop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+          "properties": {
+            "type": {
+              "const": "show.continue",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+          "properties": {
+            "type": {
+              "const": "show.back",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.177), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+          "properties": {
+            "type": {
+              "const": "show.skip",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+          "properties": {
+            "bookmark_id": {
+              "description": "The bookmark. One the show doesn't hold does nothing.",
+              "type": "string"
+            },
+            "show_id": {
+              "$ref": "#/$defs/ShowId",
+              "description": "The show."
+            },
+            "type": {
+              "const": "show.go_to",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show_id",
+            "bookmark_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+          "properties": {
+            "number": {
+              "description": "The bookmark's place in the show, 1 to 8.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "show.go_to_number",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "number"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+          "properties": {
+            "at_ms": {
+              "description": "Where to, in milliseconds of show time.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "show.seek",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "at_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+          "properties": {
+            "at_ms": {
+              "description": "Where, in milliseconds of show time. Omitted to disarm.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "show.arm",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to put over program."
+            },
+            "type": {
+              "const": "overlay.show",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to take down."
+            },
+            "type": {
+              "const": "overlay.hide",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "overlay.toggle",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
           "properties": {
             "source_id": {
@@ -2100,6 +2321,57 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "AudioClip": {
+      "description": "A clip on an audio track: its source's fader rises to `gain_db` over `fade_in_ms`\nfrom its start, and falls back over `fade_out_ms` before its end, as a sequence lane\nmoves a fader, so the mixer shows it and a hand on the fader takes over.",
+      "properties": {
+        "clip_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "fade_in_ms": {
+          "default": 0,
+          "description": "How long it fades in, in milliseconds, `0..=60000`. Default 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fade_out_ms": {
+          "default": 0,
+          "description": "How long it fades out, in milliseconds, `0..=60000`. Default 0. The two fades\ntogether fit in `length_ms`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gain_db": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The fader's level while it is up, in dB, -100 to +24. Default 0."
+        },
+        "length_ms": {
+          "description": "How long it lasts, in milliseconds, at least 1.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId",
+          "description": "The source whose fader it moves."
+        },
+        "start_ms": {
+          "description": "When it starts, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "clip_id",
+        "source_id",
+        "start_ms",
+        "length_ms"
+      ],
+      "type": "object"
+    },
     "AudioCodec": {
       "description": "An audio codec. Serialized as a snake_case string.",
       "oneOf": [
@@ -2144,6 +2416,30 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "AudioTrack": {
+      "description": "An audio track: clips that each bring one source's fader up for their span.",
+      "properties": {
+        "clips": {
+          "description": "Its clips, in time order, none overlapping another. At most 1024. Omitted for\nnone.",
+          "items": {
+            "$ref": "#/$defs/AudioClip"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "track_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track_id"
+      ],
+      "type": "object"
     },
     "Batch": {
       "description": "One or more edits, applied atomically.\n\nThe engine checks `expected_rev`, then applies the edits in order, each against the\nstate the previous one left. If any edit fails, nothing is applied and `rev` doesn't\nchange. On success `rev` increases by exactly one, whatever the number of edits, and\nthe batch becomes one undo step for the sending client.",
@@ -6676,6 +6972,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+          "properties": {
+            "show": {
+              "$ref": "#/$defs/ShowInfo",
+              "description": "The show."
+            },
+            "type": {
+              "const": "show.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a show. A show running when it is deleted stops, and emits\n`show.changed` (`stopped`). Rejected with `not_found` (entity `show`) for an ID no\nshow has. Inverse: `show.set` with the show.",
+          "properties": {
+            "show_id": {
+              "$ref": "#/$defs/ShowId",
+              "description": "The show's ID."
+            },
+            "type": {
+              "const": "show.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
           "properties": {
             "scene_id": {
@@ -7430,6 +7762,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "channel",
           "description": "A channel (0.169, ADR-0183). Only an error answering a `channel.*` command names\nit, so a client that sends none never reads it.",
+          "type": "string"
+        },
+        {
+          "const": "show",
+          "description": "A show (0.177, ADR-0210). Only an error answering a `show.*` command names it, so\na client that sends none never reads it.",
           "type": "string"
         }
       ]
@@ -8231,6 +8568,55 @@ source: crates/jstream-protocol/src/fixtures.rs
             "playing",
             "position_ms",
             "pass"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A show started, paused, continued, jumped, looped, went off script, ended or\nstopped (ADR-0210, since 0.177): never once a frame. Running a show is studio\nstate, so it carries no `rev`; `studio.get` reports the running show in full.",
+          "properties": {
+            "at_ms": {
+              "description": "Where its play head is now, in milliseconds of show time.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "bookmark_id": {
+              "description": "The bookmark it paused at or jumped to. Omitted when none is.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "change": {
+              "$ref": "#/$defs/ShowChange",
+              "description": "What happened."
+            },
+            "loop_id": {
+              "description": "The loop it wrapped in. Omitted unless `change` is `looped`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "running": {
+              "description": "Whether it runs now: `false` after `ended` and `stopped`.",
+              "type": "boolean"
+            },
+            "show_id": {
+              "$ref": "#/$defs/ShowId",
+              "description": "The show."
+            },
+            "type": {
+              "const": "show.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show_id",
+            "change",
+            "running",
+            "at_ms"
           ],
           "type": "object"
         },
@@ -9351,6 +9737,48 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "KeyframeMarker": {
+      "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+      "properties": {
+        "at_ms": {
+          "description": "When it fires, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keyframe_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The keyframe scene to load. Omitted for the scene's own values."
+        },
+        "marker_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The preset whose timing the Move takes. Omitted for the default preset."
+        }
+      },
+      "required": [
+        "marker_id",
+        "at_ms"
+      ],
+      "type": "object"
+    },
     "KeyframeTiming": {
       "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
       "properties": {
@@ -9726,6 +10154,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "expired",
           "description": "Its client's session ended.",
+          "type": "string"
+        }
+      ]
+    },
+    "LoopLeave": {
+      "description": "How `show.continue` leaves a loop.",
+      "oneOf": [
+        {
+          "const": "at_once",
+          "description": "At once: the show plays on from the loop's end.",
+          "type": "string"
+        },
+        {
+          "const": "finish_pass",
+          "description": "At the end of this pass, instead of wrapping.",
           "type": "string"
         }
       ]
@@ -11336,6 +11779,26 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "type": "object"
     },
+    "NextMonitor": {
+      "description": "What the Run view's Next monitor shows (ADR-0210 decision 13). Program is never\nslowed to draw Next.",
+      "oneOf": [
+        {
+          "const": "live",
+          "description": "The next scene, rendered live as a second picture.",
+          "type": "string"
+        },
+        {
+          "const": "still",
+          "description": "One picture of the next scene, drawn once when Next changes, while the engine has\ntime to spare.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Nothing: program alone.",
+          "type": "string"
+        }
+      ]
+    },
     "OutputHealth": {
       "description": "How a running output is doing, from its own drops and link over the last ten\nseconds: the share of its video frames lost there, and whether its live link is up.\nSerialized as a snake_case string.",
       "oneOf": [
@@ -11572,6 +12035,74 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "required": [
         "output_id"
+      ],
+      "type": "object"
+    },
+    "OverlayClip": {
+      "description": "A clip on an overlay track: its scene is shown over program from its start to its\nend, through the overlay's own show and hide transitions, across cuts and pauses.",
+      "properties": {
+        "clip_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "fade_in_ms": {
+          "description": "How long it fades in, in milliseconds, `0..=60000`. Default 0, which shows it\nthrough the overlay's own show transition.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fade_out_ms": {
+          "description": "How long it fades out, as `fade_in_ms`, through the overlay's own hide transition\nat 0. The two fades together fit in `length_ms`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "length_ms": {
+          "description": "How long it lasts, in milliseconds, at least 1.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene it shows."
+        },
+        "start_ms": {
+          "description": "When it starts, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "clip_id",
+        "scene_id",
+        "start_ms",
+        "length_ms"
+      ],
+      "type": "object"
+    },
+    "OverlayTrack": {
+      "description": "An overlay track: scene clips drawn over program, with gaps allowed.",
+      "properties": {
+        "clips": {
+          "description": "Its clips, in time order, none overlapping another. At most 1024. Omitted for\nnone.",
+          "items": {
+            "$ref": "#/$defs/OverlayClip"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "track_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track_id"
       ],
       "type": "object"
     },
@@ -12751,6 +13282,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         }
       ]
+    },
+    "ProgramClip": {
+      "description": "A scene clip on the program track.",
+      "properties": {
+        "clip_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "length_ms": {
+          "description": "How long it lasts, in milliseconds, at least 1. A clip whose scene plays a video\nor audio file takes the file's length when it is dropped.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition preset of the cut into it, which wins over the scenes' own in and\nout. Omitted for `Default`: the usual order (the next scene's in, the current\nscene's out, the collection's default)."
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene its start puts on program."
+        }
+      },
+      "required": [
+        "clip_id",
+        "scene_id",
+        "length_ms"
+      ],
+      "type": "object"
     },
     "ProtocolError": {
       "description": "Why the server refused or failed a request.\n\nOn the wire each variant is an object whose `code` tag is the variant's stable\nsnake_case code (see [`ProtocolError::code`]) and whose other fields are its details.\n[`WireError`] adds the human-readable message. A code, once released, keeps its\nmeaning and its fields (R-API-001). Clients must handle codes they don't know: they\nparse as [`ProtocolError::Unknown`], and the message still explains them.",
@@ -14520,6 +15087,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               },
               "type": "array"
             },
+            "shows": {
+              "description": "Every show (ADR-0210), ordered by ID. Omitted when there are none, and\nmissing (from a server older than 0.177) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/ShowInfo"
+              },
+              "type": "array"
+            },
             "sources": {
               "description": "Every source, ordered by ID.",
               "items": {
@@ -14755,6 +15329,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               },
               "type": "array"
             },
+            "overlays": {
+              "description": "The scenes up over program as overlays (ADR-0210, since 0.177), bottom first,\nwhether a show or `overlay.show` put them there. Omitted when none is.",
+              "items": {
+                "$ref": "#/$defs/SceneId"
+              },
+              "type": "array"
+            },
             "preview_scene": {
               "anyOf": [
                 {
@@ -14787,6 +15368,17 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170\ndecision 1, since 0.147). Omitted by an older server, which draws every effect."
+            },
+            "show": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RunningShow"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The show running (ADR-0210, since 0.177), where its play head is and what it\nis doing. Omitted when no show runs."
             },
             "timelines": {
               "description": "The timelines playing (ADR-0115, since 0.87), ordered by ID, each with where\nit is now. Omitted when none is.",
@@ -16033,6 +16625,87 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "RunningShow": {
+      "description": "A running show, as `studio.get` reports it in `show` (ADR-0210 decision 2).",
+      "properties": {
+        "armed_ms": {
+          "description": "The spot armed for the next `show.continue` (`show.arm`), in milliseconds of show\ntime. Omitted when none is.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "at_ms": {
+          "description": "Where its play head is, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "bookmark_id": {
+          "description": "The pausing bookmark it waits at. Omitted unless `state` is `paused`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loop_id": {
+          "description": "The loop its play head is in. Omitted outside a loop.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "off_script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The scene switched by hand that took it off script. Omitted unless `state` is\n`off_script`."
+        },
+        "pass": {
+          "description": "Which pass of `loop_id` it is on: 0 the first. Omitted outside a loop.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rehearse": {
+          "description": "Whether it rehearses on preview and leaves program alone. Omitted when `false`.",
+          "type": "boolean"
+        },
+        "show_id": {
+          "$ref": "#/$defs/ShowId",
+          "description": "The show."
+        },
+        "state": {
+          "$ref": "#/$defs/ShowState",
+          "description": "Whether it plays, waits at a pausing bookmark, or was taken off script."
+        },
+        "waited_ms": {
+          "description": "How long it has waited at `bookmark_id`, in milliseconds. Omitted unless `state`\nis `paused`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "show_id",
+        "at_ms",
+        "state"
+      ],
+      "type": "object"
+    },
     "SceneCamera": {
       "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
       "properties": {
@@ -16405,6 +17078,30 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "SequenceTrack": {
+      "description": "A sequence track: cues that play a sequence or run one event.",
+      "properties": {
+        "cues": {
+          "description": "Its cues, in time order. At most 1024. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/ShowCue"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "track_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track_id"
+      ],
+      "type": "object"
+    },
     "ServerMessage": {
       "description": "A message from the server to a client. Tagged by `type`.",
       "oneOf": [
@@ -16507,6 +17204,349 @@ source: crates/jstream-protocol/src/fixtures.rs
         "rev"
       ],
       "type": "object"
+    },
+    "ShowBookmark": {
+      "description": "A bookmark: a named point in show time that the show can jump to (ADR-0210\ndecision 4). A pausing one also stops the show there until `show.continue`.",
+      "properties": {
+        "at_ms": {
+          "description": "Where it is, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "bookmark_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "continue_after_ms": {
+          "description": "How long a pausing bookmark waits before it continues by itself, in milliseconds,\n1 to 3600000. Omitted to wait for `show.continue`. Only a pausing bookmark has\none.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes, shown on its flag and in \"Next\". Omitted\nmeans empty.",
+          "type": "string"
+        },
+        "note": {
+          "description": "A note for the operator, at most 1024 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "pausing": {
+          "description": "Whether the show pauses here until `show.continue`. Default `true`; omitted when\n`true`.",
+          "type": "boolean"
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition preset a jump here arrives with. Omitted for the show's\n`preset_id`."
+        }
+      },
+      "required": [
+        "bookmark_id",
+        "at_ms"
+      ],
+      "type": "object"
+    },
+    "ShowChange": {
+      "description": "What a running show did, as `show.changed` reports it.",
+      "oneOf": [
+        {
+          "const": "started",
+          "description": "`show.play` started it.",
+          "type": "string"
+        },
+        {
+          "const": "paused",
+          "description": "It reached a pausing bookmark and waits.",
+          "type": "string"
+        },
+        {
+          "const": "continued",
+          "description": "It plays on from a pause, by `show.continue` or a bookmark's own wait.",
+          "type": "string"
+        },
+        {
+          "const": "jumped",
+          "description": "It jumped: to a bookmark, by `show.seek`, or to an armed spot. What the show\nplaced before the landing point is applied as state; one-shots are not replayed.",
+          "type": "string"
+        },
+        {
+          "const": "looped",
+          "description": "It wrapped from a loop's end to its start.",
+          "type": "string"
+        },
+        {
+          "const": "off_script",
+          "description": "A scene was switched by hand: it waits off script.",
+          "type": "string"
+        },
+        {
+          "const": "ended",
+          "description": "It reached its end and stopped there.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "`show.stop` stopped it, or another show's `show.play` replaced it, or the show\nwas deleted.",
+          "type": "string"
+        }
+      ]
+    },
+    "ShowCue": {
+      "description": "A cue on a sequence track. One that runs `timeline.play` is drawn as a clip as wide\nas the sequence; any other is a one-off event.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "What it does: an action a timeline's cue may run ([`Action::cue_problem`]),\nexcept `scene.switch`, since the program track puts scenes on program. Read as\nplain JSON, as a timeline's cue is. [`ShowCue::action`] parses it."
+        },
+        "at_ms": {
+          "description": "When it fires, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cue_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cue_id",
+        "at_ms",
+        "action"
+      ],
+      "type": "object"
+    },
+    "ShowEnd": {
+      "description": "What a show does when it reaches its end (ADR-0210 decision 11). A show never ends\nthe stream.",
+      "oneOf": [
+        {
+          "description": "It stops, and the last scene stays on program.",
+          "properties": {
+            "type": {
+              "const": "stop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "It goes back to its first bookmark, or to its start if it has none, and plays on.",
+          "properties": {
+            "type": {
+              "const": "loop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "It goes to a bookmark of its own.",
+          "properties": {
+            "bookmark_id": {
+              "description": "The bookmark.",
+              "type": "string"
+            },
+            "type": {
+              "const": "go_to",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bookmark_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ShowId": {
+      "description": "A show in the collection (ADR-0210): 1 to 64 bytes of ASCII letters, digits, `_`\nand `-`.",
+      "type": "string"
+    },
+    "ShowInfo": {
+      "description": "A show: tracks of clips in show time, bookmarks and loops (ADR-0210 decisions 2 to\n4). Every element in it (a clip, a track, a marker, a cue, a bookmark, a loop) has an\nID unique within the show.\n\nA clip naming a scene, source, timeline, keyframe or preset the collection doesn't\nhold is kept, as a timeline's cue is, and does nothing when the show reaches it, so\ndeleting a scene never shifts a show.",
+      "properties": {
+        "audio": {
+          "description": "Audio tracks (A): clips that bring a source's fader up for their span. At most 8.\nOmitted for none, and with none a show changes nothing about audio.",
+          "items": {
+            "$ref": "#/$defs/AudioTrack"
+          },
+          "type": "array"
+        },
+        "bookmarks": {
+          "description": "Its bookmarks, in time order, no two at the same time. At most 256. Omitted for\nnone.",
+          "items": {
+            "$ref": "#/$defs/ShowBookmark"
+          },
+          "type": "array"
+        },
+        "end": {
+          "$ref": "#/$defs/ShowEnd",
+          "description": "What happens when it reaches its end. Default `stop`."
+        },
+        "image_ms": {
+          "description": "How long a dropped image's clip starts, in milliseconds, 1 to 24 hours. Default\n10000; omitted when it is.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keyframes": {
+          "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/KeyframeMarker"
+          },
+          "type": "array"
+        },
+        "loops": {
+          "description": "Its loops, in time order, none overlapping another. At most 64. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/ShowLoop"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "next_monitor": {
+          "$ref": "#/$defs/NextMonitor",
+          "default": "still",
+          "description": "What the Run view's Next monitor shows. Default `still`."
+        },
+        "overlays": {
+          "description": "Overlay tracks (V2 and up), bottom first: each draws its clips' scenes over\nprogram while they last. At most 8. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/OverlayTrack"
+          },
+          "type": "array"
+        },
+        "planned_ms": {
+          "description": "How long the show is planned to run, in milliseconds of wall time, for the Run\nview's clock. Omitted for no plan.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition preset a jump arrives with, and a loop wraps with, unless the\nbookmark or loop names its own. Omitted for the collection's default preset."
+        },
+        "program": {
+          "description": "The program track (V1): scene clips end to end with no gaps, the first starting\nat 0. Each clip's start puts its scene on program. At most 1024; together at most\n24 hours. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/ProgramClip"
+          },
+          "type": "array"
+        },
+        "sequences": {
+          "description": "Sequence tracks (S): cues that play a sequence or run one event. At most 8.\nOmitted for none.",
+          "items": {
+            "$ref": "#/$defs/SequenceTrack"
+          },
+          "type": "array"
+        },
+        "show_id": {
+          "$ref": "#/$defs/ShowId",
+          "description": "Its ID, unique among the collection's shows: 1 to 64 bytes of ASCII letters,\ndigits, `_` and `-`."
+        }
+      },
+      "required": [
+        "show_id"
+      ],
+      "type": "object"
+    },
+    "ShowLoop": {
+      "description": "A loop: a span of show time that the show plays again and again once it is inside\nit, until a jump outside it or `show.continue` leaves (ADR-0210 decision 7). A\nbookmark at `start_ms` is inside the loop; one at `end_ms` is outside it.",
+      "properties": {
+        "end_ms": {
+          "description": "Where it ends, at least 100 ms after `start_ms`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "leave": {
+          "$ref": "#/$defs/LoopLeave",
+          "default": "at_once",
+          "description": "How `show.continue` leaves it. Default `at_once`."
+        },
+        "loop_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition preset it wraps with. Omitted for the show's `preset_id`."
+        },
+        "start_ms": {
+          "description": "Where it starts, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "loop_id",
+        "start_ms",
+        "end_ms"
+      ],
+      "type": "object"
+    },
+    "ShowState": {
+      "description": "What a running show is doing.",
+      "oneOf": [
+        {
+          "const": "playing",
+          "description": "Its play head moves.",
+          "type": "string"
+        },
+        {
+          "const": "paused",
+          "description": "It waits at a pausing bookmark for `show.continue`. Program keeps running.",
+          "type": "string"
+        },
+        {
+          "const": "off_script",
+          "description": "A scene was switched by hand while it ran: it waits where it was, and\n`show.continue` goes on to the next clip.",
+          "type": "string"
+        }
+      ]
     },
     "Size": {
       "description": "A width and height, in canvas pixels.\n\nBoth components are [`Finite32`]. A non-positive component is rejected by\n[`ItemGeometry::validate`], not stored as a flip.",
@@ -19006,5 +20046,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.176"
+  "title": "JStream protocol 0.177"
 }

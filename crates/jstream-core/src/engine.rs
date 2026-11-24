@@ -6387,6 +6387,7 @@ impl State {
                 Query::StudioGet => QueryResult::StudioGet {
                     // No show runs until the engine has a show runner (ADR-0210).
                     show: None,
+                    overlays: Vec::new(),
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
                     warm_scenes: Some(

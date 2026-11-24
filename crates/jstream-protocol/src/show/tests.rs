@@ -32,7 +32,7 @@ fn a_new_show_is_valid_and_saves_only_its_id() {
     assert_eq!(show.problem(), None);
     assert_eq!(
         serde_json::to_value(&show).expect("serializes"),
-        serde_json::json!({"show_id": "s"})
+        serde_json::json!({"show_id": "s", "next_monitor": "still"})
     );
     let back: ShowInfo =
         serde_json::from_value(serde_json::json!({"show_id": "s"})).expect("parses");
@@ -150,7 +150,7 @@ fn clips_on_a_track_do_not_overlap_and_their_fades_fit() {
     );
     assert_eq!(
         field(&track(vec![overlay(0, 1000, 1001)])).as_deref(),
-        Some("overlays.0.clips.0.fade_in_ms")
+        Some("overlays.0.clips.0.fade_out_ms")
     );
     assert_eq!(
         track(vec![overlay(0, 1000, 1000), overlay(1000, 5, 0)]).problem(),
@@ -214,6 +214,18 @@ fn the_end_goes_to_a_bookmark_the_show_holds() {
         .expect("serializes"),
         serde_json::json!({"type": "go_to", "bookmark_id": "b"})
     );
+}
+
+#[test]
+fn an_end_from_a_newer_server_parses_but_is_refused() {
+    let end: ShowEnd = serde_json::from_value(serde_json::json!({"type": "fade_out", "ms": 3000}))
+        .expect("parses");
+    assert_eq!(end, ShowEnd::Unknown);
+    let show = ShowInfo {
+        end,
+        ..ShowInfo::new("s")
+    };
+    assert_eq!(field(&show).as_deref(), Some("end.type"));
 }
 
 #[test]
