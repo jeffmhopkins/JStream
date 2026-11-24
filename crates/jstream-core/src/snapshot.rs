@@ -494,6 +494,15 @@ pub(crate) type ShowFades = BTreeMap<ItemId, ShowFade>;
 /// drawn into it scaled down uniformly (ADR-0065 §5).
 const MAX_LAYER_SIDE: u32 = 8192;
 
+/// Layer pixels per canvas pixel for a box whose longest side with its outset on both
+/// sides is `padded`: 1, or less to fit [`MAX_LAYER_SIDE`]. With an outset, the box's
+/// side and the pad are each rounded up, which can add up to 3 pixels, so it leaves
+/// 2 pixels of room: the padded layer never passes the largest side (ADR-0219 decision 3).
+fn fit_scale(padded: f32, outset: f32) -> f32 {
+    let room = if outset > 0.0 { 2.0 } else { 0.0 };
+    ((MAX_LAYER_SIDE as f32 - room) / padded).min(1.0)
+}
+
 /// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned, in
 /// canvas pixels, scaled down to fit [`MAX_LAYER_SIDE`] with the effects' outset on
 /// every side when larger. The effects grow it by the outset where the first of them
@@ -536,7 +545,7 @@ impl Boxed {
         if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
             return None;
         }
-        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let scale = fit_scale(padded[0].max(padded[1]), outset);
         let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
         Some(Self {
             size,
@@ -559,7 +568,7 @@ impl Boxed {
         if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
             return None;
         }
-        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let scale = fit_scale(padded[0].max(padded[1]), outset);
         let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
         Some(Self {
             outset,
@@ -604,9 +613,17 @@ impl Boxed {
     }
 
     /// The size the layer is placed at, which its pixels are sampled across
-    /// ([`jstream_render::Image::set_extent`]).
+    /// ([`jstream_render::Image::set_extent`]): its pixels at [`Self::scale`] 1, and the
+    /// box's size in canvas pixels for a layer scaled down to fit [`MAX_LAYER_SIDE`], so
+    /// that layer's effects count their pixel settings in canvas pixels, as the pad does
+    /// (ADR-0219, #1720). A model's is its layer's, which stands for the canvas however
+    /// many pixels it is drawn with (ADR-0197).
     fn extent(&self) -> Option<FrameSize> {
-        FrameSize::new(self.layer[0], self.layer[1]).ok()
+        if self.model || self.scale >= 1.0 {
+            return FrameSize::new(self.layer[0], self.layer[1]).ok();
+        }
+        let side = |px: f32| (px.round() as u32).max(1);
+        FrameSize::new(side(self.size[0]), side(self.size[1])).ok()
     }
 
     /// The box `placement` puts an item cropped by `crop` in: its geometry, or a legacy
@@ -7318,6 +7335,12 @@ fn draw_box(
     let unlit = GpuKey::UnlitBox(scene_id.clone(), item_id.clone());
     if boxed.boxed.lit {
         cache.layer(compositor, &unlit, width, height)?;
+    }
+    // Placed at its box's size in canvas pixels, whatever its texels, so its effects'
+    // pixel settings count as the pad does (ADR-0219, #1720). Set each frame: a layer
+    // reused at the same size keeps the extent it was last given.
+    if let Some(extent) = boxed.boxed.extent() {
+        cache.set_extent(&key, extent);
     }
     let flat = if boxed.boxed.lit { &unlit } else { &key };
     let (Some(image), Some(inside), Some(layer)) = (
