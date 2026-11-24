@@ -715,6 +715,21 @@ pub(crate) struct Arrival {
     /// Its centre's direction in the sky's layout (x right, y down, z toward the viewer),
     /// unit length: near straight ahead.
     pub(crate) direction: [f64; 3],
+    /// The rotation from the layout it was pinned in to the sky's layout now, once a
+    /// warp aimed ahead has laid the sky out anew while it showed (ADR-0224), so it stays
+    /// where it is seen; `None` while it is in the layout it was pinned in.
+    pub(crate) relaid: Option<crate::warp_aim::Rotation>,
+}
+
+impl Arrival {
+    /// Where in the sky's layout now its picture `offset_deg` from its first is
+    /// ([`crate::snapshot::part_direction`]), turned with the layout it was pinned in.
+    pub(crate) fn part(&self, offset_deg: [f32; 2]) -> [f64; 3] {
+        let d = crate::snapshot::part_direction(self.direction, offset_deg);
+        self.relaid.map_or(d, |r| {
+            [0, 1, 2].map(|i| (0..3).map(|k| r[i][k] * d[k]).sum::<f64>())
+        })
+    }
 }
 
 /// How far from the sky's straight ahead an arrival picture is pinned, at most, in
@@ -801,6 +816,7 @@ impl SkyState {
         (pictures, seed): (usize, u32),
     ) {
         let still = self.warp <= 0.0;
+        let was = self.warp;
         let first = self.stepped.is_none();
         let shown = self.angles(aiming);
         match self.stepped {
@@ -833,7 +849,10 @@ impl SkyState {
             ((self.warp - target) / 0.15).min(1.0)
         };
         self.aim_at(at_s, aiming, (still, first), shown);
-        self.arrive(pictures, seed);
+        // Falling, as a setting that follows a channel or a sequence down out of warp
+        // makes it, though never above its setting (ADR-0224).
+        let falling = !first && self.warp < was;
+        self.arrive(pictures, seed, falling);
         self.stepped = Some((frame, at_s));
     }
 
@@ -846,9 +865,9 @@ impl SkyState {
 
     /// Picks the arrival picture after a step (ADR-0188): of `pictures`, none while the
     /// deep sky is gone ([`deep_shown`]), and a new one at random by `seed` once none is
-    /// picked, the deep sky shows and the warp is still or dropping, pinned near straight
-    /// ahead.
-    fn arrive(&mut self, pictures: usize, seed: u32) {
+    /// picked, the deep sky shows and the warp is still, dropping or `falling` this step
+    /// (ADR-0224), pinned near straight ahead.
+    fn arrive(&mut self, pictures: usize, seed: u32, falling: bool) {
         if pictures == 0 {
             self.drop_arrival();
             return;
@@ -861,7 +880,7 @@ impl SkyState {
             self.drop_arrival();
             return;
         }
-        if self.arrival.is_some() || (self.warp > 0.0 && self.dropping <= 0.0) {
+        if self.arrival.is_some() || (self.warp > 0.0 && self.dropping <= 0.0 && !falling) {
             return;
         }
         let count = u32::try_from(pictures).unwrap_or(u32::MAX);
@@ -881,6 +900,7 @@ impl SkyState {
         self.arrival = Some(Arrival {
             index,
             direction: [across.sin() * up.cos(), -up.sin(), -across.cos() * up.cos()],
+            relaid: None,
         });
     }
 
@@ -914,8 +934,14 @@ impl SkyState {
                 since: at_s,
                 arrival: self.arrival,
             });
-            // The picture it showed is left behind with the sky it was pinned in.
-            self.drop_arrival();
+            // The picture it showed stays where it is seen, turned into the sky laid out
+            // anew, so it fades as the warp rises as the deep sky does (ADR-0224); the
+            // sky it cross-fades from shows it there too.
+            let now = from_angles(self.angles(aiming));
+            if let Some(arrival) = &mut self.arrival {
+                let turned = multiply(&inverse(&now), &from_angles(shown));
+                arrival.relaid = Some(arrival.relaid.map_or(turned, |r| multiply(&turned, &r)));
+            }
         } else if let (true, Some(aim)) = (self.warp > 0.0, self.aim) {
             // At warp: hold the travel within its limit, letting the slack go.
             let laid = multiply(&item, &aim);
@@ -4631,21 +4657,87 @@ mod tests {
         // Without pictures, none.
         sky.step(200, 14.0, (0.0, 1.0), SKY_AIM, (0, 7));
         assert!(sky.arrival.is_none());
-        // Aimed ahead, the picture goes with the sky it cross-fades from.
+        // Aimed ahead (ADR-0224), the picture stays where it is seen: the sky it
+        // cross-fades from shows it, and the sky laid out anew shows it in the same
+        // place, until the deep sky is gone.
         let aimed = crate::chain::WarpAiming {
-            angles: [40.0, 0.0, 0.0],
+            angles: [40.0, 10.0, 5.0],
             ahead: Some(10.0),
         };
         let mut sky = crate::chain::SkyState::default();
         sky.step(1, 10.0, (0.0, 1.0), aimed, (2, 7));
         let shown = sky.arrival.expect("a picture");
+        let seen = |sky: &crate::chain::SkyState, arrival: crate::chain::Arrival| {
+            let r = crate::warp_aim::from_angles(sky.angles(aimed));
+            let d = arrival.part([0.0, 0.0]);
+            [0, 1, 2].map(|i| (0..3).map(|k| r[i][k] * d[k]).sum::<f64>())
+        };
+        let before = seen(&sky, shown);
         sky.step(2, 10.1, (1.0, 1.0), aimed, (2, 7));
-        assert!(sky.arrival.is_none(), "not in the sky laid out ahead");
         assert_eq!(sky.leaving.and_then(|leaving| leaving.arrival), Some(shown));
+        let kept = sky.arrival.expect("still shown in the sky laid out ahead");
+        assert_eq!(kept.index, shown.index);
+        let after = seen(&sky, kept);
+        for (a, b) in before.iter().zip(after) {
+            assert!((a - b).abs() < 1e-9, "moved: {before:?} to {after:?}");
+        }
+        sky.step(3, 10.5, (1.0, 1.0), aimed, (2, 7));
+        assert!(sky.arrival.is_none(), "gone at warp {}", sky.warp);
         // The shown amount follows the warp as the shader's does.
         assert!((crate::chain::deep_shown(0.0, 0.0) - 1.0).abs() < 1e-6);
         assert!(crate::chain::deep_shown(0.25, 0.0).abs() < 1e-6);
         assert!(crate::chain::deep_shown(0.3, 1.0) > 0.0);
+    }
+
+    /// ADR-0224: a warp setting that follows a channel or a sequence down out of warp,
+    /// with no ramp of its own, so it is never above its setting, picks the next
+    /// picture as the deep sky starts to show again, not only once the warp is still,
+    /// so it fades in with the deep sky rather than popping in at rest.
+    #[test]
+    fn a_warp_followed_down_picks_its_arrival_as_the_sky_shows() {
+        let mut sky = crate::chain::SkyState::default();
+        sky.step(1, 10.0, (0.0, 0.0), SKY_AIM, (3, 7));
+        let first = sky.arrival.expect("a picture from the start");
+        // Up into warp, frame by frame, as a sequence takes it there.
+        for i in 0..60_u32 {
+            let warp = (f64::from(i + 1) / 60.0) as f32;
+            sky.step(
+                2 + u64::from(i),
+                10.0 + f64::from(i + 1) / 60.0,
+                (warp, 0.0),
+                SKY_AIM,
+                (3, 7),
+            );
+            assert!(
+                sky.arrival.is_none() || sky.arrival == Some(first),
+                "picked on the way in at {warp}"
+            );
+        }
+        assert!(sky.arrival.is_none(), "none at full warp");
+        // Down out of it, as a sequence takes it: exactly one other picture, picked
+        // while the warp is still falling and fading in.
+        let mut picked_at = None;
+        for i in 0..60_u32 {
+            let warp = 1.0 - (f64::from(i + 1) / 60.0) as f32;
+            sky.step(
+                100 + u64::from(i),
+                12.0 + f64::from(i + 1) / 60.0,
+                (warp, 0.0),
+                SKY_AIM,
+                (3, 7),
+            );
+            assert_eq!(sky.dropping, 0.0, "followed, never above its setting");
+            if let (None, Some(next)) = (picked_at, sky.arrival) {
+                assert_ne!(next.index, first.index);
+                picked_at = Some(sky.warp);
+            }
+        }
+        let at = picked_at.expect("a picture as it drops");
+        assert!(at > 0.0, "picked only at rest");
+        assert!(
+            crate::chain::deep_shown(at, 0.0) < 0.5,
+            "picked faint, at {at}"
+        );
     }
 
     /// ADR-0188: an environment backdrop shows its arrival picture ahead, over the sky,
