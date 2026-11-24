@@ -34,8 +34,9 @@ const MAX_WAIT_S: u32 = 80;
 /// A step up undone within this many seconds doubles the wait before the next.
 const UNDONE_S: u32 = 15;
 
-/// Seconds after the first tick during which nothing is decided: a program's first
-/// frames upload and compile, and take longer than the ones after them.
+/// Seconds after the first tick, and after an output's first frame, during which
+/// nothing is decided: a program's first frames, and an output's, upload and compile,
+/// and take longer than the ones after them.
 const START_S: u32 = 3;
 
 /// What a frame's GPU time at each of [`STEPS`] is taken to be of its time at the step
@@ -106,7 +107,8 @@ impl Mode {
 /// The expectation comes from what the step down to this size saved, the frame's time
 /// after it over its time before; until a step down has been timed it is the worst
 /// case, all of the frame's GPU time growing with the model's pixels. It decides
-/// nothing for the first [`START_S`] seconds, whose frames upload and compile.
+/// nothing for the first [`START_S`] seconds, whose frames upload and compile, nor for
+/// the [`START_S`] seconds after an output starts ([`Self::output_started`]).
 ///
 /// It steps down only while the frames before drew a model: with none there is nothing
 /// to gain. On a device that can't time its frames it has only the first signal, and
@@ -168,6 +170,18 @@ impl Governor {
             before: None,
             saved: std::array::from_fn(worst),
         }
+    }
+
+    /// An output drew its first frame: its pipelines, layers and encode targets are
+    /// made then, so the GPU falls behind for a moment that fewer pixels would not
+    /// shorten. Nothing is decided for the next [`START_S`] seconds, and the frames
+    /// timed before them say nothing about the ones after.
+    pub(crate) fn output_started(&mut self) {
+        self.settle = self.settle.max(START_S.saturating_mul(self.fps));
+        self.over = 0;
+        self.calm = 0;
+        self.last = None;
+        self.before = None;
     }
 
     /// The size models are drawn at now.
@@ -447,6 +461,28 @@ mod tests {
             governor.tick(Auto, ms(60.0), true, true);
         }
         assert_eq!(governor.percent().get(), 100, "start-up frames are long");
+        governor.tick(Auto, None, true, true);
+        assert_eq!(governor.percent().get(), 85);
+    }
+
+    /// An output started 0.8 s into a show, as measured on a streaming PC: its first
+    /// frames keep the GPU behind for a moment, which used to step a scene that fits at
+    /// 100 down to 85 for good.
+    #[test]
+    fn an_output_starting_does_not_step_down() {
+        let mut governor = governor();
+        assert_eq!(run(&mut governor, 30, 24.0), 100);
+        governor.output_started();
+        for _ in 0..FPS {
+            governor.tick(Auto, ms(60.0), true, true);
+        }
+        assert_eq!(
+            governor.percent().get(),
+            100,
+            "the output's first frames are long"
+        );
+        assert_eq!(run(&mut governor, 3000, 24.0), 100);
+        // Once the start is over, falling behind steps down as before.
         governor.tick(Auto, None, true, true);
         assert_eq!(governor.percent().get(), 85);
     }

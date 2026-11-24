@@ -2151,14 +2151,18 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                 // gives way.
                 // It lowers it only while the frames before this one drew a model.
                 let mode = crate::resolution::Mode::of(program.model_resolution());
-                chains.model_percent = governor
-                    .get_or_insert_with(|| crate::resolution::Governor::new(meter.budget()))
-                    .tick(
-                        mode,
-                        meter.take_gpu_frame(),
-                        behind,
-                        std::mem::take(&mut chains.model_drawn),
-                    );
+                let governor = governor
+                    .get_or_insert_with(|| crate::resolution::Governor::new(meter.budget()));
+                // An output's first frames are long whatever size models are drawn at.
+                if frames.iter().any(|frame| frame.priming && !frame.local) {
+                    governor.output_started();
+                }
+                chains.model_percent = governor.tick(
+                    mode,
+                    meter.take_gpu_frame(),
+                    behind,
+                    std::mem::take(&mut chains.model_drawn),
+                );
                 meter.model_percent(chains.model_percent.get());
                 let mut converted = false;
                 // The GPU is still on the tick before this one: the pictures only this
