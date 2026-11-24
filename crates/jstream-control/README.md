@@ -399,7 +399,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   stop is in the destination's family, and the
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
   `internal`. So do timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
-  the `timeline.*` edits and actions and `source.restart` answer `internal`, and
+  the `timeline.*` edits and actions, `source.restart` and `source.seek` answer
+  `internal`, and
   `studio.get` lists no timeline playing. So do keyframe tracks
   ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): `scene.set_keyframe` answers
   `internal`, and `studio.get` lists no placed keyframe;
