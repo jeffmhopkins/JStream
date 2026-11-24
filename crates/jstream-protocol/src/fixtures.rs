@@ -2237,6 +2237,16 @@ pub(crate) fn actions() -> Vec<Action> {
         },
         Action::ShowArm { at_ms: None },
         Action::ShowStop,
+        // Overlays over program, with or without a show (ADR-0210).
+        Action::OverlayShow {
+            scene_id: SceneId::new("scn_panels"),
+        },
+        Action::OverlayHide {
+            scene_id: SceneId::new("scn_panels"),
+        },
+        Action::OverlayToggle {
+            scene_id: SceneId::new("scn_panels"),
+        },
     ]
 }
 
@@ -3549,7 +3559,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             hotkeys: hotkey_bindings(),
             bindings: controller_bindings(),
-            value_bindings: value_bindings(),
+            value_bindings: Box::new(value_bindings()),
             channels: Box::new(channels()),
             shows: Box::new(vec![show()]),
         },
@@ -3634,6 +3644,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 armed_ms: Some(60_000),
                 rehearse: false,
             })),
+            overlays: vec![SceneId::new("scn_panels")],
         },
         QueryResult::StudioGet {
             waiting: Vec::new(),
@@ -3656,6 +3667,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 armed_ms: None,
                 rehearse: true,
             })),
+        overlays: Vec::new(),
         },
         QueryResult::StudioGet {
             waiting: Vec::new(),
@@ -3678,6 +3690,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 armed_ms: None,
                 rehearse: false,
             })),
+        overlays: Vec::new(),
         },
         QueryResult::StudioGet {
             waiting: Vec::new(),
@@ -3689,6 +3702,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             warm_gpu_mib: None,
             rendering: None,
             show: None,
+            overlays: Vec::new(),
         },
         QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {

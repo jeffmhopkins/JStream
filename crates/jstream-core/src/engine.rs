@@ -6400,6 +6400,8 @@ impl State {
                 }
                 Query::StudioGet => QueryResult::StudioGet {
                     show: self.show_report(),
+                    // Overlays come with the show scene's overlay items (ST5).
+                    overlays: Vec::new(),
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
                     warm_scenes: Some(

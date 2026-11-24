@@ -530,6 +530,11 @@ pub fn collection() -> Batch {
                 trigger: sustain(),
                 action: start_yt(),
             },
+            // A show of the two scenes (ADR-0210), set twice: the second replaces it.
+            Edit::ShowSet {
+                show: crate::ShowInfo::new("evening"),
+            },
+            Edit::ShowSet { show: show() },
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
@@ -682,9 +687,9 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 sends: sends(),
                 hotkeys: hotkeys(),
                 bindings: bindings(),
-                value_bindings: Vec::new(),
+                value_bindings: Box::default(),
                 channels: Box::default(),
-                shows: Box::default(),
+                shows: Box::new(vec![show()]),
             }),
         ),
         // Outputs by ID, whatever order they were created in.
@@ -751,6 +756,51 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 ends_gesture: None,
             },
             ProtocolError::EmptyBatch,
+        ),
+        // A show's bookmarks are in time order, none sharing a time (ADR-0210).
+        (
+            Batch::single(Edit::ShowSet {
+                show: crate::ShowInfo {
+                    bookmarks: vec![
+                        show().bookmarks.remove(0),
+                        crate::ShowBookmark {
+                            bookmark_id: "again".into(),
+                            ..show().bookmarks.remove(0)
+                        },
+                    ],
+                    ..show()
+                },
+            }),
+            invalid(
+                "edits.0.show.bookmarks.1.at_ms",
+                "must be in time order, none at the same time as the one before it",
+            ),
+        ),
+        // A show's cue never switches program: its program track does.
+        (
+            Batch::single(Edit::ShowSet {
+                show: crate::ShowInfo {
+                    sequences: vec![crate::SequenceTrack {
+                        track_id: "s1".into(),
+                        name: String::new(),
+                        cues: vec![crate::ShowCue::new("cut", 0, &switch_to_a())],
+                    }],
+                    ..show()
+                },
+            }),
+            invalid(
+                "edits.0.show.sequences.0.cues.0.action.type",
+                "a show's program track puts scenes on program: place a clip there",
+            ),
+        ),
+        (
+            Batch::single(Edit::ShowDelete {
+                show_id: crate::ShowId::new("ghost"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Show,
+                id: "ghost".into(),
+            },
         ),
         (
             Batch::single(Edit::SceneCreate {
@@ -2194,6 +2244,43 @@ pub fn bindings() -> Vec<Binding> {
         Binding::new(pad(), &switch_to_a()),
         Binding::new(sustain(), &start_yt()),
     ]
+}
+
+/// The collection's show: scene `a` then `b`, with a pausing bookmark between them and
+/// an overlay of `b` over the start (ADR-0210).
+pub fn show() -> crate::ShowInfo {
+    let clip = |id: &str, scene: &str| crate::ProgramClip {
+        clip_id: id.into(),
+        scene_id: SceneId::new(scene),
+        length_ms: 5000,
+        preset_id: None,
+    };
+    crate::ShowInfo {
+        name: "Evening".into(),
+        program: vec![clip("open", "a"), clip("close", "b")],
+        overlays: vec![crate::OverlayTrack {
+            track_id: "v2".into(),
+            name: String::new(),
+            clips: vec![crate::OverlayClip {
+                clip_id: "corner".into(),
+                scene_id: SceneId::new("b"),
+                start_ms: 0,
+                length_ms: 2000,
+                fade_in_ms: 0,
+                fade_out_ms: 0,
+            }],
+        }],
+        bookmarks: vec![crate::ShowBookmark {
+            bookmark_id: "break".into(),
+            name: "Break".into(),
+            at_ms: 5000,
+            pausing: true,
+            preset_id: None,
+            continue_after_ms: None,
+            note: String::new(),
+        }],
+        ..crate::ShowInfo::new("evening")
+    }
 }
 
 /// The collection's hotkey bindings, ordered by chord.

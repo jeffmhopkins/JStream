@@ -642,7 +642,8 @@ pub enum QueryResult {
         /// Every value binding (ADR-0178), ordered by ID. Omitted when there are none,
         /// and missing (from a server older than 0.168) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        value_bindings: Vec<ValueBinding>,
+        // Boxed, as `channels` is, to keep a call's result small.
+        value_bindings: Box<Vec<ValueBinding>>,
         /// Every channel (ADR-0183), ordered by ID. Omitted when there are none, and
         /// missing (from a server older than 0.169) parses as empty.
         // Boxed, as `master` is, to keep a call's result small.
@@ -747,6 +748,10 @@ pub enum QueryResult {
         /// is doing. Omitted when no show runs.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         show: Option<Box<crate::RunningShow>>,
+        /// The scenes up over program as overlays (ADR-0210, since 0.177), bottom first,
+        /// whether a show or `overlay.show` put them there. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        overlays: Vec<SceneId>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]

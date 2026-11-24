@@ -193,6 +193,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 ├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
 ├── value_bindings [{ binding_id, kind, …, target, amount? }]   a control or data field → a setting, fader or send (ADR-0178)
 ├── channels       [{ channel_id, name, inputs, combine, fades, curve, on, … }]   controls → one live 0..1 value (ADR-0183)
+├── shows          [{ show_id, name, program, overlays, keyframes, sequences, audio, bookmarks, loops, end, … }]   a run order of scenes in show time (ADR-0210)
+├── show_scene     scene_id?   the engine's internal scene that draws overlays over program (ADR-0210)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -500,16 +502,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), controller bindings (protocol 0.96,
-  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20), as the organisation bullet above describes.
+  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20) and shows with the show scene marker (protocol 0.177, schema version 22), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions for built-in kinds (a source or
   preset saved at another version is refused on load; a source or filter of an effect
   pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
   `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
-  `hotkeys`, `bindings`, `value_bindings`, `channels` and `transitions`. The collection file saves everything built so far,
+  `hotkeys`, `bindings`, `value_bindings`, `channels`, `shows`, `show_scene` and `transitions`. The collection file saves everything built so far,
   encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
-  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller and value bindings, channels and
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller and value bindings, channels, shows and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -780,6 +782,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   into one live value, 0 to 1, that a `channel` modifier or value binding follows and an
   `amount` scales by; `channel.set_value`, `channel.nudge` and `channel.switch` move it
   with no `rev`, and `channel.values` reads every channel's level.
+  `show.set` and `show.delete` (protocol 0.177,
+  [ADR-0210](adr/0210-shows-a-run-order-with-bookmarks.md)) set and remove a show: a
+  saved run order of scenes on program, overlay, keyframe, sequence and audio tracks in
+  show time, with pausing and non-pausing bookmarks and loops; the `show.*` actions
+  (`show.continue` among them) run one as studio state with no `rev`, `studio.get`
+  reports it in `show`, and `show.changed` says what it did; `overlay.show`,
+  `overlay.hide` and `overlay.toggle` put a scene over program with or without a show.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
@@ -1765,7 +1774,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (ADR-0183) adds `channels`, an `amount` on a modifier or value binding, the `channel`
   motion kind and the `note` MIDI control, each refused the same way, and version 21
   (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
-  `delay_ms`, refused the same way. `jstream-core`
+  `delay_ms`, refused the same way. Version 22 (ADR-0210) adds `shows`, the
+  `show_scene` marker and the `show.*` actions a binding may run, refused the same way;
+  a marker naming a scene the file doesn't hold is dropped on load. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

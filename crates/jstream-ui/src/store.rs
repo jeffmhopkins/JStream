@@ -127,7 +127,7 @@ impl Collection {
                     hotkeys,
                     folders,
                     transitions: *transitions,
-                    value_bindings,
+                    value_bindings: *value_bindings,
                     channels: *channels,
                 })
             }
@@ -1540,6 +1540,7 @@ mod tests {
             warm_gpu_mib: None,
             rendering: None,
             show: None,
+            overlays: Vec::new(),
         };
         assert_eq!(Collection::from_result(other), None);
     }
