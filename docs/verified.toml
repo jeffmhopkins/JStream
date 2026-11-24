@@ -7428,7 +7428,7 @@ stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labe
 stamp = { hash = "b3:32f763eb2e5453d9", by = "agent:mappings-panel", note = "mappings.spec.js gains a Triggers tab test on the same per-test daemon; #1708 adds keys-and-midi.spec.js; harness unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/mappings.spec.js"]
-stamp = { hash = "b3:68391ac992a244a9", by = "agent:mappings-panel", note = "mappings.spec.js gains a Triggers tab test on the same per-test daemon; #1708 adds keys-and-midi.spec.js; harness unchanged" }
+stamp = { hash = "b3:aaf7fc7be9160d3f", by = "agent:mappings-panel", note = "mappings.spec.js's Triggers test now waits for the key capture's focus before F8, as keys-and-midi.spec does; the section's description holds" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
 stamp = { hash = "b3:74a909007ca3d6e3", by = "agent:claude", note = "Re-read: filters.spec.js and menus.spec.js add assertions only (the Settings chips, no Add as group or Name field for Color); the fixtures are unchanged." }
@@ -7572,7 +7572,7 @@ stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labe
 stamp = { hash = "b3:32f763eb2e5453d9", by = "agent:mappings-panel", note = "Mappings bullet now names the second test, naming Mod 20 to Camera roll (Mod 20) with its live value" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/mappings.spec.js"]
-stamp = { hash = "b3:68391ac992a244a9", by = "agent:mappings-panel", note = "Mappings bullet names the Triggers tab test; #1708's Keys and MIDI bullet kept beside it" }
+stamp = { hash = "b3:aaf7fc7be9160d3f", by = "agent:mappings-panel", note = "mappings.spec.js's Triggers test now waits for the key capture's focus before F8, as keys-and-midi.spec does; the section's description holds" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
 stamp = { hash = "b3:74a909007ca3d6e3", by = "agent:claude", note = "The Menus and Add source entry says Color shows neither New | Existing nor a Name field, and the Filters entry that the picked kind's settings are chips." }

@@ -80,6 +80,7 @@ test('the Triggers tab binds a key and lists what starts sequences', async ({ pa
   await expect(panel.getByText('No sequence starts or stops by itself.', { exact: false })).toBeVisible();
 
   await panel.getByRole('button', { name: '+ Key' }).click();
+  await expect(panel.getByRole('button', { name: /Press a key/ })).toBeFocused();
   await page.keyboard.press('F8');
   const fresh = panel.getByRole('group', { name: 'Add an action to F8' });
   await fresh.getByRole('combobox', { name: 'Action' }).selectOption('scene_switch');
