@@ -3020,7 +3020,13 @@ impl Engine {
             }
         }
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        let hardware = count(sessions.iter().filter(|e| e.hardware()).count());
+        // A preview stream's hardware session counts too (#1691): it is one of the
+        // sessions a capped encoder has given out.
+        let preview = usize::from(
+            gate.program()
+                .is_some_and(|program| program.preview_hardware().taken()),
+        );
+        let hardware = count(sessions.iter().filter(|e| e.hardware()).count() + preview);
         let encoder = gate
             .running
             .get(output_id)
@@ -3038,7 +3044,7 @@ impl Engine {
                 hardware: own.hardware(),
                 dedicated: own.dedicated(),
             });
-        (encoder, count(sessions.len()), hardware)
+        (encoder, count(sessions.len() + preview), hardware)
     }
 
     fn host(&mut self) -> Arc<MediaHost> {

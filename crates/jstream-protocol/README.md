@@ -398,7 +398,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.184 because `live.set` takes a filter's `live` settings
+`PROTOCOL_VERSION` is 0.185 because `profile.get` names each stream's video encoder:
+`StreamProfile` gains `encoder`, the name of the one encoding it now, and `hardware`,
+whether it runs on dedicated hardware; 0.184 because `live.set` takes a filter's `live` settings
 (`filter.set_settings`), an item's opacity (`item.set_opacity`) and the gains
 (`source.set_audio` and `bus.set_fader` carrying `gain_db` alone, and `send.set`) as live
 values, so a drag on any of them follows live and commits as one undo step
@@ -1978,7 +1980,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
-  the cap (0.13; missing, they parse as absent and 0). `cleartext` says whether
+  the cap (0.13; missing, they parse as absent and 0), and since 0.185 a preview
+  stream's session too while it is a hardware one. `cleartext` says whether
   publishing sends the stream key across the network unencrypted: a generic RTMP
   target whose URL is plain `rtmp://` to a host other than `localhost` or a loopback
   address (`OutputKind::sends_key_in_cleartext`; 0.37, missing it parses as `false`).
@@ -2101,7 +2104,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   client) and `dropped` on the way, the frames its encoder took more than a frame
   period after they were handed over (`late`), the encoder's average time per frame
   (`encode_ms`), and the bit rate sent against the encoders' (`kbps`, `target_kbps`;
-  video and audio for an output, video for a preview stream). Most frames lost come
+  video and audio for an output, video for a preview stream). Since 0.185 it also
+  names the video encoder encoding the stream now (`encoder`, as the platform names
+  it, after any fallback) and whether that one runs on dedicated hardware
+  (`hardware`). Most frames lost come
   first; a stream that ran in none of the window, or has ended, is left out. `mixer`
   (omitted when it mixed no block in the window) counts the mixer's `blocks`, the
   `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest
