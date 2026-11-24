@@ -240,19 +240,25 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   both count what was pushed (`pushed`, `controls_pushed`) so a reader can ask for what
   came since a count (`notes_since`, `controls_since`), as the engine's MIDI action
   bindings do ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)).
-  `MidiInputs::set_bindable` names the inputs whose MIDI may run those bindings
-  (`bindable`), the JTunnel senders whose "Use this sender's MIDI" is on; what every
-  input draws doesn't change. `MidiState::alive(at_ms)` (or `MidiFeed::alive`) records
-  that the input's sender was heard from, MIDI or not, and `alive_ms` reads it back,
+  `MidiInputs::set_bindable` names the inputs whose MIDI may move anything
+  (`bindable`), the JTunnel senders whose "Use this sender's MIDI" is on (ADR-0123 §3),
+  and marks each named state (`MidiState::bindable`, one atomic; a state made later
+  takes the set it's made in). `bound()` is a state like `any()` that each input feeds
+  only while it is bindable: what the engine's value bindings, channels and `midi`
+  modifiers read when they name no input; a named input that isn't bindable they read
+  as one that never sent anything. What every input draws doesn't change.
+  `MidiState::alive(at_ms)` (or `MidiFeed::alive`) records that the input's sender was
+  heard from, MIDI or not, and `alive_ms` reads it back,
   `None` for an input never marked, such as a MIDI port: the bindings let a held press go
   once a marked input falls silent. A reader skips a log slot a push is writing. CC 120
   and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
   (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
   `drawn(name)` is the state a source's `input` setting draws. An input thread pushes
-  through a `MidiFeed` (`feed(name)`): its own state and the every-input one, looked up
-  once, and a `jstream-midi` `Tempo` tracker its clock and transport messages run,
-  which publishes a `TempoReading` (time, last timing clock, BPM, beat, playing) to both
-  states (`MidiState::tempo`) through a sequence-numbered cell, without a lock. Only a
+  through a `MidiFeed` (`feed(name)`): its own state, the every-input one and the
+  bound one, looked up once, and a `jstream-midi` `Tempo` tracker its clock and
+  transport messages run, which publishes a `TempoReading` (time, last timing clock,
+  BPM, beat, playing) to its own and the every-input state (`MidiState::tempo`)
+  through a sequence-numbered cell, without a lock. Only a
   timing clock (`F8`) counts as a running clock. The every-input state takes one feed's
   clock at a time, until that clock has been silent for `CLOCK_TIMEOUT_MS` (500); a
   lone stop or song position doesn't take it from a clock that runs. `set_clock` gives it the

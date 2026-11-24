@@ -155,12 +155,15 @@ impl TempoCell {
     }
 }
 
-/// One input's feed into [`MidiInputs`]: its own state and the every-input one, looked
-/// up once, and the tracker its clock runs. An input thread holds one per input and
-/// pushes every message through it, without a lock or an allocation.
+/// One input's feed into [`MidiInputs`]: its own state, the every-input one and the
+/// bound one, looked up once, and the tracker its clock runs. An input thread holds one
+/// per input and pushes every message through it, without a lock or an allocation.
 pub struct MidiFeed {
     own: Option<Arc<MidiState>>,
     any: Arc<MidiState>,
+    /// What every bindable input feeds: this one's messages reach it only while its
+    /// own state is bindable (ADR-0123 §3).
+    bound: Arc<MidiState>,
     tempo: Tempo,
     /// When the input's last timing clock came, in milliseconds.
     clock_ms: Option<u64>,
@@ -185,9 +188,9 @@ impl MidiFeed {
     }
 
     /// Records `message`, which arrived at `at_ns` on the media clock, in the input's
-    /// state and the every-input one. A clock, start, stop, continue or song position
-    /// also moves the input's tempo, which both publish (the every-input state's from
-    /// one input at a time).
+    /// state and the every-input one, and in the bound one while the input is bindable.
+    /// A clock, start, stop, continue or song position also moves the input's tempo,
+    /// which the first two publish (the every-input state's from one input at a time).
     pub fn push(&mut self, at_ns: u64, message: &Message) {
         let at_ms = at_ns / 1_000_000;
         if matches!(
@@ -218,6 +221,9 @@ impl MidiFeed {
         // After the tempo, so a source that sees the change count sees the tempo too.
         if let Some(own) = &self.own {
             own.push(at_ms, message);
+            if own.bindable() {
+                self.bound.push(at_ms, message);
+            }
         }
         self.any.push(at_ms, message);
     }
@@ -231,6 +237,7 @@ impl MidiInputs {
         MidiFeed {
             own: self.input(name),
             any: self.any(),
+            bound: self.bound(),
             tempo: Tempo::new(TRACKER_METER),
             clock_ms: None,
             id: FEEDS.fetch_add(1, Ordering::Relaxed),

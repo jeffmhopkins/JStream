@@ -62,6 +62,8 @@ fn a_fader_drives_the_master_until_its_binding_goes() {
         "nothing sent: the stored fader"
     );
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Bitwig"].map(String::from));
     midi.push("Bitwig", 0, &cc(127));
     std::thread::sleep(Duration::from_millis(100));
     midi.push("Bitwig", 1, &cc(64));
@@ -102,5 +104,51 @@ fn a_fader_drives_the_master_until_its_binding_goes() {
     assert!(
         until(|| engine.drawn_master_gain() == 0.0),
         "the stored fader again"
+    );
+}
+
+/// ADR-0123 §3: a JTunnel sender whose "Use this sender's MIDI" is off moves no value
+/// binding, whether the binding listens to every input or names the sender; once it is
+/// let in, it does.
+#[test]
+fn a_sender_left_out_moves_no_value_binding() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let midi = engine.midi_inputs();
+    midi.set_bindable(["Desk".to_owned()]);
+    batch(&control, edits(vec![master_fader()])).expect("binds");
+    std::thread::sleep(Duration::from_millis(100));
+    midi.push("Stranger", 0, &cc(64));
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        engine.drawn_master_gain(),
+        0.0,
+        "every input, the sender left out"
+    );
+    // A binding that names the sender.
+    let mut named = master_fader();
+    if let Edit::BindingSetValue {
+        binding:
+            ValueBinding {
+                input: MotionKind::Midi { input, .. },
+                ..
+            },
+    } = &mut named
+    {
+        *input = Some("Stranger".into());
+    }
+    batch(&control, edits(vec![named])).expect("rebinds");
+    std::thread::sleep(Duration::from_millis(100));
+    midi.push("Stranger", 1, &cc(0));
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(engine.drawn_master_gain(), 0.0, "its own input, left out");
+    // Let in, it drives the fader.
+    midi.set_bindable(["Desk", "Stranger"].map(String::from));
+    midi.push("Stranger", 2, &cc(32));
+    let quarter = -60.0 + 60.0 * 32.0 / 127.0;
+    assert!(
+        until(|| (engine.drawn_master_gain() - quarter).abs() < 1e-3),
+        "let in: {}",
+        engine.drawn_master_gain()
     );
 }

@@ -89,8 +89,15 @@ the new one over the block, so a mute set between two blocks fades in one block 
    it on (`MidiInputs::bindable`). A binding with no `input` listens to each of them, not
    to the every-input state, which also holds the senders left out. This replaces
    ADR-0142 §2's "it doesn't reach the binding system" for action bindings, within
-   ADR-0123's bounds; value bindings and channels, which read a sender's MIDI without the
-   switch today, are left to their own change. **A held press never outlives its
+   ADR-0123's bounds. **The same switch gates every other MIDI reader** (#1710): value
+   bindings ([ADR-0178](0178-value-bindings-drive-any-number.md)), channels
+   ([ADR-0183](0183-virtual-control-channels.md)) and `midi` motion modifiers
+   ([ADR-0168](0168-midi-controllers-drive-motion.md)) read a named input only while its
+   state is marked bindable, and otherwise read it as a control at rest; naming no input,
+   they read a bound state that each input feeds only while it is let in, never the
+   every-input state. Switched on, an input is read from where its controls are. The
+   `midi_*` sources still draw every sender, and its clock still gives their beat
+   (ADR-0142): drawing moves nothing in the collection or the mix. **A held press never outlives its
    source.** The engine keeps each press whose action has a release until that release is
    heard, and runs the release itself as soon as the input is no longer let in, the
    binding is cleared or runs another action, or the MIDI inputs go. A JTunnel sender
@@ -126,8 +133,8 @@ the new one over the block, so a mute set between two blocks fades in one block 
 - **Harder:** a release depends on the client hearing the key go up. The web UI releases
   on blur; a desktop listener that can't hear key-up on its platform can't offer a held
   key there.
-- **Must do:** put value bindings and channels behind "Use this sender's MIDI" too, as
-  ADR-0123 §3 says.
+- **Harder:** a fader, channel or modifier bound to a sender that is switched off reads
+  its control at rest until the switch goes on, and then jumps to where the control is.
 - **Must do:** the desktop app's global hotkey listeners report key-up and send releases.
   If several actions per trigger land, the runner and the clients run every action's
   press and every action's release, in order.

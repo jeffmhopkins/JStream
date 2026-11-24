@@ -73,6 +73,8 @@ fn a_note_and_the_actions_drive_a_channel() {
         level(&control)
     );
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Pads"].map(String::from));
     let note = |on: bool| {
         jstream_midi::Message::parse(&[if on { 0x90 } else { 0x80 }, 36, 100]).expect("a note")
     };
@@ -166,6 +168,8 @@ fn an_amount_scales_a_binding_by_its_channel() {
         level(&control)
     );
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Bitwig"].map(String::from));
     let cc = |v: u8| jstream_midi::Message::parse(&[0xB0, 7, v]).expect("a CC");
     midi.push("Bitwig", 0, &cc(0));
     midi.push("Bitwig", 1, &cc(127));

@@ -169,8 +169,24 @@ impl Control {
         })
     }
 
-    /// Its value in `state` now, as `0..=1`. Reads atomics only.
+    /// What it reads on an input that never sent anything: every value at 0, so a bend
+    /// reads its centre.
+    fn at_rest(self) -> f32 {
+        match self {
+            Control::Cc { .. } | Control::Pressure { .. } => Midi::normalize_cc(0),
+            Control::Bend { .. } => Midi::normalize_bend(0),
+            Control::Note { .. } => 0.0,
+        }
+    }
+
+    /// Its value in `state` now, as `0..=1`. Reads atomics only. A state that isn't
+    /// [`bindable`](MidiState::bindable), such as a JTunnel sender whose "Use this
+    /// sender's MIDI" is off, reads as one that never moved (ADR-0123 §3): every MIDI
+    /// reader but the drawing ones reads through here.
     pub(crate) fn read(self, state: &MidiState) -> f32 {
+        if !state.bindable() {
+            return self.at_rest();
+        }
         match self {
             Control::Cc {
                 channel: Some(c),
@@ -800,7 +816,9 @@ fn input_of(
                     // Past the inputs the engine tracks by name: nothing comes.
                     None => Arc::new(MidiState::new()),
                 },
-                _ => inputs.any(),
+                // Every input the person let in, never the every-input state the
+                // sources draw, which also holds the ones left out (ADR-0123 §3).
+                _ => inputs.bound(),
             };
             Input::Midi {
                 midi: params,
@@ -1386,6 +1404,8 @@ mod tests {
     #[test]
     fn a_camera_binding_follows_by_family_apart_from_items() {
         let midi = MidiInputs::new();
+        // Its MIDI may move things (ADR-0123 §3).
+        midi.set_bindable(["Bitwig"].map(String::from));
         let family = SceneId::new("cockpit");
         let item = ItemId::new("cockpit");
         let heard: HeardScopes = Arc::default();
@@ -1451,6 +1471,8 @@ mod tests {
     #[test]
     fn a_midi_binding_follows_its_control_smoothed() {
         let midi = MidiInputs::new();
+        // Its MIDI may move things (ADR-0123 §3).
+        midi.set_bindable(["Faders", "Pads"].map(String::from));
         let item = ItemId::new("itm_lever");
         let heard: HeardScopes = Arc::default();
         let mut bindings = Bindings::default();
@@ -1510,11 +1532,60 @@ mod tests {
         assert!(none.is_empty());
     }
 
+    /// ADR-0123 §3: a JTunnel sender whose "Use this sender's MIDI" is off moves no
+    /// `midi` modifier, whether it names the sender or listens to every input; an input
+    /// let in still does, and the sender's MIDI is still drawn.
+    #[test]
+    fn a_sender_left_out_moves_no_midi_modifier() {
+        let midi = MidiInputs::new();
+        midi.set_bindable(["Faders".to_owned()]);
+        let item = ItemId::new("itm_lever");
+        let heard: HeardScopes = Arc::default();
+        let mut bindings = Bindings::default();
+        bindings.record(
+            &item,
+            &[
+                fader("any", 0, None, None),
+                fader("named", 0, None, Some("Stranger")),
+            ],
+            &heard,
+            Some(&midi),
+            None,
+        );
+        let mut follower = Follower::default();
+        midi.push("Stranger", 0, &cc(0, 7, 127));
+        follower.follow(&bindings, at_ms(0));
+        assert_eq!(
+            bindings.level(&item, "any"),
+            Some(0.0),
+            "left out of every input"
+        );
+        assert_eq!(
+            bindings.level(&item, "named"),
+            Some(0.0),
+            "left out by name"
+        );
+        assert_eq!(midi.any().controller(0, 7), 127, "though it is drawn");
+        midi.push("Faders", 1, &cc(0, 7, 127));
+        follower.follow(&bindings, at_ms(100));
+        assert_eq!(bindings.level(&item, "any"), Some(1.0), "an input let in");
+        // Switched on, the sender moves the modifier that names it; switched off
+        // again, it reads as a control at rest.
+        midi.set_bindable(["Faders", "Stranger"].map(String::from));
+        follower.follow(&bindings, at_ms(200));
+        assert_eq!(bindings.level(&item, "named"), Some(1.0));
+        midi.set_bindable(["Faders".to_owned()]);
+        follower.follow(&bindings, at_ms(300));
+        assert_eq!(bindings.level(&item, "named"), Some(0.0));
+    }
+
     /// A shot planned after the tick was followed (an edit mid-tick, or between a held
     /// clock's steps) takes the levels followed so far, not its controls unsmoothed.
     #[test]
     fn a_shot_planned_mid_tick_keeps_the_smoothed_level() {
         let midi = MidiInputs::new();
+        // Its MIDI may move things (ADR-0123 §3).
+        midi.set_bindable(["Faders"].map(String::from));
         let item = ItemId::new("itm_lever");
         let heard: HeardScopes = Arc::default();
         let plan = || {
@@ -1552,6 +1623,8 @@ mod tests {
     #[test]
     fn a_binding_that_changes_kind_starts_afresh() {
         let midi = MidiInputs::new();
+        // Its MIDI may move things (ADR-0123 §3).
+        midi.set_bindable(["Faders"].map(String::from));
         let scopes = AudioScopes::new();
         let heard: HeardScopes = Arc::new(heard_scopes(&scopes, [Hearing::Program]));
         let item = ItemId::new("itm_light");

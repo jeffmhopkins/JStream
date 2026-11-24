@@ -2013,7 +2013,7 @@ stamp = { hash = "b3:4c313edf233da586", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:7555920d25b26a7d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-motion"."body"]
-stamp = { hash = "b3:7a9ee19db9d8b4e5", by = "agent:claude", note = "B1: ActionBindings now holds presses with a release and lets them go when the input leaves bindable, the binding is cleared or changed, the MIDI inputs go, or a marked input is silent past SILENT_MS (500 ms); ports never marked; tests listed | kept from the merged side: Transitions bullet edited: a 3D group's child track places each end through its groups each frame (Visual::groups, paired as Visual::motion in plan); motion.rs adds TrackMotion::offsets_on, which the bullet list's Motion entry doesn't go into; holds" }
+stamp = { hash = "b3:b47fe8a59d13eb94", by = "agent:issues-thread", note = "MIDI-driven motion: Control::read reads a non-bindable state as at rest, and no-input readers read MidiInputs::bound, so value bindings, channels and midi modifiers follow only senders let in (ADR-0123 §3, #1710); test-only set_bindable in value_bindings.rs | kept from the merged side: Transitions bullet edited: a 3D group's child track places each end through its groups each frame (Visual::groups, paired as Visual::motion in plan); motion.rs adds TrackMotion::offsets_on, which the bullet list's Motion entry doesn't go into; holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/action_bindings.rs"]
 stamp = { hash = "b3:16df806db62671cd", by = "agent:claude", note = "B1: ActionBindings now holds presses with a release and lets them go when the input leaves bindable, the binding is cleared or changed, the MIDI inputs go, or a marked input is silent past SILENT_MS (500 ms); ports never marked; tests listed" }
@@ -2025,7 +2025,7 @@ stamp = { hash = "b3:b6e046d60f43bcc2", by = "agent:claude", note = "B1: ActionB
 stamp = { hash = "b3:250c6e6ada6ca966", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the Live aim bullet (aim.rs) and its covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/channels.rs"]
-stamp = { hash = "b3:14f20144b87f9477", by = "agent:mute-thread", note = "This branch added the Action bindings entry (note on/off, CC crossing 64, program change, releases via on_release, only bindable inputs, first look runs nothing, no audit entry) and channel.switch hold_on/hold_off; the merge of the alpha.11 train made the values tick 60 Hz while a value moves (ADR-0190), now stated in action_bindings.rs's doc. | kept from the merged side: B1: a binding or a channel input whose input changed only smoothing_ms keeps its follower (same_but_smoothing) and takes the new time; the bullet now says so. ADR renamed 0188 to 0190." }
+stamp = { hash = "b3:fc879314ce4ec3ff", by = "agent:issues-thread", note = "MIDI-driven motion: Control::read reads a non-bindable state as at rest, and no-input readers read MidiInputs::bound, so value bindings, channels and midi modifiers follow only senders let in (ADR-0123 §3, #1710); test-only set_bindable in value_bindings.rs | kept from the merged side: B1: a binding or a channel input whose input changed only smoothing_ms keeps its follower (same_but_smoothing) and takes the new time; the bullet now says so. ADR renamed 0188 to 0190." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/driven.rs"]
 stamp = { hash = "b3:6cd45e61e61a2c66", by = "agent:claude", note = "Re-read: the Data-driven motion bullet now describes painting bindings and Bindings::tint, and Driven source settings names set_color and set_emissive and effects, matching reactive.rs, sourced.rs and driven.rs." }
@@ -2040,7 +2040,7 @@ stamp = { hash = "b3:67a9c13712b51b9d", by = "agent:channels", note = "Added cha
 stamp = { hash = "b3:186939d11df9fdb8", by = "agent:issues-thread", note = "Transitions bullet edited: a 3D group's child track places each end through its groups each frame (Visual::groups, paired as Visual::motion in plan); motion.rs adds TrackMotion::offsets_on, which the bullet list's Motion entry doesn't go into; holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/reactive.rs"]
-stamp = { hash = "b3:dcc64f208699b206", by = "agent:channels", note = "Added channels.rs to covers and a Channels bullet (driver, cells, values thread, scene reset, note control, amount); value bindings bullet notes amount." }
+stamp = { hash = "b3:ee3da5f8fc4f523a", by = "agent:issues-thread", note = "MIDI-driven motion: Control::read reads a non-bindable state as at rest, and no-input readers read MidiInputs::bound, so value bindings, channels and midi modifiers follow only senders let in (ADR-0123 §3, #1710); test-only set_bindable in value_bindings.rs" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/sourced.rs"]
 stamp = { hash = "b3:d7bf0499460bc4e8", by = "agent:claude-warp-aim", note = "sourced.rs only fills the three new ShownEnvironment fields in a test fixture" }
@@ -2055,7 +2055,7 @@ stamp = { hash = "b3:2833b18aab066189", by = "agent:channels", note = "Added the
 stamp = { hash = "b3:04c978be23724359", by = "agent:issues-thread", note = "Transitions bullet edited: a 3D group's child track places each end through its groups each frame (Visual::groups, paired as Visual::motion in plan); motion.rs adds TrackMotion::offsets_on, which the bullet list's Motion entry doesn't go into; holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/value_bindings.rs"]
-stamp = { hash = "b3:439f32359ad86542", by = "agent:claude", note = "B1: a binding or a channel input whose input changed only smoothing_ms keeps its follower (same_but_smoothing) and takes the new time; the bullet now says so. ADR renamed 0188 to 0190." }
+stamp = { hash = "b3:ab03a559da3bd4b9", by = "agent:issues-thread", note = "MIDI-driven motion: Control::read reads a non-bindable state as at rest, and no-input readers read MidiInputs::bound, so value bindings, channels and midi modifiers follow only senders let in (ADR-0123 §3, #1710); test-only set_bindable in value_bindings.rs" }
 
 ["CRATE-jstream-core#contents-plugins"."body"]
 stamp = { hash = "b3:6351a5fdb4ee9121", by = "agent:plugin-uninstall", note = "re-read: plugins/automation.rs gains uninstall within the WASM plugin module the section names; its CLAP and filter text is unchanged" }
@@ -2097,7 +2097,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:b26a2d43480085e9", by = "agent:claude", note = "B1: JTunnel play() marks the sender's MIDI input alive (MidiFeed::alive) on each non-concealed frame; added that sentence and the test's new alive assertion | kept from the merged side: 3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
+stamp = { hash = "b3:26b2df45aaf736bf", by = "agent:issues-thread", note = "JTunnel paragraph: a sender's MIDI now moves value bindings, channels and midi modifiers, not just action bindings, only with Use this sender's MIDI on; drawn either way (#1710) | kept from the merged side: 3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:ff5e2c24579293a0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2136,7 +2136,7 @@ stamp = { hash = "b3:54c776185e5d3074", by = "agent:claude-warp-aim", note = "pr
 stamp = { hash = "b3:04c978be23724359", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
 
 ["CRATE-jstream-core#contents-tests"."body"]
-stamp = { hash = "b3:af638b108c259284", by = "agent:mute-thread", note = "Added src/tests/mute.rs to the list and a Mutes paragraph for its four tests and action_bindings.rs's five, including only_an_input_let_run_bindings_fires_them. | merge: Merging main brought the alpha.11 train (#1655), adding its own tests; the mute and action-binding test paragraph from this branch still holds (938+ core tests pass). | kept from the merged side: Re-read: added the groups3d case of a Move after an ended Fade; the new keyframes tests fall under the existing keyframes wording | merge: alpha.11: #1685 (f26e7e2): a model with effects casts in the first frame (#1674), transitions split the same 3D groups as the pass with each child a track sampled through its links (#1596), a scene shares a group once; groups3d.rs keeps #1683's Move-after-Fade test and #1685's three group tests (merge kept both, 12 pass), holds | kept from the merged side: groups3d.rs list extended with the legacy-transform child, group and child motion during a Move, and a Move splitting the groups the pass splits once per scene and as deep; matches the new tests" }
+stamp = { hash = "b3:e90179edb4e9f672", by = "agent:issues-thread", note = "Added the left-out-sender tests (value binding engine test, channel and midi modifier unit tests); MIDI-driven tests now name their inputs bindable | kept from the merged side: Re-read: added the groups3d case of a Move after an ended Fade; the new keyframes tests fall under the existing keyframes wording | merge: alpha.11: #1685 (f26e7e2): a model with effects casts in the first frame (#1674), transitions split the same 3D groups as the pass with each child a track sampled through its links (#1596), a scene shares a group once; groups3d.rs keeps #1683's Move-after-Fade test and #1685's three group tests (merge kept both, 12 pass), holds | kept from the merged side: groups3d.rs list extended with the legacy-transform child, group and child motion during a Move, and a Move splitting the groups the pass splits once per scene and as deep; matches the new tests" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/aim/tests.rs"]
 stamp = { hash = "b3:ed73b276a16e5ff2", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the controller emulator and live aim tests and their covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -2163,10 +2163,10 @@ stamp = { hash = "b3:1dcbe24c87fbdbcc", by = "agent:smooth-paths", note = "keyfr
 stamp = { hash = "b3:b240b3ee178cd690", by = "agent:plugin-uninstall", note = "re-read: tests.rs's differential script now also sends plugin.uninstall for an uninstalled plugin, and tests/automation.rs gains two uninstall tests; the section's description of the differential run and parity still holds" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/cameras.rs"]
-stamp = { hash = "b3:befb454a30cd273b", by = "agent:channels", note = "Added src/tests/channels.rs and what it checks to the tests list." }
+stamp = { hash = "b3:00e601506106839b", by = "agent:issues-thread", note = "Added the left-out-sender tests (value binding engine test, channel and midi modifier unit tests); MIDI-driven tests now name their inputs bindable" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/channels.rs"]
-stamp = { hash = "b3:bd114fa911593220", by = "agent:release-alpha9", note = "merge: f6cece0 (#1647's branch): the channel amount test waits for channel.values to read 0.5 before its CCs, instead of a fixed sleep; the tests bullet holds" }
+stamp = { hash = "b3:1c91996aaf3bb20b", by = "agent:issues-thread", note = "Added the left-out-sender tests (value binding engine test, channel and midi modifier unit tests); MIDI-driven tests now name their inputs bindable" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/clock.rs"]
 stamp = { hash = "b3:d3020011a2ccbca3", by = "agent:cockpit-demo", note = "re-read: tests/clock.rs adds an output waiting for a released clock to catch up, and tests/timelines.rs a step past a cue firing it; both files are listed" }
@@ -2202,7 +2202,7 @@ stamp = { hash = "b3:cfb4996edfeae2c2", by = "agent:smooth-paths", note = "keyfr
 stamp = { hash = "b3:5448eb34c345dcb8", by = "agent:channels", note = "Re-read: tests/sequences.rs is described in the Timelines section it is covered by; the list here is by area." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/keyframes.rs"]
-stamp = { hash = "b3:d26638e1feae419f", by = "agent:issues-thread", note = "Re-read: added the groups3d case of a Move after an ended Fade; the new keyframes tests fall under the existing keyframes wording" }
+stamp = { hash = "b3:ca44e6b83ca54539", by = "agent:issues-thread", note = "Added the left-out-sender tests (value binding engine test, channel and midi modifier unit tests); MIDI-driven tests now name their inputs bindable" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/live_values.rs"]
 stamp = { hash = "b3:ad8a24f6d8bc55dd", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2244,7 +2244,7 @@ stamp = { hash = "b3:f1cec73d2d439e33", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:cd79013c586d6d4b", by = "agent:claude", note = "Lists the new groups3d test (an effect setting changed later reaches a 3D card) and the keyframes tests of the shown clock in a chained scene and for an item with effects." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/value_bindings.rs"]
-stamp = { hash = "b3:729e92f66091531f", by = "agent:channels", note = "Added src/tests/channels.rs and what it checks to the tests list." }
+stamp = { hash = "b3:8ebfc5b442330cb5", by = "agent:issues-thread", note = "Added the left-out-sender tests (value binding engine test, channel and midi modifier unit tests); MIDI-driven tests now name their inputs bindable" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/values.rs"]
 stamp = { hash = "b3:7bd71026afc70549", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -6519,7 +6519,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:a86b42c09b6deeff", by = "agent:claude", note = "MidiState::alive/alive_ms and MidiFeed::alive added to the MidiState paragraph; rest of the MIDI paragraph re-read and unchanged | kept from the merged side: README sky_pictures sentence says a nested-scene item is one arrival of up to four pictures placed by turn and tilt (ADR-0198); light.rs unchanged" }
+stamp = { hash = "b3:6af7e94c01de3cd7", by = "agent:issues-thread", note = "MidiInputs gains bound() fed only by bindable inputs, set_bindable marks each named MidiState::bindable, MidiFeed feeds the bound state; tempo still published to own and every-input states; new unit test | kept from the merged side: README sky_pictures sentence says a nested-scene item is one arrival of up to four pictures placed by turn and tilt (ADR-0198); light.rs unchanged" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }
@@ -6615,13 +6615,13 @@ stamp = { hash = "b3:172f1ec70f2547a8", by = "agent:claude", note = "This branch
 stamp = { hash = "b3:896f8bfaece6addb", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds; review N1: the per-particle seed now uses wrapping_add after its wrapping_mul, so a late note's seed can't overflow in a debug build. The section's account of the kind holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/midi/mod.rs"]
-stamp = { hash = "b3:a1f5ee0898adb131", by = "agent:claude", note = "MidiState::alive/alive_ms and MidiFeed::alive added to the MidiState paragraph; rest of the MIDI paragraph re-read and unchanged" }
+stamp = { hash = "b3:ba770d390ebdd736", by = "agent:issues-thread", note = "MidiInputs gains bound() fed only by bindable inputs, set_bindable marks each named MidiState::bindable, MidiFeed feeds the bound state; tempo still published to own and every-input states; new unit test" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/midi/tempo.rs"]
-stamp = { hash = "b3:3f5f50e49e29d53e", by = "agent:claude", note = "MidiState::alive/alive_ms and MidiFeed::alive added to the MidiState paragraph; rest of the MIDI paragraph re-read and unchanged" }
+stamp = { hash = "b3:001189530918dc34", by = "agent:issues-thread", note = "MidiInputs gains bound() fed only by bindable inputs, set_bindable marks each named MidiState::bindable, MidiFeed feeds the bound state; tempo still published to own and every-input states; new unit test" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/midi/tests.rs"]
-stamp = { hash = "b3:ae19ebbf95f4de44", by = "agent:claude", note = "MidiState keeps each control's latest value on any channel; added to the MidiState bullet" }
+stamp = { hash = "b3:93f8fa56fa3ac5d5", by = "agent:issues-thread", note = "MidiInputs gains bound() fed only by bindable inputs, set_bindable marks each named MidiState::bindable, MidiFeed feeds the bound state; tempo still published to own and every-input states; new unit test" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/gltf.rs"]
 stamp = { hash = "b3:5aea3cdad420876d", by = "agent:claude", note = "Rewrote the loader's rig paragraph (node or bind space, JOINTS_0/WEIGHTS_0, inverse binds, clip names, errors, non-tree fallback) and added animation, animation_speed and animation_loop with the media-clock playback and next_change, matching gltf.rs, model/mod.rs and their tests" }
@@ -8523,7 +8523,7 @@ stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cf
 stamp = { hash = "b3:0f0dfcf2e50428c6", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:26e1b1358a329cdd", by = "agent:claude", note = "Added that a sender's held press is let go when the switch goes off, its binding changes, or the sender is silent 500 ms; JTunnel change only adds a liveness mark, sends nothing new" }
+stamp = { hash = "b3:1519faa8a1d72981", by = "agent:issues-thread", note = "Closed the open item: value bindings, channels and midi modifiers now read only senders with Use this sender's MIDI on (#1710); midi_* sources and their beat still read every sender" }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }

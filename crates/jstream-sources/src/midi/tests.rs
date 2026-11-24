@@ -817,3 +817,39 @@ fn a_soft_note_s_particles_are_smaller_and_dimmer() {
     assert_eq!(loud_color, RED);
     assert!(soft_color[0] < loud_color[0], "{soft_color:?}");
 }
+
+#[test]
+fn only_a_bindable_input_reaches_the_bound_state() {
+    // ADR-0123 §3: what a binding with no input reads holds only what inputs the person
+    // let in sent while they were let in; every input still reaches what is drawn.
+    let inputs = MidiInputs::new();
+    let mut kept = inputs.feed("Kept");
+    let mut left = inputs.feed("Left");
+    inputs.set_bindable(["Kept".to_owned()]);
+    assert!(inputs.input("Kept").expect("known").bindable());
+    assert!(!inputs.input("Left").expect("known").bindable());
+    assert!(inputs.bound().bindable() && !inputs.any().bindable());
+    assert!(!MidiState::new().bindable());
+
+    kept.push(0, &msg(&[0xB0, 7, 100]));
+    left.push(0, &msg(&[0xB0, 8, 90]));
+    inputs.push("Left", 1, &on(60, 80));
+    assert_eq!(inputs.bound().controller(0, 7), 100);
+    assert_eq!(
+        inputs.bound().controller(0, 8),
+        0,
+        "a left-out sender never reaches it"
+    );
+    assert_eq!(inputs.bound().held(0, 60), 0);
+    assert_eq!(inputs.any().controller(0, 8), 90, "though it is drawn");
+    assert_eq!(inputs.any().held(0, 60), 80);
+
+    // Switched off, an input stops reaching it; a new input learns the set it's made in.
+    inputs.set_bindable(["Later".to_owned()]);
+    assert!(!inputs.input("Kept").expect("known").bindable());
+    kept.push(2, &msg(&[0xB0, 7, 5]));
+    assert_eq!(inputs.bound().controller(0, 7), 100);
+    assert!(inputs.input("Later").expect("made").bindable());
+    inputs.push("Later", 3, &msg(&[0xB0, 9, 64]));
+    assert_eq!(inputs.bound().controller(0, 9), 64);
+}

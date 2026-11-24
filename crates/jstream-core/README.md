@@ -279,7 +279,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   A state packet ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decisions 1 and 2) is counted as `state_off` and dropped unless the sender's
   `AcceptedSender::with_state` is on ("Use this sender's state", on by default for an
-  accepted sender). A sender's MIDI runs action bindings only while its
+  accepted sender). A sender's MIDI runs action bindings and moves value bindings,
+  channels and `midi` modifiers (it is drawn either way) only while its
   `AcceptedSender::with_midi` is on ("Use this sender's MIDI", off by default, ADR-0123
   §3): `Engine::start_jtunnel` names those senders to `MidiInputs::set_bindable`, and
   `stop_jtunnel` names none ([Action bindings](#contents-motion)). On,
@@ -435,7 +436,13 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): a `midi` modifier
   following a control change, pitch bend or channel pressure on its input's state, read
   from atomics and smoothed by the same follower; a scene or source preview reads it
-  unsmoothed. A scene camera's `midi` and `data` modifiers are recorded and smoothed the
+  unsmoothed. `Control::read`, which this, value bindings and channels all read MIDI
+  through, reads a state that isn't `MidiState::bindable` as a control at rest, and a
+  modifier, binding or channel input naming no input reads `MidiInputs::bound`, never the
+  every-input state the sources draw: a JTunnel sender with "Use this sender's MIDI" off
+  moves none of them ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
+  §3). Switched on, an input is read from where its controls are.
+  A scene camera's `midi` and `data` modifiers are recorded and smoothed the
   same way, by scene family and modifier ID instead of item
   ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
   While no render thread runs (no output), `video.snapshot` and the preview
@@ -1054,6 +1061,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   gain the mixer is given, smoothed, only once it moves, while `state.get` keeps the
   stored 0 dB and lists the binding, and clearing it gives the stored gain back; the
   driver's own test (`value_bindings.rs`) waits for a control to move and follows it.
+  A JTunnel sender left out of `MidiInputs::bindable` (ADR-0123 §3) moves no value
+  binding, named or listening to every input, until it is let in; `channels.rs` and
+  `reactive.rs` show the same for a channel's input and a `midi` modifier, while an
+  input let in still moves them. These tests name their inputs bindable.
   Channels (`src/tests/channels.rs`, ADR-0183): a held note drives a channel to 1 and
   its release to 0, `channel.set_value` takes over, `channel.switch` holds the off value,
   a missing channel's action fails, and a binding's `amount` gives half the throw at
