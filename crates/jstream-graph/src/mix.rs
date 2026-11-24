@@ -142,5 +142,8 @@ fn check_mix(state: &State, mix: &MixSpec, at: usize) -> Result<(), ProtocolErro
     {
         return Err(not_found(EntityKind::Scene, scene_id.as_str()));
     }
+    if let Some(scene_id) = mix.scene() {
+        crate::apply::not_the_show_scene(state, scene_id, at, "mix.input.scene_id")?;
+    }
     Ok(())
 }
