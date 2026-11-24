@@ -2427,7 +2427,14 @@ the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds
 and an item whose motion drives its effects' settings (ADR-0138, `driven.rs`) is padded
 for the least and the most they reach (`Driven::extremes`), from its own settings and,
 during a Move, from the look it leaves. A box
-longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
+longer with its outset than 8192 pixels on a side is scaled down uniformly, leaving room
+for its side and the pad each rounded up (`fit_scale`), and its layer is given the box's
+size in canvas pixels as its extent, so its effects' pixel settings count in canvas
+pixels as the pad does and reach as far across the canvas as on a smaller item
+([ADR-0211](../../docs/adr/0211-a-filters-pixel-settings-count-in-its-inputs-extent.md), #1720,
+`golden_a_big_items_shadow_reaches_as_far_as_a_small_items`). A pad grows the extent of
+what its filter draws by as many extent pixels as its texels stand for
+(`chain::placed_after`). The item is
 drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the

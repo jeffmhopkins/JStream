@@ -65,8 +65,14 @@ tells the engine which of them count in pixels.
 3. **Reach, outset and pad.** A pass's reach counts in texels, from its scaled settings, as
    the bound it feeds does. `filter::outset` counts in extent pixels, as the settings it reads
    do, and core turns it into the item layer's pixels for the pad. The pad counts in texels.
-   Only an item's effects are padded, over a layer placed at its own size, whose texels are
-   its extent pixels, so the pad and the scaled reach agree and nothing is cut.
+   Only an item's effects are padded. Their layer is placed at the box's size in canvas
+   pixels: its own size, or for a box too large for one layer (`MAX_LAYER_SIDE`, ADR-0065
+   §5), drawn into fewer texels, the box's canvas size (#1720). Its texels per extent pixel
+   are then the scale core pads by, so the pad and the scaled reach agree and nothing is
+   cut. A pad grows the extent of what the filter draws by as many extent pixels as its
+   texels stand for, so the filters after it keep that scale. Such a layer is scaled to
+   leave room for the box's side and the pad each being rounded up, so with its pad it
+   still fits the largest side.
 4. **The cost.** The scaled settings are worked out only when the input's scale changes, and
    kept: a steady input costs a comparison per filter per frame.
 
@@ -77,6 +83,11 @@ tells the engine which of them count in pixels.
   size" now holds only for pack effects.
 - A source drawn sharp at more texels than it is shown keeps its filters' look as it is
   enlarged, where before its blur and shadow shrank on the picture.
+- An item larger than the largest layer side keeps its effects' look: a shadow or a blur
+  reaches as far across the canvas as on a smaller item and is not cut at the layer's
+  edge, where before it reached up to twice as far in its layer and the pad cut it. A pack
+  effect on such a layer still counts in texels, so it reaches further than its pad allows
+  and can be cut there, as before.
 - A new `px` parameter is scaled unless it is named as counting in something else; a test
   fails until each is one or the other.
 - Pack authors' pixel parameters still count in the input's texels; the pack docs say so.

@@ -1178,9 +1178,16 @@ impl Chains {
         let mut size = (input.width(), input.height());
         let mut placed = input.extent();
         for (index, filter) in running.iter_mut().enumerate() {
-            filter.filter.set_pad(chain.pad_of(index));
+            let pad = chain.pad_of(index);
+            filter.filter.set_pad(pad);
+            let input = size;
             size = filter.filter.output_size(size.0, size.1);
-            placed = filter.filter.output_size(placed.0, placed.1);
+            placed = placed_after(
+                filter.filter.output_size(placed.0, placed.1),
+                placed,
+                (input, size),
+                pad,
+            );
             let made = cache
                 .layer(compositor, &filter.key, size.0, size.1)
                 .map(|_| ());
@@ -1884,6 +1891,30 @@ fn see(
     running.scene = Some(held);
     cache.retire_filter(std::mem::replace(&mut running.filter, fresh));
     true
+}
+
+/// The extent of a filter's output, from `grown`, its input's extent `placed` grown as
+/// its texels are: the pad counts in texels (ADR-0211), so over an input with fewer
+/// texels than its extent (an item's layer scaled down to fit, #1720) it grows the
+/// extent by as many of its own pixels as it stands for, keeping the texels per extent
+/// pixel the filters after it scale by. A filter that sizes its output otherwise keeps
+/// `grown`.
+fn placed_after(
+    grown: (u32, u32),
+    placed: (u32, u32),
+    (input, output): ((u32, u32), (u32, u32)),
+    pad: u32,
+) -> (u32, u32) {
+    let twice = pad.saturating_mul(2);
+    let padded = (input.0.saturating_add(twice), input.1.saturating_add(twice));
+    if pad == 0 || output != padded || placed == input {
+        return grown;
+    }
+    let side = |placed: u32, texels: u32| {
+        let pad = (f64::from(pad) * f64::from(placed) / f64::from(texels.max(1))).round();
+        placed.saturating_add((pad as u32).saturating_mul(2))
+    };
+    (side(placed.0, input.0), side(placed.1, input.1))
 }
 
 #[cfg(test)]
@@ -7014,6 +7045,94 @@ mod tests {
             ",
             "the shadow falls past the box, below and to the right",
         );
+    }
+
+    /// A pad grows a filter's output extent by as many extent pixels as its texels stand
+    /// for, so the texels per extent pixel the next filter scales by hold (#1720); over
+    /// an input at its own size it grows both alike, as before.
+    #[test]
+    fn a_pad_grows_the_extent_in_its_own_pixels() {
+        // Half as many texels as its extent: 8 texels of pad are 16 extent pixels.
+        assert_eq!(
+            super::placed_after((16_400, 28), (16_384, 12), ((8192, 6), (8208, 22)), 8),
+            (16_416, 44)
+        );
+        // At its own size, as `output_size` grows it.
+        assert_eq!(
+            super::placed_after((80, 52), (64, 36), ((64, 36), (80, 52)), 8),
+            (80, 52)
+        );
+        // No pad: whatever the filter sizes it to.
+        assert_eq!(
+            super::placed_after((10, 10), (16_384, 12), ((8192, 6), (10, 10)), 0),
+            (10, 10)
+        );
+    }
+
+    /// An item wider than the largest layer side is drawn into a layer scaled down to
+    /// fit, placed at the box's size in canvas pixels (ADR-0211, #1720): its drop
+    /// shadow falls as far across the canvas as a small item's, and isn't cut by the
+    /// pad. Before, the layer was placed at its own size, so the shadow's 8 px counted
+    /// in layer pixels and fell 16 canvas px away; and the box and pad, each rounded up,
+    /// made the padded layer one pixel too wide for one texture, so nothing was drawn.
+    #[test]
+    fn golden_a_big_items_shadow_reaches_as_far_as_a_small_items() {
+        let shadow = || {
+            effect(
+                "cam",
+                "drop_shadow",
+                serde_json::json!({
+                    "color": "#0000ff", "offset_x": 8.0, "offset_y": 8.0, "blur": 0.0
+                }),
+            )
+        };
+        // Both boxes end at x 44 and span rows 12 to 24.
+        let mut small = placed(&[("cam", (26.0, 18.0), (36.0, 12.0), 0.0)]);
+        apply(&mut small, vec![hide("logo"), shadow()]);
+        assert_golden(
+            &shot(&small),
+            "
+            ................
+            ................
+            ................
+            ..WWWWWWWWW.....
+            ..WWWWWWWWW.....
+            ..WWWWWWWWWBB...
+            ....BBBBBBBBB...
+            ....BBBBBBBBB...
+            ................
+            ",
+            "a small item's shadow, 8 px right and down",
+        );
+        let mut big = placed(&[("cam", (44.0 - 8192.0, 18.0), (16_384.0, 12.0), 0.0)]);
+        apply(&mut big, vec![hide("logo"), shadow()]);
+        let shot = shot(&big);
+        let Some((grid, layer)) = golden_at(&shot, 100) else {
+            return;
+        };
+        let expected: String = "
+            ................
+            ................
+            ................
+            WWWWWWWWWWW.....
+            WWWWWWWWWWW.....
+            WWWWWWWWWWWBB...
+            BBBBBBBBBBBBB...
+            BBBBBBBBBBBBB...
+            ................
+            "
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .flat_map(|line| line.chars().chain(['\n']))
+        .collect();
+        assert_eq!(
+            grid, expected,
+            "the shadow falls 8 px right and down, as the small item's, uncut\n{grid}"
+        );
+        let [texels, extent] = layer.expect("cam's layer");
+        assert!(texels.0 <= 8192, "scaled down to fit: {texels:?}");
+        assert_eq!(extent, (16_384, 12), "placed at the box's size");
     }
 
     /// An item's layer grows by what its effects draw at their settings, not the most

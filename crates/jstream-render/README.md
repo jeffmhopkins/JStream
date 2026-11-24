@@ -1209,8 +1209,9 @@ scene's pixels, over a canvas-sized composite) and pack effects and shader sourc
 parameters the engine can't tell apart. A test fails on a pixel parameter that is neither
 scaled nor named as counting in something else. So `Pass::reach` counts in texels, from
 the scaled settings; `video_filter_outset` in extent pixels, as the settings do; and the
-pad (`set_pad`) in texels, which only an item's effects layer has, whose texels are its
-extent pixels.
+pad (`set_pad`) in texels, which only an item's effects layer has. Core places that layer
+at its box's size, and one scaled down to fit the largest layer side at the box's canvas
+size, so its texels per extent pixel are the scale core works the pad out at (#1720).
 
 **The harness.**
 

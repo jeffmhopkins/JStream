@@ -216,7 +216,8 @@ impl VideoFilter {
     /// draws, so it sees and keeps that room: 0 (the default) for none. The padding
     /// counts in texels, as the pass's reach does once its settings are scaled
     /// ([`Self::set_settings`]); only an item's effects pad, over a layer placed at
-    /// its own size, whose texels are its extent pixels. An item's
+    /// its box's size, whose texels per extent pixel are the scale its pad is worked
+    /// out at (#1720). An item's
     /// effects pad their layer at the first effect that draws past its input, so the
     /// ones before it frame the item's box itself (ADR-0065 §5).
     pub fn set_pad(&mut self, pad: u32) {
