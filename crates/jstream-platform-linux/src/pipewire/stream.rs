@@ -1,6 +1,8 @@
 //! A PipeWire video stream on the portal's remote, putting each frame into the capture
 //! mailbox (ADR-0060 §3), and, when the portal session sends it, the pointer from each
-//! buffer's cursor metadata into a second mailbox, on either path.
+//! buffer's cursor metadata, on either path: where it is into an atomic cell
+//! ([`PointerCell`]) and, when the capture asked for it, its picture too into a second
+//! mailbox.
 //!
 //! On the CPU path the stream takes shared-memory buffers and copies each frame out.
 //! On the GPU path (a stream connected with the context's [`gpu::Shared`]) it first
@@ -15,8 +17,12 @@
 //! (format changes, buffers, frames, state changes) run there. They catch panics
 //! (R-UNSAFE-005) and only touch the stream's [`Callbacks`] and the shared state.
 //!
-//! The stream's `pointer` is the trait's `None` for now: a portal stream knows where the
-//! pointer is only from the cursor metadata, which the engine doesn't ask for yet.
+//! A portal stream knows where the pointer is only from the cursor metadata
+//! ([`CursorMetadata`]). A capture that leaves the pointer out asks the portal for the
+//! metadata where it offers it and reads only the position, so the frames stay without
+//! the pointer and its picture is never kept. A capture that draws the pointer in gets
+//! the portal's embedded mode, which says nothing of where the pointer is: its
+//! `pointer` is `None`, as it is without the metadata.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -29,7 +35,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use jstream_platform::mailbox::Mailbox;
-use jstream_platform::{CaptureCursor, CursorImage, MediaClock, PlatformError, VideoSurface};
+use jstream_platform::{
+    CaptureCursor, CursorCapture, CursorImage, MediaClock, PlatformError, PointerPosition,
+    VideoSurface,
+};
 
 use super::ffi::{
     CHUNK_SKIP, FLAG_AUTOCONNECT, FLAG_MAP_BUFFERS, Fns, PW_DIRECTION_INPUT,
@@ -74,8 +83,11 @@ const HEADER_CORRUPTED: u32 = 1 << 1;
 pub(crate) struct Shared {
     /// The newest frame.
     pub(crate) mailbox: Mailbox<VideoSurface>,
-    /// The pointer, when it changed since it was last taken; only with cursor metadata.
+    /// The pointer, when it changed since it was last taken; only with
+    /// [`CursorMetadata::Picture`].
     pub(crate) cursor: Mailbox<CaptureCursor>,
+    /// Where the pointer is over the newest frame; only with cursor metadata.
+    pub(crate) pointer: PointerCell,
     pub(crate) captured: AtomicU64,
     pub(crate) skipped: AtomicU64,
     lost: AtomicBool,
@@ -100,6 +112,7 @@ impl Shared {
         Self {
             mailbox: Mailbox::new(),
             cursor: Mailbox::new(),
+            pointer: PointerCell::new(),
             captured: AtomicU64::new(0),
             skipped: AtomicU64::new(0),
             lost: AtomicBool::new(false),
@@ -130,6 +143,96 @@ impl Shared {
                 .map(|r| r.clone())
                 .unwrap_or_else(|_| "the capture stopped".into()),
         )
+    }
+}
+
+/// What a stream reads from the buffers' cursor metadata, which the portal sends only in
+/// its metadata cursor mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CursorMetadata {
+    /// None: the portal leaves the pointer out of the stream, or draws it into the
+    /// frames.
+    Off,
+    /// Where the pointer is, for `pointer`, and nothing else: its picture is never kept
+    /// or reported, so the capture shows no pointer.
+    Position,
+    /// Where the pointer is and what it looks like, for `pointer` and `cursor`.
+    Picture,
+}
+
+impl CursorMetadata {
+    /// What to read for a capture that asked for the pointer as `wanted`, when the
+    /// portal session `sends` the cursor metadata: the picture only for
+    /// [`CursorCapture::Metadata`], so a pointer left out stays out.
+    pub(crate) fn for_capture(sends: bool, wanted: CursorCapture) -> Self {
+        match (sends, wanted) {
+            (false, _) => Self::Off,
+            (true, CursorCapture::Metadata) => Self::Picture,
+            (true, _) => Self::Position,
+        }
+    }
+}
+
+/// Where the pointer is over the newest frame, in its pixels, as the cursor metadata last
+/// gave it, or unknown: one atomic word, written on PipeWire's thread and read without
+/// waiting (R-RT-002).
+#[derive(Debug)]
+pub(crate) struct PointerCell(AtomicU64);
+
+/// The word for an unknown position: `(i32::MIN, i32::MIN)`, which
+/// [`PointerCell::put`] never stores.
+const NO_POINTER: u64 = 0x8000_0000_8000_0000;
+
+impl PointerCell {
+    pub(crate) fn new() -> Self {
+        Self(AtomicU64::new(NO_POINTER))
+    }
+
+    /// Stores `at`, the pointer's position in the frame's pixels, or `None` when it isn't
+    /// known.
+    pub(crate) fn put(&self, at: Option<(i32, i32)>) {
+        let word = match at {
+            // `i32::MIN` is 2 billion pixels off the frame either way, so moving an `x`
+            // there by one keeps the unknown word unique and changes nothing.
+            Some((x, y)) => (u64::from(x.max(i32::MIN + 1) as u32) << 32) | u64::from(y as u32),
+            None => NO_POINTER,
+        };
+        self.0.store(word, Ordering::Relaxed);
+    }
+
+    /// The position last stored, as the trait reports it; never waits.
+    pub(crate) fn get(&self) -> Option<PointerPosition> {
+        let word = self.0.load(Ordering::Relaxed);
+        if word == NO_POINTER {
+            return None;
+        }
+        let (x, y) = ((word >> 32) as u32 as i32, word as u32 as i32);
+        Some(PointerPosition {
+            x: x as f32,
+            y: y as f32,
+        })
+    }
+}
+
+/// The crop's origin, which a position in the buffer's pixels is less to be in the
+/// frame's: the frame copy ignores an empty crop, and clamps a negative origin to 0.
+fn crop_origin(crop: Option<Crop>) -> (i32, i32) {
+    match crop {
+        Some(c) if c.width > 0 && c.height > 0 => (c.x.max(0), c.y.max(0)),
+        _ => (0, 0),
+    }
+}
+
+/// Where the pointer's hot spot is over the frame, in its pixels, after a buffer's
+/// `meta` and `crop`; `None` while it isn't over the stream (where it is then is
+/// unknown).
+fn pointer_in_frame(meta: &CursorMeta, crop: Option<Crop>) -> Option<(i32, i32)> {
+    match meta {
+        CursorMeta::Hidden => None,
+        CursorMeta::At { pointer, .. } => {
+            let (dx, dy) = crop_origin(crop);
+            Some((pointer.0.saturating_sub(dx), pointer.1.saturating_sub(dy)))
+        }
     }
 }
 
@@ -164,8 +267,10 @@ struct Callbacks {
     /// Set up once PipeWire settles on a DMA-BUF format.
     dma: Option<DmaPath>,
     streaming: bool,
-    /// The pointer so far, when the stream asks for cursor metadata.
-    cursor: Option<CursorTrack>,
+    /// What the stream reads from the cursor metadata, and asks PipeWire for.
+    metadata: CursorMetadata,
+    /// The pointer's picture so far, with [`CursorMetadata::Picture`].
+    cursor: CursorTrack,
 }
 
 /// The pointer as the buffers so far give it: the last picture (a buffer only carries
@@ -182,16 +287,13 @@ impl CursorTrack {
     fn update(&mut self, meta: CursorMeta, crop: Option<Crop>) -> Option<CaptureCursor> {
         let now = match meta {
             CursorMeta::Hidden => CaptureCursor::Hidden,
-            CursorMeta::At { x, y, bitmap } => {
+            CursorMeta::At { x, y, bitmap, .. } => {
                 match bitmap {
                     CursorBitmap::Unchanged => {}
                     CursorBitmap::Empty => self.image = None,
                     CursorBitmap::Image(image) => self.image = Some(Arc::new(image)),
                 }
-                let (dx, dy) = match crop {
-                    Some(c) if c.width > 0 && c.height > 0 => (c.x.max(0), c.y.max(0)),
-                    _ => (0, 0),
-                };
+                let (dx, dy) = crop_origin(crop);
                 match &self.image {
                     Some(image) => CaptureCursor::Shown {
                         x: x.saturating_sub(dx),
@@ -317,7 +419,7 @@ impl Callbacks {
             self.dma = None;
         }
         self.params = spa::buffer_params(dma).into();
-        if self.cursor.is_some() {
+        if self.metadata != CursorMetadata::Off {
             self.params.push(spa::cursor_param());
         }
         let mut ptrs: Vec<*const c_void> = self.params.iter().map(Pod::as_ptr).collect();
@@ -527,14 +629,15 @@ impl Callbacks {
 
     /// Notes the pointer in `b`'s cursor metadata, when the stream asks for it, on
     /// either path and before the frame is read: a buffer can carry a pointer move and
-    /// no frame, or a frame the producer marked corrupted.
+    /// no frame, or a frame the producer marked corrupted. Its position always; its
+    /// picture only with [`CursorMetadata::Picture`].
     ///
     /// # Safety
     /// `b` is a dequeued buffer of this stream, not yet queued back.
     unsafe fn note_cursor(&mut self, b: &PwBuffer) {
-        let Some(track) = &mut self.cursor else {
+        if self.metadata == CursorMetadata::Off {
             return;
-        };
+        }
         if b.buffer.is_null() {
             return;
         }
@@ -567,7 +670,13 @@ impl Callbacks {
         // SAFETY: a meta's `data` holds `size` bytes for the buffer's lifetime;
         // `parse_cursor` checks every offset in them.
         let bytes = unsafe { std::slice::from_raw_parts(m.data.cast::<u8>(), m.size as usize) };
-        if let Some(update) = spa::parse_cursor(bytes).and_then(|c| track.update(c, crop)) {
+        let Some(meta) = spa::parse_cursor(bytes) else {
+            return;
+        };
+        self.shared.pointer.put(pointer_in_frame(&meta, crop));
+        if self.metadata == CursorMetadata::Picture
+            && let Some(update) = self.cursor.update(meta, crop)
+        {
             self.shared.cursor.put(update);
         }
     }
@@ -706,7 +815,7 @@ impl VideoStream {
     /// Connects to node `node_id` on the PipeWire remote `fd` (from the portal's
     /// `OpenPipeWireRemote`), delivering frames into `shared`: on `gpu`'s device when it
     /// is given (the GPU path, falling back to CPU frames), else as CPU frames; and the
-    /// pointer too when `cursor_metadata` (the portal session sends it as metadata).
+    /// pointer too as `metadata` says, when the portal session sends it as metadata.
     ///
     /// # Errors
     /// [`PlatformError::MissingComponent`] when libpipewire lacks a function, and
@@ -717,7 +826,7 @@ impl VideoStream {
         node_id: u32,
         shared: Arc<Shared>,
         gpu: Option<Arc<gpu::Shared>>,
-        cursor_metadata: bool,
+        metadata: CursorMetadata,
     ) -> Result<Self, PlatformError> {
         let fns = Fns::load(lib)?;
         let clock = MonotonicClock::new()?;
@@ -748,7 +857,8 @@ impl VideoStream {
                 gpu,
                 dma: None,
                 streaming: false,
-                cursor: cursor_metadata.then(CursorTrack::default),
+                metadata,
+                cursor: CursorTrack::default(),
             }),
             _lib: lib.clone(),
         };
@@ -910,15 +1020,23 @@ mod cursor_tests {
     use jstream_platform::media::FrameSize;
     use jstream_platform::{CaptureCursor, CursorImage};
 
-    use super::CursorTrack;
+    use jstream_platform::CursorCapture;
+
+    use super::{CursorMetadata, CursorTrack, PointerCell, pointer_in_frame};
     use crate::spa::{Crop, CursorBitmap, CursorMeta};
 
     fn image(red: u8) -> CursorImage {
         CursorImage::new(FrameSize::new(1, 1).expect("size"), vec![red, 0, 0, 255]).expect("image")
     }
 
+    /// A pointer whose picture's corner is at `(x, y)`, its hot spot 2 right and 3 down.
     fn at(x: i32, y: i32, bitmap: CursorBitmap) -> CursorMeta {
-        CursorMeta::At { x, y, bitmap }
+        CursorMeta::At {
+            x,
+            y,
+            pointer: (x + 2, y + 3),
+            bitmap,
+        }
     }
 
     #[test]
@@ -984,5 +1102,67 @@ mod cursor_tests {
             panic!("shown");
         };
         assert_eq!((x, y), (150, 50));
+    }
+
+    #[test]
+    fn the_position_is_the_hot_spot_in_the_cropped_frame() {
+        let crop = Crop {
+            x: 100,
+            y: 40,
+            width: 640,
+            height: 480,
+        };
+        // Without a picture too: the position doesn't need one.
+        let meta = at(150, 50, CursorBitmap::Unchanged);
+        assert_eq!(pointer_in_frame(&meta, None), Some((152, 53)));
+        assert_eq!(pointer_in_frame(&meta, Some(crop)), Some((52, 13)));
+        // Left of and above the crop is off the frame, as it is on the other platforms.
+        let meta = at(10, 10, CursorBitmap::Unchanged);
+        assert_eq!(pointer_in_frame(&meta, Some(crop)), Some((-88, -27)));
+        // An empty crop is ignored, and a negative origin is the frame's 0, as the frame
+        // copy has them.
+        let empty = Crop { height: 0, ..crop };
+        assert_eq!(pointer_in_frame(&meta, Some(empty)), Some((12, 13)));
+        let negative = Crop {
+            x: -5,
+            y: -5,
+            ..crop
+        };
+        assert_eq!(pointer_in_frame(&meta, Some(negative)), Some((12, 13)));
+        // Off the stream, where the pointer is isn't known.
+        assert_eq!(pointer_in_frame(&CursorMeta::Hidden, Some(crop)), None);
+    }
+
+    #[test]
+    fn the_pointer_cell_keeps_the_last_position_or_none() {
+        let cell = PointerCell::new();
+        assert_eq!(cell.get(), None, "before any metadata");
+        for (x, y) in [(0, 0), (-1, -1), (1919, 1079), (i32::MAX, i32::MIN)] {
+            cell.put(Some((x, y)));
+            let p = cell.get().expect("a position");
+            assert_eq!((p.x, p.y), (x as f32, y as f32), "({x}, {y})");
+        }
+        // The one word that means unknown is moved a pixel, not lost.
+        cell.put(Some((i32::MIN, i32::MIN)));
+        let p = cell.get().expect("a position");
+        assert_eq!((p.x, p.y), ((i32::MIN + 1) as f32, i32::MIN as f32));
+        cell.put(None);
+        assert_eq!(cell.get(), None);
+    }
+
+    #[test]
+    fn only_a_capture_that_asked_for_the_picture_reads_it() {
+        use CursorMetadata::{Off, Picture, Position};
+        let read = |sends, wanted| CursorMetadata::for_capture(sends, wanted);
+        assert_eq!(read(true, CursorCapture::Metadata), Picture);
+        assert_eq!(read(true, CursorCapture::Hidden), Position);
+        assert_eq!(read(true, CursorCapture::Drawn), Position);
+        for wanted in [
+            CursorCapture::Metadata,
+            CursorCapture::Hidden,
+            CursorCapture::Drawn,
+        ] {
+            assert_eq!(read(false, wanted), Off, "{wanted:?} without the metadata");
+        }
     }
 }

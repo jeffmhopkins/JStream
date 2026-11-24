@@ -204,6 +204,7 @@ fn with_screen() -> Graph {
 
 fn sway() -> Vec<CameraMotionModifier> {
     vec![CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "sway".into(),
         property: CameraProperty::Roll,
         kind: MotionKind::Oscillate {

@@ -3,7 +3,7 @@
 //!
 //! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam, collection,
 //! network, networkOpen, wheelFocusOnly, browse, allowNetwork, jtunnel, setJtunnel, ptz,
-//! setPtz, saveScreenshot, openSaved, showSaved, setZoom }` that can't be reassigned, and only on a page from the
+//! setPtz, ptzCameras, setPtzCameras, saveScreenshot, openSaved, showSaved, setZoom }` that can't be reassigned, and only on a page from the
 //! app's own origin: the webview also refuses to navigate anywhere else (see `shell.rs`),
 //! so no other page ever sees the token. `collection` is the default project's folder
 //! (ADR-0163), which `collection` asset paths are relative to until the engine names
@@ -21,6 +21,9 @@
 //! reason it wasn't; it too applies at the next start. `ptz` and `setPtz(setting)` are
 //! "Accept a PTZ controller" the same way (`{on, endpoints: [{address, transport, visca,
 //! target}], allow: [ip]}`, `ptz.rs`), through the `set_ptz_controllers` command.
+//! `ptzCameras` and `setPtzCameras(setting)` are "Control PTZ cameras" (`{on, cameras:
+//! [{name, address, transport, visca}]}`, `ptz_cameras.rs`), through the
+//! `set_ptz_cameras` command, which applies a saved list at once.
 //! `saveScreenshot(png, name)` sends a screenshot's bytes to the `save_screenshot`
 //! command, its name percent-encoded in a header, and resolves to the path it saved in
 //! Downloads, or rejects with why not; `openSaved(path)` and `showSaved(path)` ask
@@ -33,12 +36,79 @@
 //! The token is the in-memory one the app made at startup, or with `--mcp` the data
 //! folder's user-only token file's; it is never written to a log (R-SEC-001).
 //!
+//! Files dragged from the desktop onto the main window don't reach the page as an HTML
+//! drop: Tauri handles the drag natively. `shell.rs` tells the page each step of it
+//! with [`drop_script`], which dispatches [`DROP_EVENT`] on `window` with a `detail` of
+//! `{ kind, paths, x, y }`: `kind` is `over`, `drop` or `leave`, `paths` the dragged
+//! files' paths, and `x`, `y` where the pointer is, in the page's CSS pixels.
+//!
 //! Docs: apps/jstream-desktop/README.md#design
 
 use std::fmt::Write as _;
 
 /// The global the UI looks for. `jstream-ui`'s `host::DESKTOP_GLOBAL` names it too.
 pub const GLOBAL: &str = "__JSTREAM_DESKTOP__";
+
+/// The event [`drop_script`] dispatches on the page's `window`. `jstream-ui`'s
+/// `host::FILE_DROP_EVENT` names it too.
+pub const DROP_EVENT: &str = "jstream-desktop-drop";
+
+/// A step of a drag of files from the desktop over the window, as the page is told it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DropKind {
+    /// The drag entered the window or moved over it.
+    Over,
+    /// The files were dropped.
+    Drop,
+    /// The drag left the window or was cancelled.
+    Leave,
+}
+
+impl DropKind {
+    /// The `kind` the page reads.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DropKind::Over => "over",
+            DropKind::Drop => "drop",
+            DropKind::Leave => "leave",
+        }
+    }
+}
+
+/// The script that tells the page about a step of a file drag: it dispatches
+/// [`DROP_EVENT`] on `window` with `{ kind, paths, x, y }`. `x` and `y` are already in
+/// the page's CSS pixels; a coordinate that isn't finite is sent as 0. The detail
+/// travels as a JSON string the page parses, so nothing in a file's name can end the
+/// script.
+pub fn drop_script(kind: DropKind, paths: &[String], x: f64, y: f64) -> String {
+    let finite = |v: f64| if v.is_finite() { v } else { 0.0 };
+    let detail = serde_json::json!({
+        "kind": kind.as_str(),
+        "paths": paths,
+        "x": finite(x),
+        "y": finite(y),
+    })
+    .to_string();
+    format!(
+        "window.dispatchEvent(new CustomEvent({event}, {{ detail: JSON.parse({detail}) }}));",
+        event = js_string(DROP_EVENT),
+        detail = js_string(&detail),
+    )
+}
+
+/// The position Tauri reports for a drag, in the page's CSS pixels. Tauri calls it a
+/// physical position, but only WebView2 (Windows) reports physical pixels; WKWebView
+/// (macOS) and WebKitGTK (Linux) report the view's logical points already. `scale` is
+/// the window's scale factor where the position is physical, else 1; one that isn't a
+/// positive number counts as 1.
+pub fn css_position(x: f64, y: f64, scale: f64) -> (f64, f64) {
+    let scale = if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    };
+    (x / scale, y / scale)
+}
 
 /// What the app tells the page beside its engine's URL and token.
 #[derive(Clone, Copy, Debug)]
@@ -58,13 +128,16 @@ pub struct Page<'a> {
     pub jtunnel: &'a crate::jtunnel::Setting,
     /// "Accept a PTZ controller" as the app read it.
     pub ptz: &'a crate::ptz::Setting,
+    /// "Control PTZ cameras" as the app read it.
+    pub ptz_cameras: &'a crate::ptz_cameras::Setting,
 }
 
 /// The script, for a page from `origin`, connecting to `url` with `token`. `vcam` is
 /// the virtual camera's status ([`crate::host::VcamStatus::as_str`]). `collection` is
 /// the default project's folder. `network` is the "Allow devices on my network" setting, and
 /// `network_open` whether the network listener opened. `jtunnel` is the JTunnel
-/// setting as the app read it, and `ptz` the PTZ controller one.
+/// setting as the app read it, `ptz` the PTZ controller one and `ptz_cameras` the PTZ
+/// camera one.
 pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
     let Page {
         vcam,
@@ -74,10 +147,12 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
         wheel_focus_only,
         jtunnel,
         ptz,
+        ptz_cameras,
     } = *page;
     // As a string the page parses, so nothing in a sender's name can end the script.
     let jtunnel = serde_json::to_string(jtunnel).unwrap_or_else(|_| "{}".to_owned());
     let ptz = serde_json::to_string(ptz).unwrap_or_else(|_| "{}".to_owned());
+    let ptz_cameras = serde_json::to_string(ptz_cameras).unwrap_or_else(|_| "{}".to_owned());
     format!(
         "if (window.location.origin === {origin}) {{\
          Object.defineProperty(window, {global}, {{\
@@ -107,6 +182,14 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
          var internals = window.__TAURI_INTERNALS__;\
          if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(\"the app can't save settings here\");\
          return internals.invoke(\"set_ptz_controllers\", {{ setting: setting }})\
+         .then(function (problem) {{ return problem === null ? null : String(problem); }},\
+         function (error) {{ return String(error); }});\
+         }},\
+         ptzCameras: Object.freeze(JSON.parse({ptz_cameras})),\
+         setPtzCameras: function (setting) {{\
+         var internals = window.__TAURI_INTERNALS__;\
+         if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(\"the app can't save settings here\");\
+         return internals.invoke(\"set_ptz_cameras\", {{ setting: setting }})\
          .then(function (problem) {{ return problem === null ? null : String(problem); }},\
          function (error) {{ return String(error); }});\
          }},\
@@ -145,6 +228,7 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
         wheel_focus_only = if wheel_focus_only { "true" } else { "false" },
         jtunnel = js_string(&jtunnel),
         ptz = js_string(&ptz),
+        ptz_cameras = js_string(&ptz_cameras),
     )
 }
 
@@ -173,7 +257,58 @@ fn js_string(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Page, js_string, script};
+    use super::{DropKind, Page, css_position, drop_script, js_string, script};
+
+    /// The `detail` a drop script hands the page, unescaped as the page would.
+    fn detail(script: &str) -> serde_json::Value {
+        let start = script.find("JSON.parse(").map(|i| i + "JSON.parse(".len());
+        let end = script.rfind(") }));");
+        let (Some(start), Some(end)) = (start, end) else {
+            panic!("no JSON.parse in {script}");
+        };
+        let literal: String = serde_json::from_str(&script[start..end]).expect("a JS string");
+        serde_json::from_str(&literal).expect("JSON")
+    }
+
+    #[test]
+    fn a_drop_is_an_event_the_page_parses() {
+        let paths = vec![
+            "/home/me/clip.mp4".to_owned(),
+            "C:\\a\"</script>\u{2028}é.png".to_owned(),
+        ];
+        let script = drop_script(DropKind::Drop, &paths, 12.5, 40.0);
+        assert!(script.starts_with(
+            "window.dispatchEvent(new CustomEvent(\"jstream-desktop-drop\", { detail: JSON.parse(\""
+        ));
+        assert!(
+            !script.contains("</script>") && !script.contains('\u{2028}'),
+            "a file name can't end the script or a line"
+        );
+        assert_eq!(
+            detail(&script),
+            serde_json::json!({ "kind": "drop", "paths": paths, "x": 12.5, "y": 40.0 })
+        );
+    }
+
+    #[test]
+    fn every_step_names_its_kind_and_a_bad_position_is_zero() {
+        assert_eq!(
+            detail(&drop_script(DropKind::Over, &[], 1.0, 2.0)),
+            serde_json::json!({ "kind": "over", "paths": [], "x": 1.0, "y": 2.0 })
+        );
+        assert_eq!(
+            detail(&drop_script(DropKind::Leave, &[], f64::NAN, f64::INFINITY)),
+            serde_json::json!({ "kind": "leave", "paths": [], "x": 0.0, "y": 0.0 })
+        );
+    }
+
+    #[test]
+    fn a_physical_position_is_scaled_to_css_pixels() {
+        assert_eq!(css_position(300.0, 150.0, 1.5), (200.0, 100.0));
+        assert_eq!(css_position(300.0, 150.0, 1.0), (300.0, 150.0));
+        assert_eq!(css_position(300.0, 150.0, 0.0), (300.0, 150.0));
+        assert_eq!(css_position(300.0, 150.0, f64::NAN), (300.0, 150.0));
+    }
 
     #[test]
     fn the_script_defines_the_global_only_on_the_app_origin() {
@@ -206,6 +341,15 @@ mod tests {
                     }],
                     allow: vec!["192.168.1.50".into()],
                 },
+                ptz_cameras: &crate::ptz_cameras::Setting {
+                    on: true,
+                    cameras: vec![crate::ptz_cameras::Camera {
+                        name: "</script>".into(),
+                        address: "192.168.1.40:52381".into(),
+                        transport: "visca_ip".into(),
+                        visca: 1,
+                    }],
+                },
             },
         );
         assert!(script.starts_with("if (window.location.origin === \"http://jstream.localhost\")"));
@@ -225,6 +369,8 @@ mod tests {
         assert!(script.contains("jtunnel: Object.freeze(JSON.parse(\"{\\\"on\\\":true"));
         assert!(script.contains("invoke(\"set_ptz_controllers\", { setting: setting })"));
         assert!(script.contains("ptz: Object.freeze(JSON.parse("));
+        assert!(script.contains("invoke(\"set_ptz_cameras\", { setting: setting })"));
+        assert!(script.contains("ptzCameras: Object.freeze(JSON.parse("));
         assert!(script.contains("invoke(\"set_zoom\", { factor: Number(factor) })"));
         assert!(
             !script.contains("</script>"),

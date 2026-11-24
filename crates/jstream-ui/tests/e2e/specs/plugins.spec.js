@@ -217,6 +217,8 @@ test('plugins and devices live in the Settings dialog, not the Inspector', async
   await expect(settings.getByRole('checkbox', { name: 'Check for updates at launch' })).toBeVisible();
   await tab('Audio').click();
   await page.keyboard.press('ArrowDown');
+  await expect(tab('Keys & MIDI')).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('ArrowDown');
   await expect(tab('Plugins')).toHaveAttribute('aria-selected', 'true');
   await expect(settings.locator('section.plugins').getByText('No plugins installed.')).toBeVisible();
   await page.keyboard.press('ArrowDown');

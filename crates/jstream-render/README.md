@@ -1195,6 +1195,23 @@ more than its `max_outset_px` (ADR-0136); core sizes an item's layer by it. A bo
 draws past it only with an outer stroke: its gap, its width and an antialiased pixel
 (#1376).
 
+**Pixel units** ([ADR-0211](../../docs/adr/0211-a-filters-pixel-settings-count-in-its-inputs-extent.md),
+#1680). A built-in kind's `px` and `px/s` settings count in its input's extent, the size it
+is placed at, not its texels, so a blur covers the same share of the picture on a model's
+layer drawn at half size (ADR-0197) or a source drawn sharp at twice its size (ADR-0073).
+Before a filter draws (`VideoFilter::fit`, from `apply_filter_into`), each is multiplied by
+the input's texels per extent pixel (`filter::units`): along its axis for an `_x`, `_y` or
+one-way setting (a scanline's spacing, a colour fringe), by the geometric mean of the two
+for a radius or a width, rounded for an `int`. The pass reads them so and keeps its own
+caps. They are worked out again only when the scale changes. A border's frame corner
+counts in the frame image's pixels and is left alone, as are the depth-aware kinds (their
+scene's pixels, over a canvas-sized composite) and pack effects and shader sources, whose
+parameters the engine can't tell apart. A test fails on a pixel parameter that is neither
+scaled nor named as counting in something else. So `Pass::reach` counts in texels, from
+the scaled settings; `video_filter_outset` in extent pixels, as the settings do; and the
+pad (`set_pad`) in texels, which only an item's effects layer has, whose texels are its
+extent pixels.
+
 **The harness.**
 
 - `VideoFilter::new(kind_id, settings)` builds a kind's pass; `set_settings` updates it
@@ -1241,7 +1258,7 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
 - **Bounded filters** (#1070). Some kinds draw transparent wherever they are far from
   their input's non-transparent texels, keep their input's size, and draw every pass
   over the whole frame at that pass's scale. Such a kind gives `Pass::reach`, how far
-  past that content it can draw, in input pixels:
+  past that content it can draw, in input texels (from its scaled settings):
   - A blur gives its span plus one working texel for its downsample and one for its
     read back.
   - `image_mask` and `scene_mask` multiply by coverage, so they give 0.
@@ -1349,6 +1366,14 @@ conversion when it has one, and the conversion into an encode target
 (`Nv12Converter::submit`), so a drawer that names a unit around them times them
 (`a_readback_and_its_conversion_are_timed_in_the_unit_named`). Texture writes carry no
 timestamps.
+
+**Submits a thread made** (`submits_on_this_thread`, `src/gpu.rs`). Each submit to the
+queue costs its thread a fixed time in wgpu and the driver however little work it
+carries, and a frame makes one per pass. The crate counts its own, per thread:
+`Gpu::submit_work`'s, the timed frame's resolve, the encoders' conversion and the test
+readbacks. A drawer reads the count at the end of each frame, and `profile.get` reports
+the difference per frame (`DrawerProfile`'s `submits`). A platform's or a browser's
+submits on the same queue are not counted.
 
 **GPU time of pack passes** (#349, `src/timer.rs`). A pack's WGSL is validated, not
 bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GPU

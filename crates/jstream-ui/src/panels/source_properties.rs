@@ -4,7 +4,8 @@
 //! ([`PropertiesAndFilters`]), picked by a segmented control as OBS's dialog puts its
 //! preview above the settings. The settings form is the one filters use (`properties.rs`),
 //! here editing a draft: each setting the kind marks `live` shows on output as it is
-//! edited, as a live value of the dialog's gesture (ADR-0091). OK sends what the user
+//! edited, as a live value of the dialog's gesture (ADR-0091); a number dragged or slid
+//! follows into the draft once per frame as it goes (#1734). OK sends what the user
 //! changed since it opened as one batch, ending the gesture, so one undo step; Cancel,
 //! Escape and the backdrop drop the draft and cancel the gesture, leaving nothing. Defaults
 //! empties the draft, so OK resets each value the dialog opened with. Filter changes
@@ -395,6 +396,25 @@ fn PropertiesBody(
             view! { <SourcePreview kind_id=kind_id.clone() source_id=source_id.clone() draft=draft /> }
         })
     });
+    // Reload page or Play from start, for a kind with something to restart (A16).
+    let restart_button = crate::item_menu::restart_label(&source.kind).map(|label| {
+        let source_id = source_id.clone();
+        let restart = move |_| {
+            if let Some(s) = session.get() {
+                studio.act(
+                    &s,
+                    Action::SourceRestart {
+                        source_id: source_id.clone(),
+                    },
+                );
+            }
+        };
+        view! {
+            <button type="button" class="secondary props-restart" on:click=restart>
+                {label}
+            </button>
+        }
+    });
     let title = source.name.clone();
     let subtitle = format!("{type_name} source");
     let form = {
@@ -417,6 +437,7 @@ fn PropertiesBody(
                         errors=errors
                         commit=commit
                         learn=learn
+                        follows_drags=true
                     />
                 }
                 .into_any()
@@ -462,6 +483,7 @@ fn PropertiesBody(
                     <input type="text" bind:value=name />
                 </label>
                 {shader_button}
+                {restart_button}
                 {form}
                 {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
             </PropertiesAndFilters>

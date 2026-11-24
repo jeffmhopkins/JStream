@@ -49,7 +49,7 @@ pub enum AudioFollow {
     WhenShown,
 }
 
-/// What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.177). Serialized as
+/// What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.187). Serialized as
 /// a snake_case string.
 ///
 /// `push_to_talk` and `push_to_mute` are for a held key or note: pressing it runs the

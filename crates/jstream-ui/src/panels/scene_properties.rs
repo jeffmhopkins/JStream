@@ -24,6 +24,7 @@ use crate::icons::Icon;
 use crate::panels::camera_moves::CameraMoves;
 use crate::panels::filters::{FilterUndo, PropertiesAndFilters, scene_owner};
 use crate::panels::inspector::transition_options;
+use crate::panels::number::{NumberField, into_draft};
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
     Action, CameraMotionModifier, Chord, Edit, FilterId, FilterOwner, Finite32, ItemId,
@@ -286,7 +287,13 @@ pub fn scene_edits(
         };
         let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
-            edits.push(Edit::HotkeyClear { chord });
+            // Only the switch to this scene: the chord's other actions stay (ADR-0208).
+            let switch = Action::SceneSwitch {
+                scene_id: scene_id.clone(),
+                preset_id: None,
+                via: Vec::new(),
+            };
+            edits.extend(collection.unbind_edits(&chord, &switch));
         }
         if let Some(chord) = draft.hotkey.clone() {
             edits.push(Edit::HotkeySet {
@@ -484,66 +491,72 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     };
     // `caption` is the short axis mark beside a triplet field; empty when the row
     // names the control. `label` is the input's accessible name.
+    // Each is the shared click-drag field (#1734), and a drag follows into the draft as
+    // it goes; OK sends it.
     let number = move |caption: &'static str,
                        label: &'static str,
                        field: CameraField,
-                       step: &'static str| {
-        view! {
-            <label class="camera-number">
-                {(!caption.is_empty()).then(|| view! { <span class="label">{caption}</span> })}
-                <input
-                    type="number"
-                    step=step
-                    aria-label=label
-                    prop:value=move || draft.with(|d| d.camera.map(|c| {
-                        let v = field.get(&c);
-                        format!("{}", (v * 100.0).round() / 100.0 + 0.0)
-                    }).unwrap_or_default())
-                    on:change=move |event| {
-                        if let Ok(value) = event_target_value(&event).trim().parse::<f32>() {
-                            draft.update(|d| {
-                                if let Some(camera) = d.camera.as_mut() {
-                                    field.set(camera, value);
-                                }
-                            });
-                        }
-                    }
-                />
-            </label>
-        }
+                       step: f64| {
+        let value =
+            Signal::derive(move || draft.with(|d| d.camera.map(|c| f64::from(field.get(&c)))));
+        let put = move |v: f64| {
+            draft.update(|d| {
+                if let Some(camera) = d.camera.as_mut() {
+                    field.set(camera, v as f32);
+                }
+            });
+            true
+        };
+        let live = into_draft(move |v| _ = put(v));
+        let field = if caption.is_empty() {
+            view! {
+                <NumberField named=Signal::stored(label.to_owned()) value step decimals=2
+                    send=put live=live />
+            }
+        } else {
+            view! {
+                <NumberField label caption inline=true value step decimals=2 send=put live=live />
+            }
+        };
+        view! { <span class="camera-number">{field}</span> }
     };
+    // Whether the scene has a camera and depth of field: memos, so a field's drag into
+    // the draft doesn't draw its fields again under the pointer.
+    let has_camera = Memo::new(move |_| draft.with(|d| d.camera.is_some()));
+    let has_focus =
+        Memo::new(move |_| draft.with(|d| d.camera.is_some_and(|c| c.focus_px.is_some())));
     let camera_fields = move || {
-        draft.with(|d| d.camera.is_some()).then(|| {
+        has_camera.get().then(|| {
             view! {
                 <div class="camera-fields">
                     <h3 class="camera-head">"View"</h3>
                     <div class="axis-row camera-row">
                         <span class="label">"Position"</span>
                         <div class="camera-axes">
-                            {number("X", "Position X", CameraField::Position(0), "1")}
-                            {number("Y", "Position Y", CameraField::Position(1), "1")}
-                            {number("Z", "Position Z", CameraField::Position(2), "1")}
+                            {number("X", "Position X", CameraField::Position(0), 1.0)}
+                            {number("Y", "Position Y", CameraField::Position(1), 1.0)}
+                            {number("Z", "Position Z", CameraField::Position(2), 1.0)}
                         </div>
                     </div>
                     <div class="axis-row camera-row">
                         <span class="label">"Looks at"</span>
                         <div class="camera-axes">
-                            {number("X", "Target X", CameraField::Target(0), "1")}
-                            {number("Y", "Target Y", CameraField::Target(1), "1")}
-                            {number("Z", "Target Z", CameraField::Target(2), "1")}
+                            {number("X", "Target X", CameraField::Target(0), 1.0)}
+                            {number("Y", "Target Y", CameraField::Target(1), 1.0)}
+                            {number("Z", "Target Z", CameraField::Target(2), 1.0)}
                         </div>
                     </div>
                     <div class="axis-row camera-row">
                         <span class="label">"Field of view"</span>
                         <div class="camera-control">
-                            {number("", "Field of view", CameraField::Fov, "0.5")}
+                            {number("", "Field of view", CameraField::Fov, 0.5)}
                             <span class="unit">"°"</span>
                         </div>
                     </div>
                     <div class="axis-row camera-row">
                         <span class="label">"Roll"</span>
                         <div class="camera-control">
-                            {number("", "Roll", CameraField::Roll, "0.5")}
+                            {number("", "Roll", CameraField::Roll, 0.5)}
                             <span class="unit">"°"</span>
                         </div>
                     </div>
@@ -615,7 +628,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                         />
                         <span>"Depth of field"</span>
                     </label>
-                    {move || draft.with(|d| d.camera.is_some_and(|c| c.focus_px.is_some())).then(|| view! {
+                    {move || has_focus.get().then(|| view! {
                         <div class="camera-sub">
                             <label class="camera-check">
                                 <input
@@ -636,12 +649,12 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             </label>
                             <div class="axis-row camera-row">
                                 <span class="label">"Focus distance"</span>
-                                {number("", "Focus distance", CameraField::Focus, "1")}
+                                {number("", "Focus distance", CameraField::Focus, 1.0)}
                             </div>
                             <div class="axis-row camera-row">
                                 <span class="label" title="How shallow the depth of field is: 0 keeps everything sharp">"Aperture (blur)"</span>
                                 <div class="camera-control">
-                                    {number("", "Aperture (blur)", CameraField::Blur, "0.5")}
+                                    {number("", "Aperture (blur)", CameraField::Blur, 0.5)}
                                     <span class="unit">"px"</span>
                                 </div>
                             </div>
@@ -1227,6 +1240,7 @@ mod tests {
             scene_edits(&c, &a, &before, &draft("A", Some("F3"))),
             Ok(vec![
                 Edit::HotkeyClear {
+                    action: Some(switch("a")),
                     chord: Chord::new("F1")
                 },
                 Edit::HotkeySet {
@@ -1242,6 +1256,20 @@ mod tests {
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", None)),
             Ok(vec![Edit::HotkeyClear {
+                action: Some(switch("a")),
+                chord: Chord::new("F1")
+            }])
+        );
+        // The chord's other actions stay bound (ADR-0208).
+        let mut shared = c.clone();
+        let reset = Action::AudioResetLoudness {};
+        shared
+            .hotkeys
+            .push(HotkeyBinding::new(Chord::new("F1"), &reset));
+        assert_eq!(
+            scene_edits(&shared, &a, &before, &draft("A", None)),
+            Ok(vec![Edit::HotkeyClear {
+                action: Some(switch("a")),
                 chord: Chord::new("F1")
             }])
         );

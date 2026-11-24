@@ -141,8 +141,8 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   errors reach callers as `RtmpError::Amf0`, with the `MuxError` as the source.
 
 **What the recorder does.** `record::Recorder` takes the encoded packets an output
-receives from `jstream-encode` (H.264 in Annex B and raw AAC, the same packets the RTMP
-path builds its FLV tags from) and writes fragmented MP4 with `jstream-mux`'s
+receives from `jstream-encode` (H.264 or HEVC in Annex B, or AV1 OBUs, and raw AAC, the
+same packets the RTMP path builds its FLV tags from) and writes fragmented MP4 with `jstream-mux`'s
 `Fmp4Muxer`, which starts a fragment at every video keyframe (every second for
 audio-only).
 

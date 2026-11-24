@@ -52,8 +52,12 @@ pub struct Collection {
     pub labels: Vec<LabelInfo>,
     /// The master stage's chains, which apply to everything leaving JStream (ADR-0080).
     pub master: FilterChains,
-    /// Every hotkey binding, ordered by chord (ADR-0024 §5).
+    /// Every hotkey binding, ordered by chord (ADR-0024 §5), then by the order a chord's
+    /// actions were bound (ADR-0208).
     pub hotkeys: Vec<HotkeyBinding>,
+    /// Every controller binding (ADR-0122), ordered by trigger, then by the order a
+    /// trigger's actions were bound (ADR-0208).
+    pub bindings: Vec<jstream_control::protocol::Binding>,
     /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
     pub folders: Vec<FolderInfo>,
     /// The transition presets and which one is the default.
@@ -63,6 +67,8 @@ pub struct Collection {
     /// The channels, ordered by ID (ADR-0183): named live values that controls set and
     /// settings follow.
     pub channels: Vec<jstream_control::protocol::ChannelInfo>,
+    /// The shows, ordered by ID (ADR-0210): what the Show panel lists and edits.
+    pub shows: Vec<jstream_control::protocol::ShowInfo>,
 }
 
 impl Collection {
@@ -81,10 +87,12 @@ impl Collection {
                 labels,
                 master,
                 hotkeys,
+                bindings,
                 folders,
                 transitions,
                 value_bindings,
                 channels,
+                shows,
                 ..
             } => {
                 let mut scenes = scenes;
@@ -125,10 +133,12 @@ impl Collection {
                     labels,
                     master: master.filters,
                     hotkeys,
+                    bindings,
                     folders,
                     transitions: *transitions,
-                    value_bindings,
+                    value_bindings: *value_bindings,
                     channels: *channels,
+                    shows: *shows,
                 })
             }
             _ => None,
@@ -320,12 +330,52 @@ impl Collection {
             .collect()
     }
 
-    /// The action bound to `chord`, if any, and this version knows it.
+    /// The edits that stop `chord` running `action`, and nothing else it runs
+    /// (ADR-0208): a `hotkey.clear` naming each bound action that matches, where a
+    /// `scene.switch` matches any switch to its scene, as [`Self::chords_for`] reads it.
+    pub fn unbind_edits(&self, chord: &Chord, action: &Action) -> Vec<Edit> {
+        let matches = |bound: &Action| match (action, bound) {
+            (
+                Action::SceneSwitch { scene_id, .. },
+                Action::SceneSwitch {
+                    scene_id: bound, ..
+                },
+            ) => scene_id == bound,
+            _ => action == bound,
+        };
+        self.hotkey_actions(chord)
+            .into_iter()
+            .filter(|bound| matches(bound))
+            .map(|bound| Edit::HotkeyClear {
+                chord: chord.clone(),
+                action: Some(bound),
+            })
+            .collect()
+    }
+
+    /// The first action bound to `chord`, if any, and this version knows it.
     pub fn hotkey(&self, chord: &Chord) -> Option<Action> {
+        self.hotkey_actions(chord).into_iter().next()
+    }
+
+    /// Every action bound to `chord` that this version knows, in the order they were
+    /// bound: what a press runs (ADR-0208).
+    pub fn hotkey_actions(&self, chord: &Chord) -> Vec<Action> {
         self.hotkeys
             .iter()
-            .find(|binding| &binding.chord == chord)
-            .and_then(HotkeyBinding::action)
+            .filter(|binding| &binding.chord == chord)
+            .filter_map(HotkeyBinding::action)
+            .collect()
+    }
+
+    /// Every action bound to the controller trigger `trigger` that this version knows,
+    /// in the order they were bound (ADR-0208).
+    pub fn trigger_actions(&self, trigger: &jstream_control::protocol::Trigger) -> Vec<Action> {
+        self.bindings
+            .iter()
+            .filter(|binding| &binding.trigger == trigger)
+            .filter_map(jstream_control::protocol::Binding::action)
+            .collect()
     }
 
     /// The scenes the scene list shows, in display order: groups are left out
@@ -530,19 +580,40 @@ pub fn optimistic_program(action: &Action) -> Option<SceneId> {
     }
 }
 
-/// The scene the canvas moves to when the preview scene goes from `before` to `after`
-/// while it shows `shown`: in studio mode the canvas is the preview side, so a new
-/// preview scene (a swap after a transition, another client's pick) is shown and
-/// selected. `None` when studio mode is off, the preview didn't change, or the canvas
-/// already shows it.
-pub fn followed_preview(
+/// What a timeline action does to the play state at once, before the engine's
+/// `timeline.changed` confirms it: `Some(Some(position))` for a `timeline.play` with no
+/// delay (from 0) or a `timeline.seek` (from where it seeks), `Some(None)` for a
+/// `timeline.stop`, and `None` for anything else, a play that waits included.
+pub fn optimistic_timeline(
+    action: &Action,
+) -> Option<(jstream_control::protocol::TimelineId, Option<u32>)> {
+    match action {
+        Action::TimelinePlay {
+            timeline_id,
+            delay_ms: None | Some(0),
+        } => Some((timeline_id.clone(), Some(0))),
+        Action::TimelineSeek { timeline_id, at_ms } => Some((timeline_id.clone(), Some(*at_ms))),
+        Action::TimelineStop { timeline_id } => Some((timeline_id.clone(), None)),
+        _ => None,
+    }
+}
+
+/// The scene the canvas moves to when program goes from `program.0` to `program.1` and
+/// preview from `preview.0` to `preview.1`, while it shows `shown`. In studio mode the
+/// canvas is the preview side, so a new preview scene (a swap after a transition,
+/// another client's pick) is shown and selected. Outside it the canvas is the only
+/// stage and stands for program, so a new program scene is shown, whatever moved it: a
+/// click, a hotkey, a trigger, a sequence or another client. `None` when the side the canvas
+/// follows didn't change, or the canvas already shows it.
+pub fn followed_scene(
     studio_mode: bool,
-    before: Option<&SceneId>,
-    after: Option<&SceneId>,
+    program: (Option<&SceneId>, Option<&SceneId>),
+    preview: (Option<&SceneId>, Option<&SceneId>),
     shown: Option<&SceneId>,
 ) -> Option<SceneId> {
+    let (before, after) = if studio_mode { preview } else { program };
     let after = after?;
-    (studio_mode && before != Some(after) && shown != Some(after)).then(|| after.clone())
+    (before != Some(after) && shown != Some(after)).then(|| after.clone())
 }
 
 /// What a click on `scene_id` in the scene list sends: in studio mode a
@@ -770,14 +841,22 @@ pub struct Studio {
     pub channel: RwSignal<Option<String>>,
     /// The sequence the Sequence panel edits (ADR-0184): a timeline, by ID.
     pub sequence: RwSignal<Option<jstream_control::protocol::TimelineId>>,
-    /// Each playing timeline, as the engine last reported it: where it was, and when
-    /// (`performance.now()`, in ms), so a play head can run on between reports.
+    /// Each playing timeline, as the engine last reported it or a Play or Stop just set
+    /// it ([`Studio::act`]): where it was, and when (`performance.now()`, in ms), so a
+    /// play head can run on between reports.
     pub playing: RwSignal<HashMap<jstream_control::protocol::TimelineId, Playing>>,
+    /// The running show as the engine last reported it (ADR-0210), and when the UI heard
+    /// it (`performance.now()`, in ms), so the Show panel's play head can run on between
+    /// reports. `None` while no show runs.
+    pub show: RwSignal<Option<(jstream_control::protocol::RunningShow, f64)>>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
     /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
     /// overtook is dropped.
     studio_seq: StoredValue<u64>,
+    /// Bumped by each `timeline.changed` and each play or stop [`Studio::act`] shows at
+    /// once, so a `studio.get` answer they overtook doesn't put back what played before.
+    timeline_seq: StoredValue<u64>,
     /// The counter [`fresh_id`] continues from.
     next_id: StoredValue<u64>,
     /// The number the next toast takes. It only grows, so a timer left from an earlier
@@ -860,8 +939,10 @@ impl Studio {
             channel: RwSignal::new(None),
             sequence: RwSignal::new(None),
             playing: RwSignal::new(HashMap::new()),
+            show: RwSignal::new(None),
             refresh: StoredValue::new((false, false)),
             studio_seq: StoredValue::new(0),
+            timeline_seq: StoredValue::new(0),
             next_id: StoredValue::new(0),
             next_toast: StoredValue::new(0),
         }
@@ -901,32 +982,41 @@ impl Studio {
         });
     }
 
-    /// Reads the program and preview scenes with `studio.get`, unless a
-    /// `studio.changed` arrives while it is in flight: that event is newer.
+    /// Reads the program and preview scenes and what plays with `studio.get`. A
+    /// `studio.changed` that comes while it is in flight is newer than its scenes, and a
+    /// `timeline.changed` or a Play or Stop shown at once ([`Studio::act`]) is newer than
+    /// what it says plays.
     async fn read_studio(&self, session: &Session) {
         let asked = self.studio_seq.get_value();
+        let timelines_asked = self.timeline_seq.get_value();
         if let Ok(QueryResult::StudioGet {
             program_scene,
             preview_scene,
             timelines,
+            show,
             ..
         }) = query(session, Query::StudioGet).await
         {
-            let at = now_ms();
-            self.playing.set(
-                timelines
-                    .into_iter()
-                    .map(|t| {
-                        (
-                            t.timeline_id,
-                            Playing {
-                                position_ms: t.position_ms,
-                                at,
-                            },
-                        )
-                    })
-                    .collect(),
-            );
+            // The running show's play head is heard now, whatever else is newer.
+            let heard = now_ms();
+            self.show.set(show.map(|s| (*s, heard)));
+            if self.timeline_seq.get_value() == timelines_asked {
+                let at = now_ms();
+                self.playing.set(
+                    timelines
+                        .into_iter()
+                        .map(|t| {
+                            (
+                                t.timeline_id,
+                                Playing {
+                                    position_ms: t.position_ms,
+                                    at,
+                                },
+                            )
+                        })
+                        .collect(),
+                );
+            }
             self.take_studio(asked, program_scene, preview_scene);
         }
     }
@@ -947,21 +1037,44 @@ impl Studio {
         self.take_program_and_preview(program, preview);
     }
 
-    /// Keeps the program and preview scenes the engine reported. In studio mode the
-    /// canvas follows a new preview scene ([`followed_preview`]).
+    /// Keeps the program and preview scenes the engine reported. The canvas follows a
+    /// new preview scene in studio mode, and a new program scene outside it
+    /// ([`followed_scene`]).
     fn take_program_and_preview(&self, program: Option<SceneId>, preview: Option<SceneId>) {
-        let before = self.preview.get_untracked();
-        self.program.set(program);
+        let before = (self.program.get_untracked(), self.preview.get_untracked());
+        self.program.set(program.clone());
         self.preview.set(preview.clone());
         self.reconcile();
+        self.follow(
+            (before.0.as_ref(), program.as_ref()),
+            (before.1.as_ref(), preview.as_ref()),
+        );
+    }
+
+    /// Shows on the canvas the scene [`followed_scene`] names for these changes of
+    /// program and preview, if it names one.
+    fn follow(
+        &self,
+        program: (Option<&SceneId>, Option<&SceneId>),
+        preview: (Option<&SceneId>, Option<&SceneId>),
+    ) {
         let shown = self.selection.with_untracked(|s| s.scene.clone());
-        if let Some(next) = followed_preview(
+        if let Some(next) = followed_scene(
             self.studio_mode.get_untracked(),
-            before.as_ref(),
-            preview.as_ref(),
+            program,
+            preview,
             shown.as_ref(),
         ) {
             self.select_scene(next);
+        }
+    }
+
+    /// Turns studio mode on or off. Turned off, the canvas stands for program again, so
+    /// it shows the program scene.
+    pub fn set_studio_mode(&self, on: bool) {
+        self.studio_mode.set(on);
+        if !on && let Some(program) = self.program.get_untracked() {
+            self.follow((None, Some(&program)), (None, None));
         }
     }
 
@@ -1029,6 +1142,7 @@ impl Studio {
                 source_id,
                 size,
                 depth,
+                ..
             } => {
                 // Only a change of depth touches the depths, so a resize of a flat
                 // source doesn't re-lay the canvas twice.
@@ -1061,6 +1175,7 @@ impl Studio {
                 position_ms,
                 ..
             } => {
+                self.timeline_seq.update_value(|seq| *seq += 1);
                 let at = now_ms();
                 self.playing.update(|map| {
                     if *playing {
@@ -1074,6 +1189,33 @@ impl Studio {
                     } else {
                         map.remove(timeline_id);
                     }
+                });
+            }
+            // A show started, paused, continued, jumped, looped or stopped (ADR-0210): the
+            // play head moves to where it is now at once, and `studio.get` then reports the
+            // rest (its state, the bookmark it waits at, the loop and the armed spot).
+            Event::ShowChanged {
+                show_id,
+                running,
+                at_ms,
+                ..
+            } => {
+                let at = now_ms();
+                if *running {
+                    self.show.update(|show| match show {
+                        Some((s, heard)) if &s.show_id == show_id => {
+                            s.at_ms = *at_ms;
+                            *heard = at;
+                        }
+                        _ => {}
+                    });
+                } else {
+                    self.show.set(None);
+                }
+                let studio = *self;
+                let session = session.clone();
+                spawn_local(async move {
+                    studio.read_studio(&session).await;
                 });
             }
             Event::KindsChanged { .. } => {
@@ -1266,12 +1408,16 @@ impl Studio {
     /// A `scene.switch` shows its scene on program at once, before the engine's
     /// `studio.changed` confirms it, so the "program" badge moves on the click and the
     /// canvas keeps the program stream rather than wanting the new scene on its own for
-    /// the round trip. The call is queued before that change wakes the panels, so the
-    /// request leaves before they redraw. A refused switch reads the studio back.
+    /// the round trip. A `timeline.play`, `timeline.seek` or `timeline.stop` shows its
+    /// sequence playing or stopped at once too ([`optimistic_timeline`]), so a second
+    /// click on a Play button stops what the first started instead of starting it
+    /// again. The call is queued before that change wakes the panels, so the request
+    /// leaves before they redraw. A refused switch or play reads the studio back.
     pub fn act(&self, session: &Session, action: Action) {
         let studio = *self;
         let switched = optimistic_program(&action);
-        let reread = switched.is_some();
+        let played = optimistic_timeline(&action);
+        let reread = switched.is_some() || played.is_some();
         let session = session.clone();
         spawn_local(async move {
             if let Err(error) = session.control.call(Call::Action { action }).await {
@@ -1288,7 +1434,26 @@ impl Studio {
         {
             // Newer than any `studio.get` in flight, which `take_studio` then drops.
             self.studio_seq.update_value(|seq| *seq += 1);
-            self.program.set(Some(scene_id));
+            let before = self.program.get_untracked();
+            self.program.set(Some(scene_id.clone()));
+            let preview = self.preview.get_untracked();
+            self.follow(
+                (before.as_ref(), Some(&scene_id)),
+                (preview.as_ref(), preview.as_ref()),
+            );
+        }
+        if let Some((timeline_id, from)) = played {
+            // Newer than what any `studio.get` in flight says plays.
+            self.timeline_seq.update_value(|seq| *seq += 1);
+            let at = now_ms();
+            self.playing.update(|map| match from {
+                Some(position_ms) => {
+                    map.insert(timeline_id, Playing { position_ms, at });
+                }
+                None => {
+                    map.remove(&timeline_id);
+                }
+            });
         }
     }
 
@@ -1398,8 +1563,9 @@ fn unexpected(what: &str) -> ControlError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Collection, Selection, Studio, apply, followed_preview, fresh_id, list_kinds,
-        optimistic_program, plan_summary, query, reset_edits, scene_click, sizes_of,
+        Collection, Selection, Studio, apply, followed_scene, fresh_id, list_kinds,
+        optimistic_program, optimistic_timeline, plan_summary, query, reset_edits, scene_click,
+        sizes_of,
     };
     use crate::session::Session;
     use jstream_control::protocol::{
@@ -1539,6 +1705,8 @@ mod tests {
             warm_scenes: None,
             warm_gpu_mib: None,
             rendering: None,
+            show: None,
+            overlays: Vec::new(),
         };
         assert_eq!(Collection::from_result(other), None);
     }
@@ -1554,11 +1722,13 @@ mod tests {
                     height: 360,
                 }),
                 depth: None,
+                duration_ms: None,
             },
             SourceSize {
                 source_id: SourceId::new("dark"),
                 size: None,
                 depth: None,
+                duration_ms: None,
             },
         ]);
         assert_eq!(sizes.len(), 1, "a source with no size is left out");
@@ -2068,25 +2238,105 @@ mod tests {
     }
 
     /// In studio mode the canvas is the preview side: a new preview scene (the old
-    /// program, swapped back after a transition) is shown there. Outside it, or when
-    /// the preview didn't move or is shown already, the canvas stays.
+    /// program, swapped back after a transition) is shown there, and a switch leaves it.
+    /// When the preview didn't move or is shown already, the canvas stays.
     #[test]
     fn in_studio_mode_the_canvas_follows_a_new_preview_scene() {
         let (a, b) = (SceneId::new("a"), SceneId::new("b"));
+        let same = (Some(&b), Some(&b));
         assert_eq!(
-            followed_preview(true, Some(&b), Some(&a), Some(&b)),
+            followed_scene(true, (Some(&a), Some(&b)), (Some(&b), Some(&a)), Some(&b)),
             Some(a.clone()),
             "a swap after a transition"
         );
-        assert_eq!(followed_preview(false, Some(&b), Some(&a), Some(&b)), None);
         assert_eq!(
-            followed_preview(true, Some(&a), Some(&a), Some(&b)),
+            followed_scene(true, (Some(&a), Some(&b)), same, Some(&a)),
+            None,
+            "a switch keeps the preview side on preview"
+        );
+        assert_eq!(
+            followed_scene(true, same, (Some(&a), Some(&a)), Some(&b)),
             None,
             "the preview didn't move: the scene the canvas shows was picked since"
         );
-        assert_eq!(followed_preview(true, Some(&b), Some(&a), Some(&a)), None);
-        assert_eq!(followed_preview(true, Some(&b), None, Some(&b)), None);
-        assert_eq!(followed_preview(true, None, Some(&a), None), Some(a));
+        assert_eq!(
+            followed_scene(true, same, (Some(&b), Some(&a)), Some(&a)),
+            None
+        );
+        assert_eq!(followed_scene(true, same, (Some(&b), None), Some(&b)), None);
+        assert_eq!(followed_scene(true, same, (None, Some(&a)), None), Some(a));
+    }
+
+    /// Outside studio mode the canvas stands for program: every new program scene is
+    /// shown there, whatever switched it (#1733), and a new preview scene isn't.
+    #[test]
+    fn outside_studio_mode_the_canvas_follows_every_new_program_scene() {
+        let (a, b) = (SceneId::new("a"), SceneId::new("b"));
+        let still = (Some(&a), Some(&a));
+        assert_eq!(
+            followed_scene(false, (Some(&a), Some(&b)), still, Some(&a)),
+            Some(b.clone()),
+            "a hotkey, a trigger or another client switched"
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&a), Some(&b)), still, None),
+            Some(b.clone())
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&a), Some(&b)), still, Some(&b)),
+            None,
+            "a click shows its scene already"
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&b), Some(&b)), still, Some(&a)),
+            None,
+            "program didn't move: a nested scene opened since stays"
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&b), Some(&b)), (Some(&b), Some(&a)), Some(&b)),
+            None,
+            "another client's preview is not this canvas's"
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&a), None), still, Some(&a)),
+            None
+        );
+    }
+
+    /// A Play, a seek or a Stop shows at once; a play that waits, and anything else,
+    /// waits for the engine.
+    #[test]
+    fn a_timeline_action_shows_at_once_unless_it_waits() {
+        use jstream_control::protocol::TimelineId;
+        let id = TimelineId::new("seq_1");
+        let play = |delay_ms| Action::TimelinePlay {
+            timeline_id: id.clone(),
+            delay_ms,
+        };
+        assert_eq!(
+            optimistic_timeline(&play(None)),
+            Some((id.clone(), Some(0)))
+        );
+        assert_eq!(
+            optimistic_timeline(&play(Some(0))),
+            Some((id.clone(), Some(0)))
+        );
+        assert_eq!(optimistic_timeline(&play(Some(500))), None);
+        let seek = Action::TimelineSeek {
+            timeline_id: id.clone(),
+            at_ms: 1200,
+        };
+        assert_eq!(optimistic_timeline(&seek), Some((id.clone(), Some(1200))));
+        let stop = Action::TimelineStop {
+            timeline_id: id.clone(),
+        };
+        assert_eq!(optimistic_timeline(&stop), Some((id, None)));
+        let switch = Action::SceneSwitch {
+            scene_id: SceneId::new("main"),
+            preset_id: None,
+            via: Vec::new(),
+        };
+        assert_eq!(optimistic_timeline(&switch), None);
     }
 
     /// A `studio.get` answer that a `studio.changed` overtook is stale, and dropped;

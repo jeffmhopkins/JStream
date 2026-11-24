@@ -119,10 +119,18 @@ pub fn MuteKeys(
             studio.apply(&s, edits);
         }
     };
-    let unbind = move |chord: Chord| {
+    // Only this mute's action: the chord may run others too (ADR-0208).
+    let unbind = move |chord: Chord, to: MuteTo| {
         close();
         if let Some(s) = session.0.get_value() {
-            studio.apply(&s, vec![Edit::HotkeyClear { chord }]);
+            let action = of.with_value(|of| of.action(to));
+            studio.apply(
+                &s,
+                vec![Edit::HotkeyClear {
+                    chord,
+                    action: Some(action),
+                }],
+            );
         }
     };
     let title = move || {
@@ -167,7 +175,7 @@ pub fn MuteKeys(
                             view! {
                                 <button type="button" class="menuitem" role="menuitem"
                                     title="Remove this key"
-                                    on:click=move |_| unbind(gone.clone())>
+                                    on:click=move |_| unbind(gone.clone(), to)>
                                     <span class="ctx-check"></span>
                                     <span class="ctx-label">{crate::hotkeys::label(&chord)}</span>
                                     <span class="hint">{format!("{} · remove", mode_name(to))}</span>

@@ -39,6 +39,7 @@ fn changed(id: &str, size: Option<PixelSize>) -> Event {
         source_id: SourceId::new(id),
         size,
         depth: None,
+        duration_ms: None,
     }
 }
 
@@ -85,16 +86,19 @@ fn sizes_follow_live_sources_stored_frames_and_deletes() {
                 source_id: SourceId::new("fill"),
                 size: size(4, 2),
                 depth: None,
+                duration_ms: None,
             },
             SourceSize {
                 source_id: SourceId::new("spare"),
                 size: size(8, 6),
                 depth: None,
+                duration_ms: None,
             },
             SourceSize {
                 source_id: SourceId::new("webcam"),
                 size: None,
                 depth: None,
+                duration_ms: None,
             },
         ]
     );
@@ -191,11 +195,13 @@ fn a_model_reports_its_depth_beside_its_size() {
                 source_id: SourceId::new("cube"),
                 size: size(512, 512),
                 depth: Some(512),
+                duration_ms: None,
             },
             SourceSize {
                 source_id: SourceId::new("fill"),
                 size: size(4, 2),
                 depth: None,
+                duration_ms: None,
             },
         ]
     );
@@ -204,6 +210,7 @@ fn a_model_reports_its_depth_beside_its_size() {
             source_id: SourceId::new("cube"),
             size: size(512, 512),
             depth: Some(512),
+            duration_ms: None,
         }),
         "the model's first size carries its depth"
     );

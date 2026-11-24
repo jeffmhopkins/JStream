@@ -45,7 +45,7 @@ pub use publish::{
     LinkState, LivePublish, OpenPublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };
 pub(crate) use render::{
-    Collector, Garbage, RenderHub, RenderReader, RenderSnapshot, SceneShots, WarmModels,
+    Collector, Garbage, RenderHub, RenderReader, RenderSnapshot, SceneShots, WarmModels, WarmStills,
 };
 pub(crate) use sink::Destination;
 pub(crate) use vcam::VcamOut;
