@@ -94,6 +94,8 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/menu.rs"]
 
 The header's menus and the right-click menus are one family:
 
+- A header menu hangs flush under the bar, its top corners square, as a desktop menu
+  bar's does. A right-click menu opens at the pointer.
 - 28 px lines. A 20 px leading slot is always kept, so labels line up in every menu.
   The slot holds a check for a shown panel, a checked option or the current layout.
   Toggle state is never shown as words.
