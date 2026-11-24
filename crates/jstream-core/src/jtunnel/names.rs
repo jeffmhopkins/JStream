@@ -116,6 +116,12 @@ fn target_label(graph: &Graph, target: &ValueTarget) -> String {
                 .item(item_id)
                 .map_or("", |(_, item)| source(item.source_id()))
         ),
+        ValueTarget::PtzAxis { camera, axis } => {
+            let axis = axis.name();
+            let mut word = axis[..1].to_uppercase();
+            word.push_str(&axis[1..]);
+            format!("{camera} {word}")
+        }
         _ => String::new(),
     }
 }

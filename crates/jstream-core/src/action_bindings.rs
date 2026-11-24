@@ -242,8 +242,13 @@ impl ActionBindings {
                         Some(Fired::Press) => {
                             run.push(action.clone());
                             if let Some(release) = action.on_release() {
-                                self.held
-                                    .retain(|held| held.input != input || held.trigger != *trigger);
+                                // A trigger may run several actions (ADR-0208): each
+                                // is held on its own.
+                                self.held.retain(|held| {
+                                    held.input != input
+                                        || held.trigger != *trigger
+                                        || held.action != *action
+                                });
                                 self.held.push(Held {
                                     input: input.clone(),
                                     trigger: trigger.clone(),
@@ -253,8 +258,11 @@ impl ActionBindings {
                             }
                         }
                         Some(Fired::Release) => {
-                            self.held
-                                .retain(|held| held.input != input || held.trigger != *trigger);
+                            self.held.retain(|held| {
+                                held.input != input
+                                    || held.trigger != *trigger
+                                    || held.action != *action
+                            });
                             run.extend(action.on_release());
                         }
                         None => {}

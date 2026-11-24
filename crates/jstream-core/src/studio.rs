@@ -21,13 +21,20 @@
 //! destination is the program scene itself. The budget is an application setting: a
 //! new collection's studio keeps it ([`Studio::fresh`]). So is its limit on the GPU bytes
 //! the warm scenes hold (ADR-0150), which the engine applies once it has planned them.
+//!
+//! Beside program's transition, the studio keeps each item of the internal show scene
+//! that is fading in or out on its own ([`ShowFade`]), until it ends: an overlay's fade is
+//! drawn over program and runs apart from program's transition, so both can overlap.
+
+use std::collections::BTreeMap;
 
 use jstream_graph::State;
+use jstream_media::MediaTime;
 use jstream_protocol::{
-    Action, DEFAULT_WARM_SCENES, EntityKind, MAX_WARM_SCENES, ProtocolError, SceneId,
+    Action, DEFAULT_WARM_SCENES, EntityKind, ItemId, MAX_WARM_SCENES, ProtocolError, SceneId,
 };
 
-use crate::transition::Running;
+use crate::transition::{Running, ShowFade};
 
 /// The most scenes the studio remembers as recently on program: as many as the largest
 /// budget can keep warm.
@@ -38,7 +45,13 @@ const RECENT: usize = MAX_WARM_SCENES as usize;
 pub(crate) struct Studio {
     program: Option<SceneId>,
     preview: Option<SceneId>,
+    /// The scene a show runs to next, kept warm right after Preview so its media is
+    /// cued at its start and the cut to it is seamless (alpha.13 ST6). Set by the show
+    /// runner; `None` while no show runs.
+    upcoming: Option<SceneId>,
     running: Option<Running>,
+    /// The show scene's items fading in or out on their own, by item, until each ends.
+    fades: BTreeMap<ItemId, ShowFade>,
     /// The scenes on program before the current one, the most recent first, never the
     /// program scene, at most [`RECENT`].
     recent: Vec<SceneId>,
@@ -54,7 +67,9 @@ impl Default for Studio {
         Studio {
             program: None,
             preview: None,
+            upcoming: None,
             running: None,
+            fades: BTreeMap::new(),
             recent: Vec::new(),
             budget: DEFAULT_WARM_SCENES as usize,
             gpu_mib: 0,
@@ -120,6 +135,40 @@ impl Studio {
         self.running.as_ref()
     }
 
+    /// The show scene's items fading in or out on their own.
+    pub(crate) fn fades(&self) -> &BTreeMap<ItemId, ShowFade> {
+        &self.fades
+    }
+
+    /// Starts `fade` on `item_id`, an item of the show scene, at `now`, in place of the
+    /// one it ran ([`ShowFade::after`]); `None` shows or hides it at once, which ends a
+    /// fade it ran.
+    pub(crate) fn fade(&mut self, item_id: ItemId, fade: Option<ShowFade>, now: MediaTime) {
+        match fade {
+            Some(fade) => {
+                let fade = fade.after(self.fades.get(&item_id), now);
+                self.fades.insert(item_id, fade);
+            }
+            None => {
+                self.fades.remove(&item_id);
+            }
+        }
+    }
+
+    /// Lets go of the fades that have ended by `now`, and of those whose item is no
+    /// longer an item of `collection`'s show scene. `true` when one went.
+    pub(crate) fn end_fades(&mut self, collection: &State, now: MediaTime) -> bool {
+        let before = self.fades.len();
+        let show = collection.show_scene();
+        self.fades.retain(|item_id, fade| {
+            !fade.ended(now)
+                && collection
+                    .item(item_id)
+                    .is_some_and(|(scene, _)| Some(scene.id()) == show)
+        });
+        self.fades.len() != before
+    }
+
     /// Puts `scene_id`, which the caller checked, on program, with `running` as the
     /// transition toward it, or none for a cut.
     pub(crate) fn switch(&mut self, scene_id: SceneId, running: Option<Running>) {
@@ -134,7 +183,8 @@ impl Studio {
     }
 
     /// The scenes kept warm beside the program, in priority order (ADR-0117 §7): the
-    /// Preview scene, even past the budget; then the scenes `collection` keeps warm
+    /// Preview scene, even past the budget; then the upcoming scene a show runs to
+    /// next ([`Self::set_upcoming`]), past the budget too; then the scenes `collection` keeps warm
     /// (`keep_warm`), in display order; then the scenes its hotkeys and its trigger
     /// bindings switch to; then the scenes most recently on program. At most the budget
     /// in all, the Preview scene counted, never the program scene, each once.
@@ -143,6 +193,13 @@ impl Studio {
         let program = self.program.as_ref();
         if let Some(preview) = self.preview.as_ref().filter(|id| Some(*id) != program) {
             warm.push(preview.clone());
+        }
+        if let Some(upcoming) = self
+            .upcoming
+            .as_ref()
+            .filter(|id| Some(*id) != program && !warm.contains(id))
+        {
+            warm.push(upcoming.clone());
         }
         let pinned = collection
             .scenes()
@@ -162,11 +219,36 @@ impl Studio {
             if warm.len() >= self.budget {
                 break;
             }
-            if Some(id) != program && !warm.contains(id) {
+            if Some(id) != program && Some(id) != collection.show_scene() && !warm.contains(id) {
                 warm.push(id.clone());
             }
         }
         warm
+    }
+
+    /// The scene a show runs to next, kept warm past the budget beside Preview.
+    pub(crate) fn upcoming(&self) -> Option<&SceneId> {
+        self.upcoming.as_ref()
+    }
+
+    /// Names the scene a show runs to next, or `None` when no show runs: it stays warm
+    /// past the budget and the GPU limit, as Preview does, so a media file on it is held
+    /// at its first frame and the cut to it starts nothing. `true` when it changed, so
+    /// the caller publishes the warm scenes again. A scene the collection doesn't hold
+    /// is `not_found`.
+    pub(crate) fn set_upcoming(
+        &mut self,
+        collection: &State,
+        scene_id: Option<&SceneId>,
+    ) -> Result<bool, ProtocolError> {
+        if let Some(id) = scene_id {
+            exists(collection, id)?;
+        }
+        if self.upcoming.as_ref() == scene_id {
+            return Ok(false);
+        }
+        self.upcoming = scene_id.cloned();
+        Ok(true)
     }
 
     /// Lets the running transition go once it has ended.
@@ -197,12 +279,25 @@ impl Studio {
     /// is forgotten. `true` when program or preview changed.
     pub(crate) fn reconcile(&mut self, collection: &State) -> bool {
         self.recent.retain(|id| collection.scene(id).is_some());
-        let first = collection.scenes().first().map(|scene| scene.id().clone());
+        if self
+            .upcoming
+            .as_ref()
+            .is_some_and(|id| collection.scene(id).is_none())
+        {
+            self.upcoming = None;
+        }
+        let show = collection.show_scene();
+        let first = collection
+            .scenes()
+            .iter()
+            .map(|scene| scene.id())
+            .find(|id| Some(*id) != show)
+            .cloned();
         let mut changed = false;
         for slot in [&mut self.program, &mut self.preview] {
             let kept = slot
                 .as_ref()
-                .is_some_and(|id| collection.scene(id).is_some());
+                .is_some_and(|id| collection.scene(id).is_some() && Some(id) != show);
             if !kept && *slot != first {
                 *slot = first.clone();
                 changed = true;
@@ -219,9 +314,17 @@ impl Studio {
     }
 }
 
-/// `not_found` unless the collection has scene `scene_id`.
+/// `not_found` unless the collection has scene `scene_id`, and `invalid_argument` for
+/// the internal show scene, which draws over program and so never goes on it or on
+/// preview.
 pub(crate) fn exists(collection: &State, scene_id: &SceneId) -> Result<(), ProtocolError> {
     match collection.scene(scene_id) {
+        Some(_) if collection.show_scene() == Some(scene_id) => {
+            Err(ProtocolError::invalid_argument(
+                "scene_id",
+                format!("scene `{scene_id}` is the internal show scene, which nothing may show"),
+            ))
+        }
         Some(_) => Ok(()),
         None => Err(ProtocolError::NotFound {
             entity: EntityKind::Scene,

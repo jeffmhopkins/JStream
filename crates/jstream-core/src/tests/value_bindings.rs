@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 fn master_fader() -> Edit {
     Edit::BindingSetValue {
         binding: ValueBinding {
+            enabled: true,
+            mode: jstream_protocol::MappingMode::Replace,
             binding_id: "master".into(),
             input: MotionKind::Midi {
                 control: MotionMidiControl::Cc,

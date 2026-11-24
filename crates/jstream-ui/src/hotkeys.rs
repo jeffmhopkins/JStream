@@ -206,20 +206,25 @@ pub fn default_zoom_edits(collection: &Collection, scene_id: &SceneId) -> Option
     Some(vec![zoom(up, 1), zoom(down, -1)])
 }
 
-/// The edits that bind `chord` to `action` (a scene's [`switch_to`], or an item's
-/// `item.toggle`, `item.show` or `item.hide`): a `hotkey.clear` of whatever the chord
-/// ran before, then the `hotkey.set`. Empty when it already does.
+/// The edits that bind `chord` to `action` (a scene's [`switch_to`], an item's
+/// `item.toggle`, `item.show` or `item.hide`, or any other action a row binds). Empty
+/// when the chord runs it already. A chord runs several actions (ADR-0208), so the
+/// chord keeps every other action, except one `action` would fight: another scene's
+/// switch, or another of the same item's show, hide or toggle, each unbound by name
+/// (`hotkey.clear` with its `action`) before the `hotkey.set`.
 pub fn bind_edits(collection: &Collection, action: &Action, chord: &Chord) -> Vec<Edit> {
-    let bound = collection.hotkeys.iter().find(|b| &b.chord == chord);
-    if bound.is_some_and(|b| b.action().as_ref() == Some(action)) {
+    let bound = collection.hotkey_actions(chord);
+    if bound.contains(action) {
         return Vec::new();
     }
-    let mut edits = Vec::new();
-    if bound.is_some() {
-        edits.push(Edit::HotkeyClear {
+    let mut edits: Vec<Edit> = bound
+        .into_iter()
+        .filter(|old| conflicts(old, action))
+        .map(|old| Edit::HotkeyClear {
             chord: chord.clone(),
-        });
-    }
+            action: Some(old),
+        })
+        .collect();
     edits.push(Edit::HotkeySet {
         chord: chord.clone(),
         action: action.clone(),
@@ -237,19 +242,25 @@ pub struct Held {
 }
 
 impl Held {
-    /// Notes that the key `code` was pressed and ran `action`: if it has a release, the
-    /// key now holds it.
-    pub fn press(&mut self, code: &str, action: &Action) {
-        if let Some(release) = action.on_release() {
-            self.keys.retain(|(key, _)| key != code);
+    /// Notes that the key `code` was pressed and ran `actions` (ADR-0208: a chord may run
+    /// several): the key now holds the release of each that has one, in their order, in
+    /// place of what it held before.
+    pub fn press(&mut self, code: &str, actions: &[Action]) {
+        self.keys.retain(|(key, _)| key != code);
+        for release in actions.iter().filter_map(Action::on_release) {
             self.keys.push((code.to_owned(), release));
         }
     }
 
-    /// The release the key `code` held, now it went up.
-    pub fn release(&mut self, code: &str) -> Option<Action> {
-        let at = self.keys.iter().position(|(key, _)| key == code)?;
-        Some(self.keys.remove(at).1)
+    /// The releases the key `code` held, in order, now it went up.
+    pub fn release(&mut self, code: &str) -> Vec<Action> {
+        let (gone, kept) = std::mem::take(&mut self.keys)
+            .into_iter()
+            .partition(|(key, _)| key == code);
+        self.keys = kept;
+        gone.into_iter()
+            .map(|(_, release): (String, Action)| release)
+            .collect()
     }
 
     /// Every release still held, oldest first: the page stopped hearing keys (it lost
@@ -259,9 +270,24 @@ impl Held {
     }
 }
 
+/// Whether one press running both `a` and `b` would undo itself: two scene switches,
+/// or two of one item's show, hide and toggle.
+fn conflicts(a: &Action, b: &Action) -> bool {
+    let item = |action: &Action| match action {
+        Action::ItemToggle { item_id, scene_id }
+        | Action::ItemShow { item_id, scene_id }
+        | Action::ItemHide { item_id, scene_id } => Some((item_id.clone(), scene_id.clone())),
+        _ => None,
+    };
+    match (a, b) {
+        (Action::SceneSwitch { .. }, Action::SceneSwitch { .. }) => true,
+        _ => item(a).is_some_and(|ia| item(b) == Some(ia)),
+    }
+}
+
 /// Whether a key press belongs to what has the focus: a text field, a select or an
 /// editable element types it.
-fn typed_in_field(event: &leptos::ev::KeyboardEvent) -> bool {
+pub(crate) fn typed_in_field(event: &leptos::ev::KeyboardEvent) -> bool {
     use leptos::wasm_bindgen::JsCast;
     let Some(element) = event
         .target()
@@ -276,7 +302,7 @@ fn typed_in_field(event: &leptos::ev::KeyboardEvent) -> bool {
 }
 
 /// Whether a dialog or a menu is open: it holds the keyboard, so no binding runs.
-fn overlay_open() -> bool {
+pub(crate) fn overlay_open() -> bool {
     leptos::prelude::document()
         .query_selector("[aria-modal='true'], [role='menu']")
         .ok()
@@ -284,8 +310,8 @@ fn overlay_open() -> bool {
         .is_some()
 }
 
-/// Runs the collection's hotkeys while the page has the focus: a bound chord sends its
-/// action, as an `action` call, and the browser's own use of the key (F5 reloads) is
+/// Runs the collection's hotkeys while the page has the focus: a bound chord sends each
+/// of its actions, in the order they were bound (ADR-0208), as `action` calls, and the browser's own use of the key (F5 reloads) is
 /// prevented. Nothing runs while a dialog or a menu is open. Mounted once, in the shell.
 #[component]
 pub fn Hotkeys() -> impl IntoView {
@@ -299,16 +325,19 @@ pub fn Hotkeys() -> impl IntoView {
         let Some(chord) = of_event(&event) else {
             return;
         };
-        let Some(action) = studio
+        let actions = studio
             .collection
-            .with_untracked(|c| c.as_ref().and_then(|c| c.hotkey(&chord)))
-        else {
+            .with_untracked(|c| c.as_ref().map(|c| c.hotkey_actions(&chord)))
+            .unwrap_or_default();
+        if actions.is_empty() {
             return;
-        };
+        }
         event.prevent_default();
-        held.update_value(|held| held.press(&event.code(), &action));
+        held.update_value(|held| held.press(&event.code(), &actions));
         if let Some(s) = session.get() {
-            studio.act(&s, action);
+            for action in actions {
+                studio.act(&s, action);
+            }
         }
     });
     // A held key's release (ADR-0207): its key going up, or the page losing the keys.
@@ -320,12 +349,12 @@ pub fn Hotkeys() -> impl IntoView {
         }
     };
     let up = window_event_listener(leptos::ev::keyup, move |event| {
-        if let Some(action) = held
+        let releases = held
             .try_update_value(|held| held.release(&event.code()))
-            .flatten()
-        {
+            .unwrap_or_default();
+        if !releases.is_empty() {
             event.prevent_default();
-            release(vec![action]);
+            release(releases);
         }
     });
     let blur = window_event_listener(leptos::ev::blur, move |_| {
@@ -352,9 +381,11 @@ pub fn Hotkeys() -> impl IntoView {
                 modifiers.3,
                 direction,
             )?;
-            studio
+            let actions = studio
                 .collection
-                .with_untracked(|c| c.as_ref().and_then(|c| c.hotkey(&chord)))
+                .with_untracked(|c| c.as_ref().map(|c| c.hotkey_actions(&chord)))
+                .unwrap_or_default();
+            (!actions.is_empty()).then_some(actions)
         };
         let delta = wheel_delta(event.delta_x(), event.delta_y(), modifiers.2);
         let direction = if delta < 0.0 {
@@ -364,7 +395,7 @@ pub fn Hotkeys() -> impl IntoView {
         } else {
             return;
         };
-        let Some(action) = bound(direction) else {
+        let Some(actions) = bound(direction) else {
             // Not bound this way: the page scrolls or zooms as it would.
             notches.reset();
             return;
@@ -374,7 +405,9 @@ pub fn Hotkeys() -> impl IntoView {
         let turned = notches.turn(delta, event.delta_mode());
         if let Some(s) = session.get() {
             for _ in 0..turned.unsigned_abs() {
-                studio.act(&s, action.clone());
+                for action in &actions {
+                    studio.act(&s, action.clone());
+                }
             }
         }
     });
@@ -591,27 +624,48 @@ mod tests {
         };
         let mut held = Held::default();
         // A toggle has no release: nothing is held.
-        held.press(
-            "KeyT",
-            &Action::BusMute {
-                bus_id: BusId::master(),
-                to: MuteTo::Toggle,
-            },
-        );
+        let toggle = Action::BusMute {
+            bus_id: BusId::master(),
+            to: MuteTo::Toggle,
+        };
+        held.press("KeyT", std::slice::from_ref(&toggle));
         assert_eq!(held, Held::default());
-        held.press("KeyM", &talk);
-        assert_eq!(held.release("KeyX"), None);
+        held.press("KeyM", std::slice::from_ref(&talk));
+        assert!(held.release("KeyX").is_empty());
         assert_eq!(
             held.release("KeyM"),
-            Some(Action::SourceMute {
+            vec![Action::SourceMute {
                 source_id: SourceId::new("mic"),
                 to: MuteTo::Muted,
-            })
+            }]
         );
-        assert_eq!(held.release("KeyM"), None, "released once");
-        held.press("KeyM", &talk);
-        held.press("KeyM", &talk);
-        assert_eq!(held.release_all().len(), 1, "one key holds one release");
+        assert!(held.release("KeyM").is_empty(), "released once");
+        held.press("KeyM", std::slice::from_ref(&talk));
+        held.press("KeyM", std::slice::from_ref(&talk));
+        assert_eq!(
+            held.release_all().len(),
+            1,
+            "one key holds one press's releases"
+        );
+        // A chord running several actions (ADR-0208) holds each one's release, in order.
+        let music = Action::BusMute {
+            bus_id: BusId::new("music"),
+            to: MuteTo::PushToMute,
+        };
+        held.press("KeyM", &[talk.clone(), toggle, music]);
+        assert_eq!(
+            held.release("KeyM"),
+            vec![
+                Action::SourceMute {
+                    source_id: SourceId::new("mic"),
+                    to: MuteTo::Muted,
+                },
+                Action::BusMute {
+                    bus_id: BusId::new("music"),
+                    to: MuteTo::Unmuted,
+                },
+            ]
+        );
         assert!(held.release_all().is_empty());
     }
 
@@ -632,7 +686,7 @@ mod tests {
         assert_eq!(
             bind_edits(&collection, &switch_to(&a), &f1).len(),
             2,
-            "cleared, then set"
+            "the old switch unbound, then set"
         );
         assert!(
             bind_edits(&collection, &switch_to(&b), &f1).is_empty(),
@@ -641,6 +695,59 @@ mod tests {
         assert_eq!(collection.hotkey(&f1), Some(switch_to(&b)));
         assert_eq!(collection.scene_chords(&b), vec![f1]);
         assert!(collection.scene_chords(&a).is_empty());
+    }
+
+    /// A chord running several actions (ADR-0208) keeps the ones the new action doesn't
+    /// fight: re-binding an action it runs is nothing, and another item's toggle is added.
+    #[test]
+    fn binding_keeps_a_chords_other_actions() {
+        let f9 = Chord::new("F9");
+        let live = Action::OutputToggle {
+            output_id: jstream_control::protocol::OutputId::new("yt"),
+        };
+        let cam = Action::ItemToggle {
+            item_id: jstream_control::protocol::ItemId::new("cam"),
+            scene_id: None,
+        };
+        let mic = Action::ItemToggle {
+            item_id: jstream_control::protocol::ItemId::new("mic"),
+            scene_id: None,
+        };
+        let a = SceneId::new("a");
+        let b = SceneId::new("b");
+        let collection = Collection {
+            hotkeys: vec![
+                HotkeyBinding::new(f9.clone(), &live),
+                HotkeyBinding::new(f9.clone(), &cam),
+                HotkeyBinding::new(f9.clone(), &switch_to(&b)),
+            ],
+            ..Collection::default()
+        };
+        assert!(
+            bind_edits(&collection, &cam, &f9).is_empty(),
+            "runs it already"
+        );
+        assert_eq!(
+            bind_edits(&collection, &mic, &f9),
+            vec![Edit::HotkeySet {
+                chord: f9.clone(),
+                action: mic,
+            }]
+        );
+        assert_eq!(
+            bind_edits(&collection, &switch_to(&a), &f9),
+            vec![
+                Edit::HotkeyClear {
+                    chord: f9.clone(),
+                    action: Some(switch_to(&b)),
+                },
+                Edit::HotkeySet {
+                    chord: f9,
+                    action: switch_to(&a),
+                },
+            ],
+            "only the other switch goes"
+        );
     }
 
     #[test]

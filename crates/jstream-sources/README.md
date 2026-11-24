@@ -45,7 +45,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   may restart there, and the default does nothing. `restart(at)` starts the source again
   whatever its settings, for `source.restart`
   ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)): a `browser` page reloads
-  and a `media` file plays from its start; the default does nothing. `sound()` gives a kind's sound that
+  and a `media` file plays from its start; the default does nothing. `seek(at, to)`
+  plays the source on from `to` into its timeline, for `source.seek`: a `media` file
+  goes there; the default restarts it as `restart` does, so a kind with nothing to seek
+  starts over. `counts_from_zero()` (default `false`; `true` for a `timer`) says the
+  source counts from its time zero, so the engine restarts it for a show,
+  `source.restart` and `source.seek` by moving that zero instead of calling `restart`
+  or `seek` (it still calls `show`, after the zero moved), and a build that keeps its time keeps the restart
+  ([ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). `duration()` is one play's length, for `SourceSize`'s `duration_ms`: a
+  `media` file's, when known; the default is `None`. `sound()` gives a kind's sound that
   plays while the program shows it (`MediaAudio`, a `media` file's), for the engine to
   mix; the default is `None`. `update(settings)` applies a change
   to `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
@@ -558,7 +566,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   (#1040) is a counter whose value means nothing: changing it, to any other number,
   starts the count again at the same `mode` and `duration`, in one edit (and its undo
   starts it again too). `mode`, `duration` and `restart` are the settings that aren't
-  live. A `clock` shows the wall-clock time of day
+  live. A countdown or stopwatch also starts again, with no edit, whenever the program
+  shows it again after plans that didn't (its scene goes on program, or its item is
+  shown), and for `source.restart`; `source.seek` counts on as if it had started that
+  long ago ([ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). The engine
+  does each by moving the time zero (`counts_from_zero`). A `clock` shows the wall-clock time of day
   (`clock_format` `24h`, `12h` with AM or PM, or either without seconds) in the
   machine's time zone, or the IANA zone `time_zone` names, through `jiff` (with no zone
   found for the machine it shows UTC; an unknown name is a setting error). Every frame
@@ -613,7 +625,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ADR-0117 §7), such a file goes to its start and holds there, its timeline still and
   its first frame shown once decoded, with the audio from the start kept: `show` then
   plays it from there with no seek, and `uncue` (a preview draws it meanwhile) does
-  the same without the program. When the frame shown
+  the same without the program. `seek` (`source.seek`) plays the file on from a
+  point, forward or back, and ends a hold: past the end a looping file lands where that
+  many plays reach, and one that doesn't loop holds its last frame. `duration` is the
+  length the container declares, else one play's once the decode thread has reached the
+  end of the file and shared it (`player::State::length`); `None` with no file. When the frame shown
   falls more than a second behind the timeline (it was hidden, or the decoder can't
   keep up), the source seeks instead of decoding every frame between; a seek decodes
   from the key frame before its target and skips frames up to it (a looping file
@@ -770,7 +786,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   moves (a message since the last look, or, with the tempo granted, a song playing) the
   next page frame is due too; while it rests, the source looks again every quarter
   second, unless the engine gave it no MIDI state. A page granted live data is looked
-  at every page frame, since data lands at any time. `youtube_chat` never sets any
+  at every page frame, since data lands at any time. With nothing waiting to be sent,
+  the next look is a page frame after the last look, never one timed from an update long
+  past, which would be due at once and keep the planner busy (#1556). `youtube_chat` never sets any
   of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,
@@ -992,7 +1010,9 @@ program mix, of a bus and of another source, don't allocate once the pool has fi
 `jstream-platform`'s fake media files (`FakeMediaDecoders`, frames told apart by
 colour): frames on the clock, the last frame held, looping and the seek after a gap,
 speed and a speed change, restarting when shown, turning `loop` on after the end, no
-file, and the errors and limits; and its audio (fake blocks told apart by level),
+file, and the errors and limits; a seek forward and back, past the end of a looping and
+a non-looping file, and after a cue, and the container's length reported (none with no
+file); and its audio (fake blocks told apart by level),
 handed to a recording handler: nothing until heard, stamps 100 ms ahead of the
 timeline with continuous positions, a restart as a discontinuity, silence at another
 speed, an audio-only file looping without a seam and seeking after a long gap, and
@@ -1000,7 +1020,8 @@ audio that outlasts the video playing on without a seek, then looping to the fir
 frame, silence in the file before the next play stepped over as a gap rather than a
 discontinuity, and a decoder's long blocks still handed on only 100 ms ahead,
 continuous across the block seam. `player.rs`'s own tests loop a stream that starts late
-in the file one frame period apart, and cut a block at a rate where 10 ms isn't a whole
+in the file one frame period apart, share one play's length only once a play has
+reached the end, and cut a block at a rate where 10 ms isn't a whole
 number of frames, keeping every frame and the pieces contiguous. `tests/browser.rs` runs
 the `browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
 over URL, setting and backend errors, live CSS, the `local_network` opt-in, the page

@@ -101,6 +101,7 @@ fn camera_motion_redraws_every_frame() {
     let control = connected(&engine);
     batch(&control, edits(scenes())).expect("scenes");
     let sway = CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "sway".into(),
         property: CameraProperty::Roll,
         kind: MotionKind::Drift {
@@ -137,6 +138,7 @@ fn a_controller_drives_a_scene_camera() {
     batch(&control, edits(scenes())).expect("scenes");
     let f = |v: f32| Finite32::new(v).expect("finite");
     let zoom = CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "zoom".into(),
         property: CameraProperty::Fov,
         kind: MotionKind::Midi {

@@ -218,7 +218,13 @@ fn a_held_press_is_let_go_when_its_binding_changes_or_goes() {
     let midi = inputs();
     let mut runner = pressed(&graph, &midi);
     graph
-        .apply(&[Edit::BindingClear { trigger: pad() }], None)
+        .apply(
+            &[Edit::BindingClear {
+                trigger: pad(),
+                action: None,
+            }],
+            None,
+        )
         .expect("unbinds");
     assert_eq!(
         runner.tick(&graph, Some(&midi)),
@@ -297,6 +303,51 @@ fn a_port_that_keeps_no_link_alive_holds_until_released() {
         "a held key is held"
     );
     midi.push("Pads", 60_000, &note(false, 36));
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Muted)]
+    );
+}
+
+#[test]
+fn each_of_a_triggers_actions_is_held_and_let_go_on_its_own() {
+    // A trigger running several actions (ADR-0208): a push to talk and a push to mute.
+    let mut graph = bound(pad(), talk("master", MuteTo::PushToTalk));
+    graph
+        .apply(
+            &[Edit::BindingSet {
+                trigger: pad(),
+                action: talk("master", MuteTo::PushToMute),
+            }],
+            None,
+        )
+        .expect("binds a second action");
+    let midi = inputs();
+    let mut runner = ActionBindings::default();
+    assert!(runner.tick(&graph, Some(&midi)).is_empty());
+    midi.push("Pads", 1, &note(true, 36));
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![
+            talk("master", MuteTo::PushToTalk),
+            talk("master", MuteTo::PushToMute)
+        ]
+    );
+    // Unbinding one lets only that one go.
+    graph
+        .apply(
+            &[Edit::BindingClear {
+                trigger: pad(),
+                action: Some(talk("master", MuteTo::PushToMute)),
+            }],
+            None,
+        )
+        .expect("unbinds one");
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Unmuted)]
+    );
+    midi.push("Pads", 2, &note(false, 36));
     assert_eq!(
         runner.tick(&graph, Some(&midi)),
         vec![talk("master", MuteTo::Muted)]

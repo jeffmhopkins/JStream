@@ -310,6 +310,15 @@ pub fn is_running(state: OutputState) -> bool {
     !matches!(state, OutputState::Stopped | OutputState::Failed)
 }
 
+/// Whether the virtual camera is feeding: an active virtual camera output among `rows`.
+/// `stats.tick` lists only the outputs that send or record, so the drop readouts ask this
+/// too, since the engine counts the camera's missed frames as drops (#1698).
+pub fn vcam_feeding<'a>(rows: impl IntoIterator<Item = &'a OutputRow>) -> bool {
+    rows.into_iter().any(|row| {
+        matches!(row.info.kind, OutputKind::VirtualCam) && row.state == OutputState::Active
+    })
+}
+
 /// What the page knows about the engine's virtual camera. Only the desktop app says
 /// (its `vcam`, see `host.rs`); in a browser it is [`Vcam::Unknown`], and starting the
 /// output is how to find out.
@@ -665,7 +674,7 @@ impl HealthReading {
             return "No stats yet.".into();
         }
         if !self.running && !self.dropping() {
-            return "No output or recording is running. Previews don't count as drops.".into();
+            return "No output, recording or virtual camera is running. Previews don't count as drops.".into();
         }
         let d = self.drops;
         let parts: Vec<String> = [
@@ -1383,7 +1392,11 @@ pub fn Outputs() -> impl IntoView {
                         outputs,
                         ..
                     } => {
-                        let running = !outputs.is_empty();
+                        let running = !outputs.is_empty()
+                            || panel
+                                .rows
+                                .try_with_untracked(|rows| vcam_feeding(rows.values()))
+                                .unwrap_or(false);
                         health.try_update(|health| health.observe(seq, drops, running));
                         panel.stats.try_set(
                             outputs
@@ -2429,7 +2442,7 @@ mod tests {
         CLEARTEXT_WARNING, Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, UPDATE_HINT,
         Vcam, cleartext_warning, create_edit, describe_kind, explain_start_failure,
         go_live_targets, live_outputs, load, next_output_id, start_blocker, start_or_stop_all,
-        status, take_key,
+        status, take_key, vcam_feeding,
     };
     use jstream_control::protocol::{
         Action, DropCounts, Edit, OutputId, OutputInfo, OutputKind, OutputState, RtmpTarget,
@@ -2464,6 +2477,26 @@ mod tests {
             key_set,
             cleartext: true,
         }
+    }
+
+    /// A virtual camera isn't in `stats.tick`'s outputs, so the drop readouts ask the
+    /// rows whether it feeds: only while it is active (#1698).
+    #[test]
+    fn a_feeding_virtual_camera_counts_as_running() {
+        let camera = |state| OutputRow {
+            info: OutputInfo {
+                kind: OutputKind::VirtualCam,
+                ..rtmp("cam", state, false).info
+            },
+            ..rtmp("cam", state, false)
+        };
+        assert!(!vcam_feeding(&[rtmp("s", OutputState::Active, true)]));
+        assert!(!vcam_feeding(&[camera(OutputState::Stopped)]));
+        assert!(!vcam_feeding(&[camera(OutputState::Starting)]));
+        assert!(vcam_feeding(&[
+            rtmp("s", OutputState::Stopped, true),
+            camera(OutputState::Active)
+        ]));
     }
 
     /// Gives the mock engine an encoder profile, `hq`, and returns its ID.

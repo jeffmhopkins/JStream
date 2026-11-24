@@ -51,7 +51,7 @@ the new one over the block, so a mute set between two blocks fades in one block 
 ## Decision
 1. **New actions `source.mute { source_id, to }` and `bus.mute { bus_id, to }`**, `to`
    one of `muted`, `unmuted`, `toggle`, `push_to_talk` and `push_to_mute` (`MuteTo`).
-   Protocol 0.177. They are collection state exactly as `item.show` is
+   Protocol 0.187. They are collection state exactly as `item.show` is
    ([ADR-0101](0101-item-show-hide-actions.md) decisions 2 and 3): the engine applies
    the `source.set_audio` or `bus.set_fader` they stand for, `rev` moves on by one,
    `state.changed` follows and the collection saves it, and they are never an undo step,

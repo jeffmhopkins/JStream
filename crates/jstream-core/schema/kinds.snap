@@ -5225,7 +5225,7 @@ source: crates/jstream-core/src/kinds.rs
         ],
         "default": "countdown",
         "label": "Mode",
-        "description": "Count down from Duration, count up from zero, or show the time of day. Changing it restarts the count.",
+        "description": "Count down from Duration, count up from zero, or show the time of day. Changing it restarts the count, and a countdown or stopwatch starts again each time its scene goes on program.",
         "live": false
       },
       {

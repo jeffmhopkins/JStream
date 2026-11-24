@@ -132,6 +132,8 @@ fn an_amount_scales_a_binding_by_its_channel() {
     let control = connected(&engine);
     let binding = Edit::BindingSetValue {
         binding: ValueBinding {
+            enabled: true,
+            mode: jstream_protocol::MappingMode::Replace,
             binding_id: "master".into(),
             input: MotionKind::Midi {
                 control: MotionMidiControl::Cc,

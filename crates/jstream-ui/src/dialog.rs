@@ -236,6 +236,7 @@ pub fn Modal(
     children: Children,
 ) -> impl IntoView {
     let dialog = NodeRef::<html::Div>::new();
+    let control_menu = use_context::<crate::panels::learn::ControlMenuAt>();
     // The shell's map. A dialog drawn without it (none are) stays centred.
     let places = use_context::<DialogPlaces>();
     let offset = RwSignal::new(places.map(|p| p.get(label)).unwrap_or((0.0, 0.0)));
@@ -251,19 +252,31 @@ pub fn Modal(
             }
         }
     };
-    // Focus the dialog's first field, so Enter and Escape reach it at once, and pull a
-    // remembered place back on screen in case the window shrank.
+    // Focus the dialog's first field, so Enter and Escape reach it at once, unless
+    // something in it took the focus first (a click or a key on a row before the first
+    // frame keeps it, #1703), and pull a remembered place back on screen in case the
+    // window shrank.
     request_animation_frame(move || {
+        // A dialog closed before the next frame (a quick Cancel or Escape) is gone, and
+        // so is its state: reading it would panic (#1703).
+        if drag.is_disposed() {
+            return;
+        }
         if let Some(dialog) = dialog.get_untracked() {
             let first = dialog
                 .query_selector("input:not([type=radio]), select, textarea")
                 .ok()
                 .flatten()
                 .and_then(|e| e.dyn_into::<leptos::web_sys::HtmlElement>().ok());
-            let _ = match first {
-                Some(field) => field.focus(),
-                None => dialog.focus(),
-            };
+            let focused_inside = document()
+                .active_element()
+                .is_some_and(|active| dialog.contains(Some(&active)));
+            if !focused_inside {
+                let _ = match first {
+                    Some(field) => field.focus(),
+                    None => dialog.focus(),
+                };
+            }
             if drag.get_value().is_none() {
                 let rect = crate::ui_scale::rect(&dialog);
                 let (vw, vh) = viewport();
@@ -443,7 +456,14 @@ pub fn Modal(
                     end_drag(&event, true);
                 }
                 on:pointercancel=move |event: ev::PointerEvent| end_drag(&event, false)
-                on:contextmenu=|event: ev::MouseEvent| event.stop_propagation()
+                on:contextmenu=move |event: ev::MouseEvent| {
+                    // A setting's row hands the click to its control button (VC-03).
+                    if let Some(at) = control_menu {
+                        crate::panels::learn::row_context(at, &event);
+                    }
+                    event.stop_propagation();
+                    crate::chrome::swallow(&event);
+                }
             >
                 {children()}
             </div>

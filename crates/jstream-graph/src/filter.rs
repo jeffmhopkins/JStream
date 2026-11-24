@@ -233,6 +233,18 @@ fn restore(owner: &FilterOwner, chain: FilterChain, filter: &Filter, index: Opti
     }
 }
 
+impl State {
+    /// The filter `filter_id` in `owner`'s chains, found as `filter.set_settings` finds
+    /// it (a keyframe's own effects, else its item's), or `None` when either is missing.
+    /// The engine reads its kind to check a live value of its settings (ADR-0213).
+    pub fn filter(&self, owner: &FilterOwner, filter_id: &FilterId) -> Option<&Filter> {
+        chains(self, owner)
+            .ok()?
+            .find(filter_id)
+            .map(|(_, _, filter)| filter)
+    }
+}
+
 /// `owner`'s chains, or `not_found` for a source, output, scene or item that doesn't
 /// exist.
 /// The chains `owner` names, as `filter.set_settings` finds them: `not_found` for an

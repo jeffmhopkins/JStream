@@ -77,14 +77,21 @@ Contents ([Design](#design) explains the choices):
   opens and shows a dismissable notice only when a newer release exists. A failure is
   quiet there and reported by the menu. A page that isn't the desktop app says the
   check runs there. Nothing is downloaded. The comparison is tested natively.
-- **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
-  around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
-  the saved layouts (`Layout`, with Editing and Live built in). Every change goes
+- **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: the `Zone`s
+  around the canvas, four inner ones and each outer `Edge`'s bands, as many as are in
+  use, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
+  the saved layouts (`Layout`, with Editing, Live and Show built in; a stored dock
+  that predates one gains it). Every change goes
   through it (`place`, `close`, `toggle`, `click_tab`, `resize_zone`, `resize_between`,
-  `save_as_new`, `apply`, `reset`), and it reads and writes itself as JSON. Tested
+  `save_as_new`, which takes the first "My layout N" no saved layout has, `apply`,
+  `reset`), and it reads and writes itself as JSON. Tested
   natively.
 - **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas
-  (in studio mode, the canvas beside the studio controls and the program monitor),
+  (in studio mode, the canvas beside the studio controls and the program monitor, or
+  over them for a portrait canvas when that shows the pictures larger, `stacks`, tested
+  natively, decided again whenever the stage row changes size, which a
+  `ResizeObserver` follows; while a show runs in the Show panel's Run view, beside its
+  Next monitor),
   with the splitters, dividers, tabs and close buttons (and the mixer's meter flip in
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
@@ -109,8 +116,17 @@ Contents ([Design](#design) explains the choices):
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
   JTunnel senders" as a `JtunnelSetting` of `JtunnelSender`s, each with its "Use this
   sender's state" and "Use this sender's MIDI" (its JSON tested natively), and `desktop_ptz()`
-  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`. `set_desktop_zoom` asks the app to zoom its webview, through the global's `setZoom`,
+  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`,
+  and `desktop_ptz_cameras()` and `set_ptz_cameras`, which read and save its "Control
+  PTZ cameras" as a `PtzCameraSetting` of `PtzCameraEntry`s (ADR-0209).
+  `set_desktop_zoom` asks the app to zoom its webview, through the global's `setZoom`,
   for the UI scale.
+  `on_file_drop` hands any panel each step of a drag of files from the desktop over the
+  app's window as a `FileDrop` (`Over`, `Drop` or `Leave`, the paths, and the pointer
+  in CSS pixels; its JSON tested natively), read from the app's `jstream-desktop-drop`
+  event, and registers nothing outside the app; `FileDrop::lands_on` (with
+  `element_at`, `document.elementFromPoint`) says whether a drop is over a panel's own
+  element.
 - **UI scale** (`ui_scale.rs`): `UiScale`, the page's scale in percent (`STEPS`, 50 to
   150), which View › UI scale and Ctrl with `=`, `-` or `0` set (a chord the project
   binds as a hotkey is left to it), kept in the browser's storage per machine. In the
@@ -140,21 +156,25 @@ Contents ([Design](#design) explains the choices):
   count as its own, and `camera_of`, the camera a 3D scene is seen through, a
   keyframe's override or else its parent's), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
-  in either mode, and `followed_preview`, the scene the canvas moves to when the preview
-  scene changes in studio mode), the `Selection`,
+  in either mode, and `followed_scene`, the scene the canvas moves to when the preview
+  scene changes in studio mode, or the program scene outside it), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`, and a
-  3D model's depth, `SourceDepths`, from the same;
+  3D model's depth, `SourceDepths`, from the same; a media file's `duration_ms` isn't
+  kept, since nothing in the UI shows it yet;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
-  and the kind descriptors read so far, the last failed call, the toast's confirmation
+  and the kind descriptors read so far, the collection's shows (`Collection::shows`,
+  ADR-0210) and the running show as `studio.get` and `show.changed` report it, with when
+  it was heard (`Studio::show`), the last failed call, the toast's confirmation
   (`notify`, `notify_with` for one with buttons, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
   kind and reads `kind.list` again, as a `gpu.device_lost` or `gpu.effect_slow` that
   quarantined kinds does. `kinds.changed` (0.107), from a CLAP scan or the effect packs,
   perhaps another client's, and `events.dropped` read it again too. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
-- **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
-  while the page has the focus and no dialog or menu is open, and the chord of a key
+- **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs every action bound to a pressed
+  chord, in bind order (ADR-0208), while the page has the focus and no dialog or menu is
+  open, and the chord of a key
   press, its label and the edits that bind a chord to an action (a scene's
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
   `Collection::chords_for` lists a row's chords), tested natively. A wheel chord
@@ -179,12 +199,26 @@ Contents ([Design](#design) explains the choices):
   `false`), which the desktop app reads to register the bound chords with the OS
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
   registers reaches JStream as a hotkey even while the page has the focus, so the page
-  doesn't see that key press. A chord bound to an action with a release
+  doesn't see that key press. Each of a chord's actions that has a release
   (`Action::on_release`: push to talk, push to mute, a channel held on or off,
   [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)) is kept in `Held`
   while down: its key-up sends the release, and blur or `pagehide` sends every held
   release, tested natively.
-- **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
+- **Keys and MIDI triggers** (`bindings.rs`, `panels/triggers.rs`,
+  [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)): `bindings.rs`
+  is pure and tested natively. `When` is a key chord or a MIDI `Trigger` with its label
+  and the edits that bind or unbind an action on it; `rows` lists every chord and
+  trigger with the actions it runs, in order (`Collection::bindings` beside the
+  hotkeys), `filtered` finds rows by their words and `describe` names an action in
+  words. `Pick` is the action picker's list, each with the object it needs (`targets`)
+  and the actions it makes: Go live and Record toggle every stream or recording output.
+  `add_edits` skips actions a row runs already and `in_use` says what a chord runs.
+  `panels/triggers.rs` holds the components: `KeysAndMidi`, Settings › Keys & MIDI;
+  `TriggerList`, the rows with a chip per action; `ActionPicker`, which adds an action
+  to a `When`; and `MidiTriggerForm`, a typed trigger or one Learn fills from
+  `midi.last_controls`. Each is public so another panel can show the same list.
+- **Menus, dialogs and icons**: `chrome.rs` (the browser's own right-click menu and text
+  selection, kept to text fields and readable text), `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
@@ -215,16 +249,34 @@ Contents ([Design](#design) explains the choices):
   with the edits they send to a scene, a source, a hotkey or a timeline tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
   blending, scene switches and hotkeys in the tabs `Tab` lists, with the stored tab and the
   arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
-  sections whose folds `Folds` remembers by title), the
+  sections whose folds `Folds` remembers by title, and ahead of either the Show page
+  while the Show panel's selection names something in the open show), the
   properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
   `looks` table in `looks.rs`), the control button beside a live setting, a fader, a send,
   a mute or an item's visibility (the Inspector's hotkeys tab's Control row) (`learn.rs`, ADR-0178 and ADR-0183, whose control matching, learned binding and channel
-  binding are tested natively), the Channels panel (`channels.rs`: `Channels`, the channel
+  binding are tested natively), the Map control dialog and the Learn popover its menu
+  opens (`map_control.rs`, with a mapping's ends, the sources it compares and a key's
+  edits tested natively), mapping mode (`mapping_mode.rs`: `MappingMode` and
+  `MappingBar`, with a drag's amount, the ends it writes and its label tested natively),
+  the targets they write through (`map_target.rs`, with a target's mappings, edits and
+  offset labels tested natively, and `item_map.rs`, the Inspector fields' mapper),
+  what is arriving for them (`live_sources.rs`, outside `panels/`: `live_sources` and
+  `Listening`, with a sender's Mods, what moved and a message's fields tested natively),
+  the Channels panel (`channels.rs`: `Channels`, the channel
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
+  the Mappings panel (`mappings.rs`: `Mappings`, its Mappings, Sources and Triggers tabs over
+  `live_sources`, arming through the Shell's `MappingMode`, with a source's live value,
+  what moved and a Mod's reader tested natively, over `mapping_index.rs`, every
+  reader grouped by source with the edits that write one back, bypass it, name a Mod and
+  list and remove what starts and stops a sequence, tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
-  point order, the lane's drawn path and each trigger's sentence tested natively), its
-  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text,
+  point order, the lane's drawn path, each trigger's sentence, the loop button's steps and
+  range and a menu line's trigger toggle tested natively; `lane_offers.rs`: the settings
+  and switches Add lane offers and the switch lanes' bars, how one is added, dragged and
+  written back as points, tested natively), its
+  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text
+  (`action_text`, which the Show panel's cues use too),
   which cues it edits and how it finds one, tested natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
@@ -235,8 +287,12 @@ Contents ([Design](#design) explains the choices):
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
   natively, and its Follow pointer note and Camera motion in `camera_moves.rs`:
-  `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
-  modifier tested natively), the Filters
+  `CameraMoves`, with the followable items, the Follow pointer note, adding a camera
+  modifier and the MIDI, DAW data and Channel kinds it offers tested natively), the
+  fields that say which live data a reader reads (`data_read.rs`: `DataReads`, shared by
+  the channel card and Camera motion, with a JTunnel sender's Mod slots and their names
+  tested natively), the audio fields beside them (`audio_read.rs`: `AudioReads`, what an
+  `audio` input hears and follows, with its names and fields tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
   Properties dialogs' list and pane, and `FilterUndo`, what the Properties dialogs
   opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
@@ -290,6 +346,29 @@ Contents ([Design](#design) explains the choices):
   pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
+- **Show** (`panels/show/`, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)):
+  `Show`, the Show panel (`PanelId::Show`, in the bottom dock), and `ShowPanel`, its
+  state, which the shell provides so the Inspector reads what it selected. It edits and
+  runs the collection's shows: `model.rs` is what it draws (`ShowView`, its tracks,
+  clips, bookmarks and loops, and `RunView`, where the runner is), `wire.rs` reads a
+  `ShowInfo` and the running show into them and turns each `Command` into its action,
+  `time.rs` is show time on screen (the clock's text, the ruler's ticks and the
+  `Viewport`), `edit.rs` the Edit view (the timeline, its tools and menus, with
+  `edit/geom.rs` for where things are drawn, `edit/gesture.rs` for what a drag does,
+  `edit/zoom.rs` for the zoom bar and `edit/drops.rs` for scenes and files dropped on
+  the tracks), `run.rs` the Run view, `edits.rs` each tool's change to a show,
+  `drop.rs` what a dropped media file becomes, `prompter.rs` the Run view's notes as a
+  teleprompter (its size, rate and where the text has rolled to, kept by the browser),
+  `inspector.rs` the Inspector's Show page
+  and `inspect_edits.rs` its fields' changes; `NextPane` and `next_monitor_shown` are
+  the Next monitor beside the canvas. `ShowPanel::carry_source` lets the Sources panel and
+  a mixer strip carry a source's audio onto the tracks. Every one of those but the components is a pure
+  function tested natively, `drop.rs` against `MockEngine` too. It sends `show.set`
+  (every edit, as one undo step) and `show.delete`, in a batch with `source.create`,
+  `scene.create` and the folder and item edits a media drop needs, and the actions
+  `show.play`, `show.pause`, `show.stop`, `show.continue`, `show.back`,
+  `show.go_to`, `show.seek` and `show.arm`; it reads the shows from `state.get` and the running
+  show from `studio.get`'s `show`, kept current by `show.changed`.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
   Settings…, Video settings… and Plugins… open, with its pages (`SettingsPage`: General,
   Video, 3D rendering, Audio, Plugins, Devices)
@@ -316,11 +395,13 @@ Contents ([Design](#design) explains the choices):
   line and an (i), then a Probe resolution select (Up to 128, 256 or 512 px,
   `max_probe_resolution`, sent with `probe_cap`) and a Reflection quality select (Low,
   Medium or High: 16, 32 or 64 steps, `screen_space_steps`, sent with
-  `reflection_steps`). It reads the switches with
+  `reflection_steps`) and a 3D model resolution select (Automatic, Full, 85%, 75%, 67%
+  or 50%, `model_resolution`, sent with `model_resolution`,
+  [ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an
   engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
-  `read`, `set`, each `Switch`'s change, the probe cap and the reflection steps are
+  `read`, `set`, each `Switch`'s change, the probe cap, the reflection steps and the model resolution are
   tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Audio plugins section of
   the Settings dialog's Audio page: the CLAP scan's folders, the effects found and the files that failed
@@ -339,6 +420,23 @@ Contents ([Design](#design) explains the choices):
   (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
   check, and `accepts`, whether a heard sender is on the list, tested natively. The
   store's `jtunnel_changed` counts `jtunnel.senders_changed`.
+- **PTZ cameras** (`ptz_cameras.rs`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)
+  decision 1): `PtzCameraSettingView`, the desktop app's "Control PTZ cameras" switch and
+  camera list on the Devices page, with Edit filling the form for Save camera, saved
+  through `host::set_ptz_cameras` and applied by the app at once; `current`, the setting
+  last saved in this window or else the app's at start; and `with_camera`, the form's
+  check, tested natively.
+- **PTZ panel** (`panels/ptz.rs`, ADR-0146, ADR-0209): `Ptz`, the "PTZ cameras" dock panel
+  (`PanelId::Ptz`, on the right from the View menu). It reads `ptz.list` every 500 ms while
+  shown and controls the picked camera: a pad of arrows that drive while held
+  (`ptz.drive`, stopped on release, on leaving, on the focus leaving the pad or the window, and on cleanup, to the camera driven), Home, Wide and Tele, focus
+  modes with Near and Far, one Speed (`drive_speeds`, `zoom_speed`), the pose as number
+  fields that aim (`aim_pose`) each with `learn::Learn` on a `ValueTarget::PtzAxis`
+  (`mapping_range`), presets 1 to 16 and a field with Save arming a store, a preset menu
+  (recall, save, name, key, scene shot), names kept in the UI settings under
+  `ptz.preset_names` (`preset_name`, `with_preset_name`), and the selected scene's shot
+  (`shots_with`, `shot_label`, `scene.set_ptz_shots`). The pure helpers are tested
+  natively.
 - **PTZ controllers** (`ptz_controllers.rs`): `PtzControllerSettingView`, the desktop
   app's "Accept a PTZ controller" switch, endpoints and allowed controllers on the
   Devices page, and `with_endpoint`, `with_allowed` and `target_label`, the add rows'
@@ -363,8 +461,9 @@ Contents ([Design](#design) explains the choices):
   and remove dialog against a fake engine that notes each list, or fails one.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
-  redoes ([Canvas](#canvas)); `ProgramMonitor` (`monitor.rs`), the live program beside
-  it in studio mode.
+  redoes ([Canvas](#canvas)); `Monitor` (`monitor.rs`), a monitor of the program mix
+  or any scene, moving or one still picture: `ProgramMonitor`, the live program beside
+  it in studio mode, and the Show panel's Next monitor.
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)), and `fonts/` holds the bundled IBM Plex files with their licence,
@@ -391,7 +490,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
   `network`, `networkOpen`, `wheelFocusOnly`, `browse`, `allowNetwork`, `jtunnel`,
-  `setJtunnel`, `ptz` and `setPtz`) before the page loads,
+  `setJtunnel`, `ptz`, `setPtz`, `ptzCameras` and `setPtzCameras`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -425,7 +524,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the items selected in it: a primary item (shown in the Inspector) and any
   others the canvas selected with it. A new session reads the program scene
   before the state, so it starts on the scene on program, or in studio mode on the
-  preview scene, which it then follows (`followed_preview`). It is fixed up after every
+  preview scene, which it then follows (`followed_scene`). Outside studio mode the
+  canvas stands for program, so it follows every new program scene, whatever switched
+  it (a click, a hotkey, a trigger, a sequence or another client), and turning studio mode
+  off shows the program scene. It is fixed up after every
   change: a
   deleted scene falls back to the program scene, then the first listed scene, and an
   item that left the scene is dropped, the next selected one becoming primary. The
@@ -540,7 +642,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   confirmation when anything refers to it. A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection, in groups
   (open it; its state; the clipboard; its arrangement; other views; removal): Properties
-  (the Properties dialog), for one item a Labels submenu (each label checked while the
+  (the Properties dialog), for one browser or media item Reload page or Play from start
+  (`source.restart`, `item_menu::restart_label`, which the Properties dialog's button
+  shares), for one item a Labels submenu (each label checked while the
   source carries it, with its colour as the swatch, then Edit labels…), the Audio check
   (`source.set_audio`), the Visible check (`item.set_visible`), Copy and Paste, an Order
   submenu of the layer order (`item.reorder`s that keep the selected items' order), a Transform submenu of Center,
@@ -586,7 +690,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   backdrop cancel, and Enter presses the button marked `data-primary`. Escape reaches the
   topmost dialog wherever the focus is: a capture-phase window listener takes one pressed
   outside it (before its first field has the focus, or on a dialog under it) unless a
-  menu is open, and cancels it under the dialog's reactive owner (#1607, #1652). A primary press
+  menu is open, and cancels it under the dialog's reactive owner (#1607, #1652). On its
+  first frame the dialog focuses its first field, unless the focus is already inside it
+  (a click or key on a row before that frame keeps it), and does nothing if it closed
+  before that frame (#1703). A primary press
   on that dialog's own header drags it, as a `translate` from the centred place, clamped
   so the box stays inside the window (a box wider than the window keeps covering it; the
   top never goes above the window). The offset is remembered for the dialog's label in
@@ -620,6 +727,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   call's does. While it lists any kinds, a Shader type under Generated writes a custom
   shader source first and opens its Properties with the shader editor (ADR-0135, under
   Filters below), and each custom shader source's kind is listed after it.
+- **The browser's own menu and selection** (`chrome.rs`, [CM-09](../../docs/UI-FEATURES.md#menus)).
+  A window listener swallows every right-click no menu answered, so the browser's
+  generic menu never opens over the app, and an element that keeps a right-click from
+  the menu behind it (a dialog, a panel's tool bar) swallows it with `chrome::swallow`.
+  Text keeps the browser's menu and its selection: `chrome::TEXT` lists text fields,
+  code, links, errors (toasts and settings errors too), the connection details, About's
+  facts and the agent's activity log, the style sheet
+  turns `user-select` off elsewhere, and `Menus::open` leaves a right-click in a text
+  field to the browser. A `selectstart` outside text is cancelled, and a press on the
+  chrome clears a stray selection, captured so a drag that stops its press still does.
 - **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
   A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
   and on a nested scene's item), any other single object's (Source in a window or full
@@ -710,12 +827,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   one yet). One that drives a setting of its item's source (ADR-0171) shows "Source
   setting" the same way. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
-  `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
-  and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
+  `scene.switch`, an × that unbinds the switch from one chord, leaving its other actions, and Set key, which binds the next chord pressed,
+  adding the switch beside any other action the chord runs and unbinding only another scene's switch, `bind_edits`, ADR-0208), and its Transition in and out (`scene.set_transitions`, with the
   presets from the shared collection). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
-  shows in them once it is dropped.
+  shows in them once it is dropped. A drag on a box, 3D or crop field shows on output
+  as it goes, through `live.set`, and is one undo step (#1734); so does a drag on the
+  opacity's field or slider (`EditDrag`, ADR-0213, #1739).
 - **Number fields** (`NumberField`, spec-panels.md G10) show the number with its unit
   in one box, with no − and + steppers but on the mixer's gain fields; an inline field's
   short caption (X, W, L) sits inside the box before the number, and a drag on it
@@ -725,7 +844,27 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   unfocused field steps once per 3 px (Shift a tenth, Ctrl four times, per move so a
   modifier never makes the value jump) and is sent once on release, so it is one edit
   and one undo step; a drag whose release the field never saw ends unsent at the next
-  move with no button held. Values are kept to the field's range and rounded, and
+  move with no button held. A field given `live` also hands the dragged value on at
+  most once per animation frame while the drag goes (#1734), then says how it ended
+  (released, or lost with its start to put back): the Inspector's box, 3D and crop
+  fields send those values as a gesture's `live.set` and the release's batch ends the
+  gesture (ADR-0032), so the output follows the drag and the drag is one undo step; a
+  dialog's field puts them in its draft, which in the Properties dialog shows each live
+  setting as before (ADR-0091). A filter's form (the Filters panel's rows and window),
+  the Inspector's opacity and the mixer's gain fields, faders and sends hand theirs to
+  an `EditDrag` (`panels/gesture.rs`, ADR-0213, #1739): it opens a gesture with the
+  first value, sends each one as the gesture's `live.set`, one call in flight and the
+  newest values next (after a refused `live.set` it sends no more for that drag, so the
+  refusal shows once), commits the release's edit in one batch with `ends_gesture`, and
+  cancels the gesture when the drag is lost or released where it started; a filter
+  parameter its kind doesn't mark `live` is sent on release only. A field whose setting
+  is absent or `null` starts from its default, else 0 kept to its range
+  (`number_or_default`), so it stays enabled. Every numeric input is this field: a kind
+  descriptor's whole and decimal numbers (`number_spec`: the step, places and range),
+  the encoder and video mix forms, the scene camera, Video settings' size, a
+  transition preset's settings, looks, sends, webcam controls. A value the engine takes
+  no live value for (a transition preset's setting, a channel's or a motion's numbers) is
+  sent on release only. Values are kept to the field's range and rounded, and
   negatives are written with `−`. A value its panel doesn't send, because the edit
   would change nothing, puts the committed value back in the field.
 - **The Arrange panel** ([UI features › transform](../../docs/UI-FEATURES.md#transform))
@@ -809,32 +948,78 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   target over the `SWITCH` range, on at half way, ADR-0207), and one after the dB
   field of each send that exists; the Inspector's item Hotkeys fold has a Control row
   with one for the item's visibility (`item_visible`). A
-  click opens the control menu; its Learn MIDI control reads `midi.last_controls` for a baseline, then every 150 ms for up to 15 s, and
-  binds the first input whose count of control changes grew with `binding.set_value`,
-  over the setting's whole range (a fader's over -60 to +6 dB), 50 ms smoothed, as
-  `learn_<hash of the target>`, so learning again replaces it. A bound button shows its
-  control (`CC 7`), and the menu's Remove control unbinds it; a learning one says "Move…" and stops on a
-  click, or once its form closes (its signals are read with `try_`, so a closed form ends
-  the loop). An engine that reads no MIDI controls says so in the problem bar.
-  Since ADR-0183 the button is the control button: a click opens one menu (for a learned
-  MIDI control, a Smoothing field first, which sends the binding again with its
-  `smoothing_ms`; then Learn MIDI
-  control, Make channel or Open channel, Follow channel…, Add to sequence ›, Set key…,
-  Remove control). Make channel
-  makes a channel named after the setting (`label`), in the selected scene, whose
-  `default` is where the setting is in its range (`current`, `fraction`), binds the
-  setting to it over the range (`follows`, the same `learn_` ID) in one batch, and opens
-  it in the Channels panel. Follow channel… opens `ChannelSearch`. Add to sequence › lists
-  the selected scene's sequences (the open one first) and New sequence: it makes the
-  channel if the setting follows none, adds its lane holding where the setting is
-  (`sequence::with_lane`), all in one batch, and opens the sequence. Set key… takes the
-  next key pressed (`KeyCapture`, a focused button whose keys never reach the hotkeys;
-  Escape or leaving it cancels) and binds it to `channel.switch` `toggle` on the channel,
-  made if need be, in the same batch. A sequence that already has the lane gets no
-  `timeline.set`; it only opens. A setting that follows a channel shows the
+  click on it, or a right-click on the setting's row, opens the control menu. The Shell and
+  every `Modal` hand a right-click to the row's own button (`row_context`: the nearest
+  ancestor with exactly one `button.learn` child, found by its `data-learn`, through
+  `ControlMenuAt`); a free-text field keeps the browser's menu (`keeps_own_menu`).
+  The menu: for a learned MIDI control or Mod, a Smoothing field first, which sends the
+  binding again with its `smoothing_ms`; Map control…, which opens the dialog below;
+  Learn, which opens `LearnPopover` in place; for a mapped setting "Mapped to" with what
+  drives it, Edit mapping…, Open channel when it follows one, and Remove mapping; and Add
+  to sequence ›, which lists the selected scene's sequences (the open one first) and New
+  sequence: it makes the channel if the setting follows none, adds its lane holding where
+  the setting is (`sequence::with_lane`), all in one batch, and opens the sequence. A
+  sequence that already has the lane gets no `timeline.set`; it only opens. A mapping is
+  one `binding.set_value` over the setting's whole range (a fader's over -60 to +6 dB),
+  50 ms smoothed, as `learn_<hash of the target>`, so mapping again replaces it. A bound
+  button shows its control (`CC 7`, `Mod 20`), and one that follows a channel shows the
   channel's name as a chip. Enter or Space opens the menu under the button (a click with
   no pointer, `detail` 0) with its first item focused; Escape or Tab closes it and gives
   the focus back to the button.
+- **What is arriving** (`live_sources.rs`, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
+  `live_sources()` reads `data.list`, each sender's `params` message (`data.get`) and
+  `midi.last_controls` every 150 ms for as long as its component lives, into
+  `LiveSources` (`loaded` once the first read is in). A sender's Mods are `params`'s
+  `values`, 32 of them kept within 0 to 1, with `names`. `Listening` is Learn: its first
+  two reads note what moves by itself, and after them `hear` answers what has moved
+  since, farthest first, without those. A MIDI input has moved when its count of control
+  changes grew; a Mod when it went at least 0.02. `fields_of` lists a message's leaves
+  for picking a field, texts cut to 40 characters with control characters removed.
+- **Map control** (`panels/map_control.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+  `MapControlHost`, mounted once in the Shell, shows the dialog for the
+  `MapControlRequest` in `MapControlDialog` (the setting's `ValueTarget`, range, label
+  and value). Tabs pick the source: Hotkey, JTunnel (each sender's Mod grid), MIDI (each
+  input's latest control, or one named by hand), Channel (`ChannelSearch`) and Other data
+  (a sender's keys, then a key's fields). The lists' structure is memoized apart from
+  their live values, so a row doesn't redraw under the pointer. `picked` gives a new
+  source the From, To, Smoothing and Curve already set. Nothing is sent until Use: one
+  `binding.set_value`, or for a hotkey `key_edits` in one batch (a channel whose default
+  is 1 with the Fade as its rise and fall, the binding following it from Off to On, and
+  the key bound to `channel.switch` `toggle`; a key that already switches a channel just
+  gets the setting following that channel). `LearnPopover` takes the one source heard
+  after a 900 ms pause with nothing new, or lists several to pick from.
+- **Mapping mode** (`panels/mapping_mode.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+  `MappingMode`, provided by the Shell, holds the armed source (`armed`, a reader and its
+  name; `arm` and `disarm`) and the drag under way (`drag`: the setting's `data-learn`,
+  the amount as a share of its range, and `done`). Anything that lists sources arms one
+  with `arm`. `MappingBar`, mounted once under the header, shows the armed source and,
+  while one is armed, listens on the document's capture phase: a press on a setting's row
+  (`setting_at`, the lookup a right-click uses) starts a drag and never reaches the
+  control, `dragged` turns pointer travel into the amount (200 px the whole range, a
+  tenth as fast with Shift), letting go after less than 3 px is a click that maps
+  nothing, the click that follows a press is swallowed, Escape cancels the drag or
+  disarms, and `[` and `]` step the armed Mod (`stepped_in`: a Mod named in the Mappings panel is armed as its channel, and stepping goes on from it). The body carries
+  `mapping-mode` for the styles. The setting's control button (`learn.rs`) watches
+  `drag` for its own ID: it shows `amount_label` of `ends_after` while the drag runs, and
+  on `done` writes one `binding.set_value` reading the armed source from where the
+  setting is to the dragged amount, kept in range; a setting the source maps already
+  keeps its start, smoothing, curve and amount channel.
+- **Mapping targets** (`panels/map_target.rs`, `panels/item_map.rs`). `MapTarget` is what
+  the Map control dialog and mapping mode write through: `Value`, a setting one value
+  binding takes over (`learn_<hash>`), or `Item`, a placement property of an item as a
+  scene shows it, which reader motion modifiers add to. `mappings` lists what drives it,
+  `set` writes a mapping (a setting's binding is replaced; a property's modifier from the
+  same source is changed, else one is added as `map_<n>` after the item's others, in one
+  `item.set_motion`) and `clear` removes one. `ItemUnit` gives a property's offset its
+  unit, label and drag span (1000 px, 360°, or 100 % for the properties the engine
+  multiplies by one plus the value), and `offset_after` the ends a drag leaves. A
+  `NumberField` takes a `MapMark` (`map`): its root carries `data-map`, which
+  `setting_at` reads before it looks for a row's control button, and its box shows the
+  mark's amount as a tag (`data-map-amount`). `ItemMapper`, made once by the Inspector's
+  Transform tab, hands each field its mark, takes the right-click (`ControlMenuAt`) and
+  the mapping-mode drag that name one of its fields (`property_of`), and draws the
+  field's menu. The dialog's request carries a `MapTarget`, the ends a new source gets
+  (`range`) and how far either end may go (`limits`).
 - **Channels** (`panels/channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
   The Channels panel (`PanelId::Channels`, beside the Inspector by default from the View
   menu) shows a search over the collection's `channels` (from `state.get`, kept in
@@ -842,31 +1027,89 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`Studio::channel`): its name, switch (`channel.switch`), a meter that also sets the value
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
-  0 to 1; "+ Channel" adds a `channel` input; each input that reads something shows its
+  0 to 1; "+ Channel" adds a `channel` input; "+ Data" opens `DataReads` on a `data`
+  input of the first Mod no channel reads yet (`next_mod`), and "+ Audio" `AudioReads` on
+  an `audio` input of the program mix's level (ADR-0206), each added on Add input; each input that reads something shows its
   `smoothing_ms`, set with `learn::set_smoothing`), its shaping, the value bindings that follow
   it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one
   `channel.set` of the whole channel. `live_values` reads `channel.values` every 100 ms
   while a panel that shows values lives.
+- **Mappings** (`panels/mappings.rs` over `mapping_index.rs`). The Mappings panel
+  (`PanelId::Mappings`, in the bottom dock from the View menu) shows everything that is
+  mapped. `mapping_index::readers` lists every reader of a source wherever it is held
+  (a channel's `inputs`, a value binding, an item's `motion` as each scene shows it, a
+  keyframe's only where it differs from its parent's, and a camera's `camera_motion`),
+  and `rows` groups them by what drives them: each channel with what sets it (its inputs,
+  the keys and `bindings` whose action switches, sets or nudges it, the sequences with a
+  lane on it) and everything that follows it or that it scales (`amount`), then each MIDI
+  control or data field read directly, all of its readers under it. A channel whose only
+  input is one Mod (`named_mod`) is that Mod's name and is shown once, as "Camera roll
+  (Mod 20)". The **Mappings** tab draws them as a table: the source, its live value
+  (`channel.values`, or `live_sources` for a named Mod and a direct source), and per target its Amount (one-sided "+15°", centred
+  "±20°", or "0 → 6.5" for a value binding, which replaces the value), Mode, Smoothing (at
+  least `MIN_CHANNEL_SMOOTHING_MS` through a channel), Curve and Bypass (a motion row's
+  `enabled`), each edited in place as one edit of the list that holds it
+  (`write_all`, so two readers in one list change together), and ×. A search, "On
+  program now" (the program scene), the kind of source and "Find by moving a control"
+  (the first control or Mod that moves, `live_sources::moved`) narrow it; "+ Target…" arms the
+  group's source. The **Sources** tab shows each sender's 32 Mods four by eight: a name
+  box (`name_mods_edits`: a new channel with the Mod as its only input at 0 ms, the
+  mappings that read the Mod directly moved onto it, one batch; a rename of the channel
+  that names it; at most 40 bytes, shown while typing; Enter goes to the next, Escape
+  restores, several pasted lines fill the Mods after it), what it drives and its live
+  bar; the rest of a cell arms it in the Shell's `MappingMode` (`mapping_mode.rs`), whose
+  bar shows it, takes the drags, steps the armed Mod with `[` and `]` and disarms on
+  Escape; a named Mod is armed as its channel). Beside the grid, the armed source's targets, then the other sources (MIDI
+  controls seen, channels, keys that switch one), which arm the same way. The **Triggers**
+  tab is `triggers::KeysAndMidi` (every key and MIDI trigger with each action it runs),
+  then each sequence's starts and stops (`mapping_index::sequence_triggers`), with Edit,
+  which opens the Sequence panel on it, and Remove (`remove_sequence_trigger`, only the
+  trigger the row was drawn from). The panel reads
+  what is arriving through `live_sources()` (below) while it lives.
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).
   The Sequence panel (`PanelId::Sequence`, in the bottom dock from the View menu) edits a
   timeline with lanes of the selected scene (a keyframe's parent): the one in
-  `Studio::sequence`, else the scene's first. Its bar picks one or makes `seq_N`, plays or
-  stops it (`timeline.play`, `timeline.stop`), loops it, sets its length and adds a lane
-  by `ChannelSearch`; its trigger bar shows `starts` and `stops` as sentences
-  (`trigger_text`) and "+ Trigger" opens an editor for each kind. Each lane is an SVG path
+  `Studio::sequence`, else the scene's first. Its bar, which stays at the top while the
+  lanes scroll, picks one or makes `seq_N`, renames or deletes it from its ⋯ menu (the
+  picker turning into the name's field), plays or stops it (`timeline.play`,
+  `timeline.stop`, which `Studio::act` shows at once, `store::optimistic_timeline`, so a
+  second click stops what the first started), loops it (`next_loop`: off, the whole
+  sequence, then a range, `TimelineLoop::Range`, whose ends `fit_range` keeps within the
+  length and shaded on the ruler), sets its length and adds a lane by `AddLaneSearch`: the
+  channels, then the scene's settings and switches (`lane_offers::offers`, from the
+  sources' and filters' kind descriptors it reads as it opens), a setting picked making a
+  channel it follows (`learn::follows`) unless it follows one already, in the same batch
+  as the lane; its trigger bar shows `starts` and `stops` as sentences
+  (`trigger_text`) and each group's "+ Trigger" opens an editor beside it for each kind,
+  which never offers a channel the sequence's own lanes drive (the engine refuses one).
+  Every edit is built on the sequence as the panel's edits still on their way leave it
+  (`Pending`): the panel draws that draft at once and drops it once every edit is
+  answered and the collection has caught up, or at once when one is refused. Built on
+  the collection's copy instead, a second click before the engine answered sent that
+  copy back and undid the first. Each lane is an SVG path
   in a `0 0 1000 100` box stretched over the lane (`lane_path`, dashed from the channel's
   value when the first point is after 0) with its points as HTML dots placed with `style:`
   properties. A double-click adds a point, a drag moves one, kept between its neighbours,
-  and a right-click sets its curve or deletes it; each gesture sends one `timeline.set`,
-  and one that changes nothing sends none. A point takes the focus: Enter, Space, the Menu
-  key or Shift+F10 open its menu beside it, and Delete removes it.
+  and a click that doesn't move (a few pixels' slop) or a right-click opens its menu: its
+  curve, its time and value typed, or delete. A switch lane (`lane_offers::is_switch`:
+  every point `hold` at 0 or 1) is its bars instead, drawn as HTML bars with no dots: off
+  from 0 to the first bar whatever the channel was (`switch_bars` from off), and written
+  back as points from the bars (`bar_points`), so an edit never turns it into a curve. A
+  double-click in a gap adds a one-second bar cut short before the next (`insert_bar`), a
+  drag on a bar moves it and a drag on one of its ends moves that end, each kept 0.1 s
+  from its neighbours so two never join (`drag_bar`), and a click or a right-click opens
+  its menu (on at, off at, Delete bar; no curves). The dragged dot or bar only restyles,
+  so it keeps the pointer. Each gesture sends one `timeline.set`, and one that changes
+  nothing sends none. The menus open beside the click, kept inside the window
+  (`events::place`). A point or a bar takes the focus: Enter, Space, the Menu key or
+  Shift+F10 open its menu beside it, and Delete removes it.
   The play head runs from `Studio::playing`, kept from `studio.get`'s `timelines` and each
   `timeline.changed`, and a click on the ruler sends `timeline.seek`. Above the lanes, the
   Events lane (`panels/events.rs`) draws the timeline's `cues` as chips on the same
   ruler: a double-click opens an editor there (what happens, which item, keyframe, scene,
-  channel, sequence or source, from `objects`), a click on a chip edits it, a drag moves
-  it with the pointer captured, and the editor deletes it; each is one `timeline.set`,
+  channel, sequence or source, from `objects`), a click or a right-click on a chip edits
+  it, a drag moves it with the pointer captured and the grabbed spot kept under it, and the editor deletes it; each is one `timeline.set`,
   with the cues kept in time order. The editor edits a cue only when it can build the
   same action again (`editable`), and keeps an object that is gone as "(missing)"; each
   edit finds its cue by time and action (`position`), and one another client changed
@@ -876,7 +1119,68 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its keyframes (`Row::Sequence`, the teal sequence icon): a click opens one in the
   Sequence panel (`sequence::open_sequence`), its hover button plays or stops it, it shows
   its elapsed time while it plays and the keys bound to play it, and its menu plays or
-  stops, renames (F2), sets or removes a key and deletes it (Del).
+  stops, renames (F2), sets or removes a key and deletes it (Del). A scene's and a
+  keyframe's menus have Play a sequence › (`sequence::trigger_submenu`, with
+  `scenes::scene_watches` and `keyframe_watches`), which adds or removes a `scene` or
+  `keyframe` trigger in any sequence's `starts` (`toggle_start`, matching one with a wait
+  by `same_watch`) or makes a new sequence it starts.
+- **Shows** (`panels/show/`, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md),
+  [UI features › show](../../docs/UI-FEATURES.md#show)). The Show panel draws one
+  view-model, `ShowView` (`wire::view_of` of a `ShowInfo` and the collection, which names
+  each clip's scene, source, sequence or keyframe, or "(missing)", and lays program's
+  clips end to end from their lengths), and `RunView` (`wire::run_of` of `Studio::show`);
+  the Edit view, the Run view, the zoom bar and the Next monitor are functions of those
+  two, so what each says is tested natively. The play head runs on between reports from
+  the position and the time it was heard, ticked about 30 times a second while the panel
+  is open. `ShowPanel` lives with the shell rather than the panel, so the Inspector's
+  Show page reads its selection and closing the panel keeps its view; its lock is the
+  panel's own, never saved. **Every edit is one `show.set` of the whole show**, so one
+  undo step: each tool's gesture is a pure function from the show to the show
+  (`edits.rs`, and `inspect_edits.rs` for the Inspector's fields), and `ShowPanel::commit`
+  sends nothing when the result equals the show the engine has, and nothing when
+  `ShowInfo::problem` (the engine's own check) would refuse it, saying why in the problem
+  bar. Program clips carry lengths, not starts, so a trim or a removal ripples by itself;
+  `shift_from` moves what sits on other tracks from the old end on, and on a shortening
+  takes the cut-out time out of them too (what lay in it is dropped, clamped or cut), so
+  the result is one `problem` accepts. A drag is a `Grab` taken on the press and
+  `gesture::dragged`, the show as it would be if the pointer came up there, snapped by a
+  `Snapper` (clip edges, bookmarks, loop edges and the running play head within about
+  6 px, else 0.1 s, Shift free): the view draws that show in place of the engine's
+  (`ShowPanel::preview`) and sends it once on release, and Escape drops it. The preview
+  stays until the engine's answer brings the new show in, or 1.5 s pass. A refused drag
+  says why in its tip and sends nothing. A scene dragged from the Scenes panel, or a
+  source's audio dragged from a Sources row or a mixer strip's name, reaches the panel
+  as a `Carry` the other panel sets as the pointer moves (a pointer drag, as the rows'
+  own reorder is), and the Edit view finds the track under it with
+  `host::element_at`; a source's audio goes on the A track it is let go on, or a new
+  one (`edits::place_source_audio`). A track head drags to reorder its kind's rows
+  (`edits::move_track`, refused across kinds by `geom::reorder_refusal`), and its menu
+  renames and deletes overlay and audio tracks. A scene clip's own audio is never
+  stored ([ADR-0216](../../docs/adr/0216-a-scene-clips-audio-is-drawn-linked-under-it.md)):
+  `wire::heard_in` finds the sources a scene is heard through when shown, and
+  `view_of` draws a read-only `TrackKind::Linked` row per video track whose clips keep
+  their scene clips' IDs, so a press on one grabs the scene clip. The play head is the
+  runner's while the open show is the running one, else the panel's `cursor` (where Play
+  starts, [ADR-0215](../../docs/adr/0215-the-edit-views-ruler-moves-the-play-head.md)):
+  `ShowPanel::move_head` seeks a running show or moves the cursor, and Play then seeks
+  to it. The Run view's notes are the note of the bookmark the show is at (`run::notes`),
+  split into lines to say and `*directions*` (`run::paragraphs`), and the run of show
+  marks each bookmark done, NOW or NEXT. Files arrive as a browser drop's `text/uri-list`
+  (`drop::dropped_paths`) or as the desktop app's `host::on_file_drop`; **one batch per
+  drop** makes each file's "Show media" folder, media source, scene and item
+  (`drop::plan_drop`, reusing a file's scene or source when it is there already) and
+  ends with the `show.set`, so a drop is one undo step too. A dropped video or audio
+  file's length (`edit::drops::media_length_ms`) is unknown until the engine reports
+  media durations, so it takes the show's image length for now. Run buttons send one
+  action each (`ShowPanel::send`, `wire::action_of`); Lock, the Next monitor and "+
+  Overlay track" are the panel's own state or a `show.set`. The Next monitor
+  (`NextPane`) is the canvas's `Monitor` of the scene `run::next_picture` names, as a
+  still picture (a one-frame stream closed once it is drawn, opened again when Next
+  changes) or a moving one, shown beside the canvas only while the open show runs in
+  the Run view outside studio mode (`next_monitor_shown`). Times on screen are
+  `Viewport` maths (`time.rs`) and positions `geom.rs`'s, placed with `style:`
+  properties, which the page's CSP allows. Its colours are `style.css`'s `--show-*`
+  tokens.
 - **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
   its filters (#1219, `filters::PropertiesAndFilters`): the source's picture on top
   (`device_preview::SourcePreview`: the draft of a capture kind, else the saved source
@@ -1130,13 +1434,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)). They show with
   `font-display: swap`, so the system font stands in until they load.
 - **The workspace** follows the prototype's dock
-  ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
+  ([UI features › docking](../../docs/UI-FEATURES.md#docking)): zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
-  the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
+  the canvas. Each outer edge holds bands (`dock::Edge`, `Zone::Bottom(n)` and so on, 0
+  nearest the canvas) as many as are in use: `EdgeView` draws them outwards and, while
+  a panel is dragged, one more past the last, laid over the edge (`.new-band`), whose
+  drop `Arrangement::state_mut` makes the next band; `Arrangement::tidy` removes an
+  emptied band after every change and moves the outer ones in. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
   Sources (`Sources`), the Inspector (`Inspector`), Arrange (the prototype's
   Transform), Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
-  Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
+  Transitions (`StudioMode`), and beyond it Channels, Sequence and Show; `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
   so it is an empty state that says what it waits on, and is in no built-in layout. Stream stats
   (`panels/stats.rs`) shows one output's live stats from `stats.tick`'s `outputs`
@@ -1202,7 +1510,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   becomes "Stop recording", which stops them; with no recording output it is disabled.
   The stats readout reads "60 fps · 0 dropped · CPU 3%" from `stats.tick`. The dropped
   count is captured, rendered and encoded frames dropped in the intervals that began with
-  an output running (the tick's `outputs` not empty), counted from when outputs began
+  an output running (the tick's `outputs` not empty, or an active virtual camera
+  output, which `stats.tick` doesn't list: `vcam_feeding`, #1698), counted from when outputs began
   running after none did, and shown only while one runs: what drops while only previews
   use the pipeline is no stream's loss (#1690). A tick of an engine restart counts
   nothing. The frame rate and CPU (`Load`) come from
@@ -1235,7 +1544,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   back to an older state. Since
   #1206 the dock is a compact list: the header has the health (a dot and a word, the
   detail on hover; it sums `stats.tick`'s drop totals over the last five ticks,
-  counting an interval only when it began with an output running and reading "Idle"
+  counting an interval only when it began with an output running (an active virtual
+  camera included, #1698) and reading "Idle"
   while none runs, so a preview's drops never show as a stream's (#1690), and a `seq`
   that doesn't increase or a total that shrinks, an engine restart, starts it over), Start all and, while any output runs, Stop all (`all_outputs`: every stopped
   output that can start, of any kind, and every running one). The program output's row ("master") comes
@@ -1340,7 +1650,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   address and what accepting lets it do (ADR-0123 §3: the first use is explicit), and
   only Accept in that prompt adds it, through the same save. With the receiver off it
   says senders show while receiving is on.
-  Below it, "Accept a PTZ controller"
+  Below it, "Control PTZ cameras" (`ptz_cameras.rs`,
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1), shown
+  only when the global has `ptzCameras` and `setPtzCameras`: the switch, the cameras
+  (name, address and port, transport and VISCA address, each with Edit and Remove) and
+  a form that adds one or, after Edit, saves it. Each change saves the whole setting
+  through `setPtzCameras`; a refused change is undone and the app's reason shown, and
+  the app applies a saved one at once, so there is no restart note. The PTZ panel's
+  gear and empty state open this page and scroll to it.
+  Then "Accept a PTZ controller"
   ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
   §3), shown only when the global has `ptz` and `setPtz`: the switch, the endpoints
   (address and port, transport, VISCA address and what each drives, each with Remove)
@@ -1420,14 +1738,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
   Studio mode is the page's (`Studio::studio_mode`, kept by the browser). On, the stage
   under the header becomes a two-up (`workspace.rs`): the canvas on the left, which
-  edits the preview scene, the program monitor on the right (`canvas/monitor.rs`: the
-  program mix as a `preview.subscribe` with no `scene_id`, on a channel tapped from the
+  edits the preview scene, the program monitor on the right (`canvas/monitor.rs`'s
+  `Monitor` with no scene: the program mix as a `preview.subscribe` with no `scene_id`, on a channel tapped from the
   canvas's binary channel, sized for its box as the canvas's stream is and opened again
   for a new base rate or a box changed by a quarter), each under a `StageLabel`, and the
   studio controls between them (`StudioControls`). Turning it on sends
   `studio.set_preview` for the scene the canvas shows, and while it is on a new preview
   scene from `studio.changed` or `studio.get` is selected, so the canvas follows it
-  (`followed_preview`). The controls and the Transitions panel (a tab beside Outputs in
+  (`followed_scene`); turned off, the canvas shows the program scene and follows it
+  again. The engine's preview scene is left alone then: it is every client's, and the
+  engine has no studio mode (ADR-0052 §4). The controls and the Transitions panel (a tab beside Outputs in
   the Editing layout, under the canvas in Live) share one state, which the shell
   provides (`provide_transitions`): the scenes (groups left out) and presets read with
   `state.get` and the studio state with `studio.get`, re-read on `state.changed` and
@@ -1460,8 +1780,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   each change it reports resets the fields to it. The kind's parameters come from
   `kind.list` and `kind.describe` (category `transition`), or the built-in `cut`,
   `fade`, `move` and `stinger` when the engine can't list them; enum, boolean, number and text
-  parameters are editable, others read-only (so a stinger's scene is set over MCP or the
-  CLI for now). A value the editor refuses is not sent.
+  parameters are editable, and a scene parameter (a stinger's scene) is a list of the
+  scenes, keyframes left out, with None; others are read-only. A value the editor refuses
+  is not sent.
   Each scene's `transition_in` and `transition_out` can also be set in a folded table
   under the editor. The engine runs the transitions, `move` pairing and gliding items,
   and the program preview shows them, so the page draws none itself.
@@ -1521,10 +1842,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     of the travel, the quiet end compressed, and snapping to 0 dB within a quarter of
     a dB. While the pointer holds a fader the strip shows the value under it; letting
     go (or each key press) sends one `source.set_audio` or `bus.set_fader`, so a drag
-    is one undo step. Hearing the fader during the drag needs live values
-    ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which `live.set` doesn't
-    take for faders yet. A source's dB field shows the fader's value during the drag
-    and sends its own value the same way: typed, stepped or scrubbed, one edit each.
+    is one undo step. The drag is heard as it goes: an `EditDrag` sends each value as a
+    gesture's `live.set` and the release's edit ends it
+    ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md), see Number fields). A
+    source's dB field shows the fader's value during the drag and sends its own value
+    the same way: typed, stepped or scrubbed, one edit each.
     Clicking a bus's readout sets 0 dB. An accepted edit is applied to the shown
     state at once, so the strip doesn't jump back before the re-read.
   - **Meters** take `meters.tick`: an RMS bar over a fainter peak bar per channel,
@@ -1573,8 +1895,16 @@ selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scen
 sends the edits; `preview.rs` chooses the preview stream and decides what to do with
 each H.264 frame and when each JPEG decodes. These are pure and tested natively,
 `model.rs` against `MockEngine`. `screen.rs` decodes and draws the preview in the
-browser, and `mod.rs` is the component. `monitor.rs` is studio mode's program monitor
-beside it ([Design › Studio mode](#design)).
+browser, and `mod.rs` is the component. `monitor.rs` is `Monitor`, a picture of the
+program mix or of one scene in a box of its own, following the scene it is given:
+studio mode's program monitor beside the canvas (`ProgramMonitor`,
+[Design › Studio mode](#design)) and the Show panel's Next monitor
+([Design › Shows](#design)). It opens its own `preview.subscribe` stream, sized for its
+box, on a channel tapped from the canvas's binary channel, and reports itself as the
+view `monitor:<label>` (`monitor:program`, `monitor:show-next`). Given a new scene it opens a
+stream of it. A still monitor asks for 1 fps and closes its stream once the first frame
+is drawn, keeping that picture, so it costs the engine one frame each time its scene
+changes.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
   `Layout::sized` from the shared collection and the sources' sizes, so it follows every state change the app
@@ -1584,15 +1914,15 @@ beside it ([Design › Studio mode](#design)).
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
   on the source's runtime size, which the canvas doesn't evaluate a legacy transform
   against yet (ADR-0022 decision 5), and a note top left counts such items. Over the live
-  picture only the selected items, the box under the pointer and hidden items (which
-  aren't in the picture but still take clicks) are outlined, so an unselected source
-  shows no box; without the picture every box gets a faint outline and
-  its name. The name sits just inside the box's top-left corner and runs along its
+  picture only the selected items and the box under the pointer are outlined, so an
+  unselected source shows no box; without the picture every visible box gets a faint
+  outline and its name. A hidden item draws nothing and isn't hit, marqueed or snapped
+  to unless it is selected (`Layout::seen_boxes`, `seen_shapes`, #1732). The name sits just inside the box's top-left corner and runs along its
   top edge, so it turns with the box; a flip mirrors the picture and not the box, and
   the name stays on that corner. On a mirrored box the glyphs still grow into the
   box, so the name sits about one line deeper. When that corner or the far end of
   the edge is behind the viewer, or the edge has no direction, the name stays
-  upright on the box's bounds. Hidden items are drawn dashed, and the box
+  upright on the box's bounds. A selected hidden item is drawn dashed, and the box
   under the pointer gets a light outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they
@@ -1608,7 +1938,8 @@ beside it ([Design › Studio mode](#design)).
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
-  `taps.rs`, the Properties dialog's picture and studio mode's program monitor) and one `preview.subscribe` stream on it, at the
+  `taps.rs`, the Properties dialog's picture and the monitors: studio mode's program
+  monitor and the Show panel's Next monitor) and one `preview.subscribe` stream on it, at the
   collection's base rate (30 or 60, `live_fps`; 30 until the collection is read, and a
   new stream of the same picture when the rate changes) and as
   sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends); when the stage settles at a size whose picture differs by a quarter or more, as when the window is maximized or the dock resized, the canvas opens a stream at the new size on a new channel. In the desktop app on its own engine (`host::own_engine`, false when the app is connected to another engine), where pictures cost no network, `preview::stage` always asks for the largest picture, so the docked canvas is full resolution at any size and a resize never restarts it. A resize restages only from its newest timeout, so a long drag opens one stream).
@@ -1766,7 +2097,11 @@ beside it ([Design › Studio mode](#design)).
   own live gesture (`Wheeling`) and commits as an orbit's drop does once no wheel event
   came for `WHEEL_SETTLE`, or at once when a drag starts. Camera mode and the item tool are left when the canvas shows a 2D scene. The bindings are kept in
   `localStorage` (`CameraControls::stored`). Save view batches `scene.create_variant`
-  and `scene.set_camera` for a new keyframe scene with the shown camera.
+  and `scene.set_camera` for a new keyframe scene with the shown camera. After it, the
+  live aim (`live_aim.rs`, `LiveAim`): pan, tilt and zoom buttons send
+  `scene.drive_camera` for their axis alone while held and 0 on release, Home sends
+  `scene.aim_camera` to the stored camera, and a readout reads `scene.camera_aim` every
+  300 ms while camera mode is on; none of it is an edit.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos

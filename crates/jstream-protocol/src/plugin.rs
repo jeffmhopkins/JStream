@@ -243,6 +243,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.set_keyframe", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),
+    ("output.toggle", Class(O)),
     ("output.set_key", N),
     ("output.clear_key", N),
     ("youtube.sign_in", N),
@@ -289,6 +290,25 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // A mute, as `source.set_audio` and `bus.set_fader` set it (ADR-0207).
     ("source.mute", Class(E)),
     ("bus.mute", Class(E)),
+    // A show switches program and runs cues, as a timeline does (ADR-0210), so writing
+    // or running one is "never" until a PR decides which class may.
+    ("show.set", N),
+    ("show.delete", N),
+    ("show.play", N),
+    ("show.stop", N),
+    ("show.pause", N),
+    ("show.continue", N),
+    ("show.back", N),
+    ("show.skip", N),
+    ("show.go_to", N),
+    ("show.go_to_number", N),
+    ("show.seek", N),
+    ("show.arm", N),
+    // An overlay changes what is on air, as `scene.switch` does, so it is the live class's.
+    ("overlay.show", Class(L)),
+    ("overlay.hide", Class(L)),
+    ("overlay.toggle", Class(L)),
+    ("source.seek", Class(L)),
     // Holding the media clock stops every animation for every client (ADR-0172); a
     // plugin never does.
     ("clock.hold", N),

@@ -12,12 +12,15 @@
 //!   (`rendering.rs`, ADR-0170 decision 1).
 //! - **Audio** holds the Audio plugins section: where the engine looks for CLAP audio
 //!   effects, what it found and Rescan (`clap_plugins.rs`).
+//! - **Keys & MIDI** lists every key and MIDI trigger with the actions each runs, in
+//!   order, and adds, unbinds and removes them (`panels/triggers.rs`, ADR-0208).
 //! - **Plugins** is the WASM automation plugins' list, install and permissions
 //!   (`plugins.rs`).
 //! - **Devices** pairs remote browsers and lists the paired devices (`pairing.rs`),
 //!   when a server in front of the engine pairs them. In the desktop app it starts with
 //!   "Allow devices on my network", then "Receive from JTunnel senders" (`jtunnel.rs`),
-//!   then "Accept a PTZ controller" (`ptz_controllers.rs`).
+//!   then "Control PTZ cameras" (`ptz_cameras.rs`), then "Accept a PTZ controller"
+//!   (`ptz_controllers.rs`).
 //!
 //! The shell provides [`SettingsDialog`] as a context, so a menu item or a notice can
 //! open the dialog on the page it is about. The dialog shows one page at a time; a page
@@ -50,15 +53,18 @@ pub enum SettingsPage {
     Devices,
     /// The 3D rendering switches (ADR-0170 decision 1).
     Rendering,
+    /// Every key and MIDI trigger and the actions it runs (ADR-0208).
+    Keys,
 }
 
 impl SettingsPage {
     /// Every page, in the order the dialog lists them.
-    pub const ALL: [SettingsPage; 6] = [
+    pub const ALL: [SettingsPage; 7] = [
         SettingsPage::General,
         SettingsPage::Video,
         SettingsPage::Rendering,
         SettingsPage::Audio,
+        SettingsPage::Keys,
         SettingsPage::Plugins,
         SettingsPage::Devices,
     ];
@@ -72,6 +78,7 @@ impl SettingsPage {
             SettingsPage::Plugins => "Plugins",
             SettingsPage::Devices => "Devices",
             SettingsPage::Rendering => "3D rendering",
+            SettingsPage::Keys => "Keys & MIDI",
         }
     }
 
@@ -84,6 +91,7 @@ impl SettingsPage {
             SettingsPage::Plugins => "plugins",
             SettingsPage::Devices => "devices",
             SettingsPage::Rendering => "rendering",
+            SettingsPage::Keys => "keys",
         }
     }
 
@@ -233,10 +241,14 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                                 <ClapPlugins />
                             </section>
                         }.into_any(),
+                        SettingsPage::Keys => view! {
+                            <crate::panels::triggers::KeysAndMidi />
+                        }.into_any(),
                         SettingsPage::Plugins => view! { <Plugins /> }.into_any(),
                         SettingsPage::Devices => view! {
                             <NetworkAccessSetting />
                             <crate::jtunnel::JtunnelSettingView />
+                            <crate::ptz_cameras::PtzCameraSettingView />
                             <crate::ptz_controllers::PtzControllerSettingView />
                             <Pairing />
                             <crate::agents::ApprovedAgents />
@@ -287,10 +299,11 @@ mod tests {
         assert_eq!(SettingsPage::General.step(true), SettingsPage::Video);
         assert_eq!(SettingsPage::Video.step(true), SettingsPage::Rendering);
         assert_eq!(SettingsPage::Rendering.step(true), SettingsPage::Audio);
-        assert_eq!(SettingsPage::Audio.step(true), SettingsPage::Plugins);
+        assert_eq!(SettingsPage::Audio.step(true), SettingsPage::Keys);
+        assert_eq!(SettingsPage::Keys.step(true), SettingsPage::Plugins);
         assert_eq!(SettingsPage::Devices.step(true), SettingsPage::General);
         assert_eq!(SettingsPage::General.step(false), SettingsPage::Devices);
-        assert_eq!(SettingsPage::Plugins.step(false), SettingsPage::Audio);
+        assert_eq!(SettingsPage::Plugins.step(false), SettingsPage::Keys);
     }
 
     #[test]
