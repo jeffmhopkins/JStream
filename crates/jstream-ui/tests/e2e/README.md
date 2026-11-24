@@ -565,7 +565,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   with the drop slot showing during the drag and a pausing bookmark at each end; a
   bookmark (B), a loop drawn on the ruler (L) and a trim of Main's right end, each one
   `show.set`, and Edit › Undo taking them back one at a time; the cut badge's transition
-  menu; an audio track and an audio clip from its menu, removed with Delete; a video
+  menu; an audio track and a source's audio from its menu's Add source audio at m:ss, with default fades, removed with Delete; a video
   file dropped as a browser URI list, made into a source and scene in the same batch
   as the show; the lock refusing Delete; a trim held mid-drag and let go with Escape,
   sending nothing; and the picker's menu duplicating, renaming and deleting a show.
