@@ -6870,7 +6870,7 @@ stamp = { hash = "b3:783ed50376435a02", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
+stamp = { hash = "b3:24baa00c95ee55a0", by = "agent:issues-thread", note = "Added to the dialog.rs paragraph: the first-frame focus of the first field, kept when focus is already inside, and skipped for a dialog closed before that frame (#1703); matches the drag.is_disposed guard and focused_inside check | merge: #1704 (UI scale) changed dialog.rs to measure the viewport, pointer and rects through ui_scale; the first-frame focus and disposed guard from this branch are unaffected | kept from the merged side: Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
@@ -7116,7 +7116,7 @@ stamp = { hash = "b3:783ed50376435a02", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
+stamp = { hash = "b3:24baa00c95ee55a0", by = "agent:issues-thread", note = "dialog.rs only changed its first-frame focus and a disposed guard; the crate's purpose (Leptos WASM UI for desktop and browser) is unchanged | merge: #1704 (UI scale) changed dialog.rs to measure the viewport, pointer and rects through ui_scale; the first-frame focus and disposed guard from this branch are unaffected | kept from the merged side: Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
@@ -8694,7 +8694,7 @@ stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:9de1c5d0cb4616bb", by = "agent:claude", note = "Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22)" }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
+stamp = { hash = "b3:24baa00c95ee55a0", by = "agent:issues-thread", note = "Re-read; dialog.rs change adds no user-visible text, copy rules still hold | merge: #1704 (UI scale) changed dialog.rs to measure the viewport, pointer and rects through ui_scale; the first-frame focus and disposed guard from this branch are unaffected | kept from the merged side: Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
@@ -8703,7 +8703,7 @@ stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the library rule (Encoders & mixes): 240 px rail of grouped rows with right-aligned summaries, a + per group eyebrow, empty texts, the editor under the pick's name and summary, and the form's Delete/Cancel/Save as the dialog's footer, Close while nothing is open. The libraries body drops the fade since the sticky footer is its last box." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read with dialog.rs's drag now in the page's CSS pixels (ui_scale::pointer, rect, window_size) and the 60vh bodies divided by --ui-scale: widths, header, footer and commit model are unchanged." }
+stamp = { hash = "b3:24baa00c95ee55a0", by = "agent:issues-thread", note = "Re-read widths, header, body, footer and the dialog list; the change is focus timing only, no layout or style change, still holds | merge: #1704 (UI scale) changed dialog.rs to measure the viewport, pointer and rects through ui_scale; the first-frame focus and disposed guard from this branch are unaffected | kept from the merged side: Re-read with dialog.rs's drag now in the page's CSS pixels (ui_scale::pointer, rect, window_size) and the 60vh bodies divided by --ui-scale: widths, header, footer and commit model are unchanged." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read with dialog.rs's drag now in the page's CSS pixels (ui_scale::pointer, rect, window_size) and the 60vh bodies divided by --ui-scale: widths, header, footer and commit model are unchanged." }
@@ -8814,7 +8814,7 @@ stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "store.rs ga
 stamp = { hash = "b3:5e96713eac99b119", by = "agent:issues-thread", note = "DL-01 now says the first field gets focus on the first frame unless focus is already inside, and a dialog closed before then is left alone (#1703); rest of the table unaffected" }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read with dialog.rs's drag and tooltip placement in CSS pixels at every UI scale: the dialog rows still hold." }
+stamp = { hash = "b3:24baa00c95ee55a0", by = "agent:issues-thread", note = "DL-01 now says the first field gets focus on the first frame unless focus is already inside, and a dialog closed before then is left alone (#1703); rest of the table unaffected | merge: #1704 (UI scale) changed dialog.rs to measure the viewport, pointer and rects through ui_scale; the first-frame focus and disposed guard from this branch are unaffected | kept from the merged side: Re-read with dialog.rs's drag and tooltip placement in CSS pixels at every UI scale: the dialog rows still hold." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/add_source.rs"]
 stamp = { hash = "b3:beb5beb8909eae52", by = "agent:release-alpha8", note = "DL-03 has #1609's Reflections check and #1631's Autofocus and Aperture (blur) with Pan and Tilt in camera motion, matching scene_properties.rs and camera_moves.rs; DL-06 lists the fog card bundle's Fog card after Backdrop and #1609's Reflection probe after Light, as the 20-kind ORDER has them." }
