@@ -9,6 +9,7 @@
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
+use super::data_read::{DataReads, MOD_SLOTS, mod_reader, mod_slot};
 use super::motion::{
     KINDS, Param, SHAPES, kind_name, param_value, sized_kind, with_input, with_param,
 };
@@ -62,19 +63,50 @@ fn gentle(property: CameraProperty) -> f32 {
     }
 }
 
-/// A new camera modifier of the kind named `name`, `size` its amount: a MIDI one
-/// (ADR-0176) follows CC 1 on any input across a range big enough to see, resting at
-/// the camera's stored view, and the clocked kinds are an item's.
-pub fn camera_kind(name: &str, property: CameraProperty, size: f32) -> Option<MotionKind> {
+/// The kinds the How select offers a camera: an item's, but audio (a camera hears
+/// nothing), and Channel when the collection has a channel to follow.
+pub fn camera_kinds(has_channels: bool) -> Vec<&'static str> {
+    KINDS
+        .into_iter()
+        .filter(|k| *k != "Audio")
+        .chain(has_channels.then_some("Channel"))
+        .collect()
+}
+
+/// A new camera modifier of the kind named `name`, `size` its amount. A MIDI one
+/// (ADR-0176) follows CC 1 on any input, a DAW data one the first of a JTunnel sender's
+/// Mod params `mods` doesn't hold (ADR-0181), and a Channel one `channel`, each across
+/// a range big enough to see, resting at the camera's stored view. The clocked kinds are
+/// an item's. `None` for Channel with no channel.
+pub fn camera_kind(
+    name: &str,
+    property: CameraProperty,
+    size: f32,
+    mods: &[u8],
+    channel: Option<&str>,
+) -> Option<MotionKind> {
+    let to = match property {
+        // A zoom in: the field of view narrows.
+        CameraProperty::Fov => -20.0,
+        // A button or a fader past its middle turns autofocus on.
+        CameraProperty::Autofocus => 1.0,
+        _ if unit(property) == "°" => 45.0,
+        _ => 200.0,
+    };
+    if name == "DAW data" {
+        let n = (1..=MOD_SLOTS).find(|n| !mods.contains(n)).unwrap_or(1);
+        return Some(mod_reader(n, 0.0, to));
+    }
+    if name == "Channel" {
+        return Some(MotionKind::Channel {
+            channel_id: channel?.to_owned(),
+            smoothing_ms: 50,
+            curve: jstream_control::protocol::MotionCurve::Linear,
+            from: jstream_control::protocol::Finite32::ZERO,
+            to: jstream_control::protocol::Finite32::new(to)?,
+        });
+    }
     if name == "MIDI" {
-        let to = match property {
-            // A zoom in: the field of view narrows.
-            CameraProperty::Fov => -20.0,
-            // A button or a fader past its middle turns autofocus on.
-            CameraProperty::Autofocus => 1.0,
-            _ if unit(property) == "°" => 45.0,
-            _ => 200.0,
-        };
         return Some(MotionKind::Midi {
             control: jstream_control::protocol::MotionMidiControl::Cc,
             controller: Some(1),
@@ -101,6 +133,7 @@ pub fn with_added(list: &[CameraMotionModifier]) -> Option<Vec<CameraMotionModif
     let property = CameraProperty::PositionX;
     let mut next = list.to_vec();
     next.push(CameraMotionModifier {
+        mode: jstream_control::protocol::MappingMode::Add,
         modifier_id: id,
         property,
         kind: sized_kind("Wiggle", gentle(property))?,
@@ -205,6 +238,56 @@ pub fn CameraMoves(
         }
     };
 
+    // The channels a Channel move can follow, this scene's first, by name.
+    let channel_options = move |scene_id: SceneId| {
+        studio.collection.with(|c| {
+            let Some(c) = c.as_ref() else {
+                return Vec::new();
+            };
+            let (here, rest) = crate::panels::channels::search(&c.channels, "", Some(&scene_id));
+            here.into_iter()
+                .chain(rest)
+                .map(|ch| {
+                    let name = if ch.name.trim().is_empty() {
+                        ch.channel_id.clone()
+                    } else {
+                        ch.name.clone()
+                    };
+                    (ch.channel_id.clone(), name)
+                })
+                .collect::<Vec<_>>()
+        })
+    };
+    let has_channels = move || {
+        studio
+            .collection
+            .with(|c| c.as_ref().is_some_and(|c| !c.channels.is_empty()))
+    };
+    // The Mods the draft's camera and the channels already read, and the channel a new
+    // Channel move follows.
+    let taken = move || {
+        let mut mods: Vec<u8> = draft.with_untracked(|d| {
+            d.camera_motion
+                .iter()
+                .filter_map(|m| mod_slot(&m.kind))
+                .collect()
+        });
+        studio.collection.with_untracked(|c| {
+            if let Some(c) = c.as_ref() {
+                mods.extend(
+                    c.channels
+                        .iter()
+                        .flat_map(|ch| ch.inputs.iter().filter_map(mod_slot)),
+                );
+            }
+        });
+        let channel = untrack(move || channel_options(scene.get_value()))
+            .into_iter()
+            .next()
+            .map(|(id, _)| id);
+        (mods, channel)
+    };
+
     // Camera motion: row `n` changed by `change`.
     let change = move |n: usize, change: &dyn Fn(&mut CameraMotionModifier) -> bool| {
         draft.update(|d| {
@@ -223,7 +306,8 @@ pub fn CameraMoves(
                     .iter()
                     .map(|param| {
                         let param = *param;
-                        let (label, step, decimals, min, max) = param.field();
+                        let (_, step, decimals, min, max) = param.field();
+                        let label = param.label_for(&kind);
                         let unit = match param {
                             Param::Amplitude | Param::Rate | Param::Wrap => {
                                 at().map_or("", |m| unit(m.property))
@@ -283,13 +367,15 @@ pub fn CameraMoves(
                             prop:value=move || at().map_or("", |m| kind_name(&m.kind))
                             on:change=move |event| {
                                 let name = event_target_value(&event);
+                                // Read before the draft is borrowed to change it.
+                                let (mods, channel) = taken();
                                 change(n, &|m| {
                                     if kind_name(&m.kind) == name {
                                         return false;
                                     }
                                     let size = param_value(&m.kind, Param::Amplitude)
                                         .map_or_else(|| gentle(m.property), |v| v as f32);
-                                    match camera_kind(&name, m.property, size) {
+                                    match camera_kind(&name, m.property, size, &mods, channel.as_deref()) {
                                         Some(kind) => {
                                             m.kind = kind;
                                             true
@@ -299,11 +385,8 @@ pub fn CameraMoves(
                                 });
                             }
                         >
-                            {KINDS
+                            {move || camera_kinds(has_channels())
                                 .into_iter()
-                                // A camera hears nothing: an audio move is an item's. A data
-                                // one is set over the protocol (ADR-0176).
-                                .filter(|k| !matches!(*k, "Audio" | "DAW data"))
                                 .map(|k| view! { <option value=k>{k}</option> })
                                 .collect_view()}
                         </select>
@@ -370,6 +453,45 @@ pub fn CameraMoves(
                                     });
                                 }
                             />
+                        </label>
+                    </Show>
+                    <Show when=move || at().is_some_and(|m| matches!(m.kind, MotionKind::Data { .. }))>
+                        <DataReads
+                            kind=Signal::derive(move || at().map(|m| m.kind))
+                            send=move |kind| {
+                                change(n, &|m| {
+                                    m.kind = kind.clone();
+                                    true
+                                });
+                            }
+                        />
+                    </Show>
+                    <Show when=move || at().is_some_and(|m| matches!(m.kind, MotionKind::Channel { .. }))>
+                        <label class="select-field">
+                            <span class="field-label">"Channel"</span>
+                            <select
+                                aria-label="Which channel it follows"
+                                title="The channel whose value, 0 to 100 %, moves the camera from At 0 % to At 100 %"
+                                prop:value=move || at().and_then(|m| match m.kind {
+                                    MotionKind::Channel { channel_id, .. } => Some(channel_id),
+                                    _ => None,
+                                }).unwrap_or_default()
+                                on:change=move |event| {
+                                    let next = event_target_value(&event);
+                                    change(n, &|m| match &mut m.kind {
+                                        MotionKind::Channel { channel_id, .. } if *channel_id != next => {
+                                            channel_id.clone_from(&next);
+                                            true
+                                        }
+                                        _ => false,
+                                    });
+                                }
+                            >
+                                {move || channel_options(scene.get_value())
+                                    .into_iter()
+                                    .map(|(id, name)| view! { <option value=id>{name}</option> })
+                                    .collect_view()}
+                            </select>
                         </label>
                     </Show>
                     <label class="select-field">
@@ -464,16 +586,17 @@ mod tests {
     /// it makes is one the engine takes.
     #[test]
     fn a_camera_takes_a_midi_move() {
-        let fov = camera_kind("MIDI", CameraProperty::Fov, 0.5).expect("midi");
+        let fov = camera_kind("MIDI", CameraProperty::Fov, 0.5, &[], None).expect("midi");
         assert!(matches!(
             fov,
             MotionKind::Midi { from, to, controller: Some(1), .. }
                 if from.get() == 0.0 && to.get() == -20.0
         ));
-        let pan = camera_kind("MIDI", CameraProperty::Pan, 0.5).expect("midi");
+        let pan = camera_kind("MIDI", CameraProperty::Pan, 0.5, &[], None).expect("midi");
         assert!(matches!(pan, MotionKind::Midi { to, .. } if to.get() == 45.0));
         let named = with_input(&pan, "Bitwig").expect("named");
         let list = [CameraMotionModifier {
+            mode: jstream_control::protocol::MappingMode::Add,
             modifier_id: "pan".into(),
             property: CameraProperty::Pan,
             kind: named,
@@ -485,9 +608,53 @@ mod tests {
             jstream_control::protocol::check_camera_motion(&list),
             Ok(())
         );
-        assert!(camera_kind("Audio", CameraProperty::Fov, 0.5).is_none());
+        assert!(camera_kind("Audio", CameraProperty::Fov, 0.5, &[], None).is_none());
         assert_eq!(property_name(CameraProperty::Tilt), "Tilt");
         assert_eq!(unit(CameraProperty::Pan), "°");
+    }
+
+    /// A camera follows a JTunnel Mod or a channel from the dialog, as the engine takes
+    /// them (ADR-0176, ADR-0183), and is never offered audio.
+    #[test]
+    fn a_camera_takes_a_mod_or_a_channel() {
+        assert_eq!(
+            camera_kinds(false),
+            ["Wiggle", "Oscillate", "Drift", "Shake", "MIDI", "DAW data"]
+        );
+        assert_eq!(camera_kinds(true).last(), Some(&"Channel"));
+        let fov =
+            camera_kind("DAW data", CameraProperty::Fov, 0.5, &[1, 2, 4], None).expect("data");
+        assert_eq!(mod_slot(&fov), Some(3));
+        assert!(
+            matches!(fov, MotionKind::Data { from, to, .. } if from.get() == 0.0 && to.get() == -20.0)
+        );
+        let roll = camera_kind("Channel", CameraProperty::Roll, 0.5, &[], Some("cam_roll"))
+            .expect("channel");
+        assert!(matches!(
+            &roll,
+            MotionKind::Channel { channel_id, to, .. } if channel_id == "cam_roll" && to.get() == 45.0
+        ));
+        assert!(camera_kind("Channel", CameraProperty::Roll, 0.5, &[], None).is_none());
+        let list: Vec<_> = [(CameraProperty::Fov, fov), (CameraProperty::Roll, roll)]
+            .into_iter()
+            .map(|(property, kind)| CameraMotionModifier {
+                mode: jstream_control::protocol::MappingMode::Add,
+                modifier_id: format!("{property:?}"),
+                property,
+                kind,
+                clock: MotionClock::Engine,
+                enabled: true,
+                amount: None,
+            })
+            .collect();
+        assert_eq!(
+            jstream_control::protocol::check_camera_motion(&list),
+            Ok(())
+        );
+        assert_eq!(Param::From.label_for(&list[1].kind), "At 0 %");
+        assert_eq!(param_value(&list[1].kind, Param::Smoothing), Some(50.0));
+        let slower = with_param(&list[1].kind, Param::Smoothing, 300.0).expect("smoothing");
+        assert_eq!(param_value(&slower, Param::Smoothing), Some(300.0));
     }
 
     #[test]

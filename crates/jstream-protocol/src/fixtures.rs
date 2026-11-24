@@ -926,6 +926,7 @@ fn keyframe_edits() -> Vec<Edit> {
         .into_iter()
         .zip(MotionShape::ALL.into_iter().cycle())
         .map(|(property, shape)| MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: format!(
                 "every-{}",
                 serde_json::to_value(property)
@@ -961,6 +962,7 @@ fn keyframe_edits() -> Vec<Edit> {
         item_id: ItemId::new("itm_3"),
         scene_id: None,
         motion: vec![MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "pulse-border".into(),
             property: MotionProperty::Effect,
             effect: Some(crate::MotionEffect {
@@ -984,6 +986,7 @@ fn keyframe_edits() -> Vec<Edit> {
         item_id: ItemId::new("itm_3"),
         scene_id: None,
         motion: vec![MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "glow".into(),
             property: MotionProperty::Source,
             effect: None,
@@ -1009,6 +1012,7 @@ fn keyframe_edits() -> Vec<Edit> {
         scene_id: None,
         motion: vec![
             MotionModifier {
+                mode: crate::MappingMode::Add,
                 modifier_id: "track-color".into(),
                 property: MotionProperty::Source,
                 effect: None,
@@ -1034,6 +1038,7 @@ fn keyframe_edits() -> Vec<Edit> {
                 amount: None,
             },
             MotionModifier {
+                mode: crate::MappingMode::Add,
                 modifier_id: "clip-color".into(),
                 property: MotionProperty::Source,
                 effect: None,
@@ -1097,6 +1102,7 @@ fn camera_motion(properties: &[crate::CameraProperty]) -> Vec<crate::CameraMotio
         .iter()
         .enumerate()
         .map(|(n, property)| crate::CameraMotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: format!("cam-{n}"),
             property: *property,
             kind: MotionKind::Wiggle {
@@ -1148,6 +1154,7 @@ fn sway() -> Vec<MotionModifier> {
     let f = |v: f32| Finite32::new(v).expect("finite");
     vec![
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "sway-x".into(),
             property: MotionProperty::X,
             effect: None,
@@ -1163,6 +1170,7 @@ fn sway() -> Vec<MotionModifier> {
             amount: None,
         },
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "sway-roll".into(),
             property: MotionProperty::Rotation,
             effect: None,
@@ -1178,6 +1186,7 @@ fn sway() -> Vec<MotionModifier> {
             amount: None,
         },
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "scroll".into(),
             property: MotionProperty::CropLeft,
             effect: None,
@@ -1191,6 +1200,7 @@ fn sway() -> Vec<MotionModifier> {
             amount: None,
         },
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "jolt".into(),
             property: MotionProperty::Y,
             effect: None,
@@ -1226,7 +1236,13 @@ fn reactive() -> Vec<MotionModifier> {
         from: f(-0.6),
         to: Finite32::ZERO,
     };
+    // The lever sets its tilt outright (ADR-0203).
     let modifier = |id: &str, property, kind| MotionModifier {
+        mode: if id == "lever" {
+            crate::MappingMode::Replace
+        } else {
+            crate::MappingMode::Add
+        },
         modifier_id: id.into(),
         property,
         effect: None,
@@ -1342,6 +1358,7 @@ fn reactive() -> Vec<MotionModifier> {
 /// The keyframe scene `scn_1_wide`'s own motion for `itm_2`: a pulse, defaults omitted.
 fn keyframe_motion() -> Vec<MotionModifier> {
     vec![MotionModifier {
+        mode: crate::MappingMode::Add,
         modifier_id: "pulse".into(),
         property: MotionProperty::Opacity,
         effect: None,
@@ -1670,6 +1687,8 @@ fn value_bindings() -> Vec<ValueBinding> {
     let f = |v: f32| Finite32::new(v).expect("finite");
     vec![
         ValueBinding {
+            enabled: true,
+            mode: crate::MappingMode::Replace,
             binding_id: "grade_fader".into(),
             input: MotionKind::Midi {
                 control: MotionMidiControl::Cc,
@@ -1690,7 +1709,10 @@ fn value_bindings() -> Vec<ValueBinding> {
             },
             amount: None,
         },
+        // A trim on the music bus, added to its fader and bypassed for now (ADR-0203).
         ValueBinding {
+            enabled: false,
+            mode: crate::MappingMode::Add,
             binding_id: "music_volume".into(),
             input: MotionKind::Data {
                 input: Some("Studio DAW".into()),
@@ -1700,7 +1722,7 @@ fn value_bindings() -> Vec<ValueBinding> {
                 states: Default::default(),
                 smoothing_ms: 50,
                 curve: MotionCurve::Linear,
-                from: f(-60.0),
+                from: f(-12.0),
                 to: Finite32::ZERO,
                 color_from: None,
                 palette: std::collections::BTreeMap::new(),
@@ -2921,6 +2943,8 @@ fn profile_info() -> ProfileInfo {
                 encode_ms: ms(4.5),
                 kbps: 6_210,
                 target_kbps: 6_160,
+                encoder: "H264 Encoder MFT (hardware)".into(),
+                hardware: true,
             },
             StreamProfile {
                 stream: ProfileStream::Preview {
@@ -2937,6 +2961,8 @@ fn profile_info() -> ProfileInfo {
                 encode_ms: ms(2.0),
                 kbps: 1_700,
                 target_kbps: 1_728,
+                encoder: "H264 Encoder MFT".into(),
+                hardware: false,
             },
         ],
         mixer: Some(MixerProfile {
