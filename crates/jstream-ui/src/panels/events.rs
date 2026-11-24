@@ -525,7 +525,7 @@ pub fn Events(
                     t.cues.remove(n);
                 });
             };
-            let (left, top) = place(e.x, e.y);
+            let (left, top) = place(e.x, e.y, 190.0);
             return Some(view! {
                 <div class="ctx-catcher" on:pointerdown=move |_| editing.set(None)></div>
                 <div class="context-menu seq-event-editor" role="dialog" aria-label="Event" node_ref=dialog on:keydown=escape style:left=left style:top=top>
@@ -612,7 +612,7 @@ pub fn Events(
                 });
             }
         };
-        let (left, top) = place(e.x, e.y);
+        let (left, top) = place(e.x, e.y, 190.0);
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| editing.set(None)></div>
             <div class="context-menu seq-event-editor" role="dialog" aria-label="Event" node_ref=dialog on:keydown=escape style:left=left style:top=top>
@@ -657,12 +657,13 @@ pub fn Events(
         }
         .into_any())
     };
-    let empty = timeline.cues.is_empty();
     view! {
         <div class="seq-lane seq-events">
             <div class="seq-lane-head">
-                <span class="seq-lane-name seq-events-name">"Events"</span>
-                <span class="hint">"One-off steps: double-click"</span>
+                <div class="seq-lane-title">
+                    <span class="seq-lane-name seq-events-name">"Events"</span>
+                </div>
+                <span class="hint">"Double-click to add one"</span>
             </div>
             <div
                 class="seq-area seq-events-area"
@@ -673,22 +674,23 @@ pub fn Events(
                 on:pointercancel=move |_| moving.set(None)
             >
                 {chips}
-                {empty.then(|| view! { <span class="hint seq-events-empty">"Double-click to add an event"</span> })}
             </div>
         </div>
         {editor}
     }
 }
 
-/// Where the editor opens for a click at (`x`, `y`): below it, kept inside the window.
-fn place(x: f64, y: f64) -> (String, String) {
+/// Where an editor `height` px tall opens for a click at (`x`, `y`): below it, or above
+/// it where there is no room below, kept inside the window. The Sequence panel's trigger
+/// editor opens this way too.
+pub(crate) fn place(x: f64, y: f64, height: f64) -> (String, String) {
     let (w, h) = match crate::ui_scale::window_size() {
         (0.0, _) | (_, 0.0) => (1600.0, 1000.0),
         size => size,
     };
     let left = (x - 20.0).min(w - 330.0).max(4.0);
-    let top = if y + 190.0 > h {
-        (y - 190.0).max(4.0)
+    let top = if y + height > h {
+        (y - height).max(4.0)
     } else {
         y + 10.0
     };

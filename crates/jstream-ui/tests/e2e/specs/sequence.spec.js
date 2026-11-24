@@ -110,7 +110,7 @@ test.describe('Sequence panel', () => {
   test('a trigger is never offered a channel its own lanes drive', async ({ page, daemon }) => {
     await connect(page, daemon);
     const panel = await sequenceWithLane(page, 'Glow');
-    await panel.getByRole('button', { name: '+ Trigger' }).click();
+    await panel.getByRole('button', { name: 'Add a trigger that starts it' }).click();
     const editor = page.getByRole('dialog', { name: 'New trigger' });
     await expect(editor.getByRole('combobox', { name: 'Which' })).toHaveText('None yet');
     await editor.getByRole('button', { name: 'Cancel' }).click();
@@ -120,9 +120,9 @@ test.describe('Sequence panel', () => {
     await page.getByRole('button', { name: '+ New channel “Dim”' }).click();
     await panel.locator('.seq-lane:not(.seq-events)').nth(1).getByRole('button', { name: 'Remove this lane' }).click();
     await expect(panel.locator('.seq-lane-name', { hasText: 'Dim' })).toHaveCount(0);
-    await panel.getByRole('button', { name: '+ Trigger' }).click();
+    await panel.getByRole('button', { name: 'Add a trigger that starts it' }).click();
     await expect(editor.getByRole('combobox', { name: 'Which' }).locator('option')).toHaveText(['Dim']);
-    await editor.getByRole('button', { name: 'Play it' }).click();
+    await editor.getByRole('button', { name: 'Add trigger' }).click();
     await expect(panel.locator('.seq-chip')).toHaveText([/Dim rises/]);
   });
 });

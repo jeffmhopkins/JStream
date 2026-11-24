@@ -13,7 +13,9 @@
 //! Docs: docs/adr/0184-sequences-lanes-and-triggers.md, docs/UI-FEATURES.md#automation
 
 use crate::app::SessionContext;
+use crate::dialog::Info;
 use crate::icons::Icon;
+use crate::menu::{Entry, Menus};
 use crate::panels::channels::{live_values, new_channel, open_channel, search};
 use crate::panels::lane_offers::{
     self, Offer, add_bar, followed_channel, is_switch, kinds_needed, offers, switch_bars,
@@ -632,10 +634,10 @@ pub fn Sequence() -> impl IntoView {
     };
     let looping = move || open.with(|o| o.as_ref().map(|(_, t)| t.looping));
     let looped = move || looping().is_some_and(|l| !matches!(l, TimelineLoop::Once));
+    // Its state is the button's: lit while it loops, and "Loop range" for a range.
     let loop_text = move || match looping() {
-        Some(TimelineLoop::Range { .. }) => "⟳ Loop a range",
-        Some(TimelineLoop::Loop) => "⟳ Loop on",
-        _ => "⟳ Loop off",
+        Some(TimelineLoop::Range { .. }) => "Loop range",
+        _ => "Loop",
     };
     let toggle_loop = move |_| {
         change(&|t| t.looping = next_loop(t.looping, t.duration_ms));
@@ -677,11 +679,16 @@ pub fn Sequence() -> impl IntoView {
             t.cues.retain(|c| c.at_ms <= t.duration_ms);
         })
     };
-    let rename = move |e: leptos::ev::Event| {
-        let name = event_target_value(&e);
-        change(&|t| t.name = name.trim().to_owned());
+    // Rename, from the ⋯ menu: the picker turns into the name's field until Enter, a
+    // click away or Escape.
+    let renaming = RwSignal::new(false);
+    let rename = move |name: Option<String>| {
+        renaming.set(false);
+        if let Some(name) = name.map(|n| n.trim().to_owned()).filter(|n| !n.is_empty()) {
+            change(&|t| t.name = name.clone());
+        }
     };
-    let delete = move |_| {
+    let delete = move || {
         let Some((_, t)) = open.get_untracked() else {
             return;
         };
@@ -699,6 +706,9 @@ pub fn Sequence() -> impl IntoView {
 
     // Add lane.
     let adding = RwSignal::new(false);
+    // Where Add lane's search opens: under its button's right end, in the window, so a
+    // short dock doesn't clip it.
+    let adding_at = RwSignal::new((0.0_f64, 0.0_f64));
     let add_lane = move |channel_id: String| {
         adding.set(false);
         let level = values.with_untracked(|v| v.get(&channel_id).map_or(0.0, |c| c.value.get()));
@@ -779,92 +789,176 @@ pub fn Sequence() -> impl IntoView {
     };
 
     let none = move || open.with(Option::is_none);
+    let menus = use_context::<Menus>();
+    let more = move |event: leptos::ev::MouseEvent| {
+        let Some(menus) = menus else { return };
+        menus.open(
+            &event,
+            vec![
+                Entry::item("Rename", move || renaming.set(true)),
+                Entry::Sep,
+                Entry::item("Delete sequence", delete).danger(),
+            ],
+        );
+    };
+    let name_now =
+        move || open.with(|o| o.as_ref().map(|(_, t)| t.name.clone()).unwrap_or_default());
     view! {
         <section class="panel seq-panel">
             <div class="seq-bar">
                 <Icon name="sequence" size=14 />
-                <select class="seq-select" aria-label="Sequence" on:change=pick>
-                    {move || {
-                        let shown = open.get().map(|(_, t)| t);
-                        let current = shown.as_ref().map(|t| t.timeline_id.clone());
-                        // The open one as the panel's edits leave it: a sequence just made
-                        // or renamed shows before the engine says so.
-                        let mut all = list();
-                        if let Some(t) = shown {
-                            match all.iter_mut().find(|l| l.timeline_id == t.timeline_id) {
-                                Some(l) => *l = t,
-                                None => all.push(t),
-                            }
-                        }
-                        let mut rows: Vec<_> = all
-                            .into_iter()
-                            .map(|t| {
-                                let id = t.timeline_id.to_string();
-                                let on = current.as_ref() == Some(&t.timeline_id);
-                                view! { <option value=id selected=on>{timeline_name(&t)}</option> }.into_any()
-                            })
-                            .collect();
-                        if current.is_none() {
-                            rows.insert(0, view! { <option value="" selected=true>"No sequence"</option> }.into_any());
-                        }
-                        rows.push(view! { <option value="+new">"+ New sequence"</option> }.into_any());
-                        rows
-                    }}
-                </select>
+                <Show
+                    when=move || renaming.get() && !none()
+                    fallback=move || view! {
+                        <select class="seq-select" aria-label="Sequence" on:change=pick>
+                            {move || {
+                                let shown = open.get().map(|(_, t)| t);
+                                let current = shown.as_ref().map(|t| t.timeline_id.clone());
+                                // The open one as the panel's edits leave it: a sequence just
+                                // made or renamed shows before the engine says so.
+                                let mut all = list();
+                                if let Some(t) = shown {
+                                    match all.iter_mut().find(|l| l.timeline_id == t.timeline_id) {
+                                        Some(l) => *l = t,
+                                        None => all.push(t),
+                                    }
+                                }
+                                let mut rows: Vec<_> = all
+                                    .into_iter()
+                                    .map(|t| {
+                                        let id = t.timeline_id.to_string();
+                                        let on = current.as_ref() == Some(&t.timeline_id);
+                                        view! { <option value=id selected=on>{timeline_name(&t)}</option> }.into_any()
+                                    })
+                                    .collect();
+                                if current.is_none() {
+                                    rows.insert(0, view! { <option value="" selected=true>"No sequence"</option> }.into_any());
+                                }
+                                rows.push(view! { <option value="+new">"+ New sequence"</option> }.into_any());
+                                rows
+                            }}
+                        </select>
+                    }
+                >
+                    <RenameField value=name_now() done=rename />
+                </Show>
                 <Show when=move || !none()>
-                    <input class="seq-name" aria-label="Sequence name"
-                        prop:value=move || open.with(|o| o.as_ref().map(|(_, t)| t.name.clone()).unwrap_or_default())
-                        on:change=rename />
-                    <button type="button" class="seq-play" class:on=move || playing().is_some() on:click=play
-                        title="Play from the start, or stop">
-                        {move || if playing().is_some() { "■ Stop" } else { "▶ Play" }}
+                    <button type="button" class="row-action more seq-more" aria-label="More for this sequence" title="More"
+                        on:click=more>"⋯"</button>
+                    <span class="seq-sep"></span>
+                    <button type="button" class="sm seq-play" class:on=move || playing().is_some()
+                        aria-pressed=move || if playing().is_some() { "true" } else { "false" }
+                        on:click=play
+                        title=move || if playing().is_some() { "Stop it" } else { "Play it from the start" }>
+                        <span class="seq-play-mark" class:stop=move || playing().is_some()></span>
+                        {move || if playing().is_some() { "Stop" } else { "Play" }}
                     </button>
-                    <button type="button" class="seq-loop" class:on=looped on:click=toggle_loop
+                    <button type="button" class="sm seq-loop" class:on=looped
+                        aria-pressed=move || if looped() { "true" } else { "false" }
+                        on:click=toggle_loop
                         title="Loop: off, the whole sequence, or a range (it plays from the start, then repeats the range)">
                         {loop_text}
                     </button>
                     <Show when=ranged>
-                        <span class="seq-label">"From"</span>
-                        <NumberField named=Signal::derive(|| "Loop from".to_owned()) unit="s" value=range_end(false) step=0.1 decimals=2 min=0.0 max=3600.0
-                            send=move |v| set_range_end(false, v) />
-                        <span class="seq-label">"to"</span>
-                        <NumberField named=Signal::derive(|| "Loop to".to_owned()) unit="s" value=range_end(true) step=0.1 decimals=2 min=0.1 max=3600.0
-                            send=move |v| set_range_end(true, v) />
+                        <label class="seq-field">
+                            <span class="seq-label">"From"</span>
+                            <NumberField named=Signal::derive(|| "Loop from".to_owned()) unit="s" value=range_end(false) step=0.1 decimals=2 min=0.0 max=3600.0
+                                send=move |v| set_range_end(false, v) />
+                        </label>
+                        <label class="seq-field">
+                            <span class="seq-label">"to"</span>
+                            <NumberField named=Signal::derive(|| "Loop to".to_owned()) unit="s" value=range_end(true) step=0.1 decimals=2 min=0.1 max=3600.0
+                                send=move |v| set_range_end(true, v) />
+                        </label>
                     </Show>
-                    <span class="seq-label">"Length"</span>
-                    <NumberField named=Signal::derive(|| "Length".to_owned()) unit="s" value=length step=0.5 decimals=1 min=0.1 max=3600.0 send=set_length />
+                    <label class="seq-field">
+                        <span class="seq-label">"Length"</span>
+                        <NumberField named=Signal::derive(|| "Length".to_owned()) unit="s" value=length step=0.5 decimals=1 min=0.1 max=3600.0 send=set_length />
+                    </label>
                     <span class="seq-spacer"></span>
                     <div class="seq-add">
-                        <button type="button" class="seq-add-button" on:click=move |_| adding.update(|a| *a = !*a)>
-                            <Icon name="search" size=13 />
+                        <button type="button" class="sm seq-add-button" aria-haspopup="dialog" aria-expanded=move || if adding.get() { "true" } else { "false" }
+                            on:click=move |e: leptos::ev::MouseEvent| {
+                                if let Some(b) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) {
+                                    let r = crate::ui_scale::rect(&b);
+                                    adding_at.set((r.right(), r.bottom()));
+                                }
+                                adding.update(|a| *a = !*a);
+                            }>
+                            <Icon name="plus" size=12 />
                             "Add lane"
                         </button>
                         {move || adding.get().then(|| view! {
                             <div class="ctx-catcher" on:pointerdown=move |_| adding.set(false)></div>
-                            <div class="context-menu seq-add-menu">
+                            <div class="context-menu seq-add-menu"
+                                style:left=move || format!("{}px", (adding_at.get().0 - 300.0).max(4.0))
+                                style:top=move || format!("{}px", adding_at.get().1 + 4.0)>
                                 <AddLaneSearch scene=open.with_untracked(|o| o.as_ref().map(|(s, _)| s.clone())) pick=add_lane make=make_lane offer=add_offer values=values />
                             </div>
                         })}
                     </div>
+                    <Info text="Double-click a lane to add a point there (snapped to a tenth of a second; Shift for free), drag a point to move it, and right-click it for its curve, time and value. Double-click the Events lane to add a one-off event. A control moved by hand takes its lane over until the sequence plays again." />
                 </Show>
             </div>
-            {move || match open.get() {
-                None => view! {
-                    <p class="placeholder seq-empty">
-                        "A sequence moves channels over time and starts itself when something happens. "
-                        <button type="button" class="seq-new" on:click=move |_| create()>"+ New sequence"</button>
-                    </p>
-                }.into_any(),
-                Some((scene, t)) => view! {
-                    <Triggers timeline=t.clone() change=change />
-                    <Lanes timeline=t scene=scene change=change values=values position=Signal::derive(position) />
-                    <div class="seq-foot">
-                        <span class="hint">"Double-click a lane to add a point · drag to move (Shift: free) · right-click for its curve · a control moved by hand takes its lane over"</span>
-                        <button type="button" class="seq-delete" on:click=delete>"Delete sequence"</button>
-                    </div>
-                }.into_any(),
-            }}
+            <div class="seq-scroll">
+                {move || match open.get() {
+                    None => view! {
+                        <div class="empty-state seq-empty-state">
+                            <Icon name="sequence" size=18 />
+                            <p class="empty-title">"No sequence in this scene"</p>
+                            <p class="empty-note">"A sequence moves channels over time, runs one-off events and can start itself when something happens."</p>
+                            <button type="button" class="sm seq-new" on:click=move |_| create()>"+ New sequence"</button>
+                        </div>
+                    }.into_any(),
+                    Some((scene, t)) => view! {
+                        <Triggers timeline=t.clone() change=change />
+                        <Lanes timeline=t scene=scene change=change values=values position=Signal::derive(position) />
+                    }.into_any(),
+                }}
+            </div>
         </section>
+    }
+}
+
+/// A sequence's name being renamed in place of the picker: Enter or a click away keeps
+/// it, Escape drops it.
+#[component]
+fn RenameField(
+    /// The name now.
+    value: String,
+    /// Takes the new name, or `None` when dropped.
+    done: impl Fn(Option<String>) + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    let input = NodeRef::<leptos::html::Input>::new();
+    Effect::new(move |_| {
+        if let Some(el) = input.get() {
+            _ = el.focus();
+            el.select();
+        }
+    });
+    // Enter and Escape end it before the blur that follows, which then sends nothing.
+    let ended = StoredValue::new(false);
+    let finish = move |name: Option<String>| {
+        if !ended.get_value() {
+            ended.set_value(true);
+            done(name);
+        }
+    };
+    view! {
+        <input class="seq-name" aria-label="Sequence name" node_ref=input prop:value=value
+            on:keydown=move |e: leptos::ev::KeyboardEvent| match e.key().as_str() {
+                "Enter" => {
+                    e.prevent_default();
+                    finish(Some(event_target_value(&e)));
+                }
+                "Escape" => {
+                    e.prevent_default();
+                    e.stop_propagation();
+                    finish(None);
+                }
+                _ => {}
+            }
+            on:blur=move |e| finish(Some(event_target_value(&e))) />
     }
 }
 
@@ -1037,7 +1131,16 @@ fn Triggers(
     change: impl Fn(&dyn Fn(&mut TimelineInfo)) -> bool + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
-    let editing = RwSignal::new(None::<bool>);
+    // The editor open: whether it adds a stop, and where it opens (below its button).
+    let editing = RwSignal::new(None::<(bool, f64, f64)>);
+    let open_editor = move |stop: bool, e: leptos::ev::MouseEvent| {
+        let at = e
+            .current_target()
+            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+            .map(|b| crate::ui_scale::rect(&b));
+        let (x, y) = at.map_or_else(|| crate::ui_scale::pointer(&e), |r| (r.left(), r.bottom()));
+        editing.set(Some((stop, x, y)));
+    };
     let chips = move |stop: bool, list: Vec<TimelineTrigger>| {
         list.into_iter()
             .enumerate()
@@ -1074,13 +1177,17 @@ fn Triggers(
         .collect();
     view! {
         <div class="seq-triggers">
-            <span class="eyebrow">"Starts when"</span>
-            {starts}
-            <button type="button" class="seq-plus" on:click=move |_| editing.set(Some(false))>"+ Trigger"</button>
-            <span class="eyebrow seq-stops">"Stops when"</span>
-            {stops}
-            <button type="button" class="seq-plus" aria-label="Add a trigger that stops it" on:click=move |_| editing.set(Some(true))>"+"</button>
-            {move || editing.get().map(|stop| {
+            <div class="seq-trigger-group">
+                <span class="eyebrow">"Starts when"</span>
+                {starts}
+                <button type="button" class="seq-plus" aria-label="Add a trigger that starts it" on:click=move |e| open_editor(false, e)>"+ Trigger"</button>
+            </div>
+            <div class="seq-trigger-group">
+                <span class="eyebrow">"Stops when"</span>
+                {stops}
+                <button type="button" class="seq-plus" aria-label="Add a trigger that stops it" on:click=move |e| open_editor(true, e)>"+ Trigger"</button>
+            </div>
+            {move || editing.get().map(|(stop, x, y)| {
                 let own = own.clone();
                 let driven = driven.clone();
                 let done = move |trigger: Option<TimelineTrigger>| {
@@ -1094,7 +1201,7 @@ fn Triggers(
                 };
                 view! {
                     <div class="ctx-catcher" on:pointerdown=move |_| editing.set(None)></div>
-                    <TriggerEditor stop=stop own=own driven=driven done=done />
+                    <TriggerEditor stop=stop own=own driven=driven x=x y=y done=done />
                 }
             })}
         </div>
@@ -1121,6 +1228,9 @@ fn TriggerEditor(
     /// The channels its own lanes drive, which can't start or stop it: the engine
     /// refuses them.
     driven: Vec<String>,
+    /// Where it opens, in the window: below this point, kept inside the window.
+    x: f64,
+    y: f64,
     /// Takes the new trigger, or `None` when cancelled.
     done: impl Fn(Option<TimelineTrigger>) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
@@ -1245,14 +1355,21 @@ fn TriggerEditor(
         (When::Channel, "A channel"),
         (When::Scene, "A scene"),
         (When::Keyframe, "A keyframe"),
-        (When::Timeline, "Another sequence"),
+        (When::Timeline, "A sequence"),
     ];
+    let (left, top) = crate::panels::events::place(x, y, 300.0);
     view! {
-        <div class="context-menu seq-trigger-editor" role="dialog" aria-label="New trigger">
-            <div class="ctx-head">{if stop { "Stop it when" } else { "Play it when" }}</div>
-            <div class="seq-kinds">
+        <div class="context-menu seq-trigger-editor" role="dialog" aria-label="New trigger"
+            style:left=left style:top=top
+            on:keydown=move |e: leptos::ev::KeyboardEvent| if e.key() == "Escape" {
+                e.prevent_default();
+                e.stop_propagation();
+                done(None);
+            }>
+            <div class="ctx-head">{if stop { "Stop it when" } else { "Start it when" }}</div>
+            <div class="segmented full seq-kinds" role="group" aria-label="What it watches">
                 {kinds.into_iter().map(|(k, label)| view! {
-                    <button type="button" class="seq-kind" class:on=move || when.get() == k on:click=move |_| when.set(k)>{label}</button>
+                    <button type="button" aria-pressed=move || if when.get() == k { "true" } else { "false" } on:click=move |_| when.set(k)>{label}</button>
                 }).collect_view()}
             </div>
             <label class="seq-row">
@@ -1298,7 +1415,7 @@ fn TriggerEditor(
                         Some(trigger) => done(Some(trigger)),
                         None => studio.problem.set(Some("Pick what the trigger watches first.".into())),
                     }
-                }>{if stop { "Stop it" } else { "Play it" }}</button>
+                }>"Add trigger"</button>
             </div>
         </div>
     }
@@ -1587,16 +1704,22 @@ fn Lanes(
             view! {
                 <div class=colour class:off=!on>
                     <div class="seq-lane-head">
-                        <button type="button" class="seq-lane-name" on:click=open title="Open the channel">
+                        <div class="seq-lane-title">
                             <span class="seq-swatch"></span>
-                            {name}
-                        </button>
-                        <div class="seq-lane-meta">
-                            <span class="hint">{if switch { "switch · " } else { "channel · " }}{level}</span>
-                            <span class="seq-meter"><span style:width=meter></span></span>
+                            <button type="button" class="seq-lane-name" on:click=open title="Open the channel in the Channels panel">
+                                {name}
+                            </button>
                             <button type="button" class="seq-mute" class:on=!on on:click=mute
-                                title=if on { "Mute this lane" } else { "Unmute this lane" }>"M"</button>
-                            <button type="button" class="chan-x" aria-label="Remove this lane" title="Remove this lane" on:click=remove>"×"</button>
+                                aria-pressed=if on { "false" } else { "true" }
+                                title=if on { "Mute this lane: it stops moving its channel" } else { "Unmute this lane" }>"M"</button>
+                            <button type="button" class="seq-lane-x" aria-label="Remove this lane" title="Remove this lane" on:click=remove>
+                                <Icon name="close" size=12 />
+                            </button>
+                        </div>
+                        <div class="seq-lane-meta">
+                            <span class="hint">{if switch { "Switch" } else { "Channel" }}</span>
+                            <span class="seq-meter"><span style:width=meter></span></span>
+                            <span class="seq-level">{level}</span>
                         </div>
                     </div>
                     <div
@@ -1728,7 +1851,7 @@ fn Lanes(
                 <crate::panels::events::Events timeline=timeline.clone() scene=scene change=change />
                 {lanes}
                 {empty.then(|| view! {
-                    <p class="placeholder seq-empty">"No lanes yet. Add lane searches the channels; a lane starts from where its channel is."</p>
+                    <p class="hint seq-empty">"No lanes yet. Add lane picks a channel or a setting; a lane starts from where its channel is."</p>
                 })}
                 <div class="seq-head-layer">{head}</div>
             </div>

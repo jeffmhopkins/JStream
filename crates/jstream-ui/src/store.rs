@@ -1446,7 +1446,8 @@ fn unexpected(what: &str) -> ControlError {
 mod tests {
     use super::{
         Collection, Selection, Studio, apply, followed_preview, fresh_id, list_kinds,
-        optimistic_program, plan_summary, query, reset_edits, scene_click, sizes_of,
+        optimistic_program, optimistic_timeline, plan_summary, query, reset_edits, scene_click,
+        sizes_of,
     };
     use crate::session::Session;
     use jstream_control::protocol::{
@@ -2136,6 +2137,42 @@ mod tests {
         assert_eq!(followed_preview(true, Some(&b), Some(&a), Some(&a)), None);
         assert_eq!(followed_preview(true, Some(&b), None, Some(&b)), None);
         assert_eq!(followed_preview(true, None, Some(&a), None), Some(a));
+    }
+
+    /// A Play, a seek or a Stop shows at once; a play that waits, and anything else,
+    /// waits for the engine.
+    #[test]
+    fn a_timeline_action_shows_at_once_unless_it_waits() {
+        use jstream_control::protocol::TimelineId;
+        let id = TimelineId::new("seq_1");
+        let play = |delay_ms| Action::TimelinePlay {
+            timeline_id: id.clone(),
+            delay_ms,
+        };
+        assert_eq!(
+            optimistic_timeline(&play(None)),
+            Some((id.clone(), Some(0)))
+        );
+        assert_eq!(
+            optimistic_timeline(&play(Some(0))),
+            Some((id.clone(), Some(0)))
+        );
+        assert_eq!(optimistic_timeline(&play(Some(500))), None);
+        let seek = Action::TimelineSeek {
+            timeline_id: id.clone(),
+            at_ms: 1200,
+        };
+        assert_eq!(optimistic_timeline(&seek), Some((id.clone(), Some(1200))));
+        let stop = Action::TimelineStop {
+            timeline_id: id.clone(),
+        };
+        assert_eq!(optimistic_timeline(&stop), Some((id, None)));
+        let switch = Action::SceneSwitch {
+            scene_id: SceneId::new("main"),
+            preset_id: None,
+            via: Vec::new(),
+        };
+        assert_eq!(optimistic_timeline(&switch), None);
     }
 
     /// A `studio.get` answer that a `studio.changed` overtook is stale, and dropped;
