@@ -45,6 +45,34 @@ test('studio mode shows preview and program side by side, with the controls betw
   await expect(page.locator('section.studio-controls')).toHaveCount(0);
 });
 
+test('a portrait canvas stacks preview over the controls over program when that shows them larger', async ({ page, daemon }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await connect(page, daemon);
+  await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Video settings…' }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByRole('combobox', { name: 'Base resolution' }).selectOption({ label: '1080 × 1920 (9:16)' });
+  await settings.getByRole('button', { name: 'Save' }).click();
+  await expect(settings).toHaveCount(0);
+
+  // In a widescreen window two 9:16 pictures fit larger side by side.
+  await page.locator('header.app-header').getByRole('button', { name: 'Studio mode' }).click();
+  const row = page.locator('.stage-row');
+  await expect(row).toHaveClass(/two-up/);
+  await expect(row).not.toHaveClass(/stacked/);
+  // In a window on a portrait monitor they stack.
+  await page.setViewportSize({ width: 1080, height: 1900 });
+  await expect(row).toHaveClass(/stacked/);
+  const canvas = await page.getByRole('region', { name: 'Canvas' }).boundingBox();
+  const controls = await page.locator('section.studio-controls').boundingBox();
+  const program = await page.getByRole('region', { name: 'Program' }).boundingBox();
+  expect(canvas.y + canvas.height).toBeLessThanOrEqual(controls.y + 1);
+  expect(controls.y + controls.height).toBeLessThanOrEqual(program.y + 1);
+  // Each picture gets the stage's width.
+  expect(Math.abs(canvas.width - program.width)).toBeLessThan(2);
+  if (process.env.JSTREAM_E2E_SHOTS) await page.screenshot({ path: `${process.env.JSTREAM_E2E_SHOTS}/studio-portrait.png` });
+});
+
 test('a transition takes preview to program, and the old program comes back to preview', async ({ page, daemon }) => {
   const studio = await openStudio(page, daemon);
   await expect(studio.getByText('That scene is already on program.', { exact: false })).toBeVisible();
