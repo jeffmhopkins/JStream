@@ -1077,6 +1077,7 @@ mod tests {
         TrackView {
             id: id.to_owned(),
             kind,
+            name: String::new(),
             clips,
             muted: false,
             locked: false,

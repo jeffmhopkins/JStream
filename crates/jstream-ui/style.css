@@ -2763,6 +2763,12 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-track-program { background: var(--canvas-bg); }
 .show-track-head { width: 130px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; border-right: 1px solid var(--line); background: var(--panel); }
 .show-track-head b { font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.show-track-head { cursor: grab; position: relative; user-select: none; }
+.show-track-head b { overflow: hidden; text-overflow: ellipsis; }
+.show-track.lifted { opacity: 0.55; }
+.show-track.lifted .show-track-head { cursor: grabbing; }
+.show-track.reorder-target .show-track-head { box-shadow: inset 0 0 0 2px var(--accent); }
+.show-track-rename { position: absolute; left: 6px; right: 6px; top: 50%; transform: translateY(-50%); height: 24px; padding: 0 6px; border: 1px solid var(--accent); border-radius: 4px; background: var(--app); color: var(--text); font-size: 12px; z-index: 2; }
 .show-tag { display: inline-block; width: 24px; color: var(--show-tag); font: 700 11px "IBM Plex Mono", ui-monospace, monospace; }
 .show-track-icons { font-size: 9px; color: var(--faint); letter-spacing: 2px; white-space: nowrap; }
 .show-track-icons i { font-style: normal; }

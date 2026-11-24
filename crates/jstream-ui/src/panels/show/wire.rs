@@ -167,6 +167,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
         tracks.push(TrackView {
             id: track.track_id.clone(),
             kind: TrackKind::Overlay(u8::try_from(n + 2).unwrap_or(u8::MAX)),
+            name: track.name.clone(),
             clips,
             muted: false,
             locked: false,
@@ -197,6 +198,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
     tracks.push(TrackView {
         id: "program".to_owned(),
         kind: TrackKind::Program,
+        name: String::new(),
         clips: program,
         muted: false,
         locked: false,
@@ -232,6 +234,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
     tracks.push(TrackView {
         id: "keyframes".to_owned(),
         kind: TrackKind::Keyframes,
+        name: String::new(),
         clips: keyframes,
         muted: false,
         locked: false,
@@ -281,6 +284,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
         tracks.push(TrackView {
             id: track.track_id.clone(),
             kind: TrackKind::Sequences(u8::try_from(n + 1).unwrap_or(u8::MAX)),
+            name: track.name.clone(),
             clips,
             muted: false,
             locked: false,
@@ -310,6 +314,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
         tracks.push(TrackView {
             id: track.track_id.clone(),
             kind: TrackKind::Audio(u8::try_from(n + 1).unwrap_or(u8::MAX)),
+            name: track.name.clone(),
             clips,
             muted: false,
             locked: false,

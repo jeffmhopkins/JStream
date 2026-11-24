@@ -69,6 +69,28 @@ pub fn starts_group(previous: Option<TrackKind>, kind: TrackKind) -> bool {
     previous.is_some_and(|p| group(p) != group(kind))
 }
 
+/// Why track `from` can't go where `to` is, or `None` when it can: tracks reorder among
+/// their own kind. Program (V1) is always the bottom layer, under every overlay, and K
+/// is the show's one keyframe row, so neither moves.
+pub fn reorder_refusal(from: TrackKind, to: TrackKind) -> Option<String> {
+    let fixed = |k: TrackKind| matches!(k, TrackKind::Program | TrackKind::Keyframes);
+    if fixed(from) || fixed(to) {
+        return Some(
+            "V1 (program) is always the bottom layer, with overlays over it, and K has its own \
+             row: drag V2 and up, S or A rows among their own kind."
+                .to_owned(),
+        );
+    }
+    if std::mem::discriminant(&from) != std::mem::discriminant(&to) {
+        return Some(format!(
+            "{} and {} are different kinds of track: a row reorders among its own kind.",
+            from.tag(),
+            to.tag()
+        ));
+    }
+    None
+}
+
 /// Whether a jump to `at_ms` lands inside a timed clip (one that holds a video or audio
 /// file), so that it seeks into the file: its flag's "seeks" tag.
 pub fn seeks(show: &ShowView, at_ms: u32) -> bool {
@@ -659,5 +681,16 @@ mod tests {
             fade_path(1000, (800, 800), false),
             "M0 100 L800.0 4 L800.0 4 L1000 100"
         );
+    }
+
+    #[test]
+    fn rows_reorder_among_their_own_kind() {
+        use TrackKind::{Audio, Keyframes, Overlay, Program, Sequences};
+        assert_eq!(reorder_refusal(Overlay(2), Overlay(3)), None);
+        assert_eq!(reorder_refusal(Audio(1), Audio(2)), None);
+        assert_eq!(reorder_refusal(Sequences(1), Sequences(2)), None);
+        assert!(reorder_refusal(Overlay(2), Program).is_some());
+        assert!(reorder_refusal(Keyframes, Audio(1)).is_some());
+        assert!(reorder_refusal(Overlay(2), Audio(1)).is_some());
     }
 }

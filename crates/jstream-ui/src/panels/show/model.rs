@@ -127,6 +127,8 @@ pub struct TrackView {
     pub id: String,
     /// What it holds.
     pub kind: TrackKind,
+    /// The name its author gave it; empty for the kind's own ([`TrackKind::title`]).
+    pub name: String,
     /// Its clips, in show time order.
     pub clips: Vec<ClipView>,
     /// Whether it is muted: its clips do nothing when the show plays.
@@ -328,6 +330,7 @@ pub(crate) mod demo {
         TrackView {
             id: id.to_owned(),
             kind,
+            name: String::new(),
             clips,
             muted: false,
             locked: false,

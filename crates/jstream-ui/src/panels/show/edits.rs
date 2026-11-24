@@ -393,6 +393,12 @@ pub fn rename(show: &mut ShowInfo, id: &str, name: &str) -> bool {
                 .iter_mut()
                 .find(|t| t.track_id == id)
                 .map(|t| &mut t.name)
+        })
+        .or_else(|| {
+            show.audio
+                .iter_mut()
+                .find(|t| t.track_id == id)
+                .map(|t| &mut t.name)
         });
     match slot {
         Some(slot) if *slot != name => {
@@ -477,6 +483,42 @@ pub fn add_audio_track(show: &mut ShowInfo) -> Option<String> {
         clips: Vec::new(),
     });
     Some(id)
+}
+
+/// Deletes overlay or audio track `id` with its clips. Program, K and the sequence
+/// tracks stay: they are the show's own. `false` when there is no such track.
+pub fn delete_track(show: &mut ShowInfo, id: &str) -> bool {
+    let before = show.overlays.len() + show.audio.len();
+    show.overlays.retain(|t| t.track_id != id);
+    show.audio.retain(|t| t.track_id != id);
+    show.overlays.len() + show.audio.len() < before
+}
+
+/// Moves track `id` to where track `onto` is, among the tracks of its own kind: overlays
+/// (which changes which draws over which), sequence tracks or audio tracks. `false` when
+/// the two aren't tracks of one kind, or are the same track.
+pub fn move_track(show: &mut ShowInfo, id: &str, onto: &str) -> bool {
+    fn shift<T>(
+        tracks: &mut Vec<T>,
+        of: impl Fn(&T) -> &str,
+        id: &str,
+        onto: &str,
+    ) -> Option<bool> {
+        let from = tracks.iter().position(|t| of(t) == id)?;
+        let Some(to) = tracks.iter().position(|t| of(t) == onto) else {
+            return Some(false);
+        };
+        if from == to {
+            return Some(false);
+        }
+        let track = tracks.remove(from);
+        tracks.insert(to, track);
+        Some(true)
+    }
+    shift(&mut show.overlays, |t| &t.track_id, id, onto)
+        .or_else(|| shift(&mut show.sequences, |t| &t.track_id, id, onto))
+        .or_else(|| shift(&mut show.audio, |t| &t.track_id, id, onto))
+        .unwrap_or(false)
 }
 
 /// Where a clip of `length_ms` fits on a track of `spans` (start, length) near `at_ms`:
@@ -833,6 +875,54 @@ mod tests {
         assert!(!s.bookmarks[1].pausing);
         assert!(rename(&mut s, &id, " Demo "));
         assert_eq!(s.bookmarks[1].name, "Demo");
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn tracks_rename_and_delete_with_their_clips() {
+        let mut s = show();
+        let ov = add_overlay_track(&mut s).unwrap_or_default();
+        let au = add_audio_track(&mut s).unwrap_or_default();
+        add_overlay_clip(&mut s, &ov, "logo".into(), 0, 10_000);
+        assert!(rename(&mut s, &ov, " Lower thirds "));
+        assert_eq!(s.overlays[0].name, "Lower thirds");
+        assert!(rename(&mut s, &au, "Music"));
+        assert_eq!(s.audio[0].name, "Music");
+        assert!(delete_track(&mut s, &ov));
+        assert!(s.overlays.is_empty());
+        assert!(
+            !delete_track(&mut s, "program"),
+            "program is the show's own"
+        );
+        assert!(delete_track(&mut s, &au));
+        assert!(s.audio.is_empty());
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn tracks_reorder_among_their_own_kind() {
+        let mut s = show();
+        let a = add_overlay_track(&mut s).unwrap_or_default();
+        let b = add_overlay_track(&mut s).unwrap_or_default();
+        let c = add_overlay_track(&mut s).unwrap_or_default();
+        let au = add_audio_track(&mut s).unwrap_or_default();
+        let order = |s: &ShowInfo| {
+            s.overlays
+                .iter()
+                .map(|t| t.track_id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert!(move_track(&mut s, &c, &a), "the top one to the bottom");
+        assert_eq!(order(&s), [c.clone(), a.clone(), b.clone()]);
+        assert!(move_track(&mut s, &c, &b), "and back to the top");
+        assert_eq!(order(&s), [a.clone(), b.clone(), c.clone()]);
+        assert!(!move_track(&mut s, &a, &a));
+        assert!(
+            !move_track(&mut s, &a, &au),
+            "an overlay doesn't go among audio"
+        );
+        assert!(!move_track(&mut s, &a, "program"), "nor under program");
+        assert_eq!(order(&s), [a, b, c]);
         assert_eq!(s.problem(), None);
     }
 

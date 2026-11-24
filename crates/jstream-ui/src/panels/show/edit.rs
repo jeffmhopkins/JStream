@@ -302,13 +302,16 @@ fn cuts(track: &TrackView, view: Viewport) -> Vec<AnyView> {
 }
 
 /// One track's row: its head and its clips. `slot` draws the "Drop a scene or a file"
-/// target `slot`% across V1, while something is dragged over the tracks.
+/// target `slot`% across V1, while something is dragged over the tracks; `rename` is
+/// the name field over the head while the track is being renamed.
 fn track_row(
     track: &TrackView,
     previous: Option<TrackKind>,
     view: Viewport,
     selected: Option<&str>,
     (over, slot): (bool, Option<f64>),
+    (lifted, target): (bool, bool),
+    rename: Option<AnyView>,
 ) -> AnyView {
     let kind = track.kind;
     let mut body: Vec<AnyView> = track
@@ -332,14 +335,23 @@ fn track_row(
     }
     let muted = track.muted;
     let locked = track.locked;
+    let title = if track.name.is_empty() {
+        kind.title().to_owned()
+    } else {
+        track.name.clone()
+    };
     view! {
         <div class=format!("show-track show-track-{}", kind.class())
             class:show-group=geom::starts_group(previous, kind)
             class:muted=muted
             class:drop-over=over
+            class:lifted=lifted
+            class:reorder-target=target
             style:height=format!("{}px", geom::row_px(kind))>
-            <div class="show-track-head">
-                <b><span class="show-tag">{kind.tag()}</span>{kind.title()}</b>
+            <div class="show-track-head" data-track-head=track.id.clone() data-kind=kind.class()
+                title="Drag to reorder · right-click for the track's menu">
+                <b><span class="show-tag">{kind.tag()}</span>{title}</b>
+                {rename}
                 <span class="show-track-icons">
                     <i class="show-mute" class:on=muted title=if muted { "Muted" } else { "Plays" }>"◉"</i>
                     <i class="show-lock" class:on=locked title=if locked { "Locked" } else { "Unlocked" }>"🔒"</i>
@@ -613,6 +625,8 @@ pub fn EditView() -> impl IntoView {
     let pending = StoredValue::new(None::<Click>);
     // A scrub of the play head along the ruler, while it lasts: when it last sent a seek.
     let scrub = StoredValue::new(None::<f64>);
+    // A track head being dragged to reorder the rows: its ID, and the head it is over.
+    let lifting = RwSignal::new(None::<(String, Option<String>)>);
     let scrub_to = move |ms: f64, shift: bool, last: bool| {
         let at = if shift {
             ms.max(0.0) as u32
@@ -765,60 +779,115 @@ pub fn EditView() -> impl IntoView {
         );
         menus.open(e, entries);
     };
-    let track_menu = move |e: &leptos::ev::MouseEvent, track: String, kind: String, at: u32| {
-        let Some(menus) = menus else { return };
-        let off = locked_now();
-        let mut entries = Vec::new();
-        if kind == TrackKind::Audio(1).class() {
-            let sources = panel
-                .collection(|c| {
-                    c.sources
-                        .iter()
-                        .filter(|s| s.audio.is_some())
-                        .map(|s| (s.source_id.clone(), s.name.clone()))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            let items: Vec<Entry> = sources
-                .into_iter()
-                .map(|(source, name)| {
-                    let track = track.clone();
-                    Entry::item(name.clone(), move || {
-                        let mut fits = true;
-                        panel.set_show(&show_id(), |s| {
-                            fits = edits::add_audio_clip(
-                                s,
-                                &track,
-                                source.clone(),
-                                at,
-                                drops::DEFAULT_SCENE_MS,
-                                (DEFAULT_FADE_MS, DEFAULT_FADE_MS),
-                            )
-                            .is_some();
-                        });
-                        if !fits {
-                            panel.refuse(format!("{name} doesn't fit on this track there."));
-                        }
-                    })
-                    .disabled_if(off)
-                })
-                .collect();
-            entries.push(if items.is_empty() {
-                Entry::unavailable("Add audio clip (no audio sources)")
-            } else {
-                Entry::submenu("Add audio clip", items)
+    // A track's menu: on its head (`head`) the track's own entries too, and clips go in at
+    // the play head; on its body they go in where it was clicked.
+    let track_menu =
+        move |e: &leptos::ev::MouseEvent, track: String, kind: String, at: u32, head: bool| {
+            let Some(menus) = menus else { return };
+            let off = locked_now();
+            let mut entries = Vec::new();
+            let at = if head { untrack(|| panel.head()) } else { at };
+            let view = show.with_untracked(|s| {
+                s.as_ref()
+                    .and_then(|s| s.tracks.iter().find(|t| t.id == track).cloned())
             });
-            entries.push(Entry::Sep);
-        }
-        entries.push(
-            Entry::item("+ Overlay track", move || {
-                send(Command::AddOverlayTrack(show_id()));
-            })
-            .disabled_if(off),
-        );
-        entries.push(Entry::item("+ Audio track", add_audio_track).disabled_if(off));
-        menus.open(e, entries);
-    };
+            let own = matches!(
+                view.as_ref().map(|t| t.kind),
+                Some(TrackKind::Overlay(_) | TrackKind::Audio(_))
+            );
+            if let Some(t) = view
+                .clone()
+                .filter(|t| matches!(t.kind, TrackKind::Program | TrackKind::Overlay(_)))
+            {
+                let scenes = panel
+                    .collection(|c| super::inspector::scene_options(c, None))
+                    .unwrap_or_default();
+                let items: Vec<Entry> = scenes
+                    .into_iter()
+                    .map(|(scene, name)| {
+                        let t = t.clone();
+                        Entry::item(name.clone(), move || {
+                            drops::place_scene(&panel, &show_id(), &t, (&scene, &name), at, false);
+                        })
+                        .disabled_if(off)
+                    })
+                    .collect();
+                entries.push(if items.is_empty() {
+                    Entry::unavailable("Add scene (no scenes yet)")
+                } else {
+                    Entry::submenu(format!("Add scene at {}", clock(at)), items)
+                });
+                entries.push(Entry::Sep);
+            }
+            if kind == TrackKind::Audio(1).class() {
+                let sources = panel
+                    .collection(|c| {
+                        c.sources
+                            .iter()
+                            .filter(|s| s.audio.is_some())
+                            .map(|s| (s.source_id.clone(), s.name.clone()))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let items: Vec<Entry> = sources
+                    .into_iter()
+                    .map(|(source, name)| {
+                        let track = track.clone();
+                        Entry::item(name.clone(), move || {
+                            let mut fits = true;
+                            panel.set_show(&show_id(), |s| {
+                                fits = edits::add_audio_clip(
+                                    s,
+                                    &track,
+                                    source.clone(),
+                                    at,
+                                    drops::DEFAULT_SCENE_MS,
+                                    (DEFAULT_FADE_MS, DEFAULT_FADE_MS),
+                                )
+                                .is_some();
+                            });
+                            if !fits {
+                                panel.refuse(format!("{name} doesn't fit on this track there."));
+                            }
+                        })
+                        .disabled_if(off)
+                    })
+                    .collect();
+                entries.push(if items.is_empty() {
+                    Entry::unavailable("Add audio clip (no audio sources)")
+                } else {
+                    Entry::submenu(format!("Add audio clip at {}", clock(at)), items)
+                });
+                entries.push(Entry::Sep);
+            }
+            if head && own {
+                let (rename_id, delete_id) = (track.clone(), track.clone());
+                entries.push(
+                    Entry::item("Rename track", move || {
+                        renaming.set(Some(rename_id.clone()))
+                    })
+                    .disabled_if(off),
+                );
+                entries.push(
+                    Entry::item("Delete track", move || {
+                        panel.set_show(&show_id(), |s| {
+                            edits::delete_track(s, &delete_id);
+                        });
+                    })
+                    .danger()
+                    .disabled_if(off),
+                );
+                entries.push(Entry::Sep);
+            }
+            entries.push(
+                Entry::item("+ Overlay track", move || {
+                    send(Command::AddOverlayTrack(show_id()));
+                })
+                .disabled_if(off),
+            );
+            entries.push(Entry::item("+ Audio track", add_audio_track).disabled_if(off));
+            menus.open(e, entries);
+        };
     let remove_selected = move || {
         let Some(id) = selected.get_untracked() else {
             return;
@@ -846,6 +915,18 @@ pub fn EditView() -> impl IntoView {
         }
         if let Some(r) = root.get_untracked() {
             let _ = r.focus();
+        }
+        if let Some(head) = closest(&target, "[data-track-head]") {
+            e.prevent_default();
+            if let Some(el) = e
+                .current_target()
+                .and_then(|t| t.dyn_into::<Element>().ok())
+            {
+                let _ = el.set_pointer_capture(e.pointer_id());
+            }
+            let id = head.get_attribute("data-track-head").unwrap_or_default();
+            lifting.set(Some((id, None)));
+            return;
         }
         let ms = ms_at(f64::from(e.client_x()));
         let tool = tool.get_untracked();
@@ -1000,6 +1081,16 @@ pub fn EditView() -> impl IntoView {
         }));
     };
     let moving = move |e: leptos::ev::PointerEvent| {
+        if let Some((id, over)) = lifting.get_untracked() {
+            let now = crate::host::element_at(f64::from(e.client_x()), f64::from(e.client_y()))
+                .and_then(|el| closest(&el, "[data-track-head]"))
+                .and_then(|el| el.get_attribute("data-track-head"))
+                .filter(|o| *o != id);
+            if now != over {
+                lifting.set(Some((id, now)));
+            }
+            return;
+        }
         if scrub.get_value().is_some() {
             scrub_to(ms_at(f64::from(e.client_x())), e.shift_key(), false);
             return;
@@ -1030,6 +1121,31 @@ pub fn EditView() -> impl IntoView {
         press.set_value(Some(p));
     };
     let up = move |e: leptos::ev::PointerEvent| {
+        if let Some((id, over)) = lifting.get_untracked() {
+            lifting.set(None);
+            let Some(onto) = over else { return };
+            if locked_now() {
+                panel.refuse("The show is locked: unlock it to edit.");
+                return;
+            }
+            let kinds = show.with_untracked(|s| {
+                let kind = |t: &str| {
+                    s.as_ref()
+                        .and_then(|s| s.tracks.iter().find(|x| x.id == t))
+                        .map(|x| x.kind)
+                };
+                kind(&id).zip(kind(&onto))
+            });
+            let Some((from, to)) = kinds else { return };
+            if let Some(why) = geom::reorder_refusal(from, to) {
+                panel.refuse(why);
+                return;
+            }
+            panel.set_show(&show_id(), |s| {
+                edits::move_track(s, &id, &onto);
+            });
+            return;
+        }
         if scrub.get_value().is_some() {
             scrub_to(ms_at(f64::from(e.client_x())), e.shift_key(), true);
             scrub.set_value(None);
@@ -1071,6 +1187,7 @@ pub fn EditView() -> impl IntoView {
         }
     };
     let cancel = move || {
+        lifting.set(None);
         scrub.set_value(None);
         press.set_value(None);
         tip.set(None);
@@ -1139,12 +1256,21 @@ pub fn EditView() -> impl IntoView {
                     .disabled_if(locked_now()),
             );
             menus.open(&e, entries);
+        } else if let Some(el) = closest(&target, "[data-track-head]") {
+            track_menu(
+                &e,
+                el.get_attribute("data-track-head").unwrap_or_default(),
+                el.get_attribute("data-kind").unwrap_or_default(),
+                ms,
+                true,
+            );
         } else if let Some(el) = closest(&target, "[data-track]") {
             track_menu(
                 &e,
                 el.get_attribute("data-track").unwrap_or_default(),
                 el.get_attribute("data-kind").unwrap_or_default(),
                 ms,
+                false,
             );
         }
     };
@@ -1311,10 +1437,38 @@ pub fn EditView() -> impl IntoView {
             })
             .collect_view()
     };
+    // Renaming a bookmark, a loop or a track: a name field over its flag, bar or head.
+    let rename_field = NodeRef::<leptos::html::Input>::new();
+    Effect::new(move |_| {
+        if renaming.get().is_some() {
+            request_animation_frame(move || {
+                if let Some(el) = rename_field.get_untracked() {
+                    let _ = el.focus();
+                    el.select();
+                }
+            });
+        }
+    });
+    let finish_rename = move |keep: bool| {
+        let Some(id) = renaming.get_untracked() else {
+            return;
+        };
+        renaming.set(None);
+        if keep && let Some(el) = rename_field.get_untracked() {
+            let name = el.value();
+            if !name.trim().is_empty() {
+                panel.set_show(&show_id(), |s| {
+                    edits::rename(s, &id, &name);
+                });
+            }
+        }
+    };
     let rows = move || {
         let v = viewport.get();
         let sel = selected.get();
         let over = hover.get();
+        let naming = renaming.get();
+        let lift = lifting.get();
         show.with(|s| {
             let Some(s) = s else {
                 return Vec::new();
@@ -1334,6 +1488,32 @@ pub fn EditView() -> impl IntoView {
                         v,
                         sel.as_deref(),
                         (is_over, slot),
+                        lift.as_ref().map_or((false, false), |(id, over)| {
+                            (*id == t.id, over.as_deref() == Some(t.id.as_str()))
+                        }),
+                        (naming.as_deref() == Some(t.id.as_str())).then(|| {
+                            let name = if t.name.is_empty() {
+                                t.kind.title().to_owned()
+                            } else {
+                                t.name.clone()
+                            };
+                            view! {
+                                <input class="show-track-rename" aria-label="Track name"
+                                    node_ref=rename_field value=name
+                                    on:pointerdown=|e| e.stop_propagation()
+                                    on:keydown=move |e| {
+                                        match e.key().as_str() {
+                                            "Enter" => finish_rename(true),
+                                            "Escape" => finish_rename(false),
+                                            _ => return,
+                                        }
+                                        e.prevent_default();
+                                        e.stop_propagation();
+                                    }
+                                    on:blur=move |_| finish_rename(true) />
+                            }
+                            .into_any()
+                        }),
                     )
                 })
                 .collect::<Vec<_>>()
@@ -1429,32 +1609,6 @@ pub fn EditView() -> impl IntoView {
                 })
                 .collect::<Vec<_>>()
         })
-    };
-    // Renaming a bookmark or a loop: a name field over its flag or bar.
-    let rename_field = NodeRef::<leptos::html::Input>::new();
-    Effect::new(move |_| {
-        if renaming.get().is_some() {
-            request_animation_frame(move || {
-                if let Some(el) = rename_field.get_untracked() {
-                    let _ = el.focus();
-                    el.select();
-                }
-            });
-        }
-    });
-    let finish_rename = move |keep: bool| {
-        let Some(id) = renaming.get_untracked() else {
-            return;
-        };
-        renaming.set(None);
-        if keep && let Some(el) = rename_field.get_untracked() {
-            let name = el.value();
-            if !name.trim().is_empty() {
-                panel.set_show(&show_id(), |s| {
-                    edits::rename(s, &id, &name);
-                });
-            }
-        }
     };
     let rename_box = move || {
         let id = renaming.get()?;
