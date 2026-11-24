@@ -581,7 +581,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   backdrop cancel, and Enter presses the button marked `data-primary`. Escape reaches the
   topmost dialog wherever the focus is: a capture-phase window listener takes one pressed
   outside it (before its first field has the focus, or on a dialog under it) unless a
-  menu is open, and cancels it under the dialog's reactive owner (#1607, #1652). A primary press
+  menu is open, and cancels it under the dialog's reactive owner (#1607, #1652). On its
+  first frame the dialog focuses its first field, unless the focus is already inside it
+  (a click or key on a row before that frame keeps it), and does nothing if it closed
+  before that frame (#1703). A primary press
   on that dialog's own header drags it, as a `translate` from the centred place, clamped
   so the box stays inside the window (a box wider than the window keeps covering it; the
   top never goes above the window). The offset is remembered for the dialog's label in

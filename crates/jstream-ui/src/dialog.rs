@@ -251,19 +251,31 @@ pub fn Modal(
             }
         }
     };
-    // Focus the dialog's first field, so Enter and Escape reach it at once, and pull a
-    // remembered place back on screen in case the window shrank.
+    // Focus the dialog's first field, so Enter and Escape reach it at once, unless
+    // something in it took the focus first (a click or a key on a row before the first
+    // frame keeps it, #1703), and pull a remembered place back on screen in case the
+    // window shrank.
     request_animation_frame(move || {
+        // A dialog closed before the next frame (a quick Cancel or Escape) is gone, and
+        // so is its state: reading it would panic (#1703).
+        if drag.is_disposed() {
+            return;
+        }
         if let Some(dialog) = dialog.get_untracked() {
             let first = dialog
                 .query_selector("input:not([type=radio]), select, textarea")
                 .ok()
                 .flatten()
                 .and_then(|e| e.dyn_into::<leptos::web_sys::HtmlElement>().ok());
-            let _ = match first {
-                Some(field) => field.focus(),
-                None => dialog.focus(),
-            };
+            let focused_inside = document()
+                .active_element()
+                .is_some_and(|active| dialog.contains(Some(&active)));
+            if !focused_inside {
+                let _ = match first {
+                    Some(field) => field.focus(),
+                    None => dialog.focus(),
+                };
+            }
             if drag.get_value().is_none() {
                 let rect = crate::ui_scale::rect(&dialog);
                 let (vw, vh) = viewport();
