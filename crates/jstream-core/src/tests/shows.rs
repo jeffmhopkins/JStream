@@ -10,7 +10,7 @@ use jstream_media::Timebase;
 use jstream_platform::fake::FakeClock;
 use jstream_protocol::{
     Action, Batch, Call, Edit, Event, ProgramClip, Query, QueryResult, RunningShow, SceneId,
-    ShowBookmark, ShowChange, ShowCue, ShowId, ShowInfo, ShowState, SequenceTrack,
+    SequenceTrack, ShowBookmark, ShowChange, ShowCue, ShowId, ShowInfo, ShowState,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -65,7 +65,11 @@ fn engine_with_show() -> (Engine, crate::InProcessControl) {
     engine.set_source_clock(Arc::new(clock));
     let control = connected(&engine);
     let mut show = ShowInfo::new("s");
-    show.program = vec![clip("ca", "a", 1000), clip("cb", "b", 1000), clip("cc", "c", 1000)];
+    show.program = vec![
+        clip("ca", "a", 1000),
+        clip("cb", "b", 1000),
+        clip("cc", "c", 1000),
+    ];
     show.bookmarks = vec![bookmark("p", 1000, true), bookmark("n", 2000, false)];
     show.sequences = vec![SequenceTrack {
         track_id: "s1".into(),
@@ -138,14 +142,22 @@ fn a_show_plays_its_program_track_and_waits_at_a_pausing_bookmark() {
 
     step(&control, 600);
     step(&control, 600);
-    assert_eq!(program(&control).as_deref(), Some("a"), "b starts on Continue");
+    assert_eq!(
+        program(&control).as_deref(),
+        Some("a"),
+        "b starts on Continue"
+    );
     let show = running(&control);
     assert_eq!(show.state, ShowState::Paused);
     assert_eq!(show.at_ms, 1000);
     assert_eq!(show.bookmark_id.as_deref(), Some("p"));
 
     step(&control, 500);
-    assert_eq!(running(&control).at_ms, 1000, "show time stops while paused");
+    assert_eq!(
+        running(&control).at_ms,
+        1000,
+        "show time stops while paused"
+    );
 
     act(&control, Action::ShowContinue).expect("continue");
     step(&control, 1);
@@ -158,7 +170,11 @@ fn a_show_plays_its_program_track_and_waits_at_a_pausing_bookmark() {
 
     step(&control, 1000);
     assert!(studio(&control).1.is_none(), "it ended");
-    assert_eq!(program(&control).as_deref(), Some("c"), "the last scene stays");
+    assert_eq!(
+        program(&control).as_deref(),
+        Some("c"),
+        "the last scene stays"
+    );
 
     let changes: Vec<ShowChange> = drain(&mut events)
         .into_iter()
@@ -238,7 +254,11 @@ fn a_hand_switch_takes_the_show_off_script_and_continue_goes_on() {
     assert_eq!(running(&control).at_ms, 200, "show time stops off script");
     act(&control, Action::ShowContinue).expect("continue");
     step(&control, 1);
-    assert_eq!(program(&control).as_deref(), Some("b"), "on to the next clip");
+    assert_eq!(
+        program(&control).as_deref(),
+        Some("b"),
+        "on to the next clip"
+    );
 }
 
 #[test]

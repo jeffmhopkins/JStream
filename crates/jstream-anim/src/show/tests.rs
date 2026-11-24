@@ -63,15 +63,31 @@ fn plan(program: Vec<ProgramClip<K>>) -> Plan<K> {
 }
 
 fn clip(scene: &'static str, length_ms: u32) -> ProgramClip<K> {
-    ProgramClip { scene, length_ms, transition: None, timed: false }
+    ProgramClip {
+        scene,
+        length_ms,
+        transition: None,
+        timed: false,
+    }
 }
 
 fn clip_tr(scene: &'static str, length_ms: u32, tr: &'static str) -> ProgramClip<K> {
-    ProgramClip { scene, length_ms, transition: Some(tr), timed: false }
+    ProgramClip {
+        scene,
+        length_ms,
+        transition: Some(tr),
+        timed: false,
+    }
 }
 
 fn bm(id: u32, at_ms: u32, pausing: bool) -> Bookmark<K> {
-    Bookmark { id, at_ms, pausing, arrive: None, limit_ms: None }
+    Bookmark {
+        id,
+        at_ms,
+        pausing,
+        arrive: None,
+        limit_ms: None,
+    }
 }
 
 fn ev(at_ms: u32, action: Act) -> ShowEvent<K> {
@@ -79,15 +95,33 @@ fn ev(at_ms: u32, action: Act) -> ShowEvent<K> {
 }
 
 fn overlay(track: u8, scene: &'static str, start_ms: u32, length_ms: u32) -> OverlayClip<K> {
-    OverlayClip { track, scene, start_ms, length_ms, fade_in_ms: 0, fade_out_ms: 0, timed: false }
+    OverlayClip {
+        track,
+        scene,
+        start_ms,
+        length_ms,
+        fade_in_ms: 0,
+        fade_out_ms: 0,
+        timed: false,
+    }
 }
 
 fn seq(timeline: u8, start_ms: u32, length_ms: u32) -> SequenceClip<K> {
-    SequenceClip { timeline, start_ms, length_ms }
+    SequenceClip {
+        timeline,
+        start_ms,
+        length_ms,
+    }
 }
 
 fn lp(id: u8, from_ms: u32, to_ms: u32, leave: Leave) -> LoopRegion<K> {
-    LoopRegion { id, from_ms, to_ms, leave, wrap: None }
+    LoopRegion {
+        id,
+        from_ms,
+        to_ms,
+        leave,
+        wrap: None,
+    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -142,7 +176,10 @@ impl World {
 
     fn apply(&mut self, plan: &Plan<K>, steps: &[Step<K>]) {
         for w in steps.windows(2) {
-            assert!(w[0].at_ns <= w[1].at_ns, "steps out of time order: {steps:#?}");
+            assert!(
+                w[0].at_ns <= w[1].at_ns,
+                "steps out of time order: {steps:#?}"
+            );
         }
         let mut i = 0;
         while i < steps.len() {
@@ -182,26 +219,44 @@ impl World {
             (offset_ms < plan.program[clip].length_ms).then(|| p - i64::from(offset_ms))
         };
         match e {
-            Effect::Program { clip, offset_ms, .. } => {
+            Effect::Program {
+                clip, offset_ms, ..
+            } => {
                 self.program = Some((*clip, origin(*clip, *offset_ms)));
                 self.keyframe = None;
             }
-            Effect::Seek { clip, offset_ms, .. } => {
-                assert_eq!(self.program.map(|p| p.0), Some(*clip), "Seek of a clip not on program");
+            Effect::Seek {
+                clip, offset_ms, ..
+            } => {
+                assert_eq!(
+                    self.program.map(|p| p.0),
+                    Some(*clip),
+                    "Seek of a clip not on program"
+                );
                 self.program = Some((*clip, origin(*clip, *offset_ms)));
             }
             Effect::Keyframe { marker, .. } => self.keyframe = Some(*marker),
             Effect::OverlayOff { clip, .. } => {
-                assert!(self.overlays.remove(clip).is_some(), "OverlayOff of clip {clip}, not up");
+                assert!(
+                    self.overlays.remove(clip).is_some(),
+                    "OverlayOff of clip {clip}, not up"
+                );
             }
-            Effect::OverlayOn { clip, offset_ms, .. } => {
+            Effect::OverlayOn {
+                clip, offset_ms, ..
+            } => {
                 self.overlays.insert(*clip, p - i64::from(*offset_ms));
             }
             Effect::SequenceStop { timeline, .. } => {
                 self.sequences.remove(timeline);
             }
-            Effect::SequencePlay { clip, timeline, offset_ms } => {
-                self.sequences.insert(*timeline, (*clip, p - i64::from(*offset_ms)));
+            Effect::SequencePlay {
+                clip,
+                timeline,
+                offset_ms,
+            } => {
+                self.sequences
+                    .insert(*timeline, (*clip, p - i64::from(*offset_ms)));
             }
             Effect::Action { action, .. } => match *action {
                 Act::Set(k, v) => {
@@ -222,7 +277,12 @@ impl World {
         Owned {
             program: self.program.map(|(c, o)| {
                 let len = i64::from(plan.program[c].length_ms);
-                (c, plan.program[c].timed.then(|| o.map_or(len, |o| (t - o).min(len))))
+                (
+                    c,
+                    plan.program[c]
+                        .timed
+                        .then(|| o.map_or(len, |o| (t - o).min(len))),
+                )
             }),
             keyframe: self.keyframe,
             overlays: self
@@ -230,7 +290,11 @@ impl World {
                 .iter()
                 .map(|(c, o)| (*c, if plan.overlays[*c].timed { t - o } else { 0 }))
                 .collect(),
-            sequences: self.sequences.iter().map(|(tl, (c, o))| (*tl, (*c, t - o))).collect(),
+            sequences: self
+                .sequences
+                .iter()
+                .map(|(tl, (c, o))| (*tl, (*c, t - o)))
+                .collect(),
         }
     }
 }
@@ -249,12 +313,21 @@ struct Rig {
 impl Rig {
     fn new(plan: Plan<K>) -> Self {
         assert_eq!(plan.check(), Ok(()), "{plan:#?}");
-        Rig { plan, r: Runner::new(), w: World::default(), now: 0 }
+        Rig {
+            plan,
+            r: Runner::new(),
+            w: World::default(),
+            now: 0,
+        }
     }
 
     fn run(&mut self, steps: Vec<Step<K>>) -> Vec<Step<K>> {
         for s in &steps {
-            assert!(s.at_ns <= self.now, "step due after now ({}): {s:?}", self.now);
+            assert!(
+                s.at_ns <= self.now,
+                "step due after now ({}): {s:?}",
+                self.now
+            );
         }
         self.w.apply(&self.plan, &steps);
         steps
@@ -265,7 +338,8 @@ impl Rig {
     }
 
     fn start(&mut self, at_ms: u32, landing: Landing) -> Vec<Effect<K>> {
-        self.w.anchor(i64::from(at_ms), self.now, landing == Landing::PlayOn);
+        self.w
+            .anchor(i64::from(at_ms), self.now, landing == Landing::PlayOn);
         let s = self.r.start(&self.plan, at_ms, landing, self.now);
         let mut e = Self::effects(self.run(s));
         e.extend(self.tick_ns(self.now));
@@ -290,7 +364,10 @@ impl Rig {
 
     /// Calls a command, then ticks at the same instant (what lands at a point happens
     /// on the next tick).
-    fn cmd(&mut self, f: impl FnOnce(&mut Runner<u8>, &Plan<K>, i64) -> Vec<Step<K>>) -> Vec<Effect<K>> {
+    fn cmd(
+        &mut self,
+        f: impl FnOnce(&mut Runner<u8>, &Plan<K>, i64) -> Vec<Step<K>>,
+    ) -> Vec<Effect<K>> {
         let s = f(&mut self.r, &self.plan, self.now);
         let mut e = Self::effects(self.run(s));
         e.extend(self.tick_ns(self.now));
@@ -400,7 +477,11 @@ fn plan_check_errors() {
     assert_eq!(p.check(), Err(InvalidPlan::EmptyClip(0)));
 
     let mut p = ok.clone();
-    p.events = vec![ev(5, Act::Shot(1)), ev(5, Act::Shot(2)), ev(3, Act::Shot(3))];
+    p.events = vec![
+        ev(5, Act::Shot(1)),
+        ev(5, Act::Shot(2)),
+        ev(3, Act::Shot(3)),
+    ];
     assert_eq!(p.check(), Err(InvalidPlan::Unsorted(2)));
 
     let mut p = ok.clone();
@@ -408,10 +489,18 @@ fn plan_check_errors() {
     assert_eq!(p.check(), Err(InvalidPlan::Unsorted(1)));
 
     let mut p = ok.clone();
-    p.overlays = vec![overlay(0, "O", 0, 5), overlay(1, "P", 2, 5), overlay(0, "Q", 4, 5)];
+    p.overlays = vec![
+        overlay(0, "O", 0, 5),
+        overlay(1, "P", 2, 5),
+        overlay(0, "Q", 4, 5),
+    ];
     assert_eq!(p.check(), Err(InvalidPlan::OverlayOverlap(2)));
     // End to end on one track, and overlapping on two tracks, are fine.
-    p.overlays = vec![overlay(0, "O", 0, 5), overlay(1, "P", 2, 5), overlay(0, "Q", 5, 5)];
+    p.overlays = vec![
+        overlay(0, "O", 0, 5),
+        overlay(1, "P", 2, 5),
+        overlay(0, "Q", 5, 5),
+    ];
     assert_eq!(p.check(), Ok(()));
 
     let mut p = ok.clone();
@@ -433,7 +522,11 @@ fn plan_check_errors() {
 #[test]
 fn spanning_edges() {
     let mut p = plan(vec![clip("A", 10), clip("B", 10)]);
-    p.keyframes = vec![KeyframeMark { at_ms: 15, keyframe: Some("k"), preset: None }];
+    p.keyframes = vec![KeyframeMark {
+        at_ms: 15,
+        keyframe: Some("k"),
+        preset: None,
+    }];
     p.overlays = vec![overlay(0, "O", 5, 5)];
     p.sequences = vec![seq(1, 0, 10), seq(1, 5, 10)];
     let at = spanning(&p, 10, Edge::At);
@@ -466,22 +559,44 @@ fn spanning_edges() {
 
 #[test]
 fn plays_through_cuts_with_each_clips_transition_at_exact_times() {
-    let p = plan(vec![clip("A", 10), clip_tr("B", 10, "fade"), clip_tr("C", 5, "wipe")]);
+    let p = plan(vec![
+        clip("A", 10),
+        clip_tr("B", 10, "fade"),
+        clip_tr("C", 5, "wipe"),
+    ]);
     let mut g = Rig::new(p);
     let e = g.start(0, Landing::PlayOn);
-    assert!(has(&e, |e| matches!(e, Effect::Program { clip: 0, scene: "A", offset_ms: 0, .. })));
+    assert!(has(&e, |e| matches!(
+        e,
+        Effect::Program {
+            clip: 0,
+            scene: "A",
+            offset_ms: 0,
+            ..
+        }
+    )));
     assert_eq!(g.r.status(), Status::Playing);
     // A late tick still gives each step its exact due time.
     let steps = g.tick_steps(37 * MS);
     let due = |f: &dyn Fn(&Effect<K>) -> bool| steps.iter().find(|s| f(&s.effect)).map(|s| s.at_ns);
     assert_eq!(
         due(&|e| *e
-            == Effect::Program { clip: 1, scene: "B", transition: Some("fade"), offset_ms: 0 }),
+            == Effect::Program {
+                clip: 1,
+                scene: "B",
+                transition: Some("fade"),
+                offset_ms: 0
+            }),
         Some(10 * MS)
     );
     assert_eq!(
         due(&|e| *e
-            == Effect::Program { clip: 2, scene: "C", transition: Some("wipe"), offset_ms: 0 }),
+            == Effect::Program {
+                clip: 2,
+                scene: "C",
+                transition: Some("wipe"),
+                offset_ms: 0
+            }),
         Some(20 * MS)
     );
     assert_eq!(due(&|e| *e == Effect::Ended), Some(25 * MS));
@@ -516,11 +631,19 @@ fn pausing_bookmark_pauses_before_its_point_and_continue_runs_it() {
     let mut g = Rig::new(pausing_plan(true));
     g.start(0, Landing::PlayOn);
     let steps = g.tick_steps(15 * MS);
-    assert!(
-        steps.iter().any(|s| s.at_ns == 10 * MS
-            && s.effect == Effect::Paused { bookmark: Some(0), at_ms: 10 })
+    assert!(steps.iter().any(|s| s.at_ns == 10 * MS
+        && s.effect
+            == Effect::Paused {
+                bookmark: Some(0),
+                at_ms: 10
+            }));
+    assert_eq!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(0),
+            since_ns: 10 * MS
+        }
     );
-    assert_eq!(g.r.status(), Status::Paused { bookmark: Some(0), since_ns: 10 * MS });
     assert_eq!(g.pos(), 10);
     assert_eq!(g.w.program, Some((0, Some(0))));
     assert!(g.w.overlays.is_empty() && g.w.sequences.is_empty());
@@ -557,8 +680,18 @@ fn non_pausing_bookmark_plays_through() {
 fn go_to_plan() -> Plan<K> {
     let mut p = plan(vec![clip("A", 10), clip("B", 10), clip_tr("C", 10, "wipe")]);
     p.default_transition = Some("dflt");
-    p.bookmarks = vec![bm(0, 15, false), Bookmark { arrive: Some("arr"), ..bm(1, 20, true) }];
-    p.events = vec![ev(5, Act::Set(1, 3)), ev(20, Act::Set(1, 5)), ev(20, Act::Shot(1))];
+    p.bookmarks = vec![
+        bm(0, 15, false),
+        Bookmark {
+            arrive: Some("arr"),
+            ..bm(1, 20, true)
+        },
+    ];
+    p.events = vec![
+        ev(5, Act::Set(1, 3)),
+        ev(20, Act::Set(1, 5)),
+        ev(20, Act::Shot(1)),
+    ];
     p
 }
 
@@ -569,9 +702,24 @@ fn go_to_pausing_bookmark_lands_before_it() {
     g.at(2);
     let e = g.go_to(1);
     assert!(has(&e, |e| *e
-        == Effect::Program { clip: 1, scene: "B", transition: Some("arr"), offset_ms: 10 }));
-    assert!(has(&e, |e| *e == Effect::Paused { bookmark: Some(1), at_ms: 20 }));
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(1), .. }));
+        == Effect::Program {
+            clip: 1,
+            scene: "B",
+            transition: Some("arr"),
+            offset_ms: 10
+        }));
+    assert!(has(&e, |e| *e
+        == Effect::Paused {
+            bookmark: Some(1),
+            at_ms: 20
+        }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(1),
+            ..
+        }
+    ));
     assert_eq!(g.pos(), 20);
     assert_eq!(g.w.program, Some((1, None)));
     assert_eq!(g.w.states, BTreeMap::from([(1, 3)]));
@@ -580,7 +728,12 @@ fn go_to_pausing_bookmark_lands_before_it() {
     g.at(4);
     let e = g.cont();
     assert!(has(&e, |e| *e
-        == Effect::Program { clip: 2, scene: "C", transition: Some("wipe"), offset_ms: 0 }));
+        == Effect::Program {
+            clip: 2,
+            scene: "C",
+            transition: Some("wipe"),
+            offset_ms: 0
+        }));
     assert_eq!(g.w.states, BTreeMap::from([(1, 5)]));
     assert_eq!(g.w.shots, vec![1]);
 }
@@ -591,12 +744,21 @@ fn go_to_non_pausing_bookmark_plays_on() {
     g.start(0, Landing::PlayOn);
     let e = g.go_to(0);
     assert!(has(&e, |e| *e
-        == Effect::Program { clip: 1, scene: "B", transition: Some("dflt"), offset_ms: 5 }));
+        == Effect::Program {
+            clip: 1,
+            scene: "B",
+            transition: Some("dflt"),
+            offset_ms: 5
+        }));
     assert_eq!(g.r.status(), Status::Playing);
     assert_eq!(g.w.states, BTreeMap::from([(1, 3)]));
     // It plays on into the pausing bookmark at 20.
     let e = g.at(5);
-    assert!(has(&e, |e| *e == Effect::Paused { bookmark: Some(1), at_ms: 20 }));
+    assert!(has(&e, |e| *e
+        == Effect::Paused {
+            bookmark: Some(1),
+            at_ms: 20
+        }));
 }
 
 #[test]
@@ -608,30 +770,69 @@ fn back_and_skip() {
     g.at(10);
     g.cont();
     g.at(20);
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(1), .. }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(1),
+            ..
+        }
+    ));
     g.cont();
     g.at(25);
     assert_eq!(g.pos(), 25);
 
     g.back();
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(1), .. }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(1),
+            ..
+        }
+    ));
     assert_eq!(g.pos(), 20);
     g.back();
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(0), .. }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(0),
+            ..
+        }
+    ));
     assert_eq!(g.pos(), 10);
     g.back();
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: None, .. }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused { bookmark: None, .. }
+    ));
     assert_eq!(g.pos(), 0);
 
     g.skip();
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(0), .. }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(0),
+            ..
+        }
+    ));
     assert_eq!(g.pos(), 10);
     g.skip();
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(1), .. }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(1),
+            ..
+        }
+    ));
     assert_eq!(g.pos(), 20);
     let e = g.skip();
     assert!(e.is_empty(), "{e:?}");
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(1), .. }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(1),
+            ..
+        }
+    ));
     assert_eq!(g.pos(), 20);
 }
 
@@ -645,7 +846,11 @@ fn early_continue_jumps_past_the_next_pause() {
     g.at(5);
     assert_eq!(g.next(), Next::Jump(20));
     let e = g.cont();
-    assert!(has(&e, |e| *e == Effect::Jumped { from_ms: 5, to_ms: 20 }));
+    assert!(has(&e, |e| *e
+        == Effect::Jumped {
+            from_ms: 5,
+            to_ms: 20
+        }));
     assert_eq!(g.r.status(), Status::Playing);
     assert_eq!(g.pos(), 20);
     assert_eq!(g.w.program, Some((1, Some(10))));
@@ -692,25 +897,58 @@ fn into_loop(leave: Leave) -> Rig {
     let mut g = Rig::new(loop_plan(leave));
     g.start(0, Landing::PlayOn);
     g.at(10);
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(0), .. }), "pauses on entry");
+    assert!(
+        matches!(
+            g.r.status(),
+            Status::Paused {
+                bookmark: Some(0),
+                ..
+            }
+        ),
+        "pauses on entry"
+    );
     assert_eq!(g.w.program, Some((0, Some(0))));
     g.cont();
     assert_eq!(g.w.program, Some((1, Some(10))));
     g.at(29);
     let e = g.at(30);
-    assert!(has(&e, |e| *e == Effect::Looped { region: 0, pass: 1 }), "{e:?}");
-    assert!(!has(&e, |e| matches!(e, Effect::Paused { .. })), "a loop's end never pauses a pass");
-    assert!(!has(&e, |e| matches!(e, Effect::Program { .. } | Effect::Seek { .. })));
-    assert!(!has(&e, |e| matches!(e, Effect::OverlayOff { clip: 0, .. })));
+    assert!(
+        has(&e, |e| *e == Effect::Looped { region: 0, pass: 1 }),
+        "{e:?}"
+    );
+    assert!(
+        !has(&e, |e| matches!(e, Effect::Paused { .. })),
+        "a loop's end never pauses a pass"
+    );
+    assert!(!has(&e, |e| matches!(
+        e,
+        Effect::Program { .. } | Effect::Seek { .. }
+    )));
+    assert!(!has(&e, |e| matches!(
+        e,
+        Effect::OverlayOff { clip: 0, .. }
+    )));
     assert_eq!(g.r.looping(), Some((0, 1)));
-    assert_eq!(g.r.status(), Status::Playing, "the loop's start doesn't pause on a wrap");
+    assert_eq!(
+        g.r.status(),
+        Status::Playing,
+        "the loop's start doesn't pause on a wrap"
+    );
     assert_eq!(g.pos(), 10);
     assert_eq!(g.w.program, Some((1, Some(10))));
     assert_eq!(g.w.overlays, BTreeMap::from([(0, 5)]));
     g.at(32);
-    assert_eq!(g.w.sequences, BTreeMap::from([(1, (0, 12))]), "the sequence restarts");
+    assert_eq!(
+        g.w.sequences,
+        BTreeMap::from([(1, (0, 12))]),
+        "the sequence restarts"
+    );
     g.at(35);
-    assert_eq!(g.w.overlays, BTreeMap::from([(0, 5), (1, 15)]), "overlay 1 restarts");
+    assert_eq!(
+        g.w.overlays,
+        BTreeMap::from([(0, 5), (1, 15)]),
+        "overlay 1 restarts"
+    );
     g.at(40);
     assert_eq!(g.w.shots, vec![9, 9]);
     g.at(50);
@@ -724,14 +962,47 @@ fn into_loop(leave: Leave) -> Rig {
 
 #[test]
 fn loop_wraps_and_continue_at_once_lands_at_its_end() {
+    // With a pausing bookmark at the loop's end, leaving at once lands pausing there,
+    // as finishing the pass would.
     let mut g = into_loop(Leave::AtOnce);
+    let e = g.cont();
+    assert!(
+        has(&e, |e| *e
+            == Effect::Jumped {
+                from_ms: 15,
+                to_ms: 30
+            }),
+        "{e:?}"
+    );
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(1),
+            ..
+        }
+    ));
+    assert_eq!(g.r.looping(), None);
+    assert_eq!(g.w.program, Some((1, Some(10))));
+    g.cont();
+    assert_eq!(g.w.program, Some((2, Some(30))));
+
+    // Without one, it plays on from the end.
+    let mut p = loop_plan(Leave::AtOnce);
+    p.bookmarks.truncate(1);
+    let mut g = Rig::new(p);
+    g.start(0, Landing::PlayOn);
+    g.at(10);
+    g.cont();
+    g.at(35);
+    assert_eq!(g.r.looping(), Some((0, 1)));
+    assert_eq!(g.pos(), 15);
     g.cont();
     assert_eq!(g.pos(), 30);
     assert_eq!(g.r.looping(), None);
     assert_eq!(g.r.status(), Status::Playing);
     assert_eq!(g.w.program, Some((2, Some(30))));
     assert_eq!(g.w.overlays, BTreeMap::from([(0, 5)]));
-    let e = g.at(56);
+    let e = g.at(36);
     assert!(!has(&e, |e| matches!(e, Effect::Paused { .. })));
     assert_eq!(g.pos(), 31);
 }
@@ -749,7 +1020,16 @@ fn loop_finish_pass_plays_the_pass_then_goes_on() {
     let e = g.at(70);
     assert!(!has(&e, |e| matches!(e, Effect::Looped { .. })));
     // Leaving, the play head reaches the loop's end outside a pass: its bookmark pauses.
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(1), .. }), "{e:?}");
+    assert!(
+        matches!(
+            g.r.status(),
+            Status::Paused {
+                bookmark: Some(1),
+                ..
+            }
+        ),
+        "{e:?}"
+    );
     g.cont();
     assert_eq!(g.r.looping(), None);
     assert_eq!(g.w.program, Some((2, Some(30))));
@@ -764,7 +1044,14 @@ fn end_of_show_loop_and_go_to() {
     let mut g = Rig::new(p.clone());
     g.start(0, Landing::PlayOn);
     let e = g.at(20);
-    assert!(has(&e, |e| *e == Effect::Jumped { from_ms: 20, to_ms: 0 }), "{e:?}");
+    assert!(
+        has(&e, |e| *e
+            == Effect::Jumped {
+                from_ms: 20,
+                to_ms: 0
+            }),
+        "{e:?}"
+    );
     assert_eq!(g.r.status(), Status::Playing);
     assert_eq!(g.w.program, Some((0, Some(0))));
     g.at(25);
@@ -777,7 +1064,13 @@ fn end_of_show_loop_and_go_to() {
     g.at(5);
     g.cont();
     g.at(20);
-    assert!(matches!(g.r.status(), Status::Paused { bookmark: Some(0), .. }));
+    assert!(matches!(
+        g.r.status(),
+        Status::Paused {
+            bookmark: Some(0),
+            ..
+        }
+    ));
     assert_eq!(g.pos(), 5);
     assert_eq!(g.w.program, Some((0, Some(0))));
 
@@ -796,7 +1089,10 @@ fn end_of_show_loop_and_go_to() {
 #[test]
 fn pause_limit_continues_by_itself() {
     let mut p = plan(vec![clip("A", 20)]);
-    p.bookmarks = vec![Bookmark { limit_ms: Some(500), ..bm(0, 10, true) }];
+    p.bookmarks = vec![Bookmark {
+        limit_ms: Some(500),
+        ..bm(0, 10, true)
+    }];
     p.events = vec![ev(10, Act::Shot(1))];
     let mut g = Rig::new(p);
     g.start(0, Landing::PlayOn);
@@ -805,8 +1101,16 @@ fn pause_limit_continues_by_itself() {
     assert_eq!(g.r.next_due(&g.plan), Some(510 * MS));
     assert!(g.at(509).is_empty());
     let steps = g.tick_steps(515 * MS);
-    assert!(steps.iter().any(|s| s.at_ns == 510 * MS && s.effect == Effect::Resumed { at_ms: 10 }));
-    assert!(steps.iter().any(|s| s.at_ns == 510 * MS && matches!(s.effect, Effect::Action { .. })));
+    assert!(
+        steps
+            .iter()
+            .any(|s| s.at_ns == 510 * MS && s.effect == Effect::Resumed { at_ms: 10 })
+    );
+    assert!(
+        steps
+            .iter()
+            .any(|s| s.at_ns == 510 * MS && matches!(s.effect, Effect::Action { .. }))
+    );
     assert_eq!(g.r.status(), Status::Playing);
     assert_eq!(g.pos(), 15);
     assert_eq!(g.w.shots, vec![1]);
@@ -837,7 +1141,17 @@ fn back_to_script_recuts_the_play_heads_clip() {
     g.off_script();
     g.at(50);
     let e = g.back_to_script();
-    assert!(has(&e, |e| matches!(e, Effect::Program { clip: 0, offset_ms: 5, .. })), "{e:?}");
+    assert!(
+        has(&e, |e| matches!(
+            e,
+            Effect::Program {
+                clip: 0,
+                offset_ms: 5,
+                ..
+            }
+        )),
+        "{e:?}"
+    );
     assert_eq!(g.r.status(), Status::Playing);
     assert_eq!(g.pos(), 5);
     g.at(55);
@@ -857,7 +1171,13 @@ fn stop_takes_overlays_down_and_stops_sequences() {
     assert_eq!(g.w.sequences.len(), 1);
     let e = g.stop();
     assert!(has(&e, |e| matches!(e, Effect::OverlayOff { clip: 0, .. })));
-    assert!(has(&e, |e| matches!(e, Effect::SequenceStop { clip: 0, timeline: 2 })));
+    assert!(has(&e, |e| matches!(
+        e,
+        Effect::SequenceStop {
+            clip: 0,
+            timeline: 2
+        }
+    )));
     assert!(g.w.overlays.is_empty() && g.w.sequences.is_empty());
     assert_eq!(g.w.program, Some((0, Some(0))));
     assert_eq!(g.w.states, BTreeMap::from([(0, 4)]));
@@ -907,7 +1227,11 @@ fn state_events_are_reapplied_last_per_key() {
 #[test]
 fn a_hand_set_value_is_left_alone() {
     let mut p = plan(vec![clip("A", 20)]);
-    p.events = vec![ev(2, Act::Set(0, 1)), ev(3, Act::Set(1, 5)), ev(6, Act::Set(0, 3))];
+    p.events = vec![
+        ev(2, Act::Set(0, 1)),
+        ev(3, Act::Set(1, 5)),
+        ev(6, Act::Set(0, 3)),
+    ];
     let mut g = Rig::new(p);
     g.start(0, Landing::PlayOn);
     g.at(4);
@@ -915,7 +1239,11 @@ fn a_hand_set_value_is_left_alone() {
     g.w.states.insert(0, 99);
     g.w.states.insert(2, 7);
     let e = g.jump(3, Landing::PlayOn);
-    assert_eq!(actions(&e), vec![1], "only the event at the landing point fires");
+    assert_eq!(
+        actions(&e),
+        vec![1],
+        "only the event at the landing point fires"
+    );
     assert_eq!(g.w.states, BTreeMap::from([(0, 99), (1, 5), (2, 7)]));
     // Once the show has set key 0 again, a jump back re-applies its earlier value.
     g.at(7);
@@ -945,7 +1273,11 @@ fn next_and_next_due() {
     assert_eq!(g.r.next_due(&g.plan), None);
     g.tick_ns(c0 + 17 * MS);
     g.cont();
-    assert_eq!(g.r.next_due(&g.plan), Some(c0 + 22 * MS), "the end, 5 ms of show time on");
+    assert_eq!(
+        g.r.next_due(&g.plan),
+        Some(c0 + 22 * MS),
+        "the end, 5 ms of show time on"
+    );
     assert_eq!(g.next(), Next::Nothing);
     g.tick_ns(c0 + 22 * MS);
     assert_eq!(g.r.status(), Status::Ended);
@@ -967,7 +1299,15 @@ type RawSeqs = Vec<(u8, u32, u32)>;
 type RawEvents = Vec<(u32, u8, i32)>;
 type RawBookmarks = Vec<(u32, bool, usize, Option<u32>)>;
 type RawLoops = Vec<(u32, u32, bool)>;
-type RawPlan = (RawProgram, RawOverlays, RawMarks, RawSeqs, RawEvents, RawBookmarks, RawLoops);
+type RawPlan = (
+    RawProgram,
+    RawOverlays,
+    RawMarks,
+    RawSeqs,
+    RawEvents,
+    RawBookmarks,
+    RawLoops,
+);
 
 /// The show variety to generate.
 #[derive(Clone, Copy)]
@@ -1013,7 +1353,11 @@ fn build(raw: RawPlan, end: u8, v: Variety) -> Plan<K> {
     marks.sort_by_key(|m| m.0);
     p.keyframes = marks
         .into_iter()
-        .map(|(at_ms, s)| KeyframeMark { at_ms, keyframe: SCENES.get(s).copied(), preset: None })
+        .map(|(at_ms, s)| KeyframeMark {
+            at_ms,
+            keyframe: SCENES.get(s).copied(),
+            preset: None,
+        })
         .collect();
     let mut seqs = seqs;
     seqs.sort_by_key(|s| s.1);
@@ -1023,7 +1367,14 @@ fn build(raw: RawPlan, end: u8, v: Variety) -> Plan<K> {
     p.events = evs
         .into_iter()
         .map(|(at, kind, val)| {
-            ev(at, if kind < 3 { Act::Set(kind, val) } else { Act::Shot(u32::from(kind)) })
+            ev(
+                at,
+                if kind < 3 {
+                    Act::Set(kind, val)
+                } else {
+                    Act::Shot(u32::from(kind))
+                },
+            )
         })
         .collect();
     let mut bms = bms;
@@ -1050,7 +1401,11 @@ fn build(raw: RawPlan, end: u8, v: Variety) -> Plan<K> {
                 continue;
             }
             last_end = to;
-            let leave = if v.anything && at_once { Leave::AtOnce } else { Leave::FinishPass };
+            let leave = if v.anything && at_once {
+                Leave::AtOnce
+            } else {
+                Leave::FinishPass
+            };
             p.loops.push(LoopRegion {
                 id: p.loops.len() as u8,
                 from_ms: from,
@@ -1080,7 +1435,15 @@ fn arb_plan(v: Variety) -> impl Strategy<Value = Plan<K>> {
             vec((0u32..100, 0usize..7), 0..4),
             vec((0u8..3, 0u32..100, 1u32..40), 0..4),
             vec((0u32..100, 0u8..6, 0i32..4), 0..8),
-            vec((1u32..100, any::<bool>(), 0usize..3, proptest::option::of(0u32..20)), 0..5),
+            vec(
+                (
+                    1u32..100,
+                    any::<bool>(),
+                    0usize..3,
+                    proptest::option::of(0u32..20),
+                ),
+                0..5,
+            ),
             vec((0u32..100, 1u32..40, any::<bool>()), 0..3),
         ),
         any::<u8>(),
@@ -1146,12 +1509,30 @@ fn play_until(g: &mut Rig, tgt: Target, steps: &[u32]) {
         match tgt {
             Target::At(t) if pos == t => return,
             Target::Before(_) | Target::At(_) | Target::PauseAt(_) => {
-                assert!(pos < t, "passed {tgt:?} at {pos} without stopping: {:#?}", g.plan);
+                assert!(
+                    pos < t,
+                    "passed {tgt:?} at {pos} without stopping: {:#?}",
+                    g.plan
+                );
             }
         }
-        let short = if matches!(tgt, Target::Before(_)) { 1 } else { 0 };
+        let short = if matches!(tgt, Target::Before(_)) {
+            1
+        } else {
+            0
+        };
         let goal = g.now + i64::from(t - pos) * MS - short;
-        let to = goal.min(g.now + i64::from(steps[i % steps.len()]) * MS);
+        let mut to = goal.min(g.now + i64::from(steps[i % steps.len()]) * MS);
+        // Stop at a loop's start, to leave it before its first wrap if the target is
+        // past it.
+        if let Some(l) = g
+            .plan
+            .loops
+            .iter()
+            .find(|l| l.from_ms > pos && l.from_ms < t)
+        {
+            to = to.min(g.now + i64::from(l.from_ms - pos) * MS);
+        }
         g.tick_ns(to);
         if to == goal && short == 1 && g.r.status() == Status::Playing {
             return;
@@ -1180,7 +1561,11 @@ fn jump_equals_play(
     let (tgt, land) = if use_bm && !plan.bookmarks.is_empty() {
         let i = a as usize % plan.bookmarks.len();
         let b = &plan.bookmarks[i];
-        let tgt = if b.pausing { Target::PauseAt(b.at_ms) } else { Target::At(b.at_ms) };
+        let tgt = if b.pausing {
+            Target::PauseAt(b.at_ms)
+        } else {
+            Target::At(b.at_ms)
+        };
         (tgt, Land::GoTo(i))
     } else {
         let t = a % (len + 1);
@@ -1202,7 +1587,11 @@ fn jump_equals_play(
     gb.start(0, Landing::PlayOn);
     play_until(&mut gb, Target::At(prior % (len + 1)), steps_b);
     if let Some((j, pausing)) = prior_jump {
-        let landing = if pausing { Landing::Pausing } else { Landing::PlayOn };
+        let landing = if pausing {
+            Landing::Pausing
+        } else {
+            Landing::PlayOn
+        };
         gb.jump(j % (len + 1), landing);
         gb.at(gb.now / MS + 3);
     }
@@ -1225,7 +1614,11 @@ fn jump_equals_play(
         prop_assert_eq!(gb.w.states.get(k), Some(v), "state key {}", k);
     }
     if !matches!(tgt, Target::At(_)) {
-        prop_assert!(matches!(gb.r.status(), Status::Paused { .. }), "B: {:?}", gb.r.status());
+        prop_assert!(
+            matches!(gb.r.status(), Status::Paused { .. }),
+            "B: {:?}",
+            gb.r.status()
+        );
         prop_assert_eq!(gb.pos(), t);
     } else if gb.r.status() != Status::Ended {
         prop_assert_eq!(gb.pos(), t);
@@ -1267,7 +1660,11 @@ fn arb_op() -> impl Strategy<Value = Op> {
 }
 
 fn landing(pausing: bool) -> Landing {
-    if pausing { Landing::Pausing } else { Landing::PlayOn }
+    if pausing {
+        Landing::Pausing
+    } else {
+        Landing::PlayOn
+    }
 }
 
 fn run_ops(plan: Plan<K>, ops: Vec<Op>) -> Result<(), TestCaseError> {
@@ -1312,14 +1709,22 @@ fn run_ops(plan: Plan<K>, ops: Vec<Op>) -> Result<(), TestCaseError> {
             }
             Op::Start(t, p) => {
                 // A start begins from a fresh view of what is up.
-                g.w = World { states: std::mem::take(&mut g.w.states), ..World::default() };
+                g.w = World {
+                    states: std::mem::take(&mut g.w.states),
+                    ..World::default()
+                };
                 g.start(t, landing(p));
             }
         }
         let _ = g.next();
         if let Some(due) = g.r.next_due(&g.plan) {
             let paused = matches!(g.r.status(), Status::Paused { .. });
-            prop_assert!(due >= g.now || paused, "next_due {} before now {}", due, g.now);
+            prop_assert!(
+                due >= g.now || paused,
+                "next_due {} before now {}",
+                due,
+                g.now
+            );
         }
         // The runner's view of what it put up matches what its effects did.
         let applied = g.r.applied();
@@ -1328,7 +1733,10 @@ fn run_ops(plan: Plan<K>, ops: Vec<Op>) -> Result<(), TestCaseError> {
         prop_assert_eq!(overlays, g.w.overlays.keys().copied().collect::<Vec<_>>());
         prop_assert_eq!(
             applied.sequences.clone(),
-            g.w.sequences.iter().map(|(t, (c, _))| (*t, *c)).collect::<BTreeMap<_, _>>()
+            g.w.sequences
+                .iter()
+                .map(|(t, (c, _))| (*t, *c))
+                .collect::<BTreeMap<_, _>>()
         );
         if let Some(c) = applied.program {
             prop_assert_eq!(g.program_clip(), Some(c));
@@ -1370,5 +1778,32 @@ proptest! {
         ops in proptest::collection::vec(arb_op(), 0..40),
     ) {
         run_ops(plan, ops)?;
+    }
+}
+
+#[test]
+fn end_loop_to_a_bookmark_at_the_end_does_not_spin() {
+    let mut p = plan(vec![clip("A", 1)]);
+    p.bookmarks = vec![bm(0, 1, false)];
+    p.end = EndOfShow::Loop;
+    let mut g = Rig::new(p);
+    g.now = 7;
+    g.start(0, Landing::PlayOn);
+    g.tick_ns(1_000_008);
+    for n in [1_000_009, 2_000_000, 5_000_000] {
+        let before = g.now;
+        let steps = g.tick_steps(n);
+        assert!(
+            steps.iter().all(|s| s.at_ns > before),
+            "stale steps at {n}: {steps:?}"
+        );
+        assert!(
+            g.pos() <= g.plan.length_ms(),
+            "position {} past the end",
+            g.pos()
+        );
+        if let Some(due) = g.r.next_due(&g.plan) {
+            assert!(due >= n, "next_due {due} before now {n}");
+        }
     }
 }

@@ -15,8 +15,8 @@ use jstream_anim::show::{
 };
 use jstream_graph::Graph;
 use jstream_protocol::{
-    Action, ClientId, EntityKind, Event, LoopLeave, ProtocolError, RequestId, RunningShow,
-    SceneId, ShowChange, ShowEnd, ShowId, ShowInfo, ShowState, TimelineId, TransitionPresetId,
+    Action, ClientId, EntityKind, Event, LoopLeave, ProtocolError, RequestId, RunningShow, SceneId,
+    ShowChange, ShowEnd, ShowId, ShowInfo, ShowState, TimelineId, TransitionPresetId,
 };
 
 use super::State;
@@ -211,7 +211,11 @@ impl State {
                         id: show_id.to_string(),
                     }));
                 }
-                if self.show.as_ref().is_some_and(|run| run.show_id == *show_id) {
+                if self
+                    .show
+                    .as_ref()
+                    .is_some_and(|run| run.show_id == *show_id)
+                {
                     let id = bookmark_id.clone();
                     self.show_step(wake, move |runner, plan, now| match plan.bookmark(&id) {
                         Some(b) => runner.go_to(plan, b, now),
@@ -279,16 +283,12 @@ impl State {
         let (at_ms, landing) = match bookmark_id {
             None => (0, Landing::PlayOn),
             Some(id) => {
-                let b = plan
-                    .bookmarks
-                    .iter()
-                    .find(|b| b.id == id)
-                    .ok_or_else(|| {
-                        ProtocolError::invalid_argument(
-                            "bookmark_id",
-                            "must name one of the show's bookmarks",
-                        )
-                    })?;
+                let b = plan.bookmarks.iter().find(|b| b.id == id).ok_or_else(|| {
+                    ProtocolError::invalid_argument(
+                        "bookmark_id",
+                        "must name one of the show's bookmarks",
+                    )
+                })?;
                 let landing = if b.pausing {
                     Landing::Pausing
                 } else {
@@ -381,9 +381,7 @@ impl State {
         if matches!(run.runner.status(), Status::Ended | Status::Stopped) {
             return None;
         }
-        run.runner
-            .next_due(&plan)
-            .map(crate::timelines::media_time)
+        run.runner.next_due(&plan).map(crate::timelines::media_time)
     }
 
     /// Whether the running show needs the live ticker.
@@ -452,12 +450,15 @@ impl State {
                 keyframe, preset, ..
             } => {
                 if let Some(scene_id) = self.studio.program().cloned() {
-                    let _ = self.set_keyframe(client_id, request_id, scene_id, keyframe, preset, wake);
+                    let _ =
+                        self.set_keyframe(client_id, request_id, scene_id, keyframe, preset, wake);
                 }
             }
             Effect::OverlayOn { .. } | Effect::OverlayOff { .. } => {}
             Effect::SequencePlay {
-                timeline, offset_ms, ..
+                timeline,
+                offset_ms,
+                ..
             } => {
                 let from = (offset_ms > 0).then_some(offset_ms);
                 let _ = self.timeline_play(client_id, request_id, &timeline, from, wake);
@@ -475,7 +476,9 @@ impl State {
                 }
             }
             Effect::Paused { bookmark, .. } => {
-                let id = bookmark.and_then(|b| plan.bookmarks.get(b)).map(|b| b.id.clone());
+                let id = bookmark
+                    .and_then(|b| plan.bookmarks.get(b))
+                    .map(|b| b.id.clone());
                 self.emit_show(ShowChange::Paused, id, None, wake);
             }
             Effect::Resumed { .. } => self.emit_show(ShowChange::Continued, None, None, wake),
@@ -547,7 +550,10 @@ impl State {
             .looping()
             .and_then(|(region, pass)| {
                 let l = plan.loops.get(region)?;
-                Some((Some(l.id.clone()), Some(u32::try_from(pass).unwrap_or(u32::MAX))))
+                Some((
+                    Some(l.id.clone()),
+                    Some(u32::try_from(pass).unwrap_or(u32::MAX)),
+                ))
             })
             .unwrap_or((None, None));
         Some(Box::new(RunningShow {
@@ -575,4 +581,3 @@ impl State {
         }
     }
 }
-

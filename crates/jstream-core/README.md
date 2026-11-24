@@ -519,6 +519,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   studio state beside the program scene, whose cues the live ticker fires on the
   animation clock as their actions' calls ([Timelines](#timelines)). `source.restart`
   restarts a live source at the action's time (`LiveSources::restart`).
+- **Shows** (`engine/shows.rs`, ADR-0210): the show running, studio state beside the
+  program scene, whose program clips, keyframe markers, sequence clips and cues the
+  live ticker runs on the animation clock as those actions' calls ([Shows](#shows)).
 - **Keyframe tracks** (`engine.rs`,
   [ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
   [ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)): the keyframe each
@@ -756,7 +759,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
-  `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
+  `src/tests/timelines.rs`, `src/tests/shows.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
   `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`,
   `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
@@ -1206,7 +1209,7 @@ Batches and the collection queries run under the collection lock, so those calls
 are serialized across sessions and their events are queued in the order the changes
 happened. Placeholder output actions do too: they only step the state machine.
 `clock.hold`, `clock.step` and `clock.release` (ADR-0172) do too: they hold or step the
-media clock, wake the sources' thread and run the timelines' tick, so a cue a step
+media clock, wake the sources' thread and run the timelines' and the running show's tick, so a cue a step
 passed fires before it returns; an `output.start` while the clock is held or still
 ahead of real time, or a hold while an output runs, is `action_failed`.
 `video.snapshot` reads `rev`, the published render snapshot, the live values and the
@@ -1757,6 +1760,33 @@ preset changed in one batch that one undo takes back.
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
   an effect pack's stand-in starts its program again. A source with no running instance
   has nothing to restart.
+
+<a id="shows"></a>
+## Shows
+<!-- @section
+covers = ["crates/jstream-core/src/engine/shows.rs", "crates/jstream-core/src/tests/shows.rs"]
+depends_on = ["crates/jstream-anim/README.md#purpose"]
+-->
+
+The engine runs one show at a time (ADR-0210) as studio state beside the program scene
+(`engine/shows.rs`): `show.play` builds `jstream-anim`'s show `Plan` from the
+collection's `ShowInfo` (overlay tracks flattened by start, a `timeline.play` cue as a
+sequence clip as long as its sequence, every other cue an event) and starts a `Runner`
+from the start or as a jump to a bookmark would land. The plan is built again on every
+call and tick, so editing a running show takes effect at once. The live ticker advances
+it with the timelines (`show_tick`), as do `clock.step` and `clock.release`. Each
+`Effect` runs as of its own time (`cue_at`) as the call a key or pad would make:
+`scene.switch` with the clip's preset, `scene.set_keyframe` on the program scene,
+`timeline.play` or `timeline.seek` and `timeline.stop`, or the cue's own action (a
+`show.*` action in a cue is skipped, so a cue can't re-enter the runner). Overlay
+clips and media seeks are not run yet. `show.continue` is ignored while a scene
+switch's transition plays. A `scene.switch` that the show didn't make takes the
+running show off script. `show.stop`, deleting the show and opening a collection stop
+it. `studio.get`'s `show` reports it, and `show.changed` says what it did.
+`src/tests/shows.rs` checks playing through, pausing before a pausing bookmark's
+point and continuing, a cue firing, a non-pausing bookmark playing through, the end,
+going to bookmarks by ID and number, Back, early Continue, arming, a hand switch going
+off script, stopping, deleting, and refused calls.
 
 <a id="privacy"></a>
 ## No privacy screen
@@ -4337,8 +4367,9 @@ lock (which makes the control side its one writer) and loaded by the render thre
 with no lock at all, as are the live values on the parameter channel. `video.snapshot`
 reads both under the collection lock and the snapshot thread only receives them. The
 `jstream-live` thread takes the collection lock only to send due `live.changed` events,
-release committed values and fire due timeline cues (each runs as its action's call
-would under that lock, [Timelines](#timelines)), and sleeps without it. The
+release committed values, fire due timeline cues (each runs as its action's call
+would under that lock, [Timelines](#timelines)) and advance the running show
+([Shows](#shows)), and sleeps without it. The
 `jstream-values` thread does the same: it takes the collection lock for each tick, reads
 the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
@@ -4405,7 +4436,7 @@ everything else (the new `rev`, or the error code). A refused `hello`, with the 
 name and protocol version, and a call before `hello` are `debug`. Only names, IDs,
 revisions and error codes are logged, never a call's arguments
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). A timeline's cues are not calls, so they
-log nothing: `timeline.cue_fired` reports each, with its error. A CLAP scan, at start
+log nothing: `timeline.cue_fired` reports each, with its error. A running show's effects aren't calls either and log nothing; `show.changed` reports what the show did. A CLAP scan, at start
 or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its path and
 the host's error) and an `info` with how many effects it found. A `tempo.*` value the
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a

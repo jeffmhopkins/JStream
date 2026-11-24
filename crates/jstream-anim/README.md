@@ -109,8 +109,23 @@ Contents:
   plays, and a modifier whose unchecked parameters give a non-finite value (a period
   that isn't positive or is tiny, a zero wrap, a NaN) gives 0, so bad input can't spin
   or put NaN on the render thread.
+- Shows (`show`, ADR-0210): the pure schedule of a show, generic over the caller's IDs
+  and actions through `ShowKeys`. A `Plan` holds program clips end to end from 0,
+  overlay, sequence and keyframe entries, one-off events, bookmarks (pausing or not,
+  with an arrive transition and an optional wait limit), loops (`Leave::AtOnce` or
+  `FinishPass`) and an `EndOfShow`. `spanning` gives what spans a point on either
+  `Edge` (just before it, or at it) and `state_events_before` the last state event per
+  `CueAction::state_key` before it. `Runner` walks show time on the animation clock:
+  `tick` runs the points due in order (a loop wraps at its end before a bookmark there
+  could pause, a pausing bookmark pauses before anything at its time, then the spanning
+  state, then the events), and `continue_`, `back`, `skip`, `go_to`, `jump`, `arm`,
+  `off_script`, `back_to_script` and `stop` move it. Every move puts up state by
+  diffing the target `Spanning` against what it last put up (`Applied`), so a jump
+  lands the state playing there would leave and re-applies only state events whose
+  value it changed itself; one-shots are never replayed. It returns `Step`s: each
+  `Effect` with the exact clock time it fell due.
 
-**Tests** (in `keyframe.rs`, `switch.rs`, `modifier.rs`, `audio.rs` and `timeline.rs`): live follow of absent fields, each
+**Tests** (in `keyframe.rs`, `switch.rs`, `modifier.rs`, `audio.rs`, `timeline.rs` and `show/`): live follow of absent fields, each
 write and clear inverse, the no-op clear, refused opacities, reset and its restore,
 drop and restore, a refused restore changing nothing, the wire names, every `Motion`
 case, ends between two keyframes and in reverse, ends following the parent's current
@@ -130,4 +145,14 @@ attack and release time constants, zero times, ignored bad steps, the same envel
 silence when unheard; and for timelines a six-cue sequence fired once each under uneven
 ticks, loops, a range loop's intro and repeats, `Once` ending, seeks within a pass and
 into later passes, unchecked zero-length loops that never spin, every refused timeline,
-and 200 random timelines whose cues fire the same under random ticks as in one window.
+and 200 random timelines whose cues fire the same under random ticks as in one window. For shows (`show/tests.rs`, with a simulated world that applies every effect): the
+plan's checks and `spanning` on both edges; cuts with each clip's transition, pausing
+before a pausing bookmark's point and Continue firing what sits there, non-pausing
+bookmarks, `go_to`, Back, Skip, early Continue, an armed spot, loops (passes, clips
+spanning a wrap staying up, a bookmark at a loop's start pausing once and one at its
+end never pausing a pass, both ways of leaving), every end of show, the pause limit,
+off script, `stop`, one-shots never replayed and hand-set values left alone, exact
+step times on a late tick, `next` and `next_due`; and property tests that a jump to a
+random bookmark or point leaves the same program, keyframe, overlays, sequences and
+state values as playing there, with and without loops, and that 40 random operations
+never panic and keep steps in time order.

@@ -600,9 +600,9 @@ impl<T: Ord + Clone> Runner<T> {
         });
     }
 
-    /// Processes the points that fell due by `now_ns`, while playing. The show's end
-    /// jumps at most once per call, so a show that ends where it loops back to can't
-    /// spin.
+    /// Processes the points that fell due by `now_ns`, while playing. It always ends:
+    /// an end-of-show jump that plays on lands strictly before the end ([`Self::end`]),
+    /// so each lap takes show time, and clock time, to come round again.
     fn run<K: ShowKeys<Timeline = T>>(
         &mut self,
         plan: &Plan<K>,
@@ -610,19 +610,12 @@ impl<T: Ord + Clone> Runner<T> {
         out: &mut Vec<Step<K>>,
     ) {
         let length = plan.length_ms();
-        let mut reached_end = false;
         while self.status == Status::Playing {
             let Some(p) = next_point(plan, self.done_ms) else {
                 break;
             };
             if ms_ns(p) > self.position_ns(now_ns) {
                 break;
-            }
-            if p >= length {
-                if reached_end {
-                    break;
-                }
-                reached_end = true;
             }
             let due = self.due_ns(p);
             self.point(plan, p, due, length, out);
@@ -723,6 +716,9 @@ impl<T: Ord + Clone> Runner<T> {
                 .and_then(|i| plan.bookmarks.get(i))
                 .map(|b| bookmark_landing(plan, b)),
         };
+        // A play-on landing at the end itself would reach the end again at once, so the
+        // show ends there instead of spinning.
+        let target = target.filter(|&(t, landing, _)| landing == Landing::Pausing || t < p);
         match target {
             Some((t, landing, transition)) => {
                 self.land(plan, t, landing, transition, due, Some(p), out);
@@ -1332,7 +1328,8 @@ mod unit {
         };
         let mut r = Runner::new();
         r.start(&p, 0, Landing::PlayOn, 0);
-        let s = r.tick(&p, 0);
-        assert_eq!(s.len(), 1);
+        let s = effects(r.tick(&p, 0));
+        assert_eq!(s, vec![Effect::Ended]);
+        assert_eq!(r.next_due(&p), None);
     }
 }
