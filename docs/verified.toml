@@ -2505,7 +2505,7 @@ stamp = { hash = "b3:809a41a805e4184a", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:1b4bab45ab886418", by = "agent:claude", note = "Re-read: lib.rs only adds the private drawn_camera module, which the contents-media Profile bullet describes; the engine's purpose and layering are unchanged | merge: The train merge brought fixed_aperture (a SceneCamera field, ADR-0223; snapshot.rs light_camera sets it false) and the collection-load channel fix (engine.rs wake_values on load); re-read: lib.rs adds mod drawn_camera only; purpose holds. | merge: Merged the alpha.13 train at a2b0855 (#1789 warp arrival fades ADR-0224, #1792 Show Next button, #1794 light CI for non-main PRs ADR-0231): none of it touches the drawn camera or this section's text; snapshot.rs's change is in draw_sky_of and arrival_light, outside the colour-pass notes. Re-read: holds. | kept from the merged side: lib.rs no longer re-exports LIVE_INPUT (back to the train's); purpose holds" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:c307650d2f69b3e6", by = "agent:alpha13-train", note = "The governor paragraph's output-start grace now cites ADR-0236 (the new ADR that carries it, instead of an edit to accepted ADR-0200); re-read against resolution.rs: holds" }
+stamp = { hash = "b3:5e113c92c12cfba6", by = "agent:alpha13-train", note = "Governor paragraph: behind now steps down only while the last frame timed at this size was over 88% (ADR-0236 decision 2), on top of the output-start grace; re-read against Governor::tick and its two regression tests" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:265cc716fca78aa0", by = "agent:issues-thread", note = "Render thread still reads parameter-channel values for placement/crop/camera; live gains reach the mixer through route_audio, no new thread or lock; holds" }
@@ -2514,7 +2514,7 @@ stamp = { hash = "b3:265cc716fca78aa0", by = "agent:issues-thread", note = "Rend
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/resolution.rs"]
-stamp = { hash = "b3:77da52397943e275", by = "agent:alpha13-train", note = "The governor paragraph's output-start grace now cites ADR-0236 (the new ADR that carries it, instead of an edit to accepted ADR-0200); re-read against resolution.rs: holds" }
+stamp = { hash = "b3:c6547023a8ec7598", by = "agent:alpha13-train", note = "Governor paragraph: behind now steps down only while the last frame timed at this size was over 88% (ADR-0236 decision 2), on top of the output-start grace; re-read against Governor::tick and its two regression tests" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/captures.rs"]
 stamp = { hash = "b3:0a9df2108876dafb", by = "agent:capture-cost", note = "Re-read against captures.rs and devices.rs: the capture thread, start, stop, retry, GPU-path leave and device sharing behave as described; the only new behaviour, handing a replaced CPU frame back to its stream without blocking, is described in Outputs." }

@@ -99,7 +99,7 @@ impl Mode {
 /// Chooses the size models are drawn at, one [`Self::tick`] per frame of the program.
 ///
 /// It steps down at once when the GPU has fallen behind (a frame was about to be kept
-/// from the outputs), and when [`OVER`] timed frames in a row took more than [`HIGH`] of
+/// from the outputs) while the last frame timed at this size was long too, and when [`OVER`] timed frames in a row took more than [`HIGH`] of
 /// the frame's budget. It steps back up once the GPU time the larger size is expected to
 /// take has stayed under [`LOW`] of the budget for the wait, which starts at [`WAIT_S`]
 /// seconds and doubles each time a step up is undone within [`UNDONE_S`] seconds, so a
@@ -248,7 +248,15 @@ impl Governor {
             // Nothing to gain from fewer pixels: long frames have another cause.
             self.over = 0;
         }
-        if models && (behind || self.over >= OVER) {
+        // Behind with frames that leave room is a hitch fewer pixels would not shorten
+        // (a scene's or view's first frames, an upload, another app's work): it steps
+        // down only where the last frame timed at this size was long too, or none can
+        // be timed (ADR-0236).
+        let long = !self.timed
+            || self
+                .last
+                .is_some_and(|took| took > self.budget.as_secs_f64() * HIGH);
+        if models && ((behind && long) || self.over >= OVER) {
             self.down(behind);
         } else if self.step > 0 && self.roomy {
             self.calm = self.calm.saturating_add(1);
@@ -400,9 +408,11 @@ mod tests {
         let mut governor = governor();
         governor.tick(Auto, None, true, true);
         assert_eq!(run(&mut governor, 6 * FPS, 15.0), 100);
-        // At full size it is behind again at once.
+        // At full size its frames are long again at once.
         run(&mut governor, super::SETTLE, 15.0);
-        governor.tick(Auto, None, true, true);
+        for _ in 0..super::OVER {
+            governor.tick(Auto, ms(31.0), false, true);
+        }
         assert_eq!(governor.percent().get(), 85);
         assert_eq!(
             run(&mut governor, 9 * FPS, 15.0),
@@ -483,8 +493,42 @@ mod tests {
             "the output's first frames are long"
         );
         assert_eq!(run(&mut governor, 3000, 24.0), 100);
-        // Once the start is over, falling behind steps down as before.
-        governor.tick(Auto, None, true, true);
+        // Once the start is over, falling behind with a long frame steps down as before.
+        governor.tick(Auto, ms(31.0), true, true);
+        assert_eq!(governor.percent().get(), 85);
+    }
+
+    /// A view switched to on a streaming PC: its first frames kept the GPU behind for
+    /// seconds while each frame timed left room, which stepped 85, 75, 67 and 50 in turn.
+    #[test]
+    fn falling_behind_with_frames_that_leave_room_does_not_step_down() {
+        let mut governor = governor();
+        assert_eq!(run(&mut governor, 30, 24.0), 100);
+        for tick in 0..10 * FPS {
+            governor.tick(
+                Auto,
+                (tick % 4 == 0).then(|| ms(24.0)).flatten(),
+                true,
+                true,
+            );
+        }
+        assert_eq!(
+            governor.percent().get(),
+            100,
+            "the hitch is not the models'"
+        );
+        // Long frames while behind step down once, and the smaller size's frames, which
+        // leave room, hold it there however long the GPU stays behind.
+        governor.tick(Auto, ms(31.0), true, true);
+        assert_eq!(governor.percent().get(), 85);
+        for tick in 0..10 * FPS {
+            governor.tick(
+                Auto,
+                (tick % 4 == 0).then(|| ms(22.0)).flatten(),
+                true,
+                true,
+            );
+        }
         assert_eq!(governor.percent().get(), 85);
     }
 

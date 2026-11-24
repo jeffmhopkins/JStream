@@ -1,12 +1,12 @@
 <!-- @doc
 id = "ADR-0236"
-title = "An output's start is part of the first seconds the model size governor waits out"
+title = "A hitch the models' GPU time doesn't show steps the model size down no further"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0236: An output's start is part of the first seconds the model size governor waits out
+# ADR-0236: A hitch the models' GPU time doesn't show steps the model size down no further
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -27,6 +27,12 @@ to 85%. It never stepped back up: the full show takes 88% of the frame's budget 
 and ADR-0200 keeps a scene that close to the step-down mark at 85 on purpose. Fewer
 pixels would not have shortened that moment, so the step down bought nothing.
 
+The same happened mid-session: switching to a wide view stepped it 85, 75, 67 and 50
+within 20 seconds, which looked badly blurry, though 100 fits (29.8 ms). ADR-0197
+steps down at once whenever the GPU has fallen behind, and again after each 10-tick
+settle while it still is. The view's first frames kept it behind for seconds while every
+frame timed left room, so each settle ended in another step.
+
 <a id="decision"></a>
 ## Decision
 1. **An output's first frame starts the first seconds again.** When a frame for an
@@ -35,15 +41,23 @@ pixels would not have shortened that moment, so the step down bought nothing.
    (`Governor::output_started`). The frames it timed before say nothing about the ones
    after, so they are forgotten, and its count of long frames and of calm ticks starts
    again.
-2. **Nothing else changes.** The marks of ADR-0197 decision 4 and ADR-0200's margin
-   stand: a scene that does fall behind after an output's start steps down as before.
+2. **Behind steps down only with a long frame.** Where frames are timed, falling
+   behind steps down only while the last frame timed at this size took more than 88%
+   of the budget (ADR-0197's mark). After a step down that is unknown until a frame at
+   the new size is timed, so one hitch steps down at most once. Behind with frames that
+   leave room is a hitch fewer pixels would not shorten: a scene's or view's first
+   frames, an upload, or another app's work on the GPU. A device that can't time its
+   frames steps down on being behind alone, as before.
+3. **Nothing else changes.** Three long frames in a row still step down, and the marks
+   of ADR-0197 decision 4 and ADR-0200's margin stand.
 
 <a id="consequences"></a>
 ## Consequences
-Starting a stream or a recording during a show no longer lowers the size models are
-drawn at for the rest of the show. A scene that truly can't keep up waits up to 3
+Starting a stream or a recording, or switching scenes or views, no longer lowers the
+size models are drawn at for the rest of the show. A scene that truly can't keep up waits up to 3
 seconds longer to step down after an output starts, during which the output's frames
 may come late; the start's own hitch already does that. A local preview starting does
 not restart the wait, so a page opening previews can't hold the governor's choice off.
 
-Regression test: `resolution::tests::an_output_starting_does_not_step_down`.
+Regression tests: `resolution::tests::an_output_starting_does_not_step_down` and
+`falling_behind_with_frames_that_leave_room_does_not_step_down`.

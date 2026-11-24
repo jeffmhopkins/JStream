@@ -5218,7 +5218,9 @@ the GPU time of the latest timed frame that came back (`DrawMeter::take_gpu_fram
 units of one frame of every four added up), whether the conversions are behind and
 whether a model's layer was drawn since the last tick (`Chains::model_drawn`), and
 sets `Chains::model_percent` to one of 100, 85, 75, 67 and 50. It steps down at once
-when the GPU is behind and when three timed frames in a row took over 88% of the frame's
+when the GPU is behind while the last frame timed at this size took over 88% of the
+frame's budget (so a hitch that frames with room show is not the models', and one step
+down waits for a frame at the new size, ADR-0236), and when three timed frames in a row took over 88% of the frame's
 budget; it steps up when the time the larger size is expected to take (the frame's time
 divided by what the step down to this size saved, the first frame timed after it over the
 last before it; until one has been timed, the worst case, all of the frame's time
@@ -5227,7 +5229,7 @@ up to 80 seconds, each time a step up is undone within 15; and it decides nothin
 ticks after a change, while the frames in flight are the old size, and nothing for its
 first 3 seconds, whose frames upload and compile, nor for the 3 seconds after an output
 draws its first frame (`Governor::output_started`,
-[ADR-0236](../../docs/adr/0236-an-outputs-start-is-part-of-the-first-seconds.md)), whose making keeps the GPU behind for a
+[ADR-0236](../../docs/adr/0236-a-hitch-steps-the-model-size-down-no-further.md)), whose making keeps the GPU behind for a
 moment that fewer pixels would not shorten. A device that can't
 time its frames steps on the first signal alone. It steps down only while a model is
 drawn, since fewer pixels gain nothing without one, and each change logs one line
