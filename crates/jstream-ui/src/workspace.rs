@@ -501,7 +501,9 @@ fn Splitter(ui: Ui, zone: Zone, hidden: Signal<bool>) -> impl IntoView {
                     let _captured = bar.set_pointer_capture(event.pointer_id());
                 }
                 let from = dock.with_untracked(|d| d.size(zone));
-                start.set_value(Some((f64::from(event.client_x()), f64::from(event.client_y()), from)));
+                // In the page's CSS pixels, as the zone's size is (`ui_scale.rs`).
+                let (x, y) = crate::ui_scale::pointer(&event);
+                start.set_value(Some((x, y, from)));
             }
             on:pointermove=move |event| {
                 let Some((x, y, from)) = start.get_value() else {
@@ -512,7 +514,8 @@ fn Splitter(ui: Ui, zone: Zone, hidden: Signal<bool>) -> impl IntoView {
                     return;
                 }
                 moved.set_value(true);
-                let (dx, dy) = (f64::from(event.client_x()) - x, f64::from(event.client_y()) - y);
+                let (now_x, now_y) = crate::ui_scale::pointer(&event);
+                let (dx, dy) = (now_x - x, now_y - y);
                 dock.update(|d| d.resize_zone(zone, from, dx, dy));
             }
             on:pointerup=move |_| end()

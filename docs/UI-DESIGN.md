@@ -87,6 +87,9 @@ The header's menus and the right-click menus are one family:
 - The trailing slot holds a shortcut in sans, or a submenu's current value followed by
   a `›`.
 - Section heads are the [eyebrow](#type) style.
+- A value stepped in place is one line, as a browser's zoom row is: View › UI scale has
+  its label, then −, the value and + as compact items at the trailing end. A step leaves
+  the menu open, so its effect shows as it changes, and a click on the value resets it.
 - An item that deletes is marked with `Entry::danger`, reads red, and sits in the last
   group. The Scenes and Sources panels' right-click menus share this menu style, but
   their delete items aren't marked.

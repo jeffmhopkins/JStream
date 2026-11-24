@@ -246,12 +246,10 @@ pub fn NumberField(
         })
     };
     // The pointer along the drag's axis: right, or up in a vertical field.
+    // In the page's CSS pixels, so a drag moves as far at every UI scale (`ui_scale.rs`).
     let along = move |event: &ev::PointerEvent| {
-        if vertical {
-            -f64::from(event.client_y())
-        } else {
-            f64::from(event.client_x())
-        }
+        let (x, y) = crate::ui_scale::pointer(event);
+        if vertical { -y } else { x }
     };
     let on_down = move |event: ev::PointerEvent| {
         if event.button() != 0 || focused() {

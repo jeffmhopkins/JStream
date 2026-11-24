@@ -553,6 +553,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   back by the dialog (the swatch showing the colour without its alpha); the canvas margin's Scene properties… opens it for the shown scene; the
   Inspector's Scene switches, open in its Behaviour tab, send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
+- **UI scale** (`ui-scale.spec.js`): View › UI scale steps the page from 100% to 125%
+  and 150%, where Larger is off, while its menu stays open; the value goes back to 100%,
+  and at 50% Smaller is off. Ctrl+=, Ctrl+- and Ctrl+0 step and reset it, and 125% is
+  kept across a reload, the connect form drawn at it too. At 150% in a 1600×1000 window
+  the workspace is the window's height, a click at the seed's box selects its row, and
+  its right-click menu opens at the pointer's x, on screen. The desktop app's webview
+  zoom isn't tested here.
 - **Wheel chords** (`wheel-chords.spec.js`, ADR-0112 §3, #1346): with `Ctrl+WheelUp`
   and `Ctrl+WheelDown` bound to Main's zoom by another client, each notch runs
   `scene.zoom_camera` once, whether a notch is 120 pixels or 100, two coalesced into one
