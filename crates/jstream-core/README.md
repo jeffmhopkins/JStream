@@ -921,7 +921,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   effect setting changed after the first frame reaching a 3D card, a legacy-transform
   child placed through its group; and, from the planned shot, a group's motion and a
   child's own moving it in the group's space during a Move, and a Move splitting the
-  groups the pass splits, once per scene and as deep, in
+  groups the pass splits, once per scene and as deep, and a Move that changes only the
+  camera of a 3D keyframe with a scene filter keeping the scene's chain while the camera
+  glides, an item that can't glide going and coming back the same, in
   `src/tests/groups3d.rs`), the render
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
@@ -2659,7 +2661,16 @@ it, Move falls back to that, and a filtered nested scene is never flattened into
 items. A Move by item within a 3D scene's family is the exception
 ([ADR-0180](../../docs/adr/0180-a-move-within-a-3d-family-glides-through-its-chain.md)):
 it plans each side's items one by one (`Planner::moves_within_3d_family`,
-`Planner::end_of`), so the views glide, and the chain waits for it to end. A 3D
+`Planner::end_of`), so the views glide, and the chain waits for it to end. When such a
+Move moves only the camera (every track a still pair, or an item that can't glide going
+and coming back the same, no effect blend, no camera riding
+a group: `Planner::moves_only_the_camera`,
+[ADR-0226](../../docs/adr/0226-a-camera-only-move-keeps-its-scenes-chain.md)), no
+transition is planned: the program scene is planned at rest, chain and all, and each
+camera of its family carries a `CameraGlide` (`PassCamera::glide`, set through
+`Planner::glide`) that `moved_camera` draws in place of the committed camera until the
+Move ends, so the chain runs through the glide
+(`a_camera_only_move_in_a_3d_family_keeps_its_chain`). A 3D
 scene's picture was drawn through its own camera, so its track is drawn flat, through
 no camera (`Visual::is_whole_scene`, `Transitioning::whole`): a Fade into or out of a
 filtered 3D scene, and an item shown or hidden there with a transition, which

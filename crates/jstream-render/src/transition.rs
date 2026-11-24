@@ -190,6 +190,11 @@ impl Stops {
         self.0.is_none()
     }
 
+    /// The stops, in order.
+    pub fn iter(&self) -> impl Iterator<Item = &Endpoint> {
+        self.0.iter().flat_map(|stops| stops.iter())
+    }
+
     /// `from`, the stops and `to`, in order, in `out`; how many there are.
     fn path(&self, from: Endpoint, to: Endpoint, out: &mut [Endpoint; MAX_STOPS]) -> usize {
         out[0] = from;
