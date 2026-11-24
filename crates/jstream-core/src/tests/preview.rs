@@ -17,6 +17,7 @@ use jstream_protocol::{
     Query, QueryResult, Rev, SceneId, Settings, SourceId, SourceKind, WireError,
 };
 use jstream_sources::{CaptureSpec, DeviceFormatWant};
+use std::collections::BTreeMap;
 use std::sync::{Arc, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
@@ -1174,6 +1175,115 @@ fn the_program_stage_draws_an_h264_scene_stream() {
     let deadline = Instant::now() + WAIT;
     while engine.stage_running() {
         assert!(Instant::now() < deadline, "the stage outlives the stream");
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(ticking);
+    pump.join().expect("pump");
+}
+
+/// Streams that show the same picture, the same scene or the program at one size and
+/// rate, share one encoder session: three views of the program and one of a scene are
+/// two encodes, not four. Each stream starts on a keyframe of its own asking, keeps its
+/// own times, and goes on when the stream that opened the session leaves.
+#[test]
+fn streams_of_the_same_picture_share_one_encoder_session() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        // A preview thread that drew would fail the stream.
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(5));
+            }
+        })
+    };
+    // Reads until each of `channels` has sent `each` more pictures, checking that
+    // none ended and that each channel's times go forward.
+    let mut last_pts: BTreeMap<u32, i64> = BTreeMap::new();
+    let mut read = |frames: &mut BinaryStream, channels: &[u32], each: usize| {
+        let mut got: BTreeMap<u32, Vec<BinaryFrame>> = BTreeMap::new();
+        let deadline = Instant::now() + WAIT;
+        while channels
+            .iter()
+            .any(|channel| got.get(channel).map_or(0, Vec::len) < each)
+        {
+            assert!(Instant::now() < deadline, "pictures missing: {got:?}");
+            let picture = frame(frames);
+            assert!(!picture.header.end, "a stream ended: {picture:?}");
+            let channel = picture.header.channel;
+            if let Some(before) = last_pts.insert(channel, picture.header.pts_us) {
+                assert!(
+                    before < picture.header.pts_us,
+                    "channel {channel} went back"
+                );
+            }
+            got.entry(channel).or_default().push(picture);
+        }
+        got
+    };
+
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("the first view");
+    let got = read(&mut frames, &[1], 2);
+    assert!(got[&1][0].header.keyframe);
+    assert_eq!(engine.preview_encodes_open(), 1);
+
+    // Two more views of the program and one of a scene, while the first is mid-stream.
+    act(&control, subscribe(2, Some(30), Vec::new())).expect("a second view");
+    act(&control, subscribe(3, Some(30), Vec::new())).expect("a third view");
+    act(&control, subscribe_scene(4, "other")).expect("a scene's view");
+    let got = read(&mut frames, &[1, 2, 3, 4], 3);
+    for channel in [2, 3, 4] {
+        let first = &got[&channel][0].header;
+        assert!(first.keyframe, "channel {channel} starts on a keyframe");
+        assert_eq!(first.codec, Some(PreviewCodec::H264));
+        assert_eq!((first.width, first.height), (640, 360));
+    }
+    assert_eq!(
+        engine.preview_encodes_open(),
+        2,
+        "one session for the program's three views, one for the scene's"
+    );
+
+    // The stream that opened the program's session leaves: the others keep it.
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 1 },
+        },
+    )
+    .expect("unsubscribed");
+    // Whatever channel 1 had queued is read past.
+    read(&mut frames, &[2, 3], 6);
+    assert_eq!(engine.preview_encodes_open(), 2);
+
+    // A view at another rate is another picture, so another session.
+    act(&control, subscribe(5, Some(15), Vec::new())).expect("a slower view");
+    let got = read(&mut frames, &[5], 2);
+    assert!(got[&5][0].header.keyframe);
+    assert_eq!(engine.preview_encodes_open(), 3);
+
+    for channel in [2, 3, 4, 5] {
+        act(
+            &control,
+            Call::Action {
+                action: Action::PreviewUnsubscribe { channel },
+            },
+        )
+        .expect("unsubscribed");
+    }
+    let deadline = Instant::now() + WAIT;
+    while engine.stage_running() {
+        assert!(Instant::now() < deadline, "the stage outlives the streams");
         thread::sleep(Duration::from_millis(10));
     }
     drop(ticking);

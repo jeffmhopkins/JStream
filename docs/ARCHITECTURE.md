@@ -1329,8 +1329,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 <a id="gpu-pipeline"></a>
 ## GPU pipeline
 <!-- @section
-covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**"]
-depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
+covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "crates/jstream-platform-macos/src/gpu/**"]
+depends_on = ["docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0063-macos-platform-support.md"]
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -1351,11 +1351,24 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    compute and copying them into NV12 through hal, or a D3D11 video processor, is the
    fallback for an adapter that rejects planar render targets.
 5. **Encode:** the NV12 texture is shared back to D3D11 for the hardware encoders
-   (fence-synchronized): the GPU vendor's own NVENC or AMF where it opens, else the Media
-   Foundation MFT ([ADR-0217](adr/0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)).
+   (fence-synchronized): the GPU vendor's own NVENC or AMF where it is turned on and opens,
+   else the Media Foundation MFT ([ADR-0217](adr/0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)).
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
    hybrid-GPU laptops, capture and render must use the same adapter, or the engine falls
    back and reports it.
+
+**On macOS** ([ADR-0063](adr/0063-macos-platform-support.md) decision 8,
+`jstream-platform-macos`'s `gpu/`), the engine's wgpu device is on Metal. Capture needs no
+copy: ScreenCaptureKit's frames are IOSurface-backed BGRA pixel buffers, which the
+platform wraps as Metal textures (`newTextureWithDescriptor:iosurface:plane:`) and adopts
+into wgpu through wgpu-hal, as in steps 1 and 2. They are complete when delivered, so a
+read waits for nothing; the release is what is ordered. Each staged use signals the
+context's `MTLSharedEvent` after the submit that reads the frame, and a frame's last
+clone keeps its pixel buffer until the event reaches that value, so ScreenCaptureKit
+never writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so
+an encode target will be two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12
+IOSurface that VideoToolbox reads, as spike S6 does; until then encoding takes the
+CPU readback of step 6.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
@@ -1530,7 +1543,7 @@ pass, so the render thread copies bytes but converts no pixel
 browser source's page paints on the same context and is imported the same way, read
 as premultiplied sRGB (`import_premultiplied`), CEF's layout. Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264, HEVC and AV1 encoders (NVENC or AMF
-directly where the GPU's vendor runtime opens, else Media Foundation's MFT) that copy each
+directly where turned on and the GPU's vendor runtime opens, else Media Foundation's MFT) that copy each
 NV12 encode target on D3D11 into a texture of their own, fence-synchronized both ways, and
 `jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
 ([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
