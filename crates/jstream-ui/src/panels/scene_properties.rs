@@ -287,7 +287,13 @@ pub fn scene_edits(
         };
         let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
-            edits.push(Edit::HotkeyClear { chord });
+            // Only the switch to this scene: the chord's other actions stay (ADR-0208).
+            let switch = Action::SceneSwitch {
+                scene_id: scene_id.clone(),
+                preset_id: None,
+                via: Vec::new(),
+            };
+            edits.extend(collection.unbind_edits(&chord, &switch));
         }
         if let Some(chord) = draft.hotkey.clone() {
             edits.push(Edit::HotkeySet {
@@ -1234,6 +1240,7 @@ mod tests {
             scene_edits(&c, &a, &before, &draft("A", Some("F3"))),
             Ok(vec![
                 Edit::HotkeyClear {
+                    action: Some(switch("a")),
                     chord: Chord::new("F1")
                 },
                 Edit::HotkeySet {
@@ -1249,6 +1256,20 @@ mod tests {
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", None)),
             Ok(vec![Edit::HotkeyClear {
+                action: Some(switch("a")),
+                chord: Chord::new("F1")
+            }])
+        );
+        // The chord's other actions stay bound (ADR-0208).
+        let mut shared = c.clone();
+        let reset = Action::AudioResetLoudness {};
+        shared
+            .hotkeys
+            .push(HotkeyBinding::new(Chord::new("F1"), &reset));
+        assert_eq!(
+            scene_edits(&shared, &a, &before, &draft("A", None)),
+            Ok(vec![Edit::HotkeyClear {
+                action: Some(switch("a")),
                 chord: Chord::new("F1")
             }])
         );

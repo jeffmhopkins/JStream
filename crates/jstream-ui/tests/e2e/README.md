@@ -197,7 +197,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   quotes the plugin's name and says its folder stays; Cancel sends nothing, and Remove
   sends one `plugin.uninstall` and the row goes. The Inspector holds neither
   plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
-  between General, Video, 3D rendering, Audio, Plugins and Devices, and the install dialog opens
+  between General, Video, 3D rendering, Audio, Keys & MIDI, Plugins and Devices, and the install dialog opens
   centred over a moved Settings dialog and closes alone on Escape.
 - **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
   answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter
@@ -519,6 +519,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
   changes; with two items, Selection on, Distribute off, and Match width and height
   giving both the primary item's size.
+- **Keys & MIDI** (`keys-and-midi.spec.js`,
+  [ADR-0208](../../../../docs/adr/0208-several-actions-per-key-or-trigger.md)): on
+  Settings › Keys & MIDI, + Key takes F8, the picker binds Switch to Intro and + Action
+  adds Reset the loudness meter after it; Go live with no stream output says to add one
+  and adds nothing; a chip's ✕ unbinds one action and Remove the key. A typed MIDI note
+  40 on channel 10 is bound to Switch to Main, and the search finds it by its action
+  and not by another's. Learn isn't driven, since the mock reads no MIDI.
 - **Keyframes and hotkeys** (`keyframes.spec.js`): New keyframe on Main's row nests
   "Keyframe 1" under it with the diamond, selected, under the canvas banner, and Main's
   caret folds it away and back; in the keyframe, the eye and the X field write its

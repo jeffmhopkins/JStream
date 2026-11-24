@@ -1998,7 +1998,14 @@ pub(crate) fn HotkeyRow(
                     class="icon-button"
                     title=title.clone()
                     aria-label=title
-                    on:click=move |_| send(vec![Edit::HotkeyClear { chord: chord.clone() }])
+                    on:click=move |_| {
+                        let edits = studio.collection.with_untracked(|c| {
+                            c.as_ref()
+                                .map(|c| c.unbind_edits(&chord, &id.get_value()))
+                                .unwrap_or_default()
+                        });
+                        send(edits);
+                    }
                 >
                     "×"
                 </button>

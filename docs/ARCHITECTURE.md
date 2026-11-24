@@ -189,8 +189,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
-├── hotkeys        [{ chord, action, labels }]   chord → protocol action request
-├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
+├── hotkeys        [{ chord, action, labels }]   chord → protocol action request; a chord repeats once per action, in bind order (ADR-0208)
+├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request, repeated likewise (ADR-0122, ADR-0208)
 ├── value_bindings [{ binding_id, kind, …, target, amount? }]   a control or data field → a setting, fader or send (ADR-0178)
 ├── channels       [{ channel_id, name, inputs, combine, fades, curve, on, … }]   controls → one live 0..1 value (ADR-0183)
 ├── shows          [{ show_id, name, program, overlays, keyframes, sequences, audio, bookmarks, loops, end, … }]   a run order of scenes in show time (ADR-0210)
@@ -780,6 +780,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   for a controller `Trigger` (a MIDI note, controller or program change), with the
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
   No input fires them yet.
+  A chord or trigger runs several actions in the order they were bound, and a clear can
+  name the one action to unbind (protocol 0.179,
+  [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
+  `output.toggle`, the start-or-stop a "go live" key binds.
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
   [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
   a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
@@ -1789,7 +1793,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
   `delay_ms`, refused the same way. Version 22 (ADR-0210) adds `shows`, the
   `show_scene` marker and the `show.*` actions a binding may run, refused the same way;
-  a marker naming a scene the file doesn't hold is dropped on load. `jstream-core`
+  a marker naming a scene the file doesn't hold is dropped on load. A chord or trigger
+  with several actions (ADR-0208) is stored as one entry per action with no version
+  bump: an older file loads as before, and an older engine refuses a newer file that
+  repeats a chord with `already_exists`, as it does any collection it can't rebuild.
+  `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

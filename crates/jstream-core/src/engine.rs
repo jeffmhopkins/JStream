@@ -2356,6 +2356,25 @@ impl Engine {
             request_id = %request_id,
         );
         let _entered = span.enter();
+        // `output.toggle` runs as the `output.start` or `output.stop` it resolves to,
+        // with that action's events, audit entry and errors (ADR-0208).
+        if let Call::Action {
+            action: Action::OutputToggle { output_id },
+        } = &call
+        {
+            let running = lock(&self.shared.state)
+                .outputs
+                .running()
+                .contains(output_id);
+            let output_id = output_id.clone();
+            let action = if running {
+                Action::OutputStop { output_id }
+            } else {
+                Action::OutputStart { output_id }
+            };
+            drop(_entered);
+            return self.execute(client_id, request_id, Call::Action { action }, previews);
+        }
         if matches!(
             call,
             Call::Query {

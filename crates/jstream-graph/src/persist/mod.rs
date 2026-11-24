@@ -1322,8 +1322,7 @@ impl Graph {
                 })
                 .collect(),
             hotkeys: state
-                .hotkeys
-                .iter()
+                .hotkeys()
                 .map(|(chord, action)| FileHotkey {
                     chord: chord.clone(),
                     action: action.clone(),
@@ -1331,8 +1330,7 @@ impl Graph {
                 })
                 .collect(),
             bindings: state
-                .bindings
-                .iter()
+                .bindings()
                 .map(|(trigger, action)| FileBinding {
                     trigger: trigger.clone(),
                     action: action.clone(),

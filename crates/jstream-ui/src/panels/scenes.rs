@@ -1349,11 +1349,21 @@ pub fn Scenes() -> impl IntoView {
             }
         };
         let clear_keys = move || {
-            let edits = chords
-                .get_untracked()
-                .into_iter()
-                .map(|chord| Edit::HotkeyClear { chord })
-                .collect();
+            let play = Action::TimelinePlay {
+                timeline_id: id.get_value(),
+                delay_ms: None,
+            };
+            let edits = studio.collection.with_untracked(|c| {
+                c.as_ref()
+                    .map(|c| {
+                        chords
+                            .get_untracked()
+                            .iter()
+                            .flat_map(|chord| c.unbind_edits(chord, &play))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            });
             send_all(edits);
         };
         let on_row_context = {

@@ -643,8 +643,22 @@ pub(crate) fn edits() -> Vec<Edit> {
             chord: Chord::new("Ctrl+Digit1"),
             labels: vec![LabelId::new("lbl_sponsor")],
         },
+        // A second action on the same chord, then clearing just it, then the chord (ADR-0208).
+        Edit::HotkeySet {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: Action::OutputToggle {
+                output_id: OutputId::new("out_yt"),
+            },
+        },
         Edit::HotkeyClear {
             chord: Chord::new("Ctrl+Digit1"),
+            action: Some(Action::OutputToggle {
+                output_id: OutputId::new("out_yt"),
+            }),
+        },
+        Edit::HotkeyClear {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: None,
         },
         Edit::BindingSet {
             trigger: pad_trigger(),
@@ -656,6 +670,11 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::BindingClear {
             trigger: pad_trigger(),
+            action: Some(Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+                via: Vec::new(),
+            }),
         },
         // A value binding, then its removal (ADR-0178).
         Edit::BindingSetValue {
@@ -1827,6 +1846,9 @@ pub(crate) fn actions() -> Vec<Action> {
             output_id: OutputId::new("out_yt"),
         },
         Action::OutputStop {
+            output_id: OutputId::new("out_yt"),
+        },
+        Action::OutputToggle {
             output_id: OutputId::new("out_yt"),
         },
         Action::OutputSetKey {

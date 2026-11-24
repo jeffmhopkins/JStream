@@ -43,6 +43,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Starts an output that is stopped or failed, and stops one that is starting,\nrunning or reconnecting (since 0.178, ADR-0208), so one key or pad can go live and\nend the stream. The engine runs it as the `output.start` or `output.stop` it\nresolves to, with that action's events, audit entry and errors.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to start or stop."
+            },
+            "type": {
+              "const": "output.toggle",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace, control or non-ASCII characters, and\n`action_failed` when the engine has no credential store, the store refuses, or\nthe output's `output.start` is still opening its target (#343): send it again\nonce the start has settled.",
           "properties": {
             "key": {
@@ -6830,7 +6848,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nRejected with `invalid_argument` for a chord that isn't valid (see [`Chord`]) or\nan action that can't be bound (`output.set_key`, whose stream key is never stored\nin the collection), with `already_exists` (entity `hotkey`) for a chord that is\nalready bound (rebinding is a batch of `hotkey.clear` then `hotkey.set`), and with\n`not_found` for a scene or output the action names that doesn't exist. Deleting\nthat object later removes the binding with it (ADR-0040 §3). Inverse:\n`hotkey.clear`.",
+          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nSince 0.178 (ADR-0208) a chord can run several actions: binding a chord that is\nalready bound adds this action after its others, and a press runs them all, in\nthe order they were bound. Rejected with `invalid_argument` for a chord that isn't\nvalid (see [`Chord`]) or an action that can't be bound (`output.set_key`, whose\nstream key is never stored in the collection), with `already_exists` (entity\n`hotkey`) for a chord already bound to an equal action (before 0.178, for any chord\nalready bound), and with `not_found` for a scene or output the action names that\ndoesn't exist. Deleting that object later removes that action's binding with it\n(ADR-0040 §3), leaving the chord's others. Inverse: `hotkey.clear` naming the\naction.",
           "properties": {
             "action": {
               "$ref": "#/$defs/Action",
@@ -6853,8 +6871,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes a hotkey binding. Rejected with `not_found` (entity `hotkey`) for a chord\nthat isn't bound. Inverse: `hotkey.set` with its action.",
+          "description": "Removes a hotkey binding: with `action`, that one action of the chord's, and\nwithout it, every action the chord runs (ADR-0208). The chord's labels go with its\nlast action. Rejected with `not_found` (entity `hotkey`) for a chord that isn't\nbound, or isn't bound to `action`. Inverse: `hotkey.set` with each action it\nremoved, in their order, then `hotkey.set_labels` when the chord lost its labels.",
           "properties": {
+            "action": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Action"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The one action to unbind (since 0.178, ADR-0208). Omitted unbinds them all."
+            },
             "chord": {
               "$ref": "#/$defs/Chord",
               "description": "The chord to unbind."
@@ -6897,7 +6926,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound\n(rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Inverse: `binding.clear`.",
+          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound to an equal\naction (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Since 0.178 (ADR-0208) a trigger can\nrun several actions, as a chord can: binding a trigger that is already bound adds\nthis action after its others, the engine runs them all in that order, and\n`already_exists` is only for a trigger already bound to an equal action. Inverse:\n`binding.clear` naming the action.",
           "properties": {
             "action": {
               "$ref": "#/$defs/Action",
@@ -6920,8 +6949,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that\nisn't bound. Inverse: `binding.set` with its action.",
+          "description": "Removes a binding: with `action`, that one action of the trigger's, and without\nit, every action the trigger runs (ADR-0208). Rejected with `not_found` (entity\n`binding`) for a trigger that isn't bound, or isn't bound to `action`. Inverse:\n`binding.set` with each action it removed, in their order.",
           "properties": {
+            "action": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Action"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The one action to unbind (since 0.178, ADR-0208). Omitted unbinds them all."
+            },
             "trigger": {
               "$ref": "#/$defs/Trigger",
               "description": "The trigger to unbind."
