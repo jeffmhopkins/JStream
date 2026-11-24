@@ -580,11 +580,12 @@ pub(crate) fn copy_frame(
 pub(crate) enum CursorMeta {
     /// Not over the stream (an `id` of 0).
     Hidden,
-    /// The picture's top-left corner (the position less the hot spot) at `(x, y)`, in
-    /// the buffer's pixels.
+    /// The picture's top-left corner (the position less the hot spot) at `(x, y)`, and
+    /// the position itself (where the hot spot is) at `pointer`, in the buffer's pixels.
     At {
         x: i32,
         y: i32,
+        pointer: (i32, i32),
         bitmap: CursorBitmap,
     },
 }
@@ -623,8 +624,9 @@ pub(crate) fn parse_cursor(meta: &[u8]) -> Option<CursorMeta> {
     if u32_at(meta, 0)? == 0 {
         return Some(CursorMeta::Hidden);
     }
-    let x = i32_at(meta, 8)?.saturating_sub(i32_at(meta, 16)?);
-    let y = i32_at(meta, 12)?.saturating_sub(i32_at(meta, 20)?);
+    let pointer = (i32_at(meta, 8)?, i32_at(meta, 12)?);
+    let x = pointer.0.saturating_sub(i32_at(meta, 16)?);
+    let y = pointer.1.saturating_sub(i32_at(meta, 20)?);
     let bitmap_offset = u32_at(meta, 24)? as usize;
     let bitmap = if bitmap_offset == 0 {
         CursorBitmap::Unchanged
@@ -632,7 +634,12 @@ pub(crate) fn parse_cursor(meta: &[u8]) -> Option<CursorMeta> {
         meta.get(bitmap_offset..)
             .map_or(CursorBitmap::Unchanged, parse_bitmap)
     };
-    Some(CursorMeta::At { x, y, bitmap })
+    Some(CursorMeta::At {
+        x,
+        y,
+        pointer,
+        bitmap,
+    })
 }
 
 /// The picture in `bitmap`: a `struct spa_meta_bitmap` and, `offset` bytes from its
@@ -842,12 +849,14 @@ mod tests {
         let Some(CursorMeta::At {
             x,
             y,
+            pointer,
             bitmap: CursorBitmap::Image(image),
         }) = parse_cursor(&m)
         else {
             panic!("a cursor with a picture: {:?}", parse_cursor(&m));
         };
         assert_eq!((x, y), (97, 46));
+        assert_eq!(pointer, (100, 50), "the hot spot is at the position");
         assert_eq!((image.size().width(), image.size().height()), (2, 1));
         assert_eq!(image.rgba(), &[0, 0, 255, 255, 255, 0, 0, 128], "as RGBA");
 
@@ -871,6 +880,7 @@ mod tests {
             Some(CursorMeta::At {
                 x: 10,
                 y: 10,
+                pointer: (10, 10),
                 bitmap: CursorBitmap::Unchanged
             })
         );
@@ -927,6 +937,7 @@ mod tests {
             Some(CursorMeta::At {
                 x: i32::MIN,
                 y: i32::MAX,
+                pointer: (i32::MIN, i32::MAX),
                 ..
             })
         ));

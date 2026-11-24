@@ -1,9 +1,9 @@
 //! Codecs on Linux (ADR-0060 §6, §7).
 //!
-//! Video encode goes through VA-API, H.264 or HEVC. Software H.264 is Cisco's OpenH264
+//! Video encode goes through VA-API, H.264, HEVC or AV1. Software H.264 is Cisco's OpenH264
 //! binary, once the user has downloaded it (`crate::openh264`, ADR-0140): it serves
 //! [`HardwarePreference::Avoid`], and `Prefer` on a machine with no VA-API H.264
-//! encoder. There is no software HEVC encoder: HEVC is VA-API's alone.
+//! encoder. There is no software HEVC or AV1 encoder: those are VA-API's alone.
 //! H.264 decode, for the streams the engine encodes itself (the quality probe), is the
 //! same OpenH264 library's decoder (ADR-0140); nothing else decodes here.
 //! Audio encode is JStream's own AAC-LC encoder (`crate::aac`, ADR-0140 and ADR-0062),
@@ -22,9 +22,9 @@ use crate::VaEncoder;
 /// first that encodes its codec.
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] for a codec other than H.264 and HEVC and for
+/// [`PlatformError::Unsupported`] for a codec other than H.264, HEVC and AV1 and for
 /// [`HardwarePreference::Avoid`] (software H.264 is OpenH264's, not VA-API's, and there
-/// is no software HEVC); [`PlatformError::MissingComponent`], with the distributions'
+/// is no software HEVC or AV1); [`PlatformError::MissingComponent`], with the distributions'
 /// remedy, when no driver encodes the codec (ADR-0060 §6).
 pub fn choose_encoder<'a>(
     encoders: &'a [VaEncoder],
@@ -33,9 +33,10 @@ pub fn choose_encoder<'a>(
     let component = match config.codec {
         Codec::H264 => "a VA-API driver with H.264 encode",
         Codec::Hevc => "a VA-API driver with HEVC encode",
+        Codec::Av1 => "a VA-API driver with AV1 encode",
         other => {
             return Err(PlatformError::Unsupported {
-                what: format!("{other:?} encoding on Linux (H.264 and HEVC only, ADR-0060)"),
+                what: format!("{other:?} encoding on Linux (H.264, HEVC and AV1 only, ADR-0060)"),
             });
         }
     };
@@ -100,6 +101,7 @@ mod backend {
         let codec = e.profile.codec();
         let label = match codec {
             Codec::Hevc => "HEVC",
+            Codec::Av1 => "AV1",
             _ => "H.264",
         };
         CodecInfo {
@@ -125,7 +127,7 @@ mod backend {
         }
     }
 
-    /// Codecs through VA-API (ADR-0060 §6): H.264 and HEVC encode sessions on the
+    /// Codecs through VA-API (ADR-0060 §6): H.264, HEVC and AV1 encode sessions on the
     /// probe's encoders, on CPU frames, or on the GPU context's encode targets for the backend
     /// [`Codecs::on_context`] returns. And the Rust AAC-LC encoder.
     #[derive(Clone, Debug)]
@@ -433,6 +435,14 @@ mod tests {
         )
         .expect("an HEVC encoder");
         assert_eq!(hevc.node, "/dev/dri/renderD129");
+        let amd_av1 = VaEncoder {
+            profile: VaProfile::Av1Main,
+            ..amd_hevc()
+        };
+        let with_av1 = [intel(), intel_hevc(), amd_hevc(), amd_av1.clone()];
+        let av1 = choose_encoder(&with_av1, &config(Codec::Av1, HardwarePreference::Prefer))
+            .expect("an AV1 encoder");
+        assert_eq!(av1, &amd_av1);
         // An HEVC-only machine has no H.264 encoder to give.
         assert!(matches!(
             choose_encoder(
@@ -447,10 +457,11 @@ mod tests {
     fn refusals_say_why() {
         let encoders = [intel(), intel_hevc()];
         for (codec, hw) in [
-            (Codec::Av1, HardwarePreference::Prefer),
+            (Codec::Aac, HardwarePreference::Prefer),
             (Codec::H264, HardwarePreference::Avoid),
-            // There is no software HEVC encoder on Linux.
+            // There is no software HEVC or AV1 encoder on Linux.
             (Codec::Hevc, HardwarePreference::Avoid),
+            (Codec::Av1, HardwarePreference::Avoid),
         ] {
             assert!(matches!(
                 choose_encoder(&encoders, &config(codec, hw)),
@@ -458,7 +469,7 @@ mod tests {
             ));
         }
         // No encode driver for the codec is something to install (ADR-0060 §6).
-        for codec in [Codec::H264, Codec::Hevc] {
+        for codec in [Codec::H264, Codec::Hevc, Codec::Av1] {
             let refused = choose_encoder(&[], &config(codec, HardwarePreference::Prefer));
             assert!(matches!(
                 refused,

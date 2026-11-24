@@ -172,6 +172,14 @@ impl StatsHandle {
     pub fn stats(&self) -> Option<SessionStats> {
         self.0.upgrade().map(|shared| shared.counters.snapshot())
     }
+
+    /// The codec implementation encoding now ([`VideoSession::codec`]), or `None` once
+    /// the session and every handle on its stream are gone.
+    ///
+    /// [`VideoSession::codec`]: crate::VideoSession::codec
+    pub fn codec(&self) -> Option<CodecInfo> {
+        self.0.upgrade().map(|shared| shared.codec().clone())
+    }
 }
 
 /// State shared by the encode thread, the session, its inputs and its subscriptions.

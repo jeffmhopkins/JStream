@@ -1241,12 +1241,12 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 2 MB
-  of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
-  of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
-  `hotkey` and `binding` each carry every action's, because `hotkey.set` and
-  `binding.set` take any action), and `describe_api` returns the whole protocol schema. Shrinking
-  the tools is an open question in
+  Part of this is built: each group tool carries its own ops' full schemas, but where an
+  op holds an action or edit (`hotkey.set`, a cue, `live.set`, `batch`'s `edits`), the
+  tool carries only a stub naming the variants, since the two unions refer to each other
+  and copying them whole made `tools/list` about 2 MB. `describe_api` returns the whole
+  protocol schema, or with `name` one definition or op of it. Shrinking the group tools
+  further is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
@@ -1349,10 +1349,11 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 4. **Convert** to NV12/P010 with two render passes that write straight into the Y and UV
    plane views of the shared NV12 texture (proven by S1). Writing R8 + RG8 targets in
    compute and copying them into NV12 through hal, or a D3D11 video processor, is the
-   fallback for an adapter that rejects planar render targets. Where the backend has no
-   `NV12` textures at all (Metal), an encode target is a planar pair over one surface, an
-   `R8Unorm` Y texture and a half-size `Rg8Unorm` CbCr texture (`GpuFrame::planar`), and
-   the same passes write those.
+   fallback for an adapter that rejects planar render targets. A backend with no NV12
+   texture format (wgpu's Metal backend) gets its encode target as a pair of textures
+   over the planes of one surface instead, an `R8Unorm` Y and a half-size `Rg8Unorm`
+   CbCr (`GpuFrame::planar`, as spike S6 wraps an IOSurface's), written by the same
+   two passes.
 5. **Encode:** the NV12 texture is shared back to D3D11 for the Media Foundation encoders
    (fence-synchronized).
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On

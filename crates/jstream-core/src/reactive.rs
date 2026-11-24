@@ -90,7 +90,13 @@ pub(crate) enum Hearing {
 /// What `modifier` hears, when it is an audio one. A source overrides a bus, as for the
 /// `spectrum` kind.
 pub(crate) fn hearing(modifier: &MotionModifier) -> Option<Hearing> {
-    match &modifier.kind {
+    hearing_of(&modifier.kind)
+}
+
+/// What an `audio` reader of kind `kind` hears, on a motion modifier, a channel's input
+/// or a value binding (ADR-0206).
+pub(crate) fn hearing_of(kind: &MotionKind) -> Option<Hearing> {
+    match kind {
         MotionKind::Audio {
             audio,
             audio_source,
@@ -643,6 +649,7 @@ impl Bindings {
                 continue;
             }
             let modifier = MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: camera.modifier_id.clone(),
                 property: MotionProperty::X,
                 effect: None,
@@ -1133,6 +1140,7 @@ mod tests {
     fn light(id: &str, audio: Option<&str>, measure: MotionMeasure) -> MotionModifier {
         let band = measure == MotionMeasure::Band;
         MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: id.into(),
             property: MotionProperty::Opacity,
             effect: None,
@@ -1357,6 +1365,7 @@ mod tests {
         input: Option<&str>,
     ) -> MotionModifier {
         MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: id.into(),
             property: MotionProperty::Tilt,
             effect: None,
@@ -1390,6 +1399,7 @@ mod tests {
         let item = ItemId::new("cockpit");
         let heard: HeardScopes = Arc::default();
         let on_camera = |m: MotionModifier| CameraMotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: m.modifier_id,
             property: jstream_protocol::CameraProperty::Fov,
             kind: m.kind,
@@ -1593,6 +1603,7 @@ mod tests {
     ) -> MotionModifier {
         let f = |v: f32| Finite32::new(v).expect("finite");
         MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: id.into(),
             property: MotionProperty::Opacity,
             effect: None,
