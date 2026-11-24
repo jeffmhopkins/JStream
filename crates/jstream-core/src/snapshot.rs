@@ -9716,11 +9716,16 @@ fn moved_camera(
     })
 }
 
+/// The opacity under which autofocus sees through an item: mostly faded, it shows more of
+/// what is behind it than of itself.
+const MIN_FOCUS_OPACITY: f32 = 0.5;
+
 /// How far along `camera`'s viewing axis the nearest item that the passes of scene family
 /// `family` draw meets it (the program's, a mix's, the show scene's, or a chain phase's,
 /// which draws a scene with a video chain), at `at` with each item's motion: what autofocus focuses on
-/// (ADR-0176 decision 5). An item placed through a 3D group, or with no opacity left, is
-/// passed over; a model is met at the surface it draws (ADR-0218), and a model whose
+/// (ADR-0176 decision 5). An item placed through a 3D group, one blended onto what is
+/// behind it (any blend mode but `normal`), or one under [`MIN_FOCUS_OPACITY`], is
+/// passed over, since none of them hides what is behind it; a model is met at the surface it draws (ADR-0218), and a model whose
 /// mesh this frame doesn't have, or whose search isn't built yet, isn't met. `None` when
 /// the axis meets none.
 fn centre_distance(
@@ -9749,7 +9754,10 @@ fn centre_distance(
             let (Placement::Geometry(geometry) | Placement::Layer(geometry)) = placement else {
                 continue;
             };
-            if opacity <= 0.0 {
+            // Only what hides what is behind it is focused on: a see-through item, one
+            // blended onto what is behind (a glow or a hologram added on), or mostly
+            // faded, is passed over, so it can't pull the focus off the scene behind it.
+            if layer.blend != BlendMode::Normal || opacity < MIN_FOCUS_OPACITY {
                 continue;
             }
             let met = if layer.boxed.is_some_and(|boxed| boxed.model) {
