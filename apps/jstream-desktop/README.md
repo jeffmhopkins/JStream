@@ -65,7 +65,8 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   can be stored relative to the collection), whether "Allow devices on my network" is on,
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
   the JTunnel setting as it was at start with `setJtunnel`, which saves it, and
-  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands.
+  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands; and
+  `drop_script`, the event that tells the page about files dragged onto the window.
 - **The person's folders** (`folders.rs`, `screenshots.rs`;
   [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
   the default project in `Documents\JStream`, which `host::startup_project` moves the
@@ -549,6 +550,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `save_screenshot` answered in this run (`folders::Saved`): Open hands it to Explorer,
   `open` or `xdg-open` as one argument, and Show in folder runs Explorer's `/select`,
   `open -R`, or `xdg-open` on its folder.
+- **Files dragged onto the window.** Tauri handles a drag of files from the desktop
+  natively, so the page gets no HTML drop with paths. `shell.rs` hears the main
+  window's drag events and runs `bootstrap::drop_script` in its webview for each step:
+  it dispatches `jstream-desktop-drop` on `window` with `{ kind, paths, x, y }`, `kind`
+  `over` (the drag entered or moved), `drop` or `leave`, `paths` the dragged files'
+  UTF-8 paths (Tauri names them as the drag enters and at the drop; the app keeps them
+  between), and `x`, `y` the pointer in the page's CSS pixels. Only WebView2 reports
+  physical pixels, so on Windows the position is divided by the window's scale factor;
+  WKWebView and WebKitGTK already report logical points. The detail is a JSON string
+  the page parses, so no file name can end the script. The app reads no dropped file
+  and grants no command for it: the page decides what to do with the paths, over the
+  WebSocket API as with a picked one (`jstream-ui`'s `host::on_file_drop`). A projector
+  window isn't told.
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no

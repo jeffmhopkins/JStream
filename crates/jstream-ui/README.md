@@ -110,6 +110,12 @@ Contents ([Design](#design) explains the choices):
   JTunnel senders" as a `JtunnelSetting` of `JtunnelSender`s, each with its "Use this
   sender's state" (its JSON tested natively), and `desktop_ptz()`
   and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
+  `on_file_drop` hands any panel each step of a drag of files from the desktop over the
+  app's window as a `FileDrop` (`Over`, `Drop` or `Leave`, the paths, and the pointer
+  in CSS pixels; its JSON tested natively), read from the app's `jstream-desktop-drop`
+  event, and registers nothing outside the app; `FileDrop::lands_on` (with
+  `element_at`, `document.elementFromPoint`) says whether a drop is over a panel's own
+  element.
   `same_engine` says
   whether the open session is that app's own engine, and `own_engine` asks it of the
   session's `ConnectedEngine` (for Browse… and the canvas's full-resolution preview).
