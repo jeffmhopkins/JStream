@@ -325,7 +325,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"event","event":{"type":"youtube.stats","output_id":"out_live","broadcast_id":"dQw4w9WgXcQ","concurrent_viewers":1520,"likes":3400,"views":98765}}
 {"type":"event","event":{"type":"source.size_changed","source_id":"window","size":{"width":1280,"height":720}}}
 {"type":"event","event":{"type":"source.size_changed","source_id":"window"}}
-{"type":"event","event":{"type":"source.size_changed","source_id":"theme","duration_ms":184000}}
+{"type":"event","event":{"type":"source.size_changed","source_id":"theme","size":{"width":1,"height":1},"duration_ms":184000}}
 {"type":"event","event":{"type":"source.size_changed","source_id":"teapot","size":{"width":512,"height":512},"depth":400}}
 {"type":"event","event":{"type":"youtube.stats","output_id":"out_live","broadcast_id":"dQw4w9WgXcQ"}}
 {"type":"event","event":{"type":"meters.tick","sources":[{"source_id":"src_mic","peak":[0.5,0.25],"rms":[0.125,0.0625]}],"buses":[{"bus_id":"bus_vod","peak":[0.5,0.25],"rms":[0.125,0.0625]},{"bus_id":"master","peak":[0.5,0.25],"rms":[0.125,0.0625],"true_peak":[0.53125,0.25],"loudness":{"momentary":-18.5,"short_term":-20.0}}]}}

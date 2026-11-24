@@ -1214,8 +1214,8 @@ pub struct SourceSize {
     pub depth: Option<u32>,
     /// How long one play of it lasts, in milliseconds, for a `media` file whose length
     /// is known: from its container, or once a play has reached its end (since 0.177).
-    /// A file with only audio has one and no `size`. Omitted for every other source and
-    /// while the length isn't known.
+    /// A file with only audio reports it beside its 1x1 `size`. Omitted for every other
+    /// source and while the length isn't known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
 }

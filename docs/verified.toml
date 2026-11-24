@@ -885,10 +885,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:3722747cac95a861", by = "agent:st6-docs", note = "Re-read the protocol summary against command.rs, query.rs, event.rs, plugin.rs, the snapshots and mock.rs: added source.seek (0.177, holds through the switch, hotkey/MCP/live plugin, not a cue) to the timelines bullet and duration_ms to the source.sizes read." }
+stamp = { hash = "b3:668b73c11950a196", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:8bb20707eff78770", by = "agent:st6-docs", note = "Re-read the protocol summary against command.rs, query.rs, event.rs, plugin.rs, the snapshots and mock.rs: added source.seek (0.177, holds through the switch, hotkey/MCP/live plugin, not a cue) to the timelines bullet and duration_ms to the source.sizes read." }
+stamp = { hash = "b3:6387e6ab570d96ad", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -939,7 +939,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Edited: since 0.99 item.set_timing and the three easings; mock and fixtures match" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:0caeb24e24fc446f", by = "agent:st6-docs", note = "Re-read the protocol summary against command.rs, query.rs, event.rs, plugin.rs, the snapshots and mock.rs: added source.seek (0.177, holds through the switch, hotkey/MCP/live plugin, not a cue) to the timelines bullet and duration_ms to the source.sizes read." }
+stamp = { hash = "b3:a4a85dabaa8d312b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/frames.rs"]
 stamp = { hash = "b3:5fc2e1a197c77868", by = "agent:release-thread", note = "Queries bullet adds video.frames and the frame sheet scene.switch_and_watch answers with; the protocol inputs add frames.rs (FrameStrip, FrameSheet, SheetFrame), both ops in command.rs, query.rs and envelope.rs, plugin scopes, fixtures and snapshots; control README notes the mock answers both with internal. Renumbered to tentative 0.78 (0.76 and 0.77 held by other PRs), restoring item.set_locked's since 0.71; main merged up to #1109 with nothing there touching frame sheets. | merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); video.frames now says protocol 0.82 beside main's shared values at 0.78 | merge: wave/alpha4 into #1080 (protocol 0.82): the merge brought into crates/jstream-protocol/src/frames.rs no merged PR, only the conflict resolution. The protocol summary keeps #1080's frame-sheet clause (0.82) beside #1125's item.set_motion (0.81); snapshots, fixtures and frames.rs match. | merge: main into wave/alpha4 (second sync): main didn't change crates/jstream-protocol/src/frames.rs. ARCH#protocol has #1041's Codec downloads bullet (0.69) beside the wave's 0.80 to 0.86 clauses; mock, snapshots and protocol sources match." }
@@ -1020,7 +1020,7 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:ff9d3eda58eb42de", by = "agent:st6-docs", note = "Re-read the protocol summary against command.rs, query.rs, event.rs, plugin.rs, the snapshots and mock.rs: added source.seek (0.177, holds through the switch, hotkey/MCP/live plugin, not a cue) to the timelines bullet and duration_ms to the source.sizes read." }
+stamp = { hash = "b3:616626752915873b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/rendering.rs"]
 stamp = { hash = "b3:c0769385ccb93e44", by = "agent:claude", note = "Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; the regenerated snapshots and rendering.rs's doc change the default only; the Reflections bullet names no step default and holds." }
@@ -4593,7 +4593,7 @@ stamp = { hash = "b3:e74a612576428c11", by = "agent:st6-docs", note = "Re-read t
 stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:ff9d3eda58eb42de", by = "agent:st6-docs", note = "Re-read the edit/action classification against command.rs: source.seek is an Action (runtime state, never undone or batched) and SourceSize changes no Call form; holds." }
+stamp = { hash = "b3:616626752915873b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#camera-aim"."body"]
 stamp = { hash = "b3:beaf081f013c6b07", by = "agent:ptz-builder", note = "new section for camera_aim.rs: the actions, the query, the checks, binding and plugin classes, matching the code; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -4617,10 +4617,10 @@ stamp = { hash = "b3:c499997af40d7f9e", by = "agent:channels", note = "Added 0.1
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:3722747cac95a861", by = "agent:st6-docs", note = "Re-read against the snapshots' diffs and version.rs: source.seek is a new action variant and duration_ms a new optional field (skip_serializing_if none), both minor; hotkey and cue actions are carried as plain JSON so older clients keep parsing; holds." }
+stamp = { hash = "b3:668b73c11950a196", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:8bb20707eff78770", by = "agent:st6-docs", note = "Re-read against the snapshots' diffs and version.rs: source.seek is a new action variant and duration_ms a new optional field (skip_serializing_if none), both minor; hotkey and cue actions are carried as plain JSON so older clients keep parsing; holds." }
+stamp = { hash = "b3:6387e6ab570d96ad", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
@@ -4656,7 +4656,7 @@ stamp = { hash = "b3:aaea5a5d3bcc0c6f", by = "agent:issues-thread", note = "Re-r
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:ff9d3eda58eb42de", by = "agent:st6-docs", note = "Re-read the queries, shapes, events and plugin-scope bullets against query.rs (SourceSize.duration_ms), event.rs (source.size_changed duration_ms) and plugin.rs (source.seek live): each names source.sizes, SourceSize, source.size_changed and PLUGIN_SCOPES without field lists; holds." }
+stamp = { hash = "b3:616626752915873b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/settings.rs"]
 stamp = { hash = "b3:12085313843efe02", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**" }
@@ -4716,7 +4716,7 @@ stamp = { hash = "b3:f04efc8b542328fd", by = "agent:claude", note = "Added solid
 stamp = { hash = "b3:c1a63b9ead949330", by = "agent:claude", note = "This PR: the body names a hotkey binding's labels and label.members of a missing label among the parity cases. Merge: #1299's binding checks there (#1284, #1299, #1316, #1319, #1364 and #1368). On re-reading, fixtures.rs and parity.rs match. | kept from the merged side: The parity collection now also holds two controller bindings, one rebound, and its rejected batches check bindings: updated the fixture description for 0.96 controller bindings (ADR-0122): binding.set/clear, Trigger, Binding, state.get bindings, delete.plan bindings, removed_bindings, entity binding" }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:0caeb24e24fc446f", by = "agent:st6-docs", note = "Re-read the parity fixture bullet against fixtures.rs's additions (a source.seek action, an intro SourceSize with duration_ms, a size_changed event with only duration_ms): those are wire examples, not the parity batch or its answers, so the bullet holds." }
+stamp = { hash = "b3:a4a85dabaa8d312b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:54abc60954404dc6", by = "agent:channels", note = "Re-read: fixtures and parity gain channel examples; the schema description holds." }
@@ -4749,7 +4749,7 @@ stamp = { hash = "b3:2031d27ef862a130", by = "agent:claude", note = "Edited: Hot
 stamp = { hash = "b3:058a20509ea722cf", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to filter.rs, output.rs, hotkey.rs, encoder.rs, mix.rs, audio.rs, organise.rs, query.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#contents-state"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:ff9d3eda58eb42de", by = "agent:st6-docs", note = "Re-read against query.rs's SourceSize.duration_ms: this section lists collection-state types (filters, outputs, hotkeys, audio, organisation); SourceSize is listed under Contents: queries, so nothing here changes; holds." }
+stamp = { hash = "b3:616626752915873b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#design"."body"]
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now the preface plus Envelope and versioning and Tagging; the other subsections moved out unchanged as their own sections. Re-read: the envelope, handshake, message size, semver rule and tagging hold against envelope.rs, version.rs (can_serve) and lib.rs, the narrowed covers; depends_on keeps R-API-001 and R-API-002, which these two subsections cite; ADR-0013, R-ARCH-006 and R-API-004 moved with the subsections that cite them (#calls, #batches); the schema files moved to #compatibility" }
@@ -4956,7 +4956,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read against ADR-0129 (keyframe timing in switches into a keyframe, item.set_timing, ease_in/hold/cubic_bezier, protocol 0.99 and schema 9 placeholders); holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:0caeb24e24fc446f", by = "agent:st6-docs", note = "Re-read Purpose's envelope, history and live bullets against command.rs, event.rs, query.rs, plugin.rs, fixtures.rs and version.rs: source.seek, SourceSize.duration_ms and the 0.177 bump add no envelope or live-set change; holds." }
+stamp = { hash = "b3:a4a85dabaa8d312b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/frames.rs"]
 stamp = { hash = "b3:5fc2e1a197c77868", by = "agent:release-thread", note = "Added video.frames to the queries, scene.switch_and_watch to the actions, a Frame sheets bullet for frames.rs (FrameStrip with its limits and check, FrameSheet, SheetFrame), and the frame sheets to the version history. Renumbered to tentative 0.78 (0.76 and 0.77 held by other PRs), restoring item.set_locked's since 0.71; main merged up to #1109 with nothing there touching frame sheets. | merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | merge: wave/alpha4 into #1080 (protocol 0.82): the merge brought into crates/jstream-protocol/src/frames.rs no merged PR, only the conflict resolution. The file list holds: frames.rs (#1080), command.rs, fixtures.rs (scene.switch_and_watch and the item actions both), plugin.rs, lib.rs and query.rs carry the merged motion; version.rs is 0.82. | merge: main into wave/alpha4 (second sync): main didn't change crates/jstream-protocol/src/frames.rs. command.rs, fixtures.rs, lib.rs, plugin.rs and query.rs carry #1041's codec downloads (codec.downloads, codec.download, codec.delete, protocol 0.69, people-only) beside the wave's motion work (0.80 to 0.86); lib.rs's Docs line now names both #motion and #codec-downloads (the one conflict in it). frames.rs is the wave's and unchanged by main." }
@@ -5037,7 +5037,7 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:ff9d3eda58eb42de", by = "agent:st6-docs", note = "Re-read Purpose's envelope, history and live bullets against command.rs, event.rs, query.rs, plugin.rs, fixtures.rs and version.rs: source.seek, SourceSize.duration_ms and the 0.177 bump add no envelope or live-set change; holds." }
+stamp = { hash = "b3:616626752915873b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/rendering.rs"]
 stamp = { hash = "b3:c0769385ccb93e44", by = "agent:claude", note = "Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; rendering.rs's DEFAULT doc says the fewest steps; the purpose holds." }
@@ -5082,7 +5082,7 @@ stamp = { hash = "b3:aaea5a5d3bcc0c6f", by = "agent:issues-thread", note = "Edit
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:ff9d3eda58eb42de", by = "agent:st6-docs", note = "Re-read source.sizes against query.rs's duration_ms and the engine's sizes: fixed the claim that an audio-only file reports duration with no size (the engine reports it beside the 1x1 frame the same paragraph describes), and said when it is omitted and that source.size_changed announces it." }
+stamp = { hash = "b3:616626752915873b", by = "agent:st6", note = "the SourceSize::duration_ms comment now says an audio-only file reports its length beside its 1x1 size, matching this section; the size_changed fixture for an audio-only file carries that 1x1 size" }
 
 ["CRATE-jstream-protocol#shared-values"."body"]
 stamp = { hash = "b3:1a6b4bf810de3cb0", by = "agent:claude", note = "Edited: the tempo.* bullet says a page reads them only with page_api_tempo, never through page_api_values." }

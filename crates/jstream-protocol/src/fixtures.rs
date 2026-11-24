@@ -4323,7 +4323,10 @@ pub(crate) fn events() -> Vec<Event> {
     });
     events.push(Event::SourceSizeChanged {
         source_id: SourceId::new("theme"),
-        size: None,
+        size: Some(PixelSize {
+            width: 1,
+            height: 1,
+        }),
         depth: None,
         duration_ms: Some(184_000),
     });
