@@ -199,6 +199,8 @@ pub struct BookmarkView {
     pub pausing: bool,
     /// The key bound to "go to" it, if any, as it shows on a key cap: F2.
     pub key: Option<String>,
+    /// What to say or do there, read from the Run view's notes like a teleprompter.
+    pub note: String,
 }
 
 /// A loop: a region the play head goes round until the operator leaves.
@@ -318,6 +320,7 @@ pub(crate) mod demo {
             at_ms,
             pausing,
             key: Some(key.to_owned()),
+            note: String::new(),
         }
     }
 

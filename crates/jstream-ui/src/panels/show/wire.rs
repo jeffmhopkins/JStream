@@ -332,6 +332,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
             )
             .into_iter()
             .next(),
+            note: b.note.clone(),
         })
         .collect();
     let loops = show

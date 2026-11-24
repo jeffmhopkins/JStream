@@ -17,6 +17,7 @@ pub mod edits;
 pub mod inspect_edits;
 pub mod inspector;
 pub mod model;
+pub mod prompter;
 pub mod run;
 pub mod time;
 pub mod wire;
@@ -100,6 +101,11 @@ pub struct ShowPanel {
     pub carry: RwSignal<Option<Carry>>,
     /// Whether the show picker is a name field, renaming the open show.
     pub renaming: RwSignal<bool>,
+    /// Whether the Run view's bookmark notes are unfolded: the panel's own state, never
+    /// saved.
+    pub notes_open: RwSignal<bool>,
+    /// The notes' teleprompter settings, kept by the browser.
+    pub prompter: RwSignal<prompter::Prompter>,
 }
 
 /// A scene dragged from the Scenes panel towards the Show panel's tracks. The Scenes
@@ -137,6 +143,8 @@ impl ShowPanel {
             preview: RwSignal::new(None),
             carry: RwSignal::new(None),
             renaming: RwSignal::new(false),
+            notes_open: RwSignal::new(true),
+            prompter: RwSignal::new(prompter::Prompter::default()),
         }
     }
 
@@ -173,6 +181,7 @@ impl ShowPanel {
     pub fn connected(studio: Studio, session: SessionContext) -> ShowPanel {
         let panel = ShowPanel {
             engine: Some((studio, session)),
+            prompter: RwSignal::new(prompter::Prompter::restore()),
             ..ShowPanel::new(studio.problem)
         };
         Effect::new(move |_| {

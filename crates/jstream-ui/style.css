@@ -2961,3 +2961,24 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
   .show-run-body { grid-template-columns: minmax(0, 1fr); }
   .show-run-body > .show-run-marks { grid-row: auto; }
 }
+/* The Run view's bookmark notes: a fold under the cards, normal text. */
+.show-notes { margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface, var(--raised)); }
+.show-notes-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; background: none; color: var(--text-soft); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-align: left; }
+.show-notes-head:hover { background: none; color: var(--text); }
+.show-notes-caret { width: 10px; color: var(--muted); }
+.show-notes-body { max-height: 180px; overflow: auto; padding: 0 12px 10px 30px; }
+.show-notes-here { margin: 0; white-space: pre-wrap; line-height: 1.5; color: var(--text); }
+.show-notes-here.hint { color: var(--muted); }
+.show-notes-next { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.show-notes-next h6 { margin: 0 0 4px; color: var(--muted); font-size: 10.5px; letter-spacing: .06em; }
+.show-notes-next p { margin: 0; white-space: pre-wrap; line-height: 1.5; color: var(--text-soft); }
+.show-notes-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding-right: 10px; }
+.show-notes-bar .show-notes-head { width: auto; flex: 1 1 auto; }
+.show-notes-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: 12px; white-space: nowrap; }
+.show-notes-tools { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.show-notes-tools .show-btn { height: 26px; padding: 0 8px; }
+.show-notes-value { min-width: 64px; text-align: center; color: var(--text-soft); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* Teleprompter: large text that rolls; room below so the last line can reach the reading line. */
+.show-notes.prompter .show-notes-body { max-height: min(48vh, 420px); padding: 4px 24px 0; scroll-behavior: auto; }
+.show-notes.prompter .show-notes-body::after { content: ""; display: block; height: min(36vh, 315px); }
+.show-notes.prompter .show-notes-here { line-height: 1.35; font-weight: 500; }

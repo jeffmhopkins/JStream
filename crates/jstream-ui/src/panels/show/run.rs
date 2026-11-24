@@ -83,6 +83,34 @@ fn with_transition(transition: Option<&str>) -> String {
     }
 }
 
+/// The bookmark notes the Run view shows: the bookmark the show is at, and the next one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Notes {
+    /// The bookmark the show is at, or last passed, and its note.
+    pub here: Option<(String, String)>,
+    /// The next bookmark after it, and its note.
+    pub next: Option<(String, String)>,
+}
+
+/// The notes for where the show is: paused, the bookmark it waits at; otherwise the last
+/// bookmark at or before the play head (none before the first one), then the one after.
+pub fn notes(show: &ShowView, run: &model::RunView, head: u32) -> Notes {
+    let marks = &show.bookmarks;
+    let here = match &run.phase {
+        RunPhase::Paused { bookmark, .. } => marks.iter().position(|b| &b.id == bookmark),
+        _ => marks.iter().rposition(|b| b.at_ms <= head),
+    };
+    let next = match here {
+        Some(i) => marks.get(i + 1),
+        None => marks.iter().find(|b| b.at_ms > head),
+    };
+    let pair = |b: &BookmarkView| (b.name.clone(), b.note.trim().to_owned());
+    Notes {
+        here: here.map(|i| pair(&marks[i])),
+        next: next.map(pair),
+    }
+}
+
 /// The NOW card: what is on program and what the runner is doing.
 pub fn now(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Card {
     let (clip, key) = on_program(show, head, settled(run));
@@ -535,6 +563,7 @@ pub fn RunView() -> impl IntoView {
                     <UpNowCard />
                 </div>
             </div>
+            <NotesPanel />
             <FoldedStrip />
             <p class="show-run-foot">
                 "Run view: the same show with the tracks folded into one strip · a click on the strip arms that spot for the next Continue, it does not jump · Edit brings the tracks back"
@@ -734,6 +763,157 @@ fn UpNowCard() -> impl IntoView {
                 }}
             </ul>
         </div>
+    }
+}
+
+/// The bookmark notes, folded under a header that names the bookmark: its note, then the
+/// next bookmark's. With the teleprompter on, the note is large and rolls up at the rate
+/// set while Roll is on, from the top again at each bookmark.
+#[component]
+fn NotesPanel() -> impl IntoView {
+    use super::prompter::{self, Prompter};
+    let panel = expect_context::<ShowPanel>();
+    let read = Memo::new(move |_| {
+        let show = panel.show()?;
+        let head = panel.head();
+        Some(panel.run.with(|run| notes(&show, run, head)))
+    });
+    let here = Memo::new(move |_| read.with(|n| n.as_ref().and_then(|n| n.here.clone())));
+    let open = panel.notes_open;
+    let look = panel.prompter;
+    let set = move |f: &dyn Fn(Prompter) -> Prompter| {
+        look.update(|p| *p = f(*p));
+        look.get_untracked().keep();
+    };
+    // Seconds read before the current roll began, and when it began (None: paused).
+    let read_ms = RwSignal::new(0.0_f64);
+    let since = RwSignal::new(None::<f64>);
+    let body = NodeRef::<leptos::html::Div>::new();
+    let text = NodeRef::<leptos::html::Div>::new();
+    let to_top = move || {
+        if let Some(b) = body.get_untracked() {
+            b.set_scroll_top(0);
+        }
+    };
+    Effect::new(move |seen: Option<Option<(String, String)>>| {
+        let now = here.get();
+        if seen.is_some_and(|seen| seen != now) {
+            read_ms.set(0.0);
+            if since.get_untracked().is_some() {
+                since.set(Some(panel.clock.get_untracked()));
+            }
+            to_top();
+        }
+        now
+    });
+    Effect::new(move |_| {
+        let at = panel.clock.get();
+        let (Some(start), true) = (since.get(), look.with(|p| p.on)) else {
+            return;
+        };
+        let (Some(b), Some(t)) = (body.get(), text.get()) else {
+            return;
+        };
+        let words = here.with(|h| h.as_ref().map_or(0, |(_, note)| prompter::words(note)));
+        let elapsed = (read_ms.get_untracked() + at - start) / 1000.0;
+        let top = prompter::scroll_top(
+            elapsed,
+            look.with_untracked(|p| p.wps),
+            words,
+            f64::from(t.offset_height()),
+            f64::from(b.client_height()),
+        );
+        b.set_scroll_top(top as i32);
+    });
+    let roll = move |_| {
+        let now = panel.clock.get_untracked();
+        match since.get_untracked() {
+            Some(start) => {
+                read_ms.update(|r| *r += now - start);
+                since.set(None);
+            }
+            None => since.set(Some(now)),
+        }
+    };
+    let restart = move |_| {
+        read_ms.set(0.0);
+        if since.get_untracked().is_some() {
+            since.set(Some(panel.clock.get_untracked()));
+        }
+        to_top();
+    };
+    let title = move || match here.get() {
+        Some((name, _)) => format!("NOTES · {name}"),
+        None => "NOTES".to_owned(),
+    };
+    let next = move || {
+        read.get()?
+            .next
+            .filter(|(_, note)| !note.is_empty())
+            .map(|(name, note)| {
+                view! {
+                    <div class="show-notes-next">
+                        <h6>{format!("NEXT · {name}")}</h6>
+                        <p>{note}</p>
+                    </div>
+                }
+            })
+    };
+    let note = move || match here.get() {
+        Some((_, note)) if !note.is_empty() => {
+            view! { <p class="show-notes-here">{note}</p> }.into_any()
+        }
+        Some(_) => {
+            view! { <p class="show-notes-here hint">"No notes for this bookmark."</p> }.into_any()
+        }
+        None => view! { <p class="show-notes-here hint">"Notes show from the first bookmark."</p> }
+            .into_any(),
+    };
+    let on = move || look.with(|p| p.on);
+    view! {
+        <section class="show-notes" class:open=move || open.get() class:prompter=on>
+            <div class="show-notes-bar">
+                <button type="button" class="show-notes-head" aria-expanded=move || open.get().to_string()
+                    on:click=move |_| open.update(|o| *o = !*o)>
+                    <span class="show-notes-caret">{move || if open.get() { "▾" } else { "▸" }}</span>
+                    {title}
+                </button>
+                <Show when=move || open.get()>
+                    <label class="show-notes-toggle" title="Large text that rolls up at the rate set">
+                        <input type="checkbox" prop:checked=on
+                            on:change=move |ev| {
+                                let on = event_target_checked(&ev);
+                                set(&|p| Prompter { on, ..p });
+                            } />
+                        "Teleprompter"
+                    </label>
+                    <Show when=on>
+                        <span class="show-notes-tools">
+                            <button type="button" class="show-btn" title="Smaller text"
+                                on:click=move |_| set(&|p| p.sized(false))>"A−"</button>
+                            <span class="show-notes-value">{move || format!("{} px", look.with(|p| p.size))}</span>
+                            <button type="button" class="show-btn" title="Larger text"
+                                on:click=move |_| set(&|p| p.sized(true))>"A+"</button>
+                            <button type="button" class="show-btn" title="Slower"
+                                on:click=move |_| set(&|p| p.paced(false))>"−"</button>
+                            <span class="show-notes-value">{move || format!("{} words/s", look.with(|p| p.wps))}</span>
+                            <button type="button" class="show-btn" title="Faster"
+                                on:click=move |_| set(&|p| p.paced(true))>"+"</button>
+                            <button type="button" class="show-btn" class:on=move || since.get().is_some()
+                                on:click=roll>{move || if since.get().is_some() { "❚❚ Pause" } else { "▶ Roll" }}</button>
+                            <button type="button" class="show-btn" title="Back to the top" on:click=restart>"⟲"</button>
+                        </span>
+                    </Show>
+                </Show>
+            </div>
+            <Show when=move || open.get()>
+                <div class="show-notes-body" node_ref=body
+                    style:font-size=move || on().then(|| format!("{}px", look.with(|p| p.size)))>
+                    <div class="show-notes-text" node_ref=text>{note}</div>
+                    {move || (!on()).then(next)}
+                </div>
+            </Show>
+        </section>
     }
 }
 
@@ -1091,5 +1271,47 @@ mod tests {
         assert!((s.loops[0].1 - 27.273).abs() < 0.01);
         assert_eq!(strip_ms(&show, 0.5), 330_000);
         assert_eq!(strip_ms(&show, 2.0), 660_000);
+    }
+
+    #[test]
+    fn notes_follow_the_bookmark_the_show_is_at() {
+        let mut show = demo::friday();
+        for b in &mut show.bookmarks {
+            b.note = match b.id.as_str() {
+                "b3" => "  Welcome everyone.\nIntroduce the guest.  ".to_owned(),
+                "b4" => "Show the build.".to_owned(),
+                _ => String::new(),
+            };
+        }
+        let pair = |a: &str, b: &str| Some((a.to_owned(), b.to_owned()));
+        // Paused at Close-up: its note, trimmed, then Demo's.
+        let paused = model::RunView {
+            phase: RunPhase::Paused {
+                bookmark: "b3".to_owned(),
+                since: 0.0,
+            },
+            ..model::RunView::default()
+        };
+        let n = notes(&show, &paused, 330_000);
+        assert_eq!(
+            n.here,
+            pair("Close-up", "Welcome everyone.\nIntroduce the guest.")
+        );
+        assert_eq!(n.next, pair("Demo", "Show the build."));
+        // Playing between Demo and Screen: Demo's note; Screen has none.
+        let playing = model::RunView {
+            phase: RunPhase::Playing,
+            ..model::RunView::default()
+        };
+        let n = notes(&show, &playing, 450_000);
+        assert_eq!(n.here, pair("Demo", "Show the build."));
+        assert_eq!(n.next, pair("Screen", ""));
+        // Past the last bookmark there is no next.
+        assert_eq!(notes(&show, &playing, 700_000).next, None);
+        // Before the first bookmark there is nothing here.
+        show.bookmarks.retain(|b| b.id != "b1");
+        let n = notes(&show, &playing, 10_000);
+        assert_eq!(n.here, None);
+        assert_eq!(n.next, pair("Intro", ""));
     }
 }
