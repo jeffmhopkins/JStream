@@ -568,7 +568,7 @@ pub fn EditView() -> impl IntoView {
             {move || panel.continue_key.get().map(|k| view! { <kbd class="show-key">{k}</kbd> })}
             {next}
             <span class="show-bar-gap"></span>
-            <button type="button" class="show-btn" class:on=locked
+            <button type="button" class="show-btn show-lock" class:on=locked
                 aria-pressed=move || locked().to_string()
                 title=move || if locked() { "Editing is locked: unlock it" } else { "Lock the show against edits" }
                 on:click=move |_| send(Command::Lock(show_id(), !locked()))>
