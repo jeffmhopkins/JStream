@@ -137,7 +137,9 @@ npm run pack                # validates, then writes dist/io.github.jeffmhopkins
 - `test/daemon.test.ts` runs against a real `jstream-daemon --lan`. It probes the
   certificate, refuses a wrong fingerprint, pairs, and drives a scene, keyframe, item,
   mute, effect, sequence, output and hotkey key's calls while watching the state they
-  light from. Last, it revokes the device and checks the refusal.
+  light from. Last, it revokes the device and checks the refusal. A second test runs a
+  show (play, pause, continue, go to a bookmark, stop) and watches `studio.get`'s `show`.
+  It skips on a JStream without shows.
 - `test/plugin.test.ts` runs the built plugin as the Stream Deck app does, against a
   stand-in for the app's socket. A key appears offline, the property inspector pairs it,
   and a press switches program and lights the key.

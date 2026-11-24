@@ -8490,7 +8490,7 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "ADR-0156 is now maintainer tier and proposed; the Linux steps are unchanged and still match vcam.rs's MODPROBE and PERSIST_HINT" }
 
 ["INTEGRATION-streamdeck#build"."body"]
-stamp = { hash = "b3:c978e02464f078a5", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:3b6ea036f1685810", by = "agent:streamdeck-thread", note = "added the show test (play, pause, continue, go_to, stop against the train's daemon); the section names it and its skip" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/package.json"]
 stamp = { hash = "b3:d67843ed82f78f37", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8502,7 +8502,7 @@ stamp = { hash = "b3:71c171caa84ac726", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:91d8b1042b9fc2de", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.test.ts"]
-stamp = { hash = "b3:45034f96c0717dc3", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:b275071e92e34826", by = "agent:streamdeck-thread", note = "added the show test (play, pause, continue, go_to, stop against the train's daemon); the section names it and its skip" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.ts"]
 stamp = { hash = "b3:33e39cd38e1bb930", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }

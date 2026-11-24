@@ -91,3 +91,64 @@ test("a Stream Deck pairs over the network and drives JStream", { skip }, async 
 	assert.equal((client.status as { retryInMs?: number }).retryInMs, undefined, "a refused token is not retried");
 	client.close();
 });
+
+test("show keys run a show, and the studio says when it plays and waits", { skip }, async (t) => {
+	const seeded = call({
+		kind: "batch",
+		edits: [
+			{
+				type: "show.set",
+				show: {
+					show_id: "evening",
+					name: "Evening show",
+					program: [
+						{ clip_id: "intro", scene_id: "scn_a", length_ms: 30000 },
+						{ clip_id: "main", scene_id: "scn_b", length_ms: 30000 },
+					],
+					bookmarks: [{ bookmark_id: "bm_main", name: "Main", at_ms: 30000 }],
+				},
+			},
+		],
+	});
+	try {
+		await seeded;
+	} catch (err) {
+		// A JStream from before shows doesn't know `show.set`.
+		if (/malformed/.test(String(err))) {
+			t.skip("this JStream has no shows");
+			return;
+		}
+		throw err;
+	}
+	const { code } = await call({ kind: "action", action: { type: "pairing.start" } });
+	const paired = await pair(lanHost(), lanPort, fingerprint, code, "Stream Deck shows");
+	const client = new JStreamClient("Stream Deck (test)");
+	t.after(() => client.close());
+	const studio = new Studio(client);
+	client.setEndpoint({ host: lanHost(), port: lanPort, fingerprint, token: paired.token });
+	await until("the studio", () => studio.state !== undefined && studio.studio !== undefined);
+	assert.deepEqual(
+		studio.state!.shows!.map((s) => [s.show_id, s.bookmarks!.map((b) => b.bookmark_id)]),
+		[["evening", ["bm_main"]]],
+	);
+
+	// Play lights the Play key; the show runs from the start.
+	await client.action({ type: "show.play", show_id: "evening" });
+	await until("the show playing", () => studio.studio?.show?.show_id === "evening" && studio.studio.show.state === "playing");
+	await until("program on Intro", () => studio.studio?.program_scene === "scn_a");
+
+	// Pause holds it: the Continue and Pause keys light.
+	await client.action({ type: "show.pause" });
+	await until("the show paused", () => studio.studio?.show?.state === "paused");
+	await client.action({ type: "show.continue" });
+	await until("the show playing again", () => studio.studio?.show?.state === "playing");
+
+	// Go to a bookmark puts its clip on program; it pauses there (a pausing bookmark).
+	await client.action({ type: "show.go_to", show_id: "evening", bookmark_id: "bm_main" });
+	await until("program on Main", () => studio.studio?.program_scene === "scn_b");
+	await client.action({ type: "show.go_to_number", number: 1 });
+
+	// Stop ends it: no key stays lit.
+	await client.action({ type: "show.stop" });
+	await until("the show stopped", () => !studio.studio?.show);
+});
