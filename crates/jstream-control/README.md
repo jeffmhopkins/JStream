@@ -404,8 +404,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `timeline.play`, `timeline.seek` and `timeline.stop` send `timeline.changed` and list
   what plays in `studio.get`. The mock keeps no clock: a timeline it plays stays where
   it started until it is stopped or deleted (`removed`), never ending, looping or firing
-  a cue, and a play's delay and the triggers are ignored. `source.restart` answers
-  `internal`. So do keyframe tracks
+  a cue, and a play's delay and the triggers are ignored. `source.restart` and
+  `source.seek` answer `internal`. So do keyframe tracks
   ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): `scene.set_keyframe` answers
   `internal`, and `studio.get` lists no placed keyframe;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
@@ -417,8 +417,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   receiver, so it never sends `jtunnel.senders_changed`;
 - `font.list`, answered with `MOCK_FONTS`, two made-up fonts of one family ("Mock Sans"
   Bold and Regular) whose files don't exist;
-- `source.sizes`, answered with every source and no size, since the mock makes no
-  frames, so it never sends `source.size_changed`;
+- `source.sizes`, answered with every source and no size, depth or `duration_ms`,
+  since the mock makes no frames and plays no files, so it never sends
+  `source.size_changed`;
 - `activity.list`, answered with no entries and the host's clock as `now_ms`: the mock
   keeps no activity log ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md));
 - the deprecated privacy calls, as from the engine

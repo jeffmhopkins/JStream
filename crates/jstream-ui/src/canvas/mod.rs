@@ -21,6 +21,7 @@ pub mod camera;
 pub mod crop;
 pub mod group;
 pub mod live;
+pub mod live_aim;
 pub mod model;
 pub mod monitor;
 pub mod preview;
@@ -2399,6 +2400,9 @@ pub fn Canvas() -> impl IntoView {
                             >
                                 "◆ Save view"
                             </button>
+                            <live_aim::LiveAim scene=Signal::derive(move || {
+                                layout.with(|l| l.as_ref().and_then(|l| shown_scene(l).cloned()))
+                            }) />
                         }
                     })}
                 })}

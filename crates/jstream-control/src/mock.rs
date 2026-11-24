@@ -27,8 +27,8 @@
 //! their `timeline.changed` and list the timeline in `studio.get`, but the mock keeps no
 //! clock: a timeline it plays stays where it started until stopped or deleted, never
 //! ending, looping or firing a cue, and a play's delay or a trigger is ignored.
-//! `source.restart` is not mocked, nor keyframe tracks (ADR-0116): `scene.set_keyframe`,
-//! so `studio.get` lists no placed keyframe.
+//! `source.restart` and `source.seek` are not mocked, nor keyframe tracks (ADR-0116):
+//! `scene.set_keyframe`, so `studio.get` lists no placed keyframe.
 //!
 //! The mock has no render thread, so a gesture's values are released the moment it ends,
 //! and it sends one `live.changed` per `live.set` instead of coalescing them: the engine
@@ -1562,6 +1562,7 @@ impl State {
                         source_id: source_id.clone(),
                         size: None,
                         depth: None,
+                        duration_ms: None,
                     })
                     .collect(),
             },
