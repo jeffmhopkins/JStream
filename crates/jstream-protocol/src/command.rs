@@ -1736,7 +1736,7 @@ pub enum Action {
         channel: u32,
     },
     /// Changes what one of this session's open preview streams of the program or of a
-    /// scene shows (since 0.187): `scene_id`'s scene, or the program mix when it is
+    /// scene shows (since 0.188): `scene_id`'s scene, or the program mix when it is
     /// omitted. The stream keeps its channel, size, rate and codec, and where nothing
     /// else shares its encoder, the encoder itself, so a client's decoder goes on and
     /// a view switching scenes shows the last picture of the old one until the first of
@@ -1754,7 +1754,7 @@ pub enum Action {
         scene_id: Option<SceneId>,
     },
     /// Asks one of this session's open preview streams for a keyframe as its next
-    /// picture (since 0.187): a client whose decoder fell behind and dropped pictures
+    /// picture (since 0.188): a client whose decoder fell behind and dropped pictures
     /// resumes from it rather than waiting for the stream's next regular keyframe, up to
     /// two seconds later. Succeeds for a channel that is not open.
     #[serde(rename = "preview.keyframe")]

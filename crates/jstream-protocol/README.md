@@ -399,7 +399,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.187 because `preview.show` moves an open preview stream to
+`PROTOCOL_VERSION` is 0.188 because `preview.show` moves an open preview stream to
 another scene, or the program, on its channel, keeping its encoder where nothing else
 shares it, and `preview.keyframe` asks a stream for a keyframe at once; 0.186 because a value binding and a reader motion row (`midi`,
 `data`, `channel` or `audio`, on an item or a scene camera) take a `mode`, `add` or
@@ -3706,7 +3706,7 @@ the JSON text messages of the same connection (0.20,
   windows and webcams it shows for the preview itself. A scene the collection doesn't
   have fails with `not_found`; a scene deleted while its stream is open ends the stream
   with an end frame.
-- **Moving a stream.** `preview.show {channel, scene_id?}` (0.187) changes what an open
+- **Moving a stream.** `preview.show {channel, scene_id?}` (0.188) changes what an open
   stream of the program or a scene shows, on the same channel and at the same size, rate
   and codec: what a canvas or monitor does when the scene it shows changes, so its
   decoder and its last picture carry on and no stream opens or closes. An H.264 stream
@@ -3715,7 +3715,7 @@ the JSON text messages of the same connection (0.20,
   picture of the new scene is a keyframe, and pictures of the old one may arrive before
   it. A channel not open, or a stream of a source, fails with `invalid_argument` naming
   `channel`; a scene the collection doesn't have with `not_found`.
-  `preview.keyframe {channel}` (0.187) asks a stream for a keyframe as its next picture:
+  `preview.keyframe {channel}` (0.188) asks a stream for a keyframe as its next picture:
   a client whose decoder fell behind and dropped pictures resumes from it at once
   rather than at the stream's next regular keyframe, up to 2 s later. It succeeds for a
   channel that isn't open, and the activity log doesn't record it.

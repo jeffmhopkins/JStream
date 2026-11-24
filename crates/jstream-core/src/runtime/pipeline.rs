@@ -1073,8 +1073,9 @@ pub(crate) struct Program {
     /// render thread once it leaves it (#699), and claimed by each session that opens on
     /// the GPU path until the thread has its tap (#733).
     gpu_gate: Arc<GpuGate>,
-    /// The one hardware encoder session this stage's preview streams may hold, which
-    /// an output takes back when its own open got no hardware encoder.
+    /// The hardware encoder sessions this stage's preview streams may hold (up to
+    /// `PREVIEW_HARDWARE_SESSIONS`), which an output takes back when its own open got no
+    /// hardware encoder.
     preview_hardware: crate::preview::HardwareSlot,
     /// The encoder sessions this stage's preview streams share, one per picture.
     preview_encodes: crate::preview::SharedEncodes,

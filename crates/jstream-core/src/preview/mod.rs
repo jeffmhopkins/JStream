@@ -892,7 +892,10 @@ struct Staged {
 
 /// The most hardware H.264 sessions the previews of a program stage hold at once. Each
 /// is one distinct picture (a scene or the program, at a size and rate), however many
-/// streams show it ([`SharedEncode`]).
+/// streams show it ([`SharedEncode`]). Four covers the views a studio layout shows at
+/// once (the canvas, the program monitor, a Next monitor and a projector), and stays
+/// under the session limits consumer GPUs have had. Nothing relies on getting them: an
+/// output that misses its encoder takes every preview session back.
 const PREVIEW_HARDWARE_SESSIONS: u32 = 4;
 
 /// The hardware H.264 sessions the previews of a program stage may hold (#1691), up to
