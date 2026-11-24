@@ -66,9 +66,7 @@ impl ShowView {
 
     /// The first pausing bookmark after `at_ms`.
     pub fn next_pause(&self, at_ms: u32) -> Option<&BookmarkView> {
-        self.bookmarks
-            .iter()
-            .find(|b| b.pausing && b.at_ms > at_ms)
+        self.bookmarks.iter().find(|b| b.pausing && b.at_ms > at_ms)
     }
 }
 
@@ -244,6 +242,13 @@ pub struct RunView {
     pub rehearsing: bool,
     /// The scene a hand switch put on program, taking the show off script.
     pub off_script: Option<String>,
+    /// How long the stream has been live, for the Run view's clocks, if it is.
+    pub live_ms: Option<u32>,
+    /// How long the show has run in wall time, pauses included, for "against plan".
+    pub elapsed_ms: Option<u32>,
+    /// The bindings of Continue (`show.continue`) as they show on key caps: "Space",
+    /// "PageDown", "MIDI note 36 · ch 10".
+    pub continue_keys: Vec<String>,
 }
 
 /// What the runner is doing.
@@ -344,8 +349,20 @@ pub(crate) mod demo {
                     id: "k".to_owned(),
                     kind: TrackKind::Keyframes,
                     clips: vec![
-                        clip("k1", 240_000, 0, "Wide", ClipKind::Keyframe("wide".to_owned())),
-                        clip("k2", 330_000, 0, "Close", ClipKind::Keyframe("close".to_owned())),
+                        clip(
+                            "k1",
+                            240_000,
+                            0,
+                            "Wide",
+                            ClipKind::Keyframe("wide".to_owned()),
+                        ),
+                        clip(
+                            "k2",
+                            330_000,
+                            0,
+                            "Close",
+                            ClipKind::Keyframe("close".to_owned()),
+                        ),
                     ],
                     muted: false,
                     locked: false,

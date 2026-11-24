@@ -20,7 +20,10 @@ pub fn clock(ms: u32) -> String {
 /// A signed difference as the clocks write it: `+2:14` or `-0:30`.
 pub fn signed(ms: i64) -> String {
     let sign = if ms < 0 { '-' } else { '+' };
-    format!("{sign}{}", clock(u32::try_from(ms.unsigned_abs()).unwrap_or(u32::MAX)))
+    format!(
+        "{sign}{}",
+        clock(u32::try_from(ms.unsigned_abs()).unwrap_or(u32::MAX))
+    )
 }
 
 /// The part of the show in view: from `start_ms`, `span_ms` long, over a show `len_ms`
@@ -57,7 +60,9 @@ impl Viewport {
 
     /// Kept inside the show, and no narrower than [`MIN_SPAN_MS`].
     pub fn clamped(self) -> Viewport {
-        let span = self.span_ms.clamp(MIN_SPAN_MS.min(self.len_ms), self.len_ms);
+        let span = self
+            .span_ms
+            .clamp(MIN_SPAN_MS.min(self.len_ms), self.len_ms);
         let start = self.start_ms.clamp(0.0, self.len_ms - span);
         Viewport {
             start_ms: start,
@@ -182,11 +187,16 @@ mod tests {
 
     #[test]
     fn the_view_stays_inside_the_show() {
-        let v = Viewport::fit(600_000).zoom_at(0.5, 0.0, 1000.0).scrolled(1e9);
+        let v = Viewport::fit(600_000)
+            .zoom_at(0.5, 0.0, 1000.0)
+            .scrolled(1e9);
         assert_eq!(v.end_ms(), 600_000.0);
         let v = v.scrolled(-1e9);
         assert_eq!(v.start_ms, 0.0);
-        assert_eq!(Viewport::fit(600_000).zoom_at(1e-9, 0.0, 10.0).span_ms, MIN_SPAN_MS);
+        assert_eq!(
+            Viewport::fit(600_000).zoom_at(1e-9, 0.0, 10.0).span_ms,
+            MIN_SPAN_MS
+        );
     }
 
     #[test]
