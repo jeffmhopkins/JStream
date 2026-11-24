@@ -1711,7 +1711,9 @@ controls into one live value, 0 to 1, that anything bindable follows, listed in
   `scene_id` goes back to its default each time that scene goes on program.
 - **`channel.set_value {channel_id, value, fade_ms?}`** (0 to 1),
   **`channel.nudge {channel_id, by, fade_ms?}`** (-1 to 1) and **`channel.switch
-  {channel_id, to}`** (`on`, `off`, `toggle`) change it until an input moves again
+  {channel_id, to}`** (`on`, `off`, `toggle`, and since 0.187 `hold_on` and `hold_off`,
+  on or off while a key or note is held and back on release, ADR-0207) change it until
+  an input moves again
   (`fade_ms` ≤ 60,000). A hotkey, a controller binding and a timeline cue may run them.
 - **`channel.values`** answers `ChannelValueInfo {channel_id, value, on, driver?}` for
   each channel, where `driver` is `{by: "input", index}` or `{by: "action"}`.

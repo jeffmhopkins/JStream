@@ -620,7 +620,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 19), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 22), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -673,6 +673,8 @@ with `property` `source` and their `source` target, which drive a setting of the
 own source. A scene's `reflections` (ADR-0170), omitted while `false`, is
 `schema_version` 18. Version 19 (ADR-0178) adds the `value_bindings`, ordered by ID and
 omitted when there are none, and motion modifiers with `property` `width` or `height`.
+Versions 20, 21 and 22 add the `channels`, a timeline's `lanes`, `starts` and `stops`,
+and the `shows` with the `show_scene` marker (see Channels, Timelines and Shows above).
 Loading puts the value bindings in last, each after its own shape check, without looking
 up its target, so one whose target is gone or of a kind not installed loads as it was
 saved. Loading creates the folders top level first, then

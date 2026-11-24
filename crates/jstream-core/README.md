@@ -262,7 +262,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   the name of what reads its `params` key's `values.<n>` (an enabled `data` modifier on an
   item, named by its source and property, or on a scene's camera, by the scene and
   property, a value binding, by its target (a PTZ axis as the camera and axis, `Wide
-  Zoom`, ADR-0209), or a channel's input
+  Zoom`, ADR-0209; a mute or visibility switch as `Mic Mute` or `Logo Visible`,
+  ADR-0207), or a channel's input
   ([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), by the channel's name or
   else its ID), a reader naming the sender winning a
   slot over one naming any, a slot read twice taking `+N`, cut to 40 bytes. The engine
@@ -4611,9 +4612,7 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
-  would need to use it are designed (ADR-0076); and a way to remove one (no
-  `plugin.uninstall` yet, so an unwanted plugin stays saved, disabled, until
-  `plugins.json` is edited).
+  would need to use it are designed (ADR-0076).
 
 <a id="locking"></a>
 ## Locking

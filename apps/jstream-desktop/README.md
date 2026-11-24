@@ -304,7 +304,7 @@ folder, and its log `logs\cef.log`.
 - **JTunnel senders.** Settings › Devices › "Receive from JTunnel senders" (off until
   turned on) and its list of accepted senders, each a tunnel name and the address and
   port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
-  in the data folder; they apply at the next start. On, the app receives each accepted
+  in the data folder and apply at once, with no restart. On, the app receives each accepted
   sender's audio and MIDI as the daemon's `--jtunnel-accept` does
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and the DAW state of
   each, unless its "Use this sender's state" is unticked, as `--jtunnel-no-state` does
@@ -313,8 +313,7 @@ folder, and its log `logs\cef.log`.
   sender's MIDI" is ticked, as `--jtunnel-midi` does (off by default,
   [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), and lists the
   senders that answer on the network, each not yet accepted with Accept…, which asks
-  before adding it (so turning it on with no sender, then restarting, is how to find
-  the first one). The page shows why a sender was refused, and the log names the
+  before adding it (so turning it on with no sender is how to find the first one). The page shows why a sender was refused, and the log names the
   senders at start.
 - **PTZ controllers.** Settings › Devices › "Accept a PTZ controller" (off until turned
   on), its endpoints (an address and port of this machine on the LAN, a transport, a

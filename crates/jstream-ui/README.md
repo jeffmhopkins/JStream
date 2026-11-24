@@ -1842,10 +1842,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     of the travel, the quiet end compressed, and snapping to 0 dB within a quarter of
     a dB. While the pointer holds a fader the strip shows the value under it; letting
     go (or each key press) sends one `source.set_audio` or `bus.set_fader`, so a drag
-    is one undo step. Hearing the fader during the drag needs live values
-    ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which `live.set` doesn't
-    take for faders yet. A source's dB field shows the fader's value during the drag
-    and sends its own value the same way: typed, stepped or scrubbed, one edit each.
+    is one undo step. The drag is heard as it goes: an `EditDrag` sends each value as a
+    gesture's `live.set` and the release's edit ends it
+    ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md), see Number fields). A
+    source's dB field shows the fader's value during the drag and sends its own value
+    the same way: typed, stepped or scrubbed, one edit each.
     Clicking a bus's readout sets 0 dB. An accepted edit is applied to the shown
     state at once, so the strip doesn't jump back before the re-read.
   - **Meters** take `meters.tick`: an RMS bar over a fainter peak bar per channel,
