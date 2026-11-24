@@ -3,7 +3,10 @@
 //! (`scene.drive_camera`), Home (`scene.aim_camera` back to the stored camera) and a
 //! readout of the aim (`scene.camera_aim`, read about three times a second while it
 //! shows). A live aim is not an edit: nothing is stored or undone, as from a VISCA
-//! controller. Shift holds a button at a slow speed.
+//! controller. Shift holds a button at a slow speed. A button holds its axis from a press,
+//! captured so the pointer may wander, to its release, and Space or Enter holds it from the
+//! keyboard until the key is let go or the button loses the focus; passing over a button
+//! sends nothing.
 
 use crate::app::SessionContext;
 use crate::store::{Studio, query};
@@ -12,6 +15,7 @@ use jstream_control::protocol::{
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use leptos::wasm_bindgen::JsCast;
 use std::time::Duration;
 
 /// How often the readout reads the aim.
@@ -109,17 +113,58 @@ pub fn LiveAim(
         }
     };
     let button = move |axis: Axis, sign: i8, label: &'static str, title: &'static str| {
-        let start = move |event: leptos::ev::PointerEvent| {
-            if event.button() != 0 {
+        // Whether this button holds its axis: a press drives it once and its release
+        // stops it once, so a pointer passing over, or a second way of letting go, sends
+        // nothing that would stop an axis a controller or a binding drives.
+        let held = StoredValue::new(false);
+        let press = move |slow: bool| {
+            if held.get_value() {
                 return;
             }
             if let Some(scene_id) = scene.get_untracked() {
-                act(drive(scene_id, axis, speed(axis, sign, event.shift_key())));
+                held.set_value(true);
+                act(drive(scene_id, axis, speed(axis, sign, slow)));
             }
         };
-        let stop = move |_: leptos::ev::PointerEvent| {
+        let release = move || {
+            if !held.get_value() {
+                return;
+            }
+            held.set_value(false);
             if let Some(scene_id) = scene.get_untracked() {
                 act(drive(scene_id, axis, 0));
+            }
+        };
+        // The pointer is captured on the press, so it holds the button until it is let
+        // go wherever it has moved.
+        let pointer_down = move |event: leptos::ev::PointerEvent| {
+            if event.button() != 0 {
+                return;
+            }
+            if let Some(el) = event
+                .current_target()
+                .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+            {
+                _ = el.set_pointer_capture(event.pointer_id());
+            }
+            press(event.shift_key());
+        };
+        // Space or Enter holds the button from the keyboard; a repeat is the same hold.
+        let held_key =
+            |event: &leptos::ev::KeyboardEvent| matches!(event.key().as_str(), " " | "Enter");
+        let key_down = move |event: leptos::ev::KeyboardEvent| {
+            if !held_key(&event) {
+                return;
+            }
+            event.prevent_default();
+            if !event.repeat() {
+                press(event.shift_key());
+            }
+        };
+        let key_up = move |event: leptos::ev::KeyboardEvent| {
+            if held_key(&event) {
+                event.prevent_default();
+                release();
             }
         };
         view! {
@@ -127,10 +172,13 @@ pub fn LiveAim(
                 class="canvas-tool canvas-tool-text live-aim"
                 aria-label=title
                 title=format!("{title} while held (Shift: slowly) · live only, nothing is saved")
-                on:pointerdown=start
-                on:pointerup=stop
-                on:pointerleave=stop
-                on:pointercancel=stop
+                on:pointerdown=pointer_down
+                on:pointerup=move |_| release()
+                on:pointercancel=move |_| release()
+                on:lostpointercapture=move |_| release()
+                on:keydown=key_down
+                on:keyup=key_up
+                on:blur=move |_| release()
             >
                 {label}
             </button>
