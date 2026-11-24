@@ -510,6 +510,13 @@ fn drawer_profile(
                 .over_budget
                 .saturating_sub(before.map_or(0, |b| b.over_budget)),
             skipped: now.skipped.saturating_sub(before.map_or(0, |b| b.skipped)),
+            model_resolution: match now.model_percent {
+                0 => 100,
+                percent => percent,
+            },
+            model_frames_reduced: now
+                .model_reduced
+                .saturating_sub(before.map_or(0, |b| b.model_reduced)),
             preview_skipped: now
                 .preview_skipped
                 .saturating_sub(before.map_or(0, |b| b.preview_skipped)),
