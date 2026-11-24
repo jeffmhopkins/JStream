@@ -994,7 +994,7 @@ fn bookmark_page(page: Page) -> AnyView {
             </div>
             <label class="select-field note-field">
                 <span class="field-label">"Note"</span>
-                <textarea rows="2" aria-label="Note" placeholder="A note for whoever runs the show"
+                <textarea rows="5" aria-label="Note" placeholder="Notes for whoever runs the show, shown in the Run view at this bookmark"
                     prop:value=move || {
                         note_again.track();
                         mark.with(|b| b.as_ref().map(|b| b.note.clone()).unwrap_or_default())
