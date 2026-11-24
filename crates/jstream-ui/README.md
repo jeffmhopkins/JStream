@@ -1178,7 +1178,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   becomes "Stop recording", which stops them; with no recording output it is disabled.
   The stats readout reads "60 fps · 0 dropped · CPU 3%" from `stats.tick`. The dropped
   count is captured, rendered and encoded frames dropped in the intervals that began with
-  an output running (the tick's `outputs` not empty), counted from when outputs began
+  an output running (the tick's `outputs` not empty, or an active virtual camera
+  output, which `stats.tick` doesn't list: `vcam_feeding`, #1698), counted from when outputs began
   running after none did, and shown only while one runs: what drops while only previews
   use the pipeline is no stream's loss (#1690). A tick of an engine restart counts
   nothing. The frame rate and CPU (`Load`) come from
@@ -1211,7 +1212,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   back to an older state. Since
   #1206 the dock is a compact list: the header has the health (a dot and a word, the
   detail on hover; it sums `stats.tick`'s drop totals over the last five ticks,
-  counting an interval only when it began with an output running and reading "Idle"
+  counting an interval only when it began with an output running (an active virtual
+  camera included, #1698) and reading "Idle"
   while none runs, so a preview's drops never show as a stream's (#1690), and a `seq`
   that doesn't increase or a total that shrinks, an engine restart, starts it over), Start all and, while any output runs, Stop all (`all_outputs`: every stopped
   output that can start, of any kind, and every running one). The program output's row ("master") comes

@@ -18,7 +18,7 @@ use crate::dock::PanelId;
 use crate::menu::{move_focus, step};
 use crate::panels::outputs::{
     OutputRow, Vcam, go_live_targets, is_running, live_outputs, load, start_blocker,
-    start_or_stop_all,
+    start_or_stop_all, vcam_feeding,
 };
 use crate::project::{OpenProject, ProjectAsk, ProjectDialog, open_now, project_name};
 use crate::projector::{self, Request, Target};
@@ -80,7 +80,8 @@ impl RecordButton {
 }
 
 /// Video frames the outputs lost while they ran, from `stats.tick`'s running totals
-/// (#1690). Only an output's or a recording's losses matter to a show: while none runs
+/// (#1690). Only an output's, a recording's or the virtual camera's losses matter to a
+/// show (#1698): while none runs
 /// the pipeline only feeds this machine's previews, and what it drops then is counted
 /// nowhere here, so the readout never suggests a stream is in trouble when there is
 /// none.
@@ -458,7 +459,10 @@ pub fn Header(
                         outputs,
                         ..
                     } => {
-                        let running = !outputs.is_empty();
+                        let running = !outputs.is_empty()
+                            || rows
+                                .try_with_untracked(|rows| vcam_feeding(rows))
+                                .unwrap_or(false);
                         dropped.try_update(|d| d.observe(seq, drops, running));
                         engine_load.try_update(|l| l.observe(seq, now));
                     }
@@ -951,8 +955,8 @@ pub fn Header(
             <span
                 class="readout"
                 title="The program's frame rate while an output runs, video frames the \
-                       outputs and recordings dropped since they started (previews \
-                       don't count), and the share of all CPUs JStream uses"
+                       outputs, recordings and virtual camera dropped since they started \
+                       (previews don't count), and the share of all CPUs JStream uses"
             >
                 {move || {
                     let (fps, cpu) = engine_load.with(|l| (l.fps(), l.cpu()));
