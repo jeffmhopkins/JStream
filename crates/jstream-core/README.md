@@ -1913,7 +1913,9 @@ scene draws a `media` file is timed: a jump into it, or within it, seeks every s
 the scene's family draws to that spot (`source.seek`'s `LiveSources::seek`, as of the
 effect's time), and so does an overlay put up partway through its clip (ADR-0210
 decision 9). After each tick the scene of the program clip after the one under the play
-head is the upcoming scene (`State::set_upcoming`, see *Program scene*), so its file is
+head is the upcoming scene (`State::set_upcoming`, see *Program scene*), or at a loop's
+last clip, unless the runner is leaving it (`Runner::leaving`), the clip at the loop's
+start, which the wrap runs to; so its file is
 held at its first frame and the cut to it starts nothing; it clears when the show
 stops. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
@@ -1934,7 +1936,8 @@ a show running, put a scene over program through the internal show scene
 makes the show scene if the collection has none ("Show overlays"), a `scene` source of
 the overlay scene unless one exists ("Overlay: <name>"), and a hidden item of it in the
 show scene, as one engine change that is no client's undo step, and saves the
-collection. Showing or hiding it then goes through `State::set_show_scene_item_shown`,
+collection (if the show scene can't be marked, the change is still logged and announced,
+and no item is returned). Showing or hiding it then goes through `State::set_show_scene_item_shown`,
 so it fades over program on its own, apart from any scene switch: a clip's
 `fade_in_ms` or `fade_out_ms` is a plain fade of that length, and 0 uses the item's own
 show or hide transition. `studio.get`'s `overlays` lists the scenes shown over program.
@@ -1950,7 +1953,8 @@ off script, stopping, deleting, refused calls, a sequence clip's cue firing with
 keyframe markers moving program to a keyframe scene and back, an edit of the running
 show cutting program to the clip now under the play head, an overlay clip up for its
 span and taken down when an edit removes it, the overlay actions with no show, the
-show scene refusing a delete and being heard, the next program clip named upcoming, and
+show scene refusing a delete and being heard, the next program clip named upcoming (the
+loop's first at its last clip), and
 a rehearsal on preview leaving program, its cues and off script alone.
 `src/tests/sources.rs` checks that a show's jump into a timed clip, and within it,
 seeks its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). `src/tests/timelines.rs` checks that a
