@@ -121,7 +121,8 @@ pub fn now(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Card {
         },
     };
     if run.off_script.is_some() {
-        line.push_str(" · off script");
+        // A hand switch: the show waits where it was, and Continue goes on from there.
+        line = "Off script · Continue goes on to the next clip".to_owned();
     }
     if run.rehearsing {
         line.push_str(" · rehearsing on preview");

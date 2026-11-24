@@ -2712,11 +2712,12 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
   --show-played: rgba(10, 13, 18, 0.38);
 }
 .show-edit { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.show-edit-bar { padding: 8px 0; }
+.show-edit-bar { padding: 8px 0; flex-wrap: wrap; row-gap: 6px; }
+.show-edit-bar .show-continue { flex: none; }
 .show-btn { height: 30px; padding: 0 12px; white-space: nowrap; }
 .show-btn.on { background: var(--selected); border-color: var(--accent); }
-.show-continue { height: 34px; padding: 0 18px; border: 0; border-radius: 6px; background: var(--show-bookmark); color: var(--show-bookmark-ink); font-weight: 700; font-size: 14px; white-space: nowrap; }
-.show-continue:hover:not(:disabled) { background: var(--show-bookmark); filter: brightness(1.08); }
+.show-edit .show-continue { height: 34px; padding: 0 18px; border: 0; border-radius: 6px; background: var(--show-bookmark); color: var(--show-bookmark-ink); font-weight: 700; font-size: 14px; white-space: nowrap; }
+.show-edit .show-continue:hover:not(:disabled) { background: var(--show-bookmark); filter: brightness(1.08); }
 .show-keycap { background: var(--raised); border: 1px solid var(--border); border-radius: 10px; padding: 2px 9px; font: inherit; font-size: 12px; color: var(--text-soft); }
 .show-next { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .show-next b { color: var(--text); font-weight: 600; }
@@ -2846,9 +2847,9 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-run-marks h6 { font-weight: 400; margin-bottom: 8px; }
 .show-card-big { font-size: 22px; font-weight: 700; color: var(--text); }
 .show-card-sub { margin-top: 3px; color: var(--muted); }
-.show-continue { display: block; width: 100%; padding: 22px 0; border: none; border-radius: 10px; background: var(--show-bookmark); color: var(--show-bookmark-ink); font-size: 26px; font-weight: 800; text-align: center; }
-.show-continue:hover { filter: brightness(1.06); }
-.show-continue.busy { opacity: .45; cursor: not-allowed; filter: none; }
+.show-run .show-continue { display: block; width: 100%; height: auto; line-height: 1.2; padding: 22px 0; border: none; border-radius: 10px; background: var(--show-bookmark); color: var(--show-bookmark-ink); font-size: 26px; font-weight: 800; text-align: center; }
+.show-run .show-continue:hover { filter: brightness(1.06); }
+.show-run .show-continue.busy { opacity: .45; cursor: not-allowed; filter: none; }
 .show-run-back { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
 .show-run-back > .show-btn, .show-run-back > .show-key { flex: none; }
 .show-key { padding: 1px 6px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--canvas-bg); color: var(--text); font: 700 11px "IBM Plex Mono", ui-monospace, monospace; }
@@ -2892,3 +2893,15 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 /* Show panel: the Next monitor beside the canvas (panels/show/mod.rs NextPane). */
 .stage-label.show-next-label { color: var(--show-bookmark); border-top-color: var(--show-bookmark); text-transform: none; letter-spacing: 0; }
 .region.monitor.show-next { outline: 2px solid var(--show-bookmark); outline-offset: -2px; }
+/* Show panel at narrower widths: the Run view's three columns become two, the bookmarks
+   spanning both under Now and the clocks, then one. */
+.show-panel { container-type: inline-size; }
+@container (max-width: 1100px) {
+  .show-run-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .show-run-body > .show-run-marks { grid-column: 1 / -1; grid-row: 2; }
+  .show-run-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+}
+@container (max-width: 640px) {
+  .show-run-body { grid-template-columns: minmax(0, 1fr); }
+  .show-run-body > .show-run-marks { grid-row: auto; }
+}
