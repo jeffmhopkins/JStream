@@ -997,6 +997,9 @@ fn describe_api_returns_the_protocol_schema() {
     f.initialize();
     let result = f.call_tool("describe_api", json!({}));
     assert_eq!(ok(&result), &json_schema());
+    let result = f.call_tool("describe_api", json!({"name": "Action"}));
+    assert_eq!(ok(&result)["$ref"], "#/$defs/Action");
+    tool_error(&f.call_tool("describe_api", json!({"name": "nothing.here"})));
     // Only `initialize`'s `hello`: describing the API sends nothing.
     assert_eq!(f.hello_names(), ["agent-x"]);
 }

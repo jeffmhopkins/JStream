@@ -218,6 +218,8 @@ pub fn binding_for(
         input,
         target: target.clone(),
         amount,
+        enabled: true,
+        mode: jstream_control::protocol::MappingMode::Replace,
     }
 }
 

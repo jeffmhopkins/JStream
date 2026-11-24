@@ -448,7 +448,17 @@ impl Feed {
             let at = self.looked.unwrap_or(0.0) + MIDI_IDLE;
             return Some(micros(at));
         }
-        let at = self.sent.map_or(0.0, |sent| sent + self.frame());
+        // Something to send goes a page frame after the last update; with nothing to
+        // send, the next look is a page frame after the last look. The last update can
+        // be long past (live data granted but resting), and timing a look from it would
+        // ask for one at once, every plan, so the sources thread re-planned without a
+        // break (#1556).
+        let last = if self.pending.is_empty() {
+            self.looked
+        } else {
+            self.sent
+        };
+        let at = last.map_or(0.0, |last| last + self.frame());
         Some(micros(at))
     }
 
@@ -894,6 +904,14 @@ mod tests {
         );
         assert!(feed.due().is_some(), "it keeps looking");
         assert!(feed.view(&view(1100)).data.is_empty(), "nothing new");
+        // Resting data is looked at again a page frame (20 ms) after the last look, not
+        // a page frame after the last update, which would be due at once (#1556).
+        assert!(feed.view(&view(5000)).data.is_empty(), "still nothing new");
+        assert_eq!(
+            feed.due(),
+            Some(MediaTime::new(5_020_000, Timebase::MICROS)),
+            "a page frame after the last look"
+        );
         live.put("Bitwig", "clock", br#"{"bar":2}"#, 0)
             .expect("taken");
         let next = feed.view(&view(1200));

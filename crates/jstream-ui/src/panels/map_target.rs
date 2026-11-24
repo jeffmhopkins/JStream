@@ -241,6 +241,7 @@ impl MapTarget {
                             kind: input,
                             clock: MotionClock::default(),
                             enabled: true,
+                            mode: jstream_control::protocol::MappingMode::Add,
                             amount,
                         });
                     }

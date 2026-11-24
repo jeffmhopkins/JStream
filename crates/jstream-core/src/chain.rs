@@ -6,7 +6,7 @@
 //! mix an output draws, once per frame, and an output's own over what the master stage
 //! made of its mix (ADR-0080), both at the canvas size ([`GpuKey::Mixed`]).
 //!
-//! [`plan`](crate::snapshot::plan_with) copies each reached source's chain into the
+//! [`plan`](crate::snapshot::plan_program) copies each reached source's chain into the
 //! [`Shot`](crate::snapshot::Shot) as a [`Chain`]: its input (the source's frame upload,
 //! or the display capture) and the filters that run, each with its settings. A layer
 //! that places the source then shows the chain's output instead of the input.
