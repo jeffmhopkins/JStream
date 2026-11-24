@@ -3,7 +3,7 @@
 //!
 //! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam, collection,
 //! network, networkOpen, wheelFocusOnly, browse, allowNetwork, jtunnel, setJtunnel, ptz,
-//! setPtz, saveScreenshot, openSaved, showSaved }` that can't be reassigned, and only on a page from the
+//! setPtz, saveScreenshot, openSaved, showSaved, setZoom }` that can't be reassigned, and only on a page from the
 //! app's own origin: the webview also refuses to navigate anywhere else (see `shell.rs`),
 //! so no other page ever sees the token. `collection` is the default project's folder
 //! (ADR-0163), which `collection` asset paths are relative to until the engine names
@@ -26,6 +26,9 @@
 //! Downloads, or rejects with why not; `openSaved(path)` and `showSaved(path)` ask
 //! `open_saved` and `show_saved` to open such a file or show it in its folder
 //! (`screenshots.rs`).
+//! `setZoom(factor)` asks the `set_zoom` command to zoom the window's webview for the
+//! UI scale (`zoom.rs`) and returns at once: true when it could ask, false when the page
+//! has no Tauri bridge (the UI then zooms itself).
 //! `jstream-ui`'s host hook (`host.rs`) reads it and connects without the connect form.
 //! The token is the in-memory one the app made at startup, or with `--mcp` the data
 //! folder's user-only token file's; it is never written to a log (R-SEC-001).
@@ -122,6 +125,12 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
          var internals = window.__TAURI_INTERNALS__;\
          if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(false);\
          return internals.invoke(\"show_saved\", {{ path: String(path) }}).then(function (shown) {{ return shown === true; }}, function () {{ return false; }});\
+         }},\
+         setZoom: function (factor) {{\
+         var internals = window.__TAURI_INTERNALS__;\
+         if (!internals || typeof internals.invoke !== \"function\") return false;\
+         internals.invoke(\"set_zoom\", {{ factor: Number(factor) }}).catch(function () {{}});\
+         return true;\
          }} }}),\
          writable: false, configurable: false, enumerable: false }});\
          }}",
@@ -216,6 +225,7 @@ mod tests {
         assert!(script.contains("jtunnel: Object.freeze(JSON.parse(\"{\\\"on\\\":true"));
         assert!(script.contains("invoke(\"set_ptz_controllers\", { setting: setting })"));
         assert!(script.contains("ptz: Object.freeze(JSON.parse("));
+        assert!(script.contains("invoke(\"set_zoom\", { factor: Number(factor) })"));
         assert!(
             !script.contains("</script>"),
             "a sender's name can't end the script"
