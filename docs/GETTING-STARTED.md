@@ -214,6 +214,27 @@ recording** finishes the file. A recording runs on its own, whether or not you a
 It never overwrites a file, so for another take, open its settings (double-click its
 row) and give it a new file name. Browse… is there too.
 
+<a id="show"></a>
+## Run a show (optional)
+<!-- @section
+depends_on = ["docs/UI-FEATURES.md#show", "docs/UI-FEATURES.md#keyboard", "docs/adr/0210-shows-a-run-order-with-bookmarks.md"]
+-->
+
+A show is a running order you build once and step through live. Pick the **Show** layout
+from the **Layout** menu, then press **+ New show** in the **Show** panel. In its Edit
+view, drag scenes from **Scenes** onto the V1 track, end to end, and drop video, image or
+audio files onto the tracks to make scenes of them. Overlay tracks put a scene over
+program, the audio tracks bring a source up for a clip's span (a webcam's microphone for
+the whole show, say), and the Bookmark tool (B) marks the points where the show waits for
+you.
+
+At show time switch to **Run**, press **▶ Play show**, and press **Continue** at each
+bookmark. The run of show lists the bookmarks, and a click on one goes there at once.
+To run it from keys or a pad controller, open **File › Settings… › Keys & MIDI**, add a
+key or MIDI trigger, and give it **Continue the show**, or **Go to bookmark 1 to 8** with
+a number for each of a row of pads. An agent can build and run a show too; ask it to
+rehearse first, since playing a show switches program.
+
 <a id="vcam"></a>
 ## The virtual camera (optional)
 <!-- @section

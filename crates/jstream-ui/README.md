@@ -208,6 +208,10 @@ Contents ([Design](#design) explains the choices):
   hotkeys), `filtered` finds rows by their words and `describe` names an action in
   words. `Pick` is the action picker's list, each with the object it needs (`targets`)
   and the actions it makes: Go live and Record toggle every stream or recording output.
+  The Shows picks run the show the action names or the one running (play from a
+  bookmark, continue, pause, stop, back, skip), go to one show's bookmark, whose target
+  is the show's and the bookmark's ids joined by a newline, or go to bookmark 1 to 8 by
+  order (ADR-0210); the Overlays picks show, hide or toggle a scene over program.
   `add_edits` skips actions a row runs already and `in_use` says what a chord runs.
   `panels/triggers.rs` holds the components: `KeysAndMidi`, Settings › Keys & MIDI;
   `TriggerList`, the rows with a chip per action; `ActionPicker`, which adds an action
