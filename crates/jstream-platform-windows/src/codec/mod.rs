@@ -118,6 +118,9 @@
 mod aac;
 #[cfg(any(windows, test))]
 mod decoder;
+// The vendor encoders' shared bookkeeping and FFI layouts are tested on every platform.
+#[cfg(any(windows, test))]
+pub(crate) mod direct;
 #[cfg(any(windows, test))]
 mod fallback;
 #[cfg(windows)]
@@ -147,6 +150,7 @@ mod backend {
 
     use super::aac::MfAacEncoder;
     use super::decoder::MfH264Decoder;
+    use super::direct::{self, Policy};
     use super::fallback::FirstFrameFallback;
     use super::mf::{self, MfRuntime};
     use super::video::{Format, MfVideoEncoder};
@@ -165,12 +169,25 @@ mod backend {
     pub struct MfCodecs {
         /// The context its video encoders read encode targets on; `None` for CPU frames.
         gpu: Option<EncodeGpu>,
+        /// Which direct vendor encoders the GPU path tries first (`codec::direct`);
+        /// `None` reads `JSTREAM_DIRECT_ENCODERS` when the backend goes on a context.
+        direct: Option<Policy>,
     }
 
     impl MfCodecs {
         /// The backend. Opening nothing yet, it can't fail.
         pub fn new() -> Self {
             Self::default()
+        }
+
+        /// The backend with the direct encoders `policy` names, whatever the variable
+        /// says: for tests that compare a direct encoder with the MFT.
+        #[cfg(all(test, feature = "hw-tests"))]
+        pub(crate) fn with_direct(policy: Policy) -> Self {
+            Self {
+                gpu: None,
+                direct: Some(policy),
+            }
         }
     }
 
@@ -218,9 +235,38 @@ mod backend {
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-            // The GPU path has hardware encoders only, so nothing to fall back to.
+            // The GPU path has hardware encoders only, so no software to fall back to: the
+            // vendor's direct encoder first, then the Media Foundation MFTs.
             if let Some(gpu) = &self.gpu {
-                return Ok(Box::new(MfVideoEncoder::open_on(config, gpu)?));
+                let policy = self.direct.unwrap_or(Policy::Off);
+                let refused = match direct::open_direct(config, gpu, policy) {
+                    Ok(Some(encoder)) => return Ok(encoder),
+                    Ok(None) => None,
+                    Err(err) => Some(err),
+                };
+                return match MfVideoEncoder::open_on(config, gpu) {
+                    Ok(encoder) => {
+                        if let Some(err) = refused {
+                            tracing::info!(
+                                direct = gpu.vendor().encoder().unwrap_or_default(),
+                                encoder = %encoder.info().name,
+                                error = %err,
+                                "the GPU's direct encoder didn't open; using the Media \
+                                 Foundation encoder"
+                            );
+                        }
+                        Ok(Box::new(encoder))
+                    }
+                    Err(mf) => Err(match refused {
+                        Some(err) => PlatformError::Unsupported {
+                            what: format!(
+                                "{mf}; the GPU's direct encoder ({}) refused too: {err}",
+                                gpu.vendor().encoder().unwrap_or_default()
+                            ),
+                        },
+                        None => mf,
+                    }),
+                };
             }
             let encoder = MfVideoEncoder::open(config)?;
             if !FirstFrameFallback::applies(config, encoder.info()) {
@@ -275,6 +321,7 @@ mod backend {
         ) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
             Ok(Some(Arc::new(Self {
                 gpu: Some(EncodeGpu::of(context)?),
+                direct: Some(self.direct.unwrap_or_else(direct::policy)),
             })))
         }
     }
