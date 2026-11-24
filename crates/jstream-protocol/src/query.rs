@@ -290,6 +290,17 @@ pub enum Query {
         /// The scene whose camera to read: a keyframe scene reads its family's.
         scene_id: crate::SceneId,
     },
+    /// The camera a 3D scene was drawn through last (since 0.192): its camera as its
+    /// camera motion, follow camera, live aim, the 3D group it rides with and autofocus
+    /// moved it for the latest picture that drew the scene, which is where its items
+    /// are seen. What an editor outlines and hits the scene's items through. Runtime
+    /// state, so no `rev`; `camera` is omitted while no picture has drawn the scene
+    /// through a camera in the last second.
+    #[serde(rename = "scene.drawn_camera")]
+    SceneDrawnCamera {
+        /// The scene, as a picture draws it: a keyframe scene by its own ID.
+        scene_id: crate::SceneId,
+    },
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
     /// in the OS's font folders that parses, as a family and style to show and the
     /// absolute path an `asset` setting names it by. Runtime state, so no `rev`. The
@@ -506,6 +517,7 @@ impl Query {
             Query::DataList => "data.list",
             Query::DataGet { .. } => "data.get",
             Query::SceneCameraAim { .. } => "scene.camera_aim",
+            Query::SceneDrawnCamera { .. } => "scene.drawn_camera",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
@@ -888,6 +900,14 @@ pub enum QueryResult {
         #[serde(flatten)]
         aim: crate::camera_aim::CameraAimInfo,
     },
+    /// The result of `scene.drawn_camera` (since 0.192).
+    #[serde(rename = "scene.drawn_camera")]
+    SceneDrawnCamera {
+        /// The camera the scene was drawn through last, or `None` (omitted) while no
+        /// picture has drawn it through one in the last second.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        camera: Option<crate::SceneCamera>,
+    },
     /// The result of `jtunnel.senders`.
     #[serde(rename = "jtunnel.senders")]
     JtunnelSenders {
@@ -1074,6 +1094,7 @@ impl QueryResult {
             QueryResult::DataList { .. } => "data.list",
             QueryResult::DataGet { .. } => "data.get",
             QueryResult::SceneCameraAim { .. } => "scene.camera_aim",
+            QueryResult::SceneDrawnCamera { .. } => "scene.drawn_camera",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",

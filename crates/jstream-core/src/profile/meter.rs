@@ -13,9 +13,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwapOption;
-use jstream_protocol::{SceneId, SourceId};
+use jstream_protocol::{SceneCamera, SceneId, SourceId};
 
 use crate::chain::ChainOwner;
+use crate::drawn_camera::{CameraRecorder, DrawnCameras};
 use crate::snapshot::CaptureKey;
 
 /// How often a meter publishes its totals.
@@ -129,10 +130,29 @@ pub(crate) struct DrawerTotals {
     pub(crate) model_reduced: u64,
 }
 
+/// What a meter's publish replaced, for the caller to free (R-RT-003).
+#[derive(Debug)]
+pub(crate) enum Retired {
+    Totals(Arc<DrawerTotals>),
+    Cameras(Arc<DrawnCameras>),
+}
+
+impl Retired {
+    /// Lets go of it: frees it unless a reader still holds it.
+    pub(crate) fn free(self) {
+        match self {
+            Self::Totals(totals) => drop(totals),
+            Self::Cameras(cameras) => drop(cameras),
+        }
+    }
+}
+
 /// Where a drawer publishes, read by the control side.
 #[derive(Default)]
 pub(crate) struct DrawerSlot {
     current: ArcSwapOption<DrawerTotals>,
+    /// The cameras its latest frame drew its scenes through (`scene.drawn_camera`).
+    cameras: ArcSwapOption<DrawnCameras>,
     /// Numbers the runs that publish here.
     runs: std::sync::atomic::AtomicU64,
 }
@@ -141,6 +161,11 @@ impl DrawerSlot {
     /// The totals published last, if any.
     pub(crate) fn load(&self) -> Option<Arc<DrawerTotals>> {
         self.current.load_full()
+    }
+
+    /// Where it publishes the cameras it drew its scenes through.
+    pub(crate) fn cameras(&self) -> &ArcSwapOption<DrawnCameras> {
+        &self.cameras
     }
 
     /// A meter for a new run of the drawer, publishing here.
@@ -330,6 +355,8 @@ pub(crate) struct DrawMeter {
     model_reduced: u64,
     /// Each GPU id's unit, by id, and the generation they were given in.
     gpu_units: GpuIds,
+    /// The cameras the frame being drawn drew its scenes through.
+    cameras: CameraRecorder,
 }
 
 /// The GPU ids given to units, a generation at a time.
@@ -370,6 +397,7 @@ impl Default for DrawMeter {
             model_percent: 100,
             model_reduced: 0,
             gpu_units: GpuIds::default(),
+            cameras: CameraRecorder::default(),
         }
     }
 }
@@ -616,15 +644,25 @@ impl DrawMeter {
         self.frame_phases = [0; PHASES];
     }
 
+    /// Notes that the frame being drawn drew `scene`'s pass through `camera`
+    /// (`scene.drawn_camera`); a 2D pass, `None`, notes nothing.
+    pub(crate) fn drew_camera(&mut self, scene: &SceneId, camera: Option<SceneCamera>) {
+        self.cameras.drew(scene, camera);
+    }
+
     /// Ends a frame that took `took` from start to finish: folds each unit's time into
     /// its totals and, once [`PUBLISH_EVERY`] has passed since the last publish,
-    /// publishes the totals and hands the ones they replace to `retire`.
+    /// publishes the totals; publishes the cameras the frame drew its scenes through as
+    /// [`CameraRecorder::end_frame`] says. What either publish replaces goes to `retire`.
     pub(crate) fn end_frame(
         &mut self,
         took: Duration,
         now: Instant,
-        retire: impl FnOnce(Arc<DrawerTotals>),
+        mut retire: impl FnMut(Retired),
     ) {
+        let slot = self.slot.as_deref().map(DrawerSlot::cameras);
+        self.cameras
+            .end_frame(now, slot, |old| retire(Retired::Cameras(old)));
         let took = nanos(took);
         self.frames = self.frames.saturating_add(1);
         self.nanos = self.nanos.saturating_add(took);
@@ -645,7 +683,7 @@ impl DrawMeter {
         let published = *self.published.get_or_insert(now);
         if now.saturating_duration_since(published) >= PUBLISH_EVERY {
             self.published = Some(now);
-            self.publish(retire);
+            self.publish(|old| retire(Retired::Totals(old)));
         }
     }
 

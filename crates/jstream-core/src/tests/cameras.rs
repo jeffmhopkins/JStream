@@ -703,3 +703,98 @@ fn a_scene_cameras_live_aim_is_driven_aimed_and_read() {
         "it stays where the drive left it"
     );
 }
+
+/// `scene.drawn_camera`: the camera a picture drew a 3D scene through, after its camera
+/// motion moved it, which is where an editor outlines its items. Nothing is drawn yet,
+/// so it answers none; once a metered frame draws the scene, it answers the moved
+/// camera, not the stored one; an unknown scene is not found.
+#[test]
+fn drawn_camera_answers_the_camera_a_picture_drew_the_scene_through() {
+    use crate::chain::Chains;
+    use crate::snapshot::{DrawAt, LiveParams, NoCaptures, View, compose_metered};
+    use jstream_media::{FrameSize, MediaTime, Timebase};
+    use jstream_protocol::{Query, QueryResult};
+    use jstream_render::ResourceCache;
+    use std::time::Instant;
+
+    let _gpu = crate::tests::one_gpu_test_at_a_time();
+    let Some(mut compositor) = crate::snapshot::tests::gpu() else {
+        return;
+    };
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    batch(&control, edits(scenes())).expect("scenes");
+    // The camera slides right at 100 px a second on the engine's clock.
+    let slide = CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
+        modifier_id: "slide".into(),
+        property: CameraProperty::PositionX,
+        kind: MotionKind::Drift {
+            rate_per_s: Finite32::new(100.0).expect("finite"),
+            wrap: None,
+        },
+        clock: MotionClock::Engine,
+        enabled: true,
+        amount: None,
+    };
+    batch(
+        &control,
+        Batch::single(Edit::SceneSetCameraMotion {
+            scene_id: SceneId::new("a"),
+            motion: vec![slide],
+        }),
+    )
+    .expect("motion");
+    let drawn = |scene: &str| {
+        super::query(
+            &control,
+            Query::SceneDrawnCamera {
+                scene_id: SceneId::new(scene),
+            },
+        )
+    };
+    let camera_of = |answer| match answer {
+        QueryResult::SceneDrawnCamera { camera } => camera,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(
+        camera_of(drawn("a").expect("a")),
+        None,
+        "nothing drew it yet"
+    );
+
+    let snapshot = engine.render_hub().load();
+    let mut meter = engine.profiler().program_meter();
+    let mut cache = ResourceCache::new();
+    cache.begin_frame();
+    let at = MediaTime::new(2_000, Timebase::new(1, 1000).expect("valid"));
+    compose_metered(
+        &mut compositor,
+        (&mut cache, &mut Chains::default(), &mut meter),
+        (snapshot.shot(), at),
+        View::default(),
+        &LiveParams::default(),
+        &NoCaptures,
+        DrawAt::read(FrameSize::new(640, 360).expect("size")),
+    )
+    .expect("drawn");
+    drop(cache.end_frame(&compositor));
+    let started = Instant::now();
+    meter.end_frame(started.elapsed(), started, drop);
+
+    let stored = SceneCamera::framing(Canvas::DEFAULT);
+    let camera = camera_of(drawn("a").expect("a")).expect("drawn through a camera");
+    assert!(
+        (camera.position.x.get() - (stored.position.x.get() + 200.0)).abs() < 0.5,
+        "moved 200 px right in 2 s: {camera:?}"
+    );
+    assert_eq!(camera.position.y, stored.position.y);
+    assert_eq!(camera.target.x, stored.target.x, "a position move only");
+    assert_eq!(
+        camera_of(drawn("b").expect("b")),
+        None,
+        "a 2D scene has none"
+    );
+    let failed = drawn("nope").expect_err("unknown");
+    assert_eq!(code(&failed), Some("not_found"));
+}
