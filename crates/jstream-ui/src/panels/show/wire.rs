@@ -418,6 +418,7 @@ pub fn action_of(command: &Command, show: Option<&str>) -> Option<Action> {
             rehearse: false,
         },
         Command::Stop => Action::ShowStop,
+        Command::Pause => Action::ShowPause,
         Command::Continue => Action::ShowContinue,
         Command::Back => Action::ShowBack,
         Command::GoTo(bookmark) => return go_to(show, bookmark),

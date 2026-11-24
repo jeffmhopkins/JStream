@@ -47,6 +47,9 @@ pub enum Command {
     Play(String),
     /// Stop the running show.
     Stop,
+    /// Hold the running show's play head where it is (`show.pause`); Play or Continue
+    /// plays on.
+    Pause,
     /// Continue: play on from a pause, or to the next pausing bookmark (`show.continue`).
     Continue,
     /// Back to the previous pausing bookmark.
@@ -468,13 +471,16 @@ pub fn status(show: &ShowView, run: &RunView, now: f64) -> String {
             run.off_script.as_deref().unwrap_or_default()
         ),
         RunPhase::Paused { bookmark, since } => {
-            let name = show
-                .bookmarks
-                .iter()
-                .find(|b| &b.id == bookmark)
-                .map_or("a bookmark", |b| b.name.as_str());
             let waited = (now - since).max(0.0) as u32;
-            format!("Paused at {name} · {}", time::clock(waited))
+            match show.bookmarks.iter().find(|b| &b.id == bookmark) {
+                Some(b) => format!("Paused at {} · {}", b.name, time::clock(waited)),
+                // `show.pause` holds the play head anywhere.
+                None => format!(
+                    "Paused at {} · {}",
+                    time::clock(run.at_ms),
+                    time::clock(waited)
+                ),
+            }
         }
     }
 }

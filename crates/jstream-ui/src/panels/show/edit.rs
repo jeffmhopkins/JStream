@@ -512,15 +512,19 @@ pub fn EditView() -> impl IntoView {
             <button type="button" class="show-btn" disabled=move || !running.get()
                 title="Back to the previous pausing bookmark"
                 on:click=move |_| send(Command::Back)>"⏮ Back"</button>
-            <button type="button" class="show-btn show-play" class:on=move || running.get()
-                disabled=move || running.get()
-                title=move || if running.get() {
-                    "Playing. Pause anywhere comes with the engine's show.pause; Stop show stops it"
+            <button type="button" class="show-btn show-play"
+                class:on=move || running.get() && !paused()
+                title=move || if running.get() && !paused() {
+                    "Pause where the play head is"
                 } else {
-                    "Play the show from the play head"
+                    "Play from the play head"
                 }
-                on:click=move |_| send(Command::Play(show_id()))>
-                {move || if running.get() { "❚❚ Pause" } else { "▶ Play" }}
+                on:click=move |_| send(if running.get_untracked() && !paused() {
+                    Command::Pause
+                } else {
+                    Command::Play(show_id())
+                })>
+                {move || if running.get() && !paused() { "❚❚ Pause" } else { "▶ Play" }}
             </button>
             <button type="button" class="show-continue"
                 disabled=move || !running.get() || matches!(phase(), RunPhase::Transition)

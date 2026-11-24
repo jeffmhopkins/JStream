@@ -97,7 +97,9 @@ pub struct Notes {
 pub fn notes(show: &ShowView, run: &model::RunView, head: u32) -> Notes {
     let marks = &show.bookmarks;
     let here = match &run.phase {
-        RunPhase::Paused { bookmark, .. } => marks.iter().position(|b| &b.id == bookmark),
+        RunPhase::Paused { bookmark, .. } if marks.iter().any(|b| &b.id == bookmark) => {
+            marks.iter().position(|b| &b.id == bookmark)
+        }
         _ => marks.iter().rposition(|b| b.at_ms <= head),
     };
     let next = match here {
@@ -151,13 +153,15 @@ pub fn now(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Card {
         RunPhase::Stopped => "Stopped".to_owned(),
         RunPhase::Transition => "In transition".to_owned(),
         RunPhase::Paused { bookmark, since } => {
-            let name = show
-                .bookmarks
-                .iter()
-                .find(|b| &b.id == bookmark)
-                .map_or("a bookmark", |b| b.name.as_str());
             let waited = (now - since).max(0.0) as u32;
-            format!("Paused at bookmark {name} for {}", time::clock(waited))
+            match show.bookmarks.iter().find(|b| &b.id == bookmark) {
+                Some(b) => format!("Paused at bookmark {} for {}", b.name, time::clock(waited)),
+                None => format!(
+                    "Paused at {} for {}",
+                    time::clock(head),
+                    time::clock(waited)
+                ),
+            }
         }
         RunPhase::Playing => match &run.looping {
             Some((id, pass)) => {
@@ -378,7 +382,9 @@ fn bookmark_scene(show: &ShowView, b: &BookmarkView) -> String {
 pub fn cards(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Vec<BookmarkCard> {
     let running = run.show.is_some();
     let current = match &run.phase {
-        RunPhase::Paused { bookmark, .. } => show.bookmarks.iter().position(|b| &b.id == bookmark),
+        RunPhase::Paused { bookmark, .. } if show.bookmarks.iter().any(|b| &b.id == bookmark) => {
+            show.bookmarks.iter().position(|b| &b.id == bookmark)
+        }
         _ if running => show.bookmarks.iter().rposition(|b| b.at_ms <= head),
         _ => None,
     };
@@ -703,6 +709,11 @@ fn NowNext() -> impl IntoView {
         )
     };
     let busy = move || panel.run.with(|r| r.phase == RunPhase::Transition);
+    let playing = move || {
+        panel
+            .run
+            .with(|r| r.show.is_some() && r.phase == RunPhase::Playing)
+    };
     view! {
         {move || cards().map(|(n, x)| view! {
             <div class="show-card">
@@ -719,6 +730,15 @@ fn NowNext() -> impl IntoView {
         <button type="button" class="show-continue" class:busy=busy aria-disabled=move || busy().to_string()
             on:click=move |_| if !busy() { panel.send(Command::Continue) }>"Continue ▸"</button>
         <div class="show-run-back">
+            <button type="button" class="show-btn show-play" class:on=playing
+                title=move || if playing() { "Pause where the play head is" } else { "Play" }
+                on:click=move |_| panel.send(if playing() {
+                    Command::Pause
+                } else {
+                    Command::Play(panel.show().map(|s| s.id).unwrap_or_default())
+                })>
+                {move || if playing() { "❚❚ Pause" } else { "▶ Play" }}
+            </button>
             <button type="button" class="show-btn" on:click=move |_| panel.send(Command::Back)>"⏮ Back"</button>
             {move || panel.run.with(|r| r.continue_keys.clone()).into_iter().map(binding).collect_view()}
         </div>
@@ -1403,5 +1423,49 @@ mod tests {
                 (false, "*".to_owned()),
             ]
         );
+    }
+
+    #[test]
+    fn the_run_of_show_marks_done_now_and_next() {
+        let show = demo::friday();
+        let flags = |run: &model::RunView, head: u32| -> Vec<(bool, bool, bool)> {
+            cards(&show, run, head, 0.0)
+                .into_iter()
+                .map(|c| (c.past, c.current, c.next))
+                .collect()
+        };
+        // Paused at Close-up (the third): two done, it is now, Demo is next.
+        let paused = model::RunView {
+            show: Some(show.id.clone()),
+            phase: RunPhase::Paused {
+                bookmark: "b3".to_owned(),
+                since: 0.0,
+            },
+            ..model::RunView::default()
+        };
+        let f = flags(&paused, 330_000);
+        assert_eq!(
+            &f[..4],
+            [
+                (true, false, false),
+                (true, false, false),
+                (false, true, false),
+                (false, false, true)
+            ]
+        );
+        // Held by show.pause between Demo and Screen: Demo is now, Screen next.
+        let held = model::RunView {
+            show: Some(show.id.clone()),
+            phase: RunPhase::Paused {
+                bookmark: String::new(),
+                since: 0.0,
+            },
+            ..model::RunView::default()
+        };
+        let f = flags(&held, 450_000);
+        assert_eq!((f[3], f[4]), ((false, true, false), (false, false, true)));
+        // Stopped: nothing done or now, the first is next.
+        let f = flags(&model::RunView::default(), 0);
+        assert_eq!((f[0], f[1]), ((false, false, true), (false, false, false)));
     }
 }
