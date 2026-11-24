@@ -1123,12 +1123,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   one (`edits::place_source_audio`). A track head drags to reorder its kind's rows
   (`edits::move_track`, refused across kinds by `geom::reorder_refusal`), and its menu
   renames and deletes overlay and audio tracks. A scene clip's own audio is never
-  stored ([ADR-0213](../../docs/adr/0213-a-scene-clips-audio-is-drawn-linked-under-it.md)):
+  stored ([ADR-0216](../../docs/adr/0216-a-scene-clips-audio-is-drawn-linked-under-it.md)):
   `wire::heard_in` finds the sources a scene is heard through when shown, and
   `view_of` draws a read-only `TrackKind::Linked` row per video track whose clips keep
   their scene clips' IDs, so a press on one grabs the scene clip. The play head is the
   runner's while the open show is the running one, else the panel's `cursor` (where Play
-  starts, [ADR-0212](../../docs/adr/0212-the-edit-views-ruler-moves-the-play-head.md)):
+  starts, [ADR-0215](../../docs/adr/0215-the-edit-views-ruler-moves-the-play-head.md)):
   `ShowPanel::move_head` seeks a running show or moves the cursor, and Play then seeks
   to it. The Run view's notes are the note of the bookmark the show is at (`run::notes`),
   split into lines to say and `*directions*` (`run::paragraphs`), and the run of show

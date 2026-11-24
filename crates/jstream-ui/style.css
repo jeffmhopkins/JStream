@@ -3248,9 +3248,9 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-row.current .show-row-flag, .show-row.here .show-row-flag { color: var(--show-bookmark); }
 .show-row.next { border-left-color: var(--accent); }
 .show-row.next .show-row-flag { color: var(--accent); }
-/* A mixer strip's name drags its audio onto the Show panel's tracks (ADR-0213). */
+/* A mixer strip's name drags its audio onto the Show panel's tracks (ADR-0216). */
 .strip-name.carries { cursor: grab; touch-action: none; }
-/* Scene audio rows: read-only, each clip linked to its scene clip (ADR-0213). */
+/* Scene audio rows: read-only, each clip linked to its scene clip (ADR-0216). */
 .show-track-linked .show-track-head { cursor: default; }
 .show-au.show-linked { opacity: 0.8; border-style: dashed; }
 .show-au.show-linked .show-link { font-style: normal; margin-right: 4px; font-size: 10px; }

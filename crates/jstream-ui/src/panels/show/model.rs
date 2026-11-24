@@ -84,7 +84,7 @@ pub enum TrackKind {
     /// A1 and up: audio clips. Numbered from 1.
     Audio(u8),
     /// The scene audio of video track V`n` (1 for program): drawn from its clips'
-    /// scenes, read only, each clip linked to its scene clip (ADR-0213).
+    /// scenes, read only, each clip linked to its scene clip (ADR-0216).
     Linked(u8),
 }
 

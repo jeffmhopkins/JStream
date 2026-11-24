@@ -1564,7 +1564,7 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
         edit_for: move |db| source_gain(id.get_value(), db),
     };
     // The strip's name dragged onto the Show panel's tracks adds its audio there
-    // (ADR-0213's "Add source audio").
+    // (ADR-0216's "Add source audio").
     let show_panel = use_context::<crate::panels::show::ShowPanel>();
     let pressed = StoredValue::new(None::<(i32, i32, bool)>);
     let carry = move |e: &leptos::ev::PointerEvent, dropped: bool| {

@@ -27,7 +27,7 @@ fn scene_name(collection: &Collection, scene: &SceneId) -> (String, bool) {
         )
 }
 
-/// The sources scene `scene` is heard through while it is shown (ADR-0213), by name: its
+/// The sources scene `scene` is heard through while it is shown (ADR-0216), by name: its
 /// visible items' sources whose audio is on, follows "when shown", is unmuted and above
 /// the fader's bottom, and those of the nested scenes it holds the same way. A keyframe
 /// scene is heard through its parent's items. Empty for a silent scene.
@@ -83,7 +83,7 @@ fn heard(collection: &Collection, scene: &SceneId, depth: u8, names: &mut Vec<St
     }
 }
 
-/// The scene audio rows (ADR-0213): for each video track with a clip whose scene is
+/// The scene audio rows (ADR-0216): for each video track with a clip whose scene is
 /// heard, a read-only row of those clips' audio, V1's first, each clip keeping its scene
 /// clip's ID and span so a press on it acts on the scene clip.
 fn linked_rows(tracks: &[TrackView], collection: &Collection) -> Vec<TrackView> {
@@ -699,7 +699,7 @@ mod tests {
         assert_eq!(action_of(&Command::Lock("friday".into(), true), None), None);
     }
 
-    /// ADR-0213: a scene clip heard when shown gets a linked clip under it; a silent one,
+    /// ADR-0216: a scene clip heard when shown gets a linked clip under it; a silent one,
     /// or one heard only through muted, floored or "always" sources, gets none.
     #[test]
     fn scene_audio_is_drawn_linked_under_clips_that_are_heard() {

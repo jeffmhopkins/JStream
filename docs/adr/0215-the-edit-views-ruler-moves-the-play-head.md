@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0212"
+id = "ADR-0215"
 title = "The Show panel's Edit view ruler moves the play head; the Run view's strip arms"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0212: The Show panel's Edit view ruler moves the play head; the Run view's strip arms
+# ADR-0215: The Show panel's Edit view ruler moves the play head; the Run view's strip arms
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

@@ -330,7 +330,7 @@ pub fn Sources() -> impl IntoView {
     let filter = Filter::new();
     let reorder = Reorder::new();
     // A row with audio dragged out towards the Show panel's tracks: its source's audio
-    // (ADR-0213's "Add source audio").
+    // (ADR-0216's "Add source audio").
     let show_panel = use_context::<crate::panels::show::ShowPanel>();
     let carry = move |event: &leptos::ev::PointerEvent, dropped: bool| {
         let Some(panel) = show_panel else { return };

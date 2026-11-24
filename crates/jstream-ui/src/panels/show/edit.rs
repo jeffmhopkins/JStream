@@ -141,7 +141,7 @@ fn grab_kind(track: TrackKind, clip: &ClipView) -> &'static str {
         (TrackKind::Program, _) => "program",
         (TrackKind::Overlay(_), _) => "overlay",
         (TrackKind::Audio(_), _) => "audio",
-        // Linked audio grabs its scene clip, which shares its ID (ADR-0213).
+        // Linked audio grabs its scene clip, which shares its ID (ADR-0216).
         (TrackKind::Linked(1), _) => "program",
         (TrackKind::Linked(_), _) => "overlay",
         _ => "marker",
@@ -834,7 +834,7 @@ pub fn EditView() -> impl IntoView {
             entries.push(Entry::Sep);
         }
         // Any source's audio, from anywhere in the project: on this A track, or on a new
-        // one from any other row (ADR-0213's linked audio is the scene's own).
+        // one from any other row (ADR-0216's linked audio is the scene's own).
         {
             let on = (kind == TrackKind::Audio(1).class()).then(|| track.clone());
             let sources = panel
