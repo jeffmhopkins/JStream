@@ -143,7 +143,8 @@ Contents ([Design](#design) explains the choices):
   in either mode, and `followed_preview`, the scene the canvas moves to when the preview
   scene changes in studio mode), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`, and a
-  3D model's depth, `SourceDepths`, from the same;
+  3D model's depth, `SourceDepths`, from the same; a media file's `duration_ms` isn't
+  kept, since nothing in the UI shows it yet;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
   and the kind descriptors read so far, the last failed call, the toast's confirmation

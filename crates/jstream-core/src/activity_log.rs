@@ -239,6 +239,14 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::SourceRestart { source_id } => {
             format!("Restarted {}", source(state, source_id))
         }
+        // Tenths of a second as `timeline.seek` reads, cut rather than rounded: the
+        // `u64` can't go through `f64` exactly.
+        Action::SourceSeek { source_id, at_ms } => format!(
+            "Played {} from {}.{} s",
+            source(state, source_id),
+            at_ms / 1000,
+            at_ms % 1000 / 100
+        ),
         Action::ChannelSetValue {
             channel_id,
             value,
@@ -912,6 +920,24 @@ mod tests {
                 graph.state()
             ),
             "Cleared the binding of MIDI note 36 on channel 10 from Pads"
+        );
+    }
+
+    #[test]
+    fn a_source_seek_reads_its_point_in_tenths_of_a_second() {
+        use jstream_protocol::{Action, SourceId};
+        let graph = jstream_graph::Graph::new();
+        let seek = |at_ms| Action::SourceSeek {
+            source_id: SourceId::new("clip"),
+            at_ms,
+        };
+        assert_eq!(
+            super::describe_action(&seek(83_456), graph.state()),
+            "Played “clip” from 83.4 s"
+        );
+        assert_eq!(
+            super::describe_action(&seek(0), graph.state()),
+            "Played “clip” from 0.0 s"
         );
     }
 
