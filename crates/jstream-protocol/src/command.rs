@@ -757,7 +757,7 @@ pub enum Edit {
     },
     /// Adds a folder to the scene list, last in folder order (ADR-0024 §3), or, with
     /// `scene_id`, a folder under one scene for its keyframe scenes and sequences
-    /// (ADR-0219, since 0.189). Folders organise only: they change no rendering,
+    /// (ADR-0219, since 0.190). Folders organise only: they change no rendering,
     /// switching or nesting. Inverse: `folder.delete`.
     #[serde(rename = "folder.create")]
     FolderCreate {
@@ -770,7 +770,7 @@ pub enum Edit {
         /// means top level.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<FolderId>,
-        /// The scene whose keyframe scenes and sequences it holds (since 0.189), which
+        /// The scene whose keyframe scenes and sequences it holds (since 0.190), which
         /// must exist, else `not_found`, and not be a keyframe scene, else
         /// `invalid_argument`. The folder goes with the scene when it is deleted.
         /// Omitted makes a folder of the scene list.
@@ -821,7 +821,7 @@ pub enum Edit {
     },
     /// Puts a scene in a folder, or takes it out of one. The scene keeps its position in
     /// the flat display order. A keyframe scene goes only in a folder of its parent
-    /// (ADR-0219, since 0.189), and any other scene only in a folder of the scene list,
+    /// (ADR-0219, since 0.190), and any other scene only in a folder of the scene list,
     /// else `invalid_argument` on `folder_id`. Inverse: `scene.set_folder` with the
     /// previous folder.
     #[serde(rename = "scene.set_folder")]

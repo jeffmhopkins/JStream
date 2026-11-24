@@ -812,7 +812,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list (and, with a folder that
   belongs to a scene, that scene's keyframe scenes and, through `timeline.set`'s
-  `folder`, its timelines; protocol 0.189, [ADR-0219](adr/0219-a-scenes-own-folders.md)), and `label.create`,
+  `folder`, its timelines; protocol 0.190, [ADR-0219](adr/0219-a-scenes-own-folders.md)), and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
   `source.set_meta` edit labels and organisation metadata
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31; a scene's labels, protocol

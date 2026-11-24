@@ -78,7 +78,7 @@ pub struct TimelineInfo {
     /// none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stops: Vec<TimelineTrigger>,
-    /// The folder it is filed in under its scene (ADR-0219, since 0.189): a folder of
+    /// The folder it is filed in under its scene (ADR-0219, since 0.190): a folder of
     /// the scene that holds it, or of that scene's parent for a keyframe scene's, else
     /// `invalid_argument`. Folders organise only. Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
