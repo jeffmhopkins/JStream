@@ -2920,7 +2920,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-mark-n { position: absolute; top: 10px; right: 12px; color: var(--faint); font: 700 12px "IBM Plex Mono", ui-monospace, monospace; }
 .show-mark-scene { display: block; margin-top: 4px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .show-mark-foot { position: absolute; left: 14px; right: 12px; bottom: 10px; display: flex; justify-content: space-between; align-items: center; color: var(--dim); font-size: 11.5px; }
-.show-tag { padding: 2px 5px; border-radius: 3px; font: 700 10px "IBM Plex Mono", ui-monospace, monospace; }
+.show-mark-card .show-tag { width: auto; white-space: nowrap; padding: 2px 5px; border-radius: 3px; font: 700 10px "IBM Plex Mono", ui-monospace, monospace; }
 .show-tag-pause { background: var(--show-bookmark); color: var(--show-bookmark-ink); }
 .show-tag-loop { background: var(--show-loop); color: var(--show-loop-ink); }
 .show-tag-through { background: var(--border); color: var(--text-soft); }
