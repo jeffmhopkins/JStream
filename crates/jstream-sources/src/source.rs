@@ -69,6 +69,16 @@ pub trait Source: Send {
         let _ = at;
     }
 
+    /// Whether the source counts from its time zero and starts again by counting from a
+    /// new one: a `timer` (ADR-0214). The engine restarts such a source itself, for a
+    /// show, a `source.restart` and a `source.seek`, by moving its time zero, so a build
+    /// that keeps its time ([`SourceKind::keeps_time`]) keeps the restart too; it calls
+    /// none of [`show`](Self::show), [`restart`](Self::restart) or [`seek`](Self::seek)
+    /// for one. `false`, the default.
+    fn counts_from_zero(&self) -> bool {
+        false
+    }
+
     /// How long one play of the source lasts, for a kind with a length: a `media` file
     /// whose container says, or once a play has reached its end (`SourceSize`'s
     /// `duration_ms`). `None`, the default, for every other kind.

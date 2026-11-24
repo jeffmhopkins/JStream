@@ -207,7 +207,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   it (#1405). The program
   mix shows their frames and advances animations and videos on the media clock, and
   tells a source when it shows it again, unless `source.seek` played it on from a point
-  since (`LiveSources::seek`, see *Timelines*). `media` sources play through the injected
+  since (`LiveSources::seek`, see *Timelines*); a `timer` countdown or stopwatch
+  starts its count again then (ADR-0214, see *Snapshots*). `media` sources play through the injected
   backends' media files, and report their length when it is known
   (`LiveSources::duration_ms`, `source.sizes`' `duration_ms`). A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
@@ -1068,7 +1069,13 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   count from the first plan after each, and starts again when its mode changes
   (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
   starts again at its duration when its `restart` counter changes
-  (`a_timer_restarts_when_its_restart_counter_changes`, #1040), and a `media` file's
+  (`a_timer_restarts_when_its_restart_counter_changes`, #1040), and a countdown that
+  starts again each time its scene goes on program and keeps that count through a
+  rebuild for its look (`a_timer_starts_again_when_its_scene_goes_on_program`), keeps
+  counting when it is on both scenes of a switch
+  (`a_timer_on_both_scenes_keeps_counting_through_a_switch`), and starts again for
+  `source.restart` and counts on from a `source.seek`
+  (`source_restart_and_seek_start_a_timer_again`, ADR-0214), and a `media` file's
   `duration_ms` in `source.sizes` and a `source.seek` that holds whether it comes just
   before or just after the switch that shows the file, also on a file held at its start
   on the upcoming scene, and is `not_found` for a missing source
@@ -1801,12 +1808,15 @@ preset changed in one batch that one undo takes back.
 - **`source.restart`** calls `LiveSources::restart` at `action_now` (the cue's time
   while a cue runs, otherwise the clock's now), which restarts the source's running
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
-  an effect pack's stand-in starts its program again. A source with no running instance
-  has nothing to restart.
+  an effect pack's stand-in starts its program again. A `timer`
+  (`Source::counts_from_zero`) is started again by moving its time zero instead
+  (`Entry::rezero`, [ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). A
+  source with no running instance has nothing to restart.
 - **`source.seek`** (since 0.177; not a cue, so `action_now` is the clock's now) is
   `not_found` for a source the collection doesn't hold, and otherwise calls
   `LiveSources::seek`, which plays the running instance on from the point (`Source::seek`: a `media` file
-  restarts its timeline there; a kind with nothing to seek restarts) and marks it
+  restarts its timeline there; a kind with nothing to seek restarts; a `timer`'s time
+  zero moves to `at_ms` before now, so it counts on from there) and marks it
   sought. A sought source isn't started again by the next plan that shows it
   (`Source::show`), nor cued at its start meanwhile, so a switch to its scene and the
   seek may come in either order. Its length, when it has one (`Source::duration`), is
@@ -2774,7 +2784,8 @@ animation restarts with it, unless its kind keeps the old instance's time zero f
 change (`Registry::keeps_time`, `SourceKind::keeps_time`): a `timer` keeps counting
 through any change but its `mode`, `duration` or `restart` counter (#1027, #1040). The build then carries that
 time zero (`Entry::anchor`; a build queued while another is in flight keeps what that
-one keeps, so a later style edit can't undo a restart), the thread paints the new
+one keeps, so a later style edit can't undo a restart, and a `timer` started again
+moves that anchor with its running instance's zero, `Entry::rezero`), the thread paints the new
 instance for it as soon as it is created, off the lock, so its first plan already shows
 the count, and `install` gives it that start. A build that fails is logged at `warn` with the source ID
 and an error that never names a host path, and the source draws nothing; a kind that
@@ -3076,7 +3087,11 @@ calls under the lock never draw or decode. A still `image` is planned by its `js
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
-the first time it is shown, unless `source.seek` sought it since the program last
+the first time it is shown, and a `timer` countdown or stopwatch
+(`Source::counts_from_zero`) starts its count again: its time zero moves to the plan's
+time, shared with the thread's paint under one lock (`Running::zero`) so a paint for
+the old zero can't land after the new one, and it is painted there before the plan
+shows it (ADR-0214). Neither happens when `source.seek` sought it since the program last
 reached it (`LiveSources::seek`'s `sought`): then it plays on from the seek, and the
 plan clears the mark. Each source also remembers the last plan any mix looked at
 it in (the program's, a video mix's, or a scene or source preview's, all drawn in the

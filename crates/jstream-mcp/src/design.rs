@@ -67,8 +67,9 @@ A countdown or clock: a `timer` source (`mode` `countdown` with `duration` in se
 and an `end_text` such as LIVE, `stopwatch`, or `clock` with a `clock_format` and an \
 optional IANA `time_zone`), styled like `text`. Its frame keeps one size whatever it \
 shows, so size its item once from `source.sizes`; editing its look keeps it counting, \
-and changing `mode` or `duration` restarts it. To run it again from the start at the same \
-length, change `restart` to any other number. \
+and changing `mode` or `duration` restarts it. A countdown or stopwatch starts again each \
+time its scene goes on program; to run it again at any other moment, use the \
+`source.restart` action or change `restart` to any other number. \
 A graphic of several parts that should read as one (a scoreboard, a framed camera \
 with its name bar): build it in its own scene, place that scene with a `scene` source, \
 crop the item to the graphic's bounds, and put `rounded_corners` and `drop_shadow` in \
@@ -472,7 +473,7 @@ loop) belongs in a timeline, not in a page: `timeline.set` stores in a scene a \
 or a `range` with `from_ms` and `to_ms` for an intro then a loop) and `cues` in time order, \
 each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
 `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`, \
-`channel.set_value`, `channel.switch`, `channel.nudge`, `source.restart` (a page or video from its start) or another timeline's `play`, `stop` \
+`channel.set_value`, `channel.switch`, `channel.nudge`, `source.restart` (a page, video or timer from its start) or another timeline's `play`, `stop` \
 or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
 hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
 after a first play read `timeline.cue_fired` in `events` for errors. \

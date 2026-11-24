@@ -2309,7 +2309,9 @@ pub enum Action {
         scene_id: SceneId,
     },
     /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page
-    /// loads again, and a `media` file plays from its start. Other kinds have nothing to
+    /// loads again, a `media` file plays from its start, and a `timer` countdown or
+    /// stopwatch starts its count again (ADR-0214, since 0.182), as it does when the
+    /// program shows it again. Other kinds, a `timer` clock among them, have nothing to
     /// restart, so for them it succeeds and does nothing, as it does for a source no mix
     /// shows yet. Runtime state like a scene switch's restart: it changes no `rev` and is
     /// never undone. Fails with `not_found` for a source the collection doesn't hold.
@@ -2323,9 +2325,10 @@ pub enum Action {
     /// from its start. On a looping file a point past the end lands where that many
     /// plays would reach; on one that doesn't loop, on its last frame. A kind with
     /// nothing to seek starts over as `source.restart` starts it (a `browser` page loads
-    /// again), and a kind with nothing to restart does nothing. A seek made before the
+    /// again), a `timer` counts on as if it had started `at_ms` ago (since 0.182), and a
+    /// kind with nothing to restart does nothing. A seek made before the
     /// program shows the source holds: being shown doesn't start it again from its
-    /// start, as `restart_on_show` would, so a switch and a seek may come in either
+    /// start, as `restart_on_show` or a `timer` would, so a switch and a seek may come in either
     /// order. Runtime state like `source.restart`: it changes no `rev` and is never
     /// undone. Fails with `not_found` for a source the collection doesn't hold.
     #[serde(rename = "source.seek")]

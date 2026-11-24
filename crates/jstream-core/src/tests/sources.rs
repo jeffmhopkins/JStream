@@ -490,6 +490,116 @@ fn a_timer_restarts_when_its_restart_counter_changes() {
     timer_reaches(&engine, &timer_frame(&restarted, 1.0, 3_000), "00:57");
 }
 
+/// A countdown `t` of 60 s on scene `a`, with an empty scene `b`, and `a` on program.
+fn a_countdown_on_a() -> (Engine, FakeClock, crate::InProcessControl, Settings) {
+    let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    let countdown = settings(&[("duration", json!(60))]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            source("t", "timer", countdown.clone()),
+            add("a", "i1", "t"),
+        ]),
+    )
+    .expect("created");
+    block_on(control.call(super::switch_call("a"))).expect("a on program");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00"
+    );
+    (engine, clock, control, countdown)
+}
+
+/// ADR-0214: a countdown starts again each time its scene goes on program, and a
+/// rebuild for its look after that keeps the new count.
+#[test]
+fn a_timer_starts_again_when_its_scene_goes_on_program() {
+    let (engine, clock, control, countdown) = a_countdown_on_a();
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+
+    block_on(control.call(super::switch_call("b"))).expect("b on program");
+    clock.advance(20_000);
+    block_on(control.call(super::switch_call("a"))).expect("a on program again");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00 again, from its first plan"
+    );
+    clock.advance(3_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 3_000), "00:57");
+
+    let red = settings(&[("duration", json!(60)), ("color", json!("#ff0000ff"))]);
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("t"),
+            patch: settings(&[("color", json!("#ff0000ff"))]),
+        }),
+    )
+    .expect("restyled");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&red, 1.0, 3_000),
+        "still 00:57, in red"
+    );
+}
+
+/// ADR-0214: a countdown the program shows through a switch, on both scenes, keeps
+/// counting: only being shown again starts it again.
+#[test]
+fn a_timer_on_both_scenes_keeps_counting_through_a_switch() {
+    let (engine, clock, control, countdown) = a_countdown_on_a();
+    batch(&control, edits(vec![add("b", "i2", "t")])).expect("on b too");
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+    block_on(control.call(super::switch_call("b"))).expect("b on program");
+    clock.advance(2_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 12_000), "00:48");
+}
+
+/// ADR-0214: `source.restart` starts a countdown on program again, and `source.seek`
+/// counts it on from a point.
+#[test]
+fn source_restart_and_seek_start_a_timer_again() {
+    let (engine, clock, control, countdown) = a_countdown_on_a();
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+
+    let act = |action: Action| {
+        block_on(control.call(Call::Action { action })).expect("the action");
+    };
+    act(Action::SourceRestart {
+        source_id: SourceId::new("t"),
+    });
+    timer_reaches(
+        &engine,
+        &timer_frame(&countdown, 1.0, 0),
+        "01:00 after a restart",
+    );
+    clock.advance(2_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 2_000), "00:58");
+
+    act(Action::SourceSeek {
+        source_id: SourceId::new("t"),
+        at_ms: 30_000,
+    });
+    timer_reaches(
+        &engine,
+        &timer_frame(&countdown, 1.0, 30_000),
+        "00:30 after a seek",
+    );
+    // Past the frame its change is woken on.
+    clock.advance(1_500);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 31_500), "00:29");
+}
+
 /// A `display` or `window` source shows what the pipeline captures for its target:
 /// the primary display by default, the one its `target` names otherwise. Sources that
 /// capture the same thing share one capture, and a window source with no window chosen
