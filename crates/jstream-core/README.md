@@ -1117,8 +1117,9 @@ depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md",
 
 ### Engine and sessions
 
-`Engine` is a handle around one `Arc` of shared state: the collection mutex, and
-the queue to the snapshot thread. The drop ledger is a second mutex, outside that
+`Engine` is a handle around one `Arc` of shared state: the collection mutex, the
+condvar the live ticker waits on (`Shared::ticker`, see *Timelines*), and the queue to
+the snapshot thread. The drop ledger is a second mutex, outside that
 `Arc`. Cloning it shares the engine, so a
 host can give one clone to the server's connector and another to an MCP session.
 `Engine::connect()` opens an `InProcessControl`, which holds a clone too: the engine
