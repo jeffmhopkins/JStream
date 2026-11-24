@@ -3,7 +3,7 @@
 import fs from 'fs';
 const yml = fs.readFileSync(new URL("../workflows/review-gate.yml", import.meta.url), 'utf8');
 const block = yml.slice(yml.indexOf('// BEGIN decide'), yml.indexOf('// END decide'));
-const { decide, carryCandidate, reviewedBase, sameChange, sameModes, onlyBaseMerges } = new Function(block + '\nreturn { decide, carryCandidate, reviewedBase, sameChange, sameModes, onlyBaseMerges };')();
+const { decide, carryCandidate, reviewedBase, sameChange, sameModes, onlyBaseMerges, classifyPath } = new Function(block + '\nreturn { decide, carryCandidate, reviewedBase, sameChange, sameModes, onlyBaseMerges, classifyPath };')();
 const H = 'a'.repeat(40), OLD = 'b'.repeat(40);
 const mk = (verdict, round, opts = {}) => ({
   author_association: opts.assoc ?? 'OWNER',
@@ -105,4 +105,25 @@ eq('modes: ledger ignored', sameModes([f('docs/verified.toml', '+x')], side({ 'd
 eq('modes: closed on a truncated tree', sameModes(added, side({}, { 't.opus': '100644' }), { base: tr({}), head: tr({ 't.opus': '100644' }, true) }), false);
 eq('modes: closed on a missing tree', sameModes(added, side({}, { 't.opus': '100644' }), { base: tr({}), head: null }), false);
 eq('modes: closed on files missing', sameModes(null, side({}, {}), side({}, {})), false);
+// #1692: the commits after the reviewed head are classified on their own, whatever the
+// PR's own commit count. A train of 358 commits merges main (40 commits) in.
+{
+  const sha = (n) => n.toString(16).padStart(40, '0');
+  const base = new Set(Array.from({ length: 40 }, (_, i) => sha(1000 + i)));
+  const tip = sha(999);
+  base.add(tip);
+  const inBase = async (s) => base.has(s);
+  const asked = [];
+  const files = async (s) => { asked.push(s); return s === sha(7) ? ['docs/verified.toml'] : ['src/x.rs']; };
+  const one = (s, parent) => ({ sha: s, parents: [{ sha: parent }] });
+  const mainCommits = Array.from({ length: 40 }, (_, i) => one(sha(1000 + i), sha(999 + i)));
+  const merge = { sha: sha(5), parents: [{ sha: sha(4) }, { sha: tip }] };
+  const run = async (path) => onlyBaseMerges(await classifyPath(path, inBase, files));
+  eq('path: a main merge into a 358-commit train carries (#1692)', await run([...mainCommits, merge]), true);
+  eq('path: then a ledger restamp', await run([...mainCommits, merge, one(sha(7), sha(5))]), true);
+  eq("path: main's commits aren't read for files", asked.every((s) => !base.has(s)), true);
+  eq('path: a merge of a branch not in the base', await run([{ sha: sha(5), parents: [{ sha: sha(4) }, { sha: sha(3) }] }]), false);
+  eq('path: a code commit after the merge', await run([...mainCommits, merge, one(sha(8), sha(5))]), false);
+  eq('path: nothing listed', await run([]), false);
+}
 process.exit(fails ? 1 : 0);
