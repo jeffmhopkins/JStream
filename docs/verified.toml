@@ -6762,7 +6762,7 @@ stamp = { hash = "b3:62e74973e55c9e88", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/Cargo.toml"]
-stamp = { hash = "b3:d245144b1d44c13c", by = "agent:claude", note = "Re-read with Cargo.toml's web-sys gaining the Selection feature: the build steps are unchanged." }
+stamp = { hash = "b3:7c31bc406ac851fa", by = "agent:claude", note = "Re-read with Cargo.toml's web-sys gaining the ResizeObserver feature: the build steps are unchanged." }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/Trunk.toml"]
 stamp = { hash = "b3:f87a888e55181fde" }
@@ -6819,7 +6819,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:210a78c1035379d0", by = "agent:claude", note = "Re-read: a new Design bullet explains chrome.rs (window contextmenu swallow, chrome::swallow, TEXT, selectstart and the captured pointerdown clear, Menus::open leaving text fields to the browser)." }
+stamp = { hash = "b3:57bbd925b541ce79", by = "agent:claude", note = "Re-read: the workspace bullet explains Edge bands, EdgeView's extra strip, state_mut and tidy; the rest of the design holds." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:9e1f317b60cc4742", by = "agent:claude", note = "rendering.rs gained the model resolution select and jstream-control's design the mock's refusal; this section's one mention of Settings > 3D rendering is about screen-space reflections and still holds. After merging main (#1717, protocol 0.177: source.seek and duration_ms; #1706): main's additions carry main's stamp and sit beside this change, which moves to protocol 0.178; the snapshots were regenerated. | kept from the merged side: Re-read the reads paragraph (source.sizes then source.size_changed) against store.rs's '..' ignoring duration_ms and control#design's mock change: the UI still follows sizes and depths as written; holds." }
@@ -6888,7 +6888,7 @@ stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:eb52f3ef38a189e6", by = "agent:claude", note = "Re-read: a new Design bullet explains chrome.rs (window contextmenu swallow, chrome::swallow, TEXT, selectstart and the captured pointerdown clear, Menus::open leaving text fields to the browser)." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
+stamp = { hash = "b3:359b064d2f2e23b1", by = "agent:claude", note = "Re-read: the workspace bullet explains Edge bands, EdgeView's extra strip, state_mut and tidy; the rest of the design holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:0eb880f42fea463e", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Edited the header readout and Outputs health paragraphs for #1690 (counted only while an output runs, Idle otherwise); checked against Dropped and Health." }
@@ -7065,13 +7065,13 @@ stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:8a0e803ebf942fe8", by = "agent:claude", note = "Re-read with workspace.rs measuring the stage row at each resize and stacking a portrait canvas when that's larger, and the Workspace bullet that now names stacks: the design section holds." }
+stamp = { hash = "b3:1287fb9b8753c51f", by = "agent:claude", note = "Re-read: the workspace bullet explains Edge bands, EdgeView's extra strip, state_mut and tidy; the rest of the design holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read: a new Design bullet explains chrome.rs (window contextmenu swallow, chrome::swallow, TEXT, selectstart and the captured pointerdown clear, Menus::open leaving text fields to the browser)." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read: the workspace bullet explains Edge bands, EdgeView's extra strip, state_mut and tidy; the rest of the design holds." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:12c026deb47ca269", by = "agent:claude", note = "Re-read: the Menus bullet now lists chrome.rs; app.rs installs it, lib.rs declares it, tree.rs's tool bar and dialog.rs swallow with it." }
+stamp = { hash = "b3:378a9b5345cdea00", by = "agent:claude", note = "Re-read: the Dock bullet says the zones are four inner ones and each outer Edge's bands; the Workspace bullet now says stacks is decided again when the stage row changes size (ResizeObserver); the rest holds." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -7137,7 +7137,7 @@ stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:eb52f3ef38a189e6", by = "agent:claude", note = "Re-read: the Menus bullet now lists chrome.rs; app.rs installs it, lib.rs declares it, tree.rs's tool bar and dialog.rs swallow with it." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
+stamp = { hash = "b3:359b064d2f2e23b1", by = "agent:claude", note = "Re-read: the Dock bullet says the zones are four inner ones and each outer Edge's bands; the Workspace bullet now says stacks is decided again when the stage row changes size (ResizeObserver); the rest holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:0eb880f42fea463e", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Edited the readout line: frames the outputs dropped while they ran (#1690); the rest of the purpose holds." }
@@ -7314,7 +7314,7 @@ stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:8a0e803ebf942fe8", by = "agent:claude", note = "Re-read with workspace.rs's stacks and the stacked studio layout on the new main base: purpose still holds." }
+stamp = { hash = "b3:1287fb9b8753c51f", by = "agent:claude", note = "Re-read: the Dock bullet says the zones are four inner ones and each outer Edge's bands; the Workspace bullet now says stacks is decided again when the stage row changes size (ResizeObserver); the rest holds." }
 
 ["CRATE-jstream-ui#views"."body"]
 stamp = { hash = "b3:c8a34bdd85887b52", by = "agent:claude-perf-suite", note = "review N2: labels are projector#<channel>:<scene|program|source:<id>>, checked against Picture in projector.rs; the channel survives the 64-char cut" }
@@ -7386,7 +7386,7 @@ stamp = { hash = "b3:7b4736b2ebacfe64", by = "agent:flaky-tests", note = "Only c
 stamp = { hash = "b3:ef44efd099f20b09", by = "agent:claude", note = "Re-read the harness against the new shader-source test: it adds no fixture and starts no daemon differently; custom-shader.spec.js still routes the page's socket itself, so the harness text holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
-stamp = { hash = "b3:5d200dfa3ca0136e", by = "agent:ui-design", note = "Specs now show the Arrange panel by its new name; the harness text (showPanel picks the dock strip's tab, not the Inspector's own Transform tab) still holds." }
+stamp = { hash = "b3:1c96739c408f83cb", by = "agent:claude", note = "Re-read with docking.spec.js's new dropInto helper and band test: the harness is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/effects.spec.js"]
 stamp = { hash = "b3:d59368640d554e44", by = "agent:claude", note = "Re-read: effects.spec.js and wheel-chords.spec.js use the panel's Filters of tablist and + Add filter…; the harness and fixtures they use are unchanged." }
@@ -7488,7 +7488,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:85875b38d98e4665", by = "agent:claude", note = "Re-read: added the chrome.spec.js entry (swallowed right-clicks, the search field and connection values keeping the browser menu, no selection on drag or double-click, flush header menus)." }
+stamp = { hash = "b3:f40cf3573659019e", by = "agent:claude", note = "Re-read: the Docking entry covers the second and third bottom rows, the outer left columns, the reload and the band removal." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7527,7 +7527,7 @@ stamp = { hash = "b3:7b4736b2ebacfe64", by = "agent:flaky-tests", note = "crop.s
 stamp = { hash = "b3:ef44efd099f20b09", by = "agent:claude", note = "Added the Add source › Shader click-through to the Custom shader bullet and checked it against the spec: template manifest, placed source, Properties with the editor and no Save as pack, @name/@size/@feedback in the manifest, a refused width setting, Edit shader reopening, and the written shader listed in Add source." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
-stamp = { hash = "b3:5d200dfa3ca0136e", by = "agent:ui-design", note = "Updated the specs' descriptions: the dock's Arrange tab, the width and height link, an arrow key in place of the removed stepper, the crop two by two, and transform.spec on the Arrange tab; the filters scope tabs now carry counts, which the spec matches by pattern." }
+stamp = { hash = "b3:1c96739c408f83cb", by = "agent:claude", note = "Re-read: the Docking entry covers the second and third bottom rows, the outer left columns, the reload and the band removal." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/effects.spec.js"]
 stamp = { hash = "b3:d59368640d554e44", by = "agent:claude", note = "Rewrote the Item filters entry (the Source | This item control and counts, No item filters, the switch as one edit, Source unchanged, staying on This item) and the wheel chords entry's Follow pointer item filter added from the This item tab." }
@@ -8055,7 +8055,7 @@ stamp = { hash = "b3:0d8baca5b9948658", by = "agent:issues-thread", note = "Re-r
 stamp = { hash = "b3:5e96713eac99b119", by = "agent:issues-thread", note = "Re-read the walkthrough against the DL-01 change; it says nothing about dialog focus timing, still holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#docking"]
-stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
+stamp = { hash = "b3:1bd5aeb32a041da1", by = "agent:claude", note = "Re-read against DK-01's change: the getting-started steps don't depend on how many bands an edge holds." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#header"]
 stamp = { hash = "b3:c5342bbe2ae1e031", by = "agent:claude", note = "Re-read against the UI-FEATURES and UI-DESIGN changes (CM-09, the flush header menus): every right-click menu these steps name still opens, so the steps hold." }
@@ -8700,19 +8700,19 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:7fa4b50c629a54e7", by = "agent:claude", note = "Added the Icon button rule (28 px, borderless, muted, link-coloured while on, a funnel's count, ⋯ opens what the icons don't show) for C20-C22" }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:1fdba0e3b5a5b18c", by = "agent:claude", note = "added: a sequence's own mark is --code-type (Scenes row icon, event chip edge); the playing badge is teal, not the on-air red; checked style.css" }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9de1c5d0cb4616bb", by = "agent:claude", note = "Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22)" }
@@ -8721,7 +8721,7 @@ stamp = { hash = "b3:9de1c5d0cb4616bb", by = "agent:claude", note = "Added the e
 stamp = { hash = "b3:eb52f3ef38a189e6", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the library rule (Encoders & mixes): 240 px rail of grouped rows with right-aligned summaries, a + per group eyebrow, empty texts, the editor under the pick's name and summary, and the form's Delete/Cancel/Save as the dialog's footer, Close while nothing is open. The libraries body drops the fade since the sticky footer is its last box." }
@@ -8730,7 +8730,7 @@ stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the l
 stamp = { hash = "b3:eb52f3ef38a189e6", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
@@ -8739,7 +8739,7 @@ stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn butto
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:b256e67cc1838bc5", by = "agent:claude", note = "Re-read with the dropdown now flush under the header bar: added the line that a header menu hangs flush with square top corners and a right-click menu opens at the pointer; the rest holds." }
@@ -8748,19 +8748,19 @@ stamp = { hash = "b3:b256e67cc1838bc5", by = "agent:claude", note = "Re-read wit
 stamp = { hash = "b3:dc0d2acec7063c0f", by = "agent:claude", note = "Re-read with the dropdown now flush under the header bar: added the line that a header menu hangs flush with square top corners and a right-click menu opens at the pointer; the rest holds." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read with the dropdown now flush under the header bar: added the line that a header menu hangs flush with square top corners and a right-click menu opens at the pointer; the rest holds." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-FEATURES#automation"."body"]
 stamp = { hash = "b3:fed62ddf1b5177ec", by = "agent:claude", note = "Only the ADR number and link changed, 0188 to 0190." }
@@ -8853,16 +8853,16 @@ stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "DL-0
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Re-read: source_properties.rs passes LearnOwner::Source to the form; the dialog list holds, and the inspector section describes the button." }
 
 ["UI-FEATURES#docking"."body"]
-stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "The panel list, DK-02 (second tab level is a segmented control), DK-07 and DK-08 now name Arrange; checked against dock.rs titles and the Editing layout." }
+stamp = { hash = "b3:1bd5aeb32a041da1", by = "agent:claude", note = "Re-read with dock.rs's Edge bands (Zone::Bottom(n) etc., tidy, state_mut making the next band) and workspace.rs's EdgeView and .new-band strip, plus the stage row's ResizeObserver: DK-01 describes any number of outer bands, the drop strip, removal of an emptied band and the bottom2 keys; DK-02 to DK-10 hold." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/app.rs"]
 stamp = { hash = "b3:9ff49caa2177b3bf", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "dock.rs adds Channels (right) and Sequence (bottom) to the View menu; workspace.rs maps them to their panels. Docking rows still hold." }
+stamp = { hash = "b3:359b064d2f2e23b1", by = "agent:claude", note = "Re-read with dock.rs's Edge bands (Zone::Bottom(n) etc., tidy, state_mut making the next band) and workspace.rs's EdgeView and .new-band strip, plus the stage row's ResizeObserver: DK-01 describes any number of outer bands, the drop strip, removal of an emptied band and the bottom2 keys; DK-02 to DK-10 hold." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:8a0e803ebf942fe8", by = "agent:claude", note = "Re-read with workspace.rs's stacks and the stage-row measuring: the dock rows are unchanged." }
+stamp = { hash = "b3:1287fb9b8753c51f", by = "agent:claude", note = "Re-read with dock.rs's Edge bands (Zone::Bottom(n) etc., tidy, state_mut making the next band) and workspace.rs's EdgeView and .new-band strip, plus the stage row's ResizeObserver: DK-01 describes any number of outer bands, the drop strip, removal of an emptied band and the bottom2 keys; DK-02 to DK-10 hold." }
 
 ["UI-FEATURES#filters"."body"]
 stamp = { hash = "b3:d895a7b3f5cad48b", by = "agent:release-alpha8", note = "With the hologram follow-up's Transmission, Steady, Broken signal and Amber presets FL-11 names every kind filter_presets.rs gives presets, and the text below the table describes CC PR 3 value bindings' learn button on any chain's live settings, wired through LearnOwner::Filter in both forms." }
@@ -8988,7 +8988,7 @@ stamp = { hash = "b3:f6309095a048ad27", by = "agent:claude", note = "WS-04 names
 stamp = { hash = "b3:cf8453771e0803d5", by = "agent:claude", note = "Re-read with number.rs's drag now measured in the page's CSS pixels (same speed at every UI scale) and style.css's scale rules: the shared-controls rows still hold." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:7ddaf0f265da4042", by = "agent:claude", note = "Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
+stamp = { hash = "b3:0d8d5d43cdaf8da1", by = "agent:claude", note = "Re-read against style.css: the change only adds position: relative on .workspace and the .zone.new-band rules that lay the new-band drop strip over an outer edge; nothing in this section changes." }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }

@@ -232,7 +232,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   closes on a second click of its ×, and the Inspector doesn't collapse once it is alone
   in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live, with Stream stats, Outputs and Agent activity as
-  tabs on the right, and resets to Editing.
+  tabs on the right, and resets to Editing. A drop past the bottom's row adds a second
+  full-width row under it, with its splitter, and a third past that; the outer left
+  stacks full-height columns outwards the same way; all of it survives a reload, and
+  moving the second row's panel out removes that row, the third moving in.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
   and shows the size readout, a click on empty canvas clears both, and selecting another

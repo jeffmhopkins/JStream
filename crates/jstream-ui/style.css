@@ -267,7 +267,7 @@ a.menuitem:focus-visible { outline: none; }
 
 /* The workspace (workspace.rs): the dock zones around the canvas. Zone sizes and group
    weights are set through the CSS object model, which the page's policy allows. */
-.workspace { flex: 1 1 auto; display: flex; min-height: 0; }
+.workspace { position: relative; flex: 1 1 auto; display: flex; min-height: 0; }
 .workspace.dragging, .workspace.dragging * { user-select: none; cursor: grabbing; }
 .ws-middle, .ws-centre { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .ws-row { flex: 1 1 auto; display: flex; min-height: 0; }
@@ -389,6 +389,13 @@ a.menuitem:focus-visible { outline: none; }
 .zone[hidden] { display: none; }
 .zone.vertical { flex-direction: column; }
 .zone.drop-zone { outline: 2px dashed var(--accent); outline-offset: -2px; }
+/* The place a drag offers for a new band past an outer edge's last one (dock.rs): laid
+   over that edge, so the bands don't move under the pointer. */
+.zone.new-band { position: absolute; z-index: 5; }
+.zone.new-band[data-edge="bottom"] { left: 0; right: 0; bottom: 0; }
+.zone.new-band[data-edge="top"] { left: 0; right: 0; top: 0; }
+.zone.new-band[data-edge="left"] { top: 0; bottom: 0; left: 0; }
+.zone.new-band[data-edge="right"] { top: 0; bottom: 0; right: 0; }
 .zone-placeholder {
   flex: 1 1 auto;
   display: grid;
