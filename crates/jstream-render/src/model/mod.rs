@@ -138,9 +138,9 @@ struct Uploaded {
     /// decision 5), kept while that texture and the material it replaces stay the same,
     /// so a steady frame makes none.
     live: Mutex<Option<LiveBinds>>,
-    /// Each texture's format as uploaded, for tests.
+    /// Each texture's format and size as uploaded, for tests.
     #[cfg(test)]
-    formats: Vec<wgpu::TextureFormat>,
+    formats: Vec<(wgpu::TextureFormat, (u32, u32))>,
 }
 
 /// What a model's layer was drawn of (ADR-0244): everything its pixels depend on, so a
@@ -475,8 +475,18 @@ impl PartialEq for SeenModel {
 impl GpuModel {
     /// Each texture's format as uploaded.
     #[cfg(test)]
-    pub(crate) fn texture_formats(&self) -> &[wgpu::TextureFormat] {
-        &self.inner.formats
+    pub(crate) fn texture_formats(&self) -> Vec<wgpu::TextureFormat> {
+        self.inner
+            .formats
+            .iter()
+            .map(|(format, _)| *format)
+            .collect()
+    }
+
+    /// Each texture's size as uploaded.
+    #[cfg(test)]
+    pub(crate) fn texture_sizes(&self) -> Vec<(u32, u32)> {
+        self.inner.formats.iter().map(|(_, size)| *size).collect()
     }
 
     /// Which upload this is, to tell later whether a model is still the same one.
@@ -1177,9 +1187,9 @@ impl UploadKit {
         let mut formats = Vec::with_capacity(model.textures().len());
         for (index, texture) in model.textures().iter().enumerate() {
             let compress = self.compress && !normals.contains(&index);
-            let (view, _format) = upload_texture(self, texture, compress)?;
+            let (view, _format, _size) = upload_texture(self, texture, compress)?;
             #[cfg(test)]
-            formats.push(_format);
+            formats.push((_format, _size));
             textures.push(view);
         }
         let view =
@@ -3437,7 +3447,7 @@ fn upload_texture(
     kit: &UploadKit,
     texture: &ModelTexture,
     compress: bool,
-) -> Result<(wgpu::TextureView, wgpu::TextureFormat), RenderError> {
+) -> Result<(wgpu::TextureView, wgpu::TextureFormat, (u32, u32)), RenderError> {
     let limit = kit.max_texture_dimension_2d;
     if texture.width() > limit || texture.height() > limit {
         return Err(RenderError::TooLarge {
@@ -3448,39 +3458,71 @@ fn upload_texture(
         });
     }
     let srgb = texture.color() == TextureColor::Srgb;
-    // wgpu takes a compressed texture only in whole blocks at level 0.
-    let compress =
-        compress && texture.width().is_multiple_of(4) && texture.height().is_multiple_of(4);
-    let alpha = compress && !texture.levels().iter().all(|level| bc::opaque(level));
-    let (format, block) = match (compress, alpha, srgb) {
-        (false, _, true) => (wgpu::TextureFormat::Rgba8UnormSrgb, None),
-        (false, _, false) => (wgpu::TextureFormat::Rgba8Unorm, None),
-        (true, false, true) => (wgpu::TextureFormat::Bc1RgbaUnormSrgb, Some(bc::BC1_BLOCK)),
-        (true, false, false) => (wgpu::TextureFormat::Bc1RgbaUnorm, Some(bc::BC1_BLOCK)),
-        (true, true, true) => (wgpu::TextureFormat::Bc3RgbaUnormSrgb, Some(bc::BC3_BLOCK)),
-        (true, true, false) => (wgpu::TextureFormat::Bc3RgbaUnorm, Some(bc::BC3_BLOCK)),
+    let levels = texture.levels();
+    // Short of GPU memory, the texture is made without its largest level, then without
+    // the next, until it fits: a model drawn a little softer, rather than not at all.
+    let mut skip = 0;
+    let (uploaded, format, block, alpha) = loop {
+        let (width, height) = (
+            (texture.width() >> skip).max(1),
+            (texture.height() >> skip).max(1),
+        );
+        // wgpu takes a compressed texture only in whole blocks at level 0.
+        let compress = compress && width.is_multiple_of(4) && height.is_multiple_of(4);
+        let alpha = compress && !levels[skip..].iter().all(|level| bc::opaque(level));
+        let (format, block) = match (compress, alpha, srgb) {
+            (false, _, true) => (wgpu::TextureFormat::Rgba8UnormSrgb, None),
+            (false, _, false) => (wgpu::TextureFormat::Rgba8Unorm, None),
+            (true, false, true) => (wgpu::TextureFormat::Bc1RgbaUnormSrgb, Some(bc::BC1_BLOCK)),
+            (true, false, false) => (wgpu::TextureFormat::Bc1RgbaUnorm, Some(bc::BC1_BLOCK)),
+            (true, true, true) => (wgpu::TextureFormat::Bc3RgbaUnormSrgb, Some(bc::BC3_BLOCK)),
+            (true, true, false) => (wgpu::TextureFormat::Bc3RgbaUnorm, Some(bc::BC3_BLOCK)),
+        };
+        let scope = kit.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let made = kit.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-render-model-texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: (levels.len() - skip) as u32,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let short = crate::gpu::scope_error(scope).or_else(|| refused_in_test(width, height));
+        match short {
+            None => {
+                if skip > 0 {
+                    tracing::warn!(
+                        width = texture.width(),
+                        height = texture.height(),
+                        uploaded_width = width,
+                        uploaded_height = height,
+                        "the GPU is short of memory: a model texture is uploaded without its largest levels"
+                    );
+                }
+                break (made, format, block, alpha);
+            }
+            Some(detail) if skip + 1 == levels.len() => {
+                return Err(RenderError::Uncaptured { detail });
+            }
+            Some(_) => {
+                made.destroy();
+                skip += 1;
+            }
+        }
     };
-    let uploaded = kit.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("jstream-render-model-texture"),
-        size: wgpu::Extent3d {
-            width: texture.width(),
-            height: texture.height(),
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: texture.levels().len() as u32,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
     // Each level is written from where it is, a band of rows at a time: the queue is
     // locked for one band's copy, not a level's, so a thread that submits meanwhile
     // waits for little (ADR-0177). A compressed level's rows are rows of blocks, each
     // four texels high.
-    for (level, texels) in texture.levels().iter().enumerate() {
-        let width = (texture.width() >> level).max(1);
-        let height = (texture.height() >> level).max(1);
+    for (level, texels) in levels[skip..].iter().enumerate() {
+        let width = (texture.width() >> (level + skip)).max(1);
+        let height = (texture.height() >> (level + skip)).max(1);
         let (bytes, row, texel_rows, copy_width) = match block {
             None => (
                 std::borrow::Cow::Borrowed(texels.as_slice()),
@@ -3526,7 +3568,29 @@ fn upload_texture(
     Ok((
         uploaded.create_view(&wgpu::TextureViewDescriptor::default()),
         format,
+        (uploaded.width(), uploaded.height()),
     ))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// In tests, the most texels a model texture's level 0 may have before it is refused
+    /// as if the GPU were short of memory ([`upload_texture`]); unlimited when `None`.
+    pub(crate) static TEXTURE_MEMORY_TEXELS: std::cell::Cell<Option<u64>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// A texture of `width` by `height` refused as a test asked ([`TEXTURE_MEMORY_TEXELS`]).
+fn refused_in_test(width: u32, height: u32) -> Option<String> {
+    #[cfg(test)]
+    {
+        let most = TEXTURE_MEMORY_TEXELS.with(std::cell::Cell::get);
+        if most.is_some_and(|most| u64::from(width) * u64::from(height) > most) {
+            return Some(String::from("out of memory (in a test)"));
+        }
+    }
+    let _ = (width, height);
+    None
 }
 
 mod bc;

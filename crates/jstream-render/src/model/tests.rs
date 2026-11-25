@@ -3428,6 +3428,65 @@ fn golden_model_textures_are_block_compressed_but_normal_maps() {
     assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
 }
 
+/// A model texture the GPU has no memory for is uploaded without its largest level,
+/// then the next, until it fits, and draws as its texels, softer; one with no level that
+/// fits fails the upload. Here the GPU takes at most 8 × 8 texels, then none.
+#[test]
+fn a_texture_short_of_memory_is_uploaded_without_its_largest_levels() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let quadrants = |side: u32| -> Vec<u8> {
+        (0..side)
+            .flat_map(|y| {
+                (0..side).flat_map(move |x| match (x < side / 2, y < side / 2) {
+                    (true, true) => [255, 0, 0, 255],
+                    (false, true) => [0, 255, 0, 255],
+                    (true, false) => [0, 0, 255, 255],
+                    (false, false) => [255, 255, 255, 255],
+                })
+            })
+            .collect()
+    };
+    let plane = Shape::Plane
+        .model(Material::default())
+        .expect("the plane builds");
+    let textured = Material {
+        base_color_texture: Some(TextureRef { texture: 0 }),
+        unlit: true,
+        ..plane.materials()[0].clone()
+    };
+    let with = |texture: ModelTexture| {
+        Model::new(
+            plane.primitives().to_vec(),
+            vec![textured.clone()],
+            vec![texture],
+        )
+        .expect("the plane builds")
+    };
+    let mipped =
+        with(ModelTexture::new(32, 32, quadrants(32), TextureColor::Srgb).expect("a texture"));
+    super::TEXTURE_MEMORY_TEXELS.with(|most| most.set(Some(64)));
+    let uploaded = opened.compositor.upload_model(&mipped);
+    let shot = draw(
+        &mut opened.compositor,
+        &mipped,
+        boxed(80.0, 50.0, 80.0),
+        None,
+        Lighting::Studio,
+    );
+    super::TEXTURE_MEMORY_TEXELS.with(|most| most.set(Some(0)));
+    let unfit = opened.compositor.upload_model(&mipped);
+    super::TEXTURE_MEMORY_TEXELS.with(|most| most.set(None));
+    let uploaded = uploaded.expect("the model uploads");
+    assert_eq!(uploaded.texture_sizes(), [(8, 8)], "two levels left out");
+    assert_near(rgb(&shot, 60, 30), [255, 0, 0], (60, 30));
+    assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
+    assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
+    assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+    assert!(unfit.is_err(), "no level fits");
+}
+
 /// A model's layer drawn again of the same draw is left as it is, its view depth too,
 /// and holds the same pixels (ADR-0244): neither is marked as changed. A new placement,
 /// a material's drive, another sample count, or a write into the layer since, draws it

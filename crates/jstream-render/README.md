@@ -1012,7 +1012,12 @@ four colours a block would bend its normals into steps, and so does a texture wh
 sides aren't whole blocks of 4 (wgpu takes a compressed texture only so), and every
 texture on a device without BC
 (`golden_model_textures_are_block_compressed_but_normal_maps`,
-`a_compressed_block_decodes_near_its_texels`). A vertex is 88
+`a_compressed_block_decodes_near_its_texels`). A texture the GPU has no memory for (an
+out-of-memory error from making it, caught in a scope of its own) is made again without
+its largest level, then the next, until it fits, and a warning says so: the model draws
+a little softer rather than not at all. When not even its 1 × 1 level fits, the upload
+fails with that error
+(`a_texture_short_of_memory_is_uploaded_without_its_largest_levels`). A vertex is 88
 bytes: position, normal, tangent, UV and colour as `f32`s, then four joints as `u16`s
 and four weights.
 
