@@ -503,14 +503,18 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   once. All are live. Its frame is one transparent pixel, and `Source::probe` hands the
   engine its settings, which the item that places it gives a centre (`jstream-core`'s
   README).
-- `audio_input` (a `device` ID; empty follows the system's default input),
-  `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
+- `audio_input` (a `device`, an input device's ID; empty follows the system's default
+  input), `desktop_audio` (a `device`, an output device's ID whose sound it records;
+  empty follows the system's default output) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
   audio and no video, `create` fails with `SourceError::AudioOnly`, and the engine
   records them through the platform's audio I/O from the `AudioTarget` that
   `AudioTarget::of(kind, settings)` reads from their settings (see `jstream-core`'s
-  *Audio sources*). Both settings are free text rather than a list of what is present,
-  so a collection naming an unplugged device still loads.
+  *Audio sources*). Each `device` is a `capture_target` of kind `audio_input` or
+  `audio_output`, so a UI offers the devices `capture.targets` lists to pick from. The
+  settings are still checked as text rather than against what is present, so a
+  collection naming an unplugged device still loads, and a `desktop_audio` saved before
+  it had a `device` follows the default output, as it did.
 - `network_audio` ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)
   §6) is audio-only too: a network sender's audio, recorded by `jstream-core`'s JTunnel
   receiver rather than the platform's audio I/O. `transport` is `jtunnel` (the only one

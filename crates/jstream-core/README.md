@@ -1044,7 +1044,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
-  process ID, a settings change reopening its input, a `browser` page recorded beside
+  process ID, a settings change reopening its input, a `desktop_audio` with a `device`
+  recording that output's loopback (`desktop_audio_with_a_device_records_that_output`),
+  a `browser` page recorded beside
   the defaults and its presets opening once the backend arrives, a `webcam` recording
   its device's paired input beside the defaults (the first device, or by ID), a device
   with no paired input and one not connected unavailable with their reasons, the
@@ -1530,10 +1532,12 @@ audit entry and errors.
   windows, then the video-device backend's devices, each with the formats the engine
   reads of it (uncompressed RGBA, BGRA, NV12 or YUY2, and MJPEG), with no engine lock
   held, since listing windows and devices calls the OS, and the camera controls it can
-  set (`VideoDevices::controls`, since 0.105). A device whose formats or controls can't
+  set (`VideoDevices::controls`, since 0.105), then the audio backend's input devices,
+  then its output devices (`AudioIo::devices`, since 0.195), each marked `primary` when
+  it is the system's default of its direction. A device whose formats or controls can't
   be read is listed without them. With no backends it answers `action_failed`, and so it
-  does when the OS refuses both lists; when one fails, it answers with the other and
-  logs a warning.
+  does when the OS refuses all three lists; when one fails, it answers with the others
+  and logs a warning.
 - **`font.list`** ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) reads the OS's font folders
   (`jstream_sources::installed_fonts`) on the first call, with no engine lock held, and
   keeps the list in `Shared` for the engine's life (`tests/fonts.rs`, with a folder of
@@ -3332,8 +3336,10 @@ for the format the device delivers (`AudioIo::input_format`), adding the mixer i
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`
 with no device records the default input (`AudioInputTarget::DefaultInput`), which
-the platform follows when the default changes; `desktop_audio` records the default
-output's loopback; `app_audio` records process loopback of the running process whose
+the platform follows when the default changes, and one with a device records that
+device (`AudioInputTarget::Input`); `desktop_audio` with no device records the default
+output's loopback (`DefaultOutputLoopback`), followed the same way, and one with a
+device records that output device's loopback (`OutputLoopback`); `app_audio` records process loopback of the running process whose
 executable has the source's `exe` name, ignoring case (of several, one whose parent
 is not one of them, lowest ID first).
 

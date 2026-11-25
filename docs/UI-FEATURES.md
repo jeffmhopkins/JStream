@@ -289,8 +289,10 @@ Spec: [panels › inspector](../design/ui-prototype/spec-panels.md#inspector). T
 Inspector shows only the selected item's placement and behaviour, in tabs (IN-11). The
 source's settings form is in the Properties dialog (DL-02), which the header's
 Properties & filters… button opens (IN-01), on a draft (#1219). In that form, a display or window
-capture's target, and a webcam's device, is picked from a list of the displays, open
-windows or video devices the engine reports (`capture.targets`), not typed as an ID;
+capture's target, a webcam's device, and an audio input's or desktop audio's device,
+is picked from a list of the displays, open windows, video devices or audio input or
+output devices the engine reports (`capture.targets`), not typed as an ID, with the
+system's default first for an audio device;
 a webcam's resolution, frame rate and video format are picked from what that device
 lists, each with "Auto" for the engine's choice, and its camera controls (brightness,
 exposure, white balance, focus and the others the device offers) are sliders with an
