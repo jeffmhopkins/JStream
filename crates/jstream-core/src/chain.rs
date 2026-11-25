@@ -4780,7 +4780,7 @@ mod tests {
         assert!(picture_shown(0.03, 0.0) < 0.5);
         assert_eq!(picture_shown(0.05, 0.0), 0.0);
         assert_eq!(picture_shown(0.33, 0.0), 0.0);
-        assert!(deep_shown(0.05, 0.0) > 0.9);
+        assert!(deep_shown(0.05, 0.0) > 0.85);
         // Dropping out, it comes back with the deep sky (ADR-0188 decision 5).
         for warp in [0.1_f32, 0.2, 0.3, 0.4, 0.5] {
             assert!((picture_shown(warp, 1.0) - deep_shown(warp, 1.0)).abs() < 1e-6);

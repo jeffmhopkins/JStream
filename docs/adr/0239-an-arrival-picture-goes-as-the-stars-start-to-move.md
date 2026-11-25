@@ -9,6 +9,7 @@ tier = "agent"
 # ADR-0239: An arrival picture goes as the stars start to move
 
 <!-- @generated begin adr-status -->
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

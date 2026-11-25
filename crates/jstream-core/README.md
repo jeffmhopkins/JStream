@@ -2334,7 +2334,11 @@ so a warp that follows a channel down fades it in too;
 `a_backdrop_arrives_at_another_picture_after_each_warp`,
 `a_warp_followed_down_picks_its_arrival_as_the_sky_shows`); a warp aimed ahead keeps it
 where it is seen, turned into the sky it lays out (`Arrival::relaid`), so it fades as the
-warp builds;
+warp builds. Going into warp it is gone by 0.05, as the stars start to move, and dropping
+out it comes back with the deep sky (`picture_shown`, passed as each picture's opacity
+over the deep sky's fade, `picture_opacity`;
+[ADR-0239](../../docs/adr/0239-an-arrival-picture-goes-as-the-stars-start-to-move.md),
+`an_arrival_picture_is_gone_as_the_stars_start_to_move`);
 `draw_sky_of` passes its pictures to the backdrop, the upload loop takes the average
 colour of the shown arrival's last picture once per version (`note_picture_mean`, kept in
 `Chains::picture_means`, and kept while another mix or monitored scene draws without
