@@ -63,8 +63,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   `stats.tick`s the same way, since the mock runs no pipeline.
   `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
   the mock makes no frames and reports none, and returns a function that sends the
-  page a `source.size_changed`. `liveSources` routes it to answer `data.list`, `data.get`
-  and `midi.last_controls` from what a test last gave the function it returns, since the
+  page a `source.size_changed`. `liveSources` routes it to answer `data.list`, `data.get`,
+  `midi.last_controls` and `midi.last_notes` from what a test last gave the function it returns, since the
   mock engine hears no DAW and no MIDI. `recordCalls` routes it too, passing everything on, and
   its `sent(type)` lists every edit or action of that type the page has sent, for the
   transition edits the mock engine refuses.
@@ -595,7 +595,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   adds Reset the loudness meter after it; Go live with no stream output says to add one
   and adds nothing; a chip's ✕ unbinds one action and Remove the key. A typed MIDI note
   40 on channel 10 is bound to Switch to Main, and the search finds it by its action
-  and not by another's. Learn isn't driven, since the mock reads no MIDI.
+  and not by another's. With `liveSources` answering `midi.last_notes`, Learn takes the
+  next pad played (note 38 on channel 10 from Pads). + Data trigger's Bitwig preset
+  for a scene launched, from Bitwig, equal to 2, reads itself back and is bound to
+  Switch to Intro; the Mod preset reads Mod 20 as `values.19`, and a level that isn't a
+  number says so and keeps Next off ([ADR-0202](../../../../docs/adr/0202-live-data-triggers-and-note-learn.md)).
 - **Keyframes and hotkeys** (`keyframes.spec.js`): New keyframe on Main's row nests
   "Keyframe 1" under it with the diamond, selected, under the canvas banner, and Main's
   caret folds it away and back; in the keyframe, the eye and the X field write its
@@ -689,8 +693,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
-  readout, sends live values, and commits one `scene.set_camera` with a moved camera as
-  one revision, which one undo puts back. In camera mode the live aim's buttons send no
+  readout and sends live values but no revision, showing the "Unsaved camera" bar
+  (#1809); leaving the scene for Intro and coming back, or Revert, hides it and puts the
+  saved camera's outline back; Save commits one `scene.set_camera` with a moved camera as
+  one revision, which stays after leaving and coming back, and one undo puts back. In camera mode the live aim's buttons send no
   `scene.drive_camera` while the pointer only passes over them; a press on Pan right
   sends pan 12 once, nothing more while the held pointer wanders off the button, and pan
   0 once on release; Space on a focused Tilt up drives tilt once whatever its repeats and
@@ -702,7 +708,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   720-wide viewport clamps the dialog; the Nearest on top check sits in front of its
   text, and the Roll field keeps room for its number.
 - **Fly mode** (`fly.spec.js`): in a scene given a camera, F turns on camera mode and
-  fly mode and the pill reads "fly ×1.00"; W held sends live values and then one
+  fly mode and the pill reads "fly ×1.00"; W held sends live values and shows the
+  "Unsaved camera" bar with no revision, and its Save (as after each step below) sends one
   `scene.set_camera` with the camera and its target moved together toward the canvas;
   Space with D raises it and moves it right while E rolls it (D stays a fly key, not the
   Depth tool); Shift lowers it and R levels the roll (not the Turn tool); a left drag

@@ -10,9 +10,10 @@
 //! the value ([`MapTarget`]). A setting takes one mapping per source and keeps one
 //! override, so Use rewrites the mapping from that source or replaces the override.
 //! Each mapping can be bypassed. A source is never refused for being in use: any
-//! number of settings read one control, Mod, channel or audio level. A key runs one action, so a key maps through a channel
-//! it switches ([`key_edits`]): a second setting mapped to that key follows the same
-//! channel.
+//! number of settings read one control, Mod, channel or audio level. A key is a press,
+//! not a value, so it maps through a channel it switches ([`key_edits`]), and the setting
+//! follows that channel: a second setting mapped to that key follows the same channel. A
+//! key that runs something else keeps doing it and switches the channel too (ADR-0208).
 //!
 //! Docs: docs/UI-FEATURES.md#automation, docs/adr/0178-value-bindings-drive-any-number.md
 
@@ -316,12 +317,12 @@ pub struct KeyMapping<'a> {
     pub starts_on: bool,
 }
 
-/// The edits that map a key onto a setting (ADR-0183 decision 6). A key runs one
-/// action, so it switches a channel and the setting follows that channel between
-/// `ends`. A key that switches a channel already keeps it, and the setting joins what
-/// follows it: one key, many settings. Otherwise a new channel is made, resting at 1
-/// and fading over `fade_ms`, and the key is bound to its switch, in place of whatever
-/// it ran before.
+/// The edits that map a key onto a setting (ADR-0183 decision 6). A key is a press, so
+/// it switches a channel and the setting follows that channel between `ends`. A key
+/// that switches a channel already keeps it, and the setting joins what follows it: one
+/// key, many settings. Otherwise a new channel is made, resting at 1 and fading over
+/// `fade_ms`, and its switch is added to what the key runs, after anything it runs
+/// already (ADR-0208).
 pub fn key_edits(collection: &Collection, map: &KeyMapping<'_>) -> Vec<Edit> {
     if let Some(channel_id) = key_channel(collection, map.chord) {
         return map.target.set(

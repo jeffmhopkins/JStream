@@ -1085,6 +1085,24 @@ h2 .h2-sub { margin-left: 14px; color: var(--muted); font-weight: 400; letter-sp
   white-space: nowrap;
   pointer-events: none;
 }
+/* The Save bar, under the tool bar, while a 3D scene's camera is moved and not saved
+   (#1809). */
+.camera-unsaved {
+  position: absolute;
+  top: 50px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.camera-unsaved-text { color: var(--muted); }
 /* Keyframe rows nest under their scene, with the purple diamond (SC-07). */
 .row.tree-row.keyframe { padding-left: 22px; }
 .tree-icon { display: inline-flex; }
@@ -1583,9 +1601,9 @@ h2 .h2-sub { margin-left: 14px; color: var(--muted); font-weight: 400; letter-sp
 .trigger-buttons { display: inline-flex; gap: 4px; }
 .trigger-new { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--raised); }
 .trigger-new > .settings-check-note { flex-basis: 100%; margin: 0; }
-.midi-trigger-form select { width: auto; }
-.midi-trigger-form input[type="number"] { width: 5.5rem; }
-.midi-trigger-form input[type="text"] { flex: 1 1 8rem; width: auto; }
+.midi-trigger-form select, .data-trigger-form select { width: auto; }
+.midi-trigger-form input[type="number"], .data-trigger-form input[type="number"] { width: 5.5rem; }
+.midi-trigger-form input[type="text"], .data-trigger-form input[type="text"] { flex: 1 1 8rem; width: auto; }
 .action-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; flex: 1 1 100%; }
 .action-picker select { width: auto; max-width: 100%; }
 .action-amount { display: inline-flex; align-items: center; gap: 2px; }

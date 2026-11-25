@@ -22,7 +22,7 @@ pub(crate) const BLOCK: &str = "progress";
 /// Each status, with the label the item table shows for it.
 const STATUSES: &[(&str, &str)] = &[
     ("done", "✅ merged"),
-    ("hardware", "🧪 merged, Windows run pending"),
+    ("hardware", "🧪 merged, {platform} run pending"),
     ("review", "🔍 in review"),
     ("planned", "⏳ planned"),
 ];
@@ -31,9 +31,15 @@ const STATUSES: &[(&str, &str)] = &[
 const NEEDS: &[(&str, &str)] = &[
     ("build", "🔨 build"),
     ("wave", "🌊 its wave lands"),
-    ("hardware", "🧪 Windows run"),
+    ("hardware", "🧪 {platform} run"),
     ("maintainer", "👤 maintainer"),
 ];
+/// The platforms a `hardware` run can be on (an item's `platform`), with the name its
+/// labels give it. The first is the default, for an item that names none.
+const PLATFORMS: &[(&str, &str)] = &[("windows", "Windows"), ("macos", "Mac"), ("linux", "Linux")];
+/// What a label's `{platform}` becomes where no single item's platform applies: the
+/// "What's left" counts, which add up items on any platform.
+const ANY_PLATFORM: &str = "hardware";
 /// The step shown for an unfinished item whose `needs` isn't set yet.
 const UNSET: &str = "unset";
 /// Cells in the progress bar.
@@ -91,6 +97,9 @@ struct Item {
     gate: bool,
     /// The steps still to do before it is `done`, in order (`NEEDS`).
     needs: Vec<String>,
+    /// The name of the platform its `hardware` run is on (`PLATFORMS`), Windows unless
+    /// it names another.
+    platform: &'static str,
 }
 
 impl Item {
@@ -100,7 +109,7 @@ impl Item {
     }
 
     /// The steps it still needs: its `needs`, or for a `hardware` item that lists none,
-    /// its Windows run, or `unset` for another unfinished item that lists none. Empty
+    /// its hardware run, or `unset` for another unfinished item that lists none. Empty
     /// once it is `done`.
     fn steps(&self) -> Vec<&str> {
         match self.status.as_str() {
@@ -351,6 +360,7 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
                 "needs",
                 "release",
                 "gate",
+                "platform",
             ],
             &what,
             &mut errs,
@@ -383,6 +393,20 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
                 ));
             }
         }
+        let platform = match t.get("platform") {
+            None => PLATFORMS[0].1,
+            Some(v) => match PLATFORMS.iter().find(|(id, _)| Some(*id) == v.as_str()) {
+                Some((_, name)) => name,
+                None => {
+                    let names: Vec<&str> = PLATFORMS.iter().map(|(id, _)| *id).collect();
+                    errs.push(format!(
+                        "{what}: `platform` must be one of {}",
+                        names.join(", ")
+                    ));
+                    PLATFORMS[0].1
+                }
+            },
+        };
         let release = match t.get("release") {
             None => None,
             Some(v) => match v.as_str() {
@@ -414,6 +438,7 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
             release,
             gate,
             needs,
+            platform,
             id,
         };
         if let Some(r) = &item.release {
@@ -499,28 +524,33 @@ fn prs(item: &Item) -> String {
     refs(&item.prs)
 }
 
+/// `label` with its `{platform}` named.
+fn on(label: &str, platform: &str) -> String {
+    label.replace("{platform}", platform)
+}
+
 /// The status label of an item.
 fn label(i: &Item) -> String {
     let label = STATUSES
         .iter()
         .find(|(s, _)| *s == i.status)
-        .map_or("", |(_, l)| l);
+        .map_or(String::new(), |(_, l)| on(l, i.platform));
     match &i.note {
         Some(n) => format!("{label}: {}", escape(n)),
         None => label.to_owned(),
     }
 }
 
-/// The status label of a target.
+/// The status label of a target, whose hardware run is on the default platform.
 fn target_label(g: &Target) -> String {
     let label = STATUSES
         .iter()
         .find(|(s, _)| *s == g.status)
-        .map_or("", |(_, l)| l);
+        .map_or(String::new(), |(_, l)| on(l, PLATFORMS[0].1));
     let label = if g.undecided {
         format!("{label}, ❔ this release or the next")
     } else {
-        label.to_owned()
+        label
     };
     match &g.note {
         Some(n) => format!("{label}: {}", escape(n)),
@@ -671,7 +701,7 @@ fn render(p: &Progress) -> String {
     let hardware = p.items.iter().filter(|i| i.status == "hardware").count();
     let _ = writeln!(
         out,
-        "\n{} of {} items are merged; {hardware} of those still wait on a run on Windows hardware.",
+        "\n{} of {} items are merged; {hardware} of those still wait on a run on hardware.",
         p.items.iter().filter(|i| i.merged()).count(),
         p.items.len(),
     );
@@ -715,18 +745,18 @@ fn left(p: &Progress, out: &mut String) {
         out.push_str("\nNothing is left: every item is done.\n");
         return;
     }
-    let label = |s: &str| {
+    let label = |s: &str, platform: &str| {
         NEEDS
             .iter()
             .find(|(n, _)| *n == s)
-            .map_or("❔ not set", |(_, l)| l)
+            .map_or("❔ not set".to_owned(), |(_, l)| on(l, platform))
     };
     let counts: Vec<String> = NEEDS
         .iter()
         .chain([&(UNSET, "❔ not set")])
         .filter_map(|(n, l)| {
             let c = open.iter().filter(|i| i.steps().first() == Some(n)).count();
-            (c > 0).then(|| format!("{l} {c}"))
+            (c > 0).then(|| format!("{} {c}", on(l, ANY_PLATFORM)))
         })
         .collect();
     let _ = write!(
@@ -739,7 +769,11 @@ fn left(p: &Progress, out: &mut String) {
         counts.join(", "),
     );
     for i in open {
-        let steps: Vec<&str> = i.steps().into_iter().map(label).collect();
+        let steps: Vec<String> = i
+            .steps()
+            .into_iter()
+            .map(|s| label(s, i.platform))
+            .collect();
         let _ = writeln!(
             out,
             "| {} | {} | {} | {} | {} | {} |",
@@ -1035,7 +1069,7 @@ needs = ["maintainer"]
             "{r}"
         );
         assert!(
-            r.contains("2 of 4 items are merged; 1 of those still wait"),
+            r.contains("2 of 4 items are merged; 1 of those still wait on a run on hardware."),
             "{r}"
         );
         assert!(
@@ -1055,7 +1089,7 @@ needs = ["maintainer"]
         assert!(r.contains("| A4 | Later | ⏳ planned |  |\n"), "{r}");
         assert!(
             r.contains(
-                "<summary><b>What's left</b>: 3 items, by next step: 🔨 build 1, 🧪 Windows run 1, 👤 maintainer 1</summary>"
+                "<summary><b>What's left</b>: 3 items, by next step: 🔨 build 1, 🧪 hardware run 1, 👤 maintainer 1</summary>"
             ),
             "{r}"
         );
@@ -1076,11 +1110,55 @@ needs = ["maintainer"]
             "{r}"
         );
         assert!(
-            r.contains("🧪 Windows run 1, ❔ not set 1</summary>"),
+            r.contains("🧪 hardware run 1, ❔ not set 1</summary>"),
             "{r}"
         );
         let s = stale(&unset, &[]).join("\n");
         assert!(s.contains("**A4** is `planned` but has no `needs`"), "{s}");
+    }
+
+    /// #1779: a `hardware` item names the platform its run is on, Windows unless it says
+    /// otherwise, and the counts that add up every platform name none.
+    #[test]
+    fn a_hardware_run_names_its_platform() {
+        let linux = DATA_OK.replace(
+            "note = \"Run on Windows\"",
+            "note = \"Run on Linux\"\nplatform = \"linux\"",
+        );
+        let r = render(&parse(&linux).expect("invariant: valid"));
+        assert!(
+            r.contains(
+                "| A2 | Box \\| pipe | 🧪 merged, Linux run pending: Run on Linux | #12 |\n"
+            ),
+            "{r}"
+        );
+        assert!(
+            r.contains("| A2 | Box \\| pipe | M1 | 🧪 Linux run | Run on Linux | #12 |\n"),
+            "{r}"
+        );
+        assert!(
+            r.contains("| A3 | Open | M1 | 🔨 build, then 🧪 Windows run |  | #13 |\n"),
+            "{r}"
+        );
+        assert!(
+            r.contains("🧪 hardware run 1, 👤 maintainer 1</summary>"),
+            "{r}"
+        );
+        let mac = DATA_OK.replace(
+            "note = \"Run on Windows\"",
+            "note = \"x\"\nplatform = \"macos\"",
+        );
+        let r = render(&parse(&mac).expect("invariant: valid"));
+        assert!(r.contains("🧪 merged, Mac run pending: x"), "{r}");
+        let bad = DATA_OK.replace(
+            "note = \"Run on Windows\"",
+            "note = \"x\"\nplatform = \"amiga\"",
+        );
+        let all = parse(&bad).expect_err("invariant: invalid").join("\n");
+        assert!(
+            all.contains("item `A2`: `platform` must be one of windows, macos, linux"),
+            "{all}"
+        );
     }
 
     #[test]

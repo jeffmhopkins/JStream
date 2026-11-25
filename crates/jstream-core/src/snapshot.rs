@@ -1736,6 +1736,31 @@ impl Shot {
         })
     }
 
+    /// The running transition's two end cameras as a frame `elapsed_ms` into it moves
+    /// them (`moving_cameras`), the end it leaves first, or `None` without one, for
+    /// tests (#1797).
+    #[cfg(test)]
+    pub(crate) fn moved_end_cameras(
+        &self,
+        elapsed_ms: i64,
+    ) -> Option<(Option<SceneCamera>, Option<SceneCamera>)> {
+        struct NoCaptures;
+        impl Captures for NoCaptures {
+            fn frame(&self, _: &CaptureKey) -> Option<CaptureFrame<'_>> {
+                None
+            }
+        }
+        let transition = self.transition.as_ref()?;
+        let start = transition.start;
+        let elapsed = MediaTime::new(elapsed_ms, jstream_media::Timebase::MILLIS)
+            .rescale(start.timebase(), Rounding::Nearest)
+            .ok()?;
+        let at = start.checked_add(elapsed).ok()?;
+        let chains = Chains::default();
+        let live = LiveParams::default();
+        Some(moving_cameras((self, transition), &chains, at, (&live, &NoCaptures)).ends)
+    }
+
     /// The cameras the sky backdrops of the running transition's ends, the scene it
     /// leaves's first, are seen through `elapsed_ms` into it, or `None` without one, for
     /// tests.
@@ -2223,7 +2248,6 @@ fn plan_inner(
                 start: running.start,
                 cameras: planner.track_cameras(running, pairs),
             };
-            let family = planner.family(&running.to);
             // Planned again from nothing: the transition's plan left frames, chains,
             // boxes and arrival pictures that the scene at rest plans its own way.
             shot = Shot {
@@ -2235,7 +2259,7 @@ fn plan_inner(
                 ..Shot::default()
             };
             planner.wake = end;
-            planner.glide = family.map(|family| (family, Arc::new(glide)));
+            planner.glide = Some((running.to.clone(), Arc::new(glide)));
             planner.appearing = Some((running.to.clone(), fades));
         } else if end.is_some_and(|end| now < end) {
             finished = false;
@@ -2738,8 +2762,9 @@ struct Planner<'a, 'f> {
     quiet: bool,
     /// The show scene and its items fading on their own, set while it is planned.
     fades: Option<(&'a SceneId, &'a ShowFades)>,
-    /// The family whose camera glides, and along what, while a Move moves only its
-    /// camera (ADR-0226): every camera of that family planned meanwhile carries it.
+    /// The scene whose camera glides, and along what, while a Move moves only its
+    /// camera (ADR-0226): the scene the Move goes to, which a mix of that scene shares.
+    /// Another scene of its family a mix shows keeps its own camera (ADR-0244, #1801).
     glide: Option<(SceneId, Arc<CameraGlide>)>,
     /// The program scene and its items that appear or go where they are, while a Move
     /// that draws it as it is runs (ADR-0237): each fades in the scene's own pass as
@@ -2843,7 +2868,7 @@ impl<'a> Planner<'a, '_> {
         let glide = self
             .glide
             .as_ref()
-            .filter(|(glides, _)| *glides == family)
+            .filter(|(glides, _)| glides == id)
             .map(|(_, glide)| Arc::clone(glide));
         (own.is_some() || parent.is_some() || supplied.is_some()).then_some(PassCamera {
             own,

@@ -1423,7 +1423,7 @@ and no sync timeouts. Every output decoded. `event` kept the render tick's own w
 p50 of about 0.5 ms, where `completion` blocked it for 8 to 55 ms; at load 1024 `event`
 dropped 36 to 57 frames per 20 s to a full ring instead. A paravirtual GPU's
 timings say nothing about real Apple Silicon. There is no Mac hardware to run on, so CI's
-macOS runners are the test bed. Three things they can't show stay untested: those
+macOS runners are the test bed ([ADR-0243](adr/0243-the-macos-gpu-spike-runs-on-ci-macos-runners.md)). Three things they can't show stay untested: those
 timings, whether holding webcam buffers starves AVFoundation's pool, and whether
 VideoToolbox still reads a target the ring rewrites (its own retain isn't counted).
 

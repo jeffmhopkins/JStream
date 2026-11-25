@@ -208,7 +208,8 @@ Contents ([Design](#design) explains the choices):
   release, tested natively.
 - **Keys and MIDI triggers** (`bindings.rs`, `panels/triggers.rs`,
   [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)): `bindings.rs`
-  is pure and tested natively. `When` is a key chord or a MIDI `Trigger` with its label
+  is pure and tested natively. `When` is a key chord or a MIDI or live-data `Trigger`
+  with its label
   and the edits that bind or unbind an action on it; `rows` lists every chord and
   trigger with the actions it runs, in order (`Collection::bindings` beside the
   hotkeys), `filtered` finds rows by their words and `describe` names an action in
@@ -219,10 +220,15 @@ Contents ([Design](#design) explains the choices):
   is the show's and the bookmark's ids joined by a newline, or go to bookmark 1 to 8 by
   order (ADR-0210); the Overlays picks show, hide or toggle a scene over program.
   `add_edits` skips actions a row runs already and `in_use` says what a chord runs.
+  `DataPreset` and `data_trigger` turn the data trigger form into a `Trigger::Data`
+  (ADR-0202): a Bitwig scene selected or launched, a Mod rising to a level, or any key
+  and field, checked as the engine checks it.
   `panels/triggers.rs` holds the components: `KeysAndMidi`, Settings › Keys & MIDI;
   `TriggerList`, the rows with a chip per action; `ActionPicker`, which adds an action
-  to a `When`; and `MidiTriggerForm`, a typed trigger or one Learn fills from
-  `midi.last_controls`. Each is public so another panel can show the same list.
+  to a `When`; `MidiTriggerForm`, a typed trigger or one Learn fills from the next pad
+  played or control moved (`midi.last_notes`, `midi.last_controls`); and
+  `DataTriggerForm`, a live-data trigger from a preset. Each is public so another panel
+  can show the same list.
 - **Menus, dialogs and icons**: `chrome.rs` (the browser's own right-click menu and text
   selection, kept to text fields and readable text), `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
@@ -1101,10 +1107,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`PanelId::Mappings`, in the bottom dock from the View menu) shows everything that is
   mapped. `mapping_index::readers` lists every reader of a source wherever it is held
   (a channel's `inputs`, a value binding, an item's `motion` as each scene shows it, a
-  keyframe's only where it differs from its parent's, and a camera's `camera_motion`),
-  and `rows` groups them by what drives them: each channel with what sets it (its inputs,
-  the keys and `bindings` whose action switches, sets or nudges it, the sequences with a
-  lane on it) and everything that follows it or that it scales (`amount`), then each MIDI
+  keyframe's only where it overrides that item's motion, every row of the override even
+  one equal to its parent's, and a camera's `camera_motion`), and `rows` groups them by
+  what drives them: each channel with what sets it (its inputs, the keys and `bindings`
+  whose action switches, sets or nudges it, each once however many of its actions they
+  run, the sequences with a lane on it) and everything that follows it or that it scales (`amount`), then each MIDI
   control or data field read directly, all of its readers under it. A channel whose only
   input is one Mod (`named_mod`) is that Mod's name and is shown once, as "Camera roll
   (Mod 20)". The **Mappings** tab draws them as a table: the source, its live value
@@ -1140,7 +1147,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sequence, then a range, `TimelineLoop::Range`, whose ends `fit_range` keeps within the
   length and shaded on the ruler), sets its length and adds a lane by `AddLaneSearch`: the
   channels, then the scene's settings and switches (`lane_offers::offers`, from the
-  sources' and filters' kind descriptors it reads as it opens), a setting picked making a
+  sources' and filters' kind descriptors it reads as it opens, with each audio source's
+  mute and each item's visibility, ADR-0207, as switches), a setting picked making a
   channel it follows (`learn::follows`) unless it follows one already, in the same batch
   as the lane; its trigger bar shows `starts` and `stops` as sentences
   (`trigger_text`) and each group's "+ Trigger" opens an editor beside it for each kind,
@@ -2183,13 +2191,19 @@ each time its scene changes.
   each box's on-screen bounds. Alt-drag orbits the camera about its target (0.3° per
   screen pixel, at most 85° above or below it, or on the side a typed camera is
   already past 85°, no further than it is) and Alt+Shift-drag dollies it
-  (`exp(0.005 × px)`, no closer than 10 px): the drag shows the camera on the overlay
-  and on output through the gesture's `live.set` of `scene.set_camera`, and the drop
-  commits one `scene.set_camera` with `ends_gesture`, so the orbit is one undo step.
-  The drag keeps the scene it started on (`Action::Orbit.scene`), and the overlay keeps
-  the dragged camera with it (`camera::Preview`) until the collection has it, showing it
-  in no other scene; a drag that ends with another scene shown is dropped, not
-  committed (`Preview::to_commit`). In place of the
+  (`exp(0.005 × px)`, no closer than 10 px). Moving the camera is not an edit (#1809):
+  the move shows on the overlay (`camera::Preview`) and on output through one live
+  gesture's `live.set` of `scene.set_camera`, held open across drags, wheel turns and
+  flights (`Held`, with its `camera::Unsaved`: the scene and its stored camera when the
+  first move started), and the drop keeps it unsaved. While it is, a Save bar sits
+  under the tool bar: Save commits one `scene.set_camera` with `ends_gesture` (on a
+  keyframe scene its override), so every move since the last save is one undo step, and
+  shows it until the collection has it; Revert ends the gesture with `live.cancel`.
+  Leaving the scene, the canvas going away, or the scene's stored camera changing
+  elsewhere (Properties, an undo, another client) cancels it the same way
+  (`Unsaved::stale`), so the saved camera shows again. Esc during a drag puts the camera
+  back where the drag started (`Unsaved::back_to_base`). The drag keeps the scene it
+  started on (`Action::Orbit.scene`) and moves nothing once another scene is shown. In place of the
   selection chrome, a pill reads the camera's position, distance to its target and
   field of view.
 - **3D tools and camera mode** (`camera.rs`). The Depth and Turn tools (and Ctrl-drag)
@@ -2202,11 +2216,11 @@ each time its scene changes.
   Shift to the dolly; `camera::pan` slides camera and target along the view's right and
   down axes, scaled by the target's distance over the focal length so its plane follows
   the pointer. The wheel goes through `camera::wheel`: `zoom` scales `fov_deg` by
-  `exp(0.001 × deltaY)` within 1° to 170°, or a dolly of `0.2 × deltaY`; a turn opens its
-  own live gesture (`Wheeling`) and commits as an orbit's drop does once no wheel event
-  came for `WHEEL_SETTLE`, or at once when a drag starts. Camera mode and the item tool are left when the canvas shows a 2D scene. The bindings are kept in
+  `exp(0.001 × deltaY)` within 1° to 170°, or a dolly of `0.2 × deltaY`, unsaved as an
+  orbit is. Camera mode and the item tool are left when the canvas shows a 2D scene. The bindings are kept in
   `localStorage` (`CameraControls::stored`). Save view batches `scene.create_variant`
-  and `scene.set_camera` for a new keyframe scene with the shown camera. After it, the
+  and `scene.set_camera` for a new keyframe scene with the shown camera, and selecting it
+  leaves the shown scene's unsaved move behind. After it, the
   live aim (`live_aim.rs`, `LiveAim`): pan, tilt and zoom buttons send
   `scene.drive_camera` for their axis alone while held and 0 on release, Home sends
   `scene.aim_camera` to the stored camera, and a readout reads `scene.camera_aim` every
@@ -2225,8 +2239,8 @@ each time its scene changes.
   (`fly::rescale`; the plain wheel zooms), each frame no longer than `MAX_STEP_S`. A left press locks the pointer
   on the canvas area, and pointer moves (`movementX`, `movementY`) turn the camera through
   `fly::look`; unlocked, a left drag does. Both go through the canvas's `turn_camera`,
-  which the wheel uses too: the camera live on output through one `Wheeling` gesture,
-  committed as one undo step once it rests for `WHEEL_SETTLE`. Shift is `Move::Sink`,
+  which the wheel uses too: the camera unsaved and live on output, as an orbit's is.
+  Shift is `Move::Sink`,
   apart from Z's `Move::Down`: once Shift+wheel shows it is a modifier, it sinks nothing
   until released, and the camera goes back to where Shift found it if only Shift had
   moved it since. Fly mode ends with camera mode, letting the keys and the pointer go.

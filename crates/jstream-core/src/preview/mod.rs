@@ -88,7 +88,7 @@ pub(crate) use draft::plan as plan_draft;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
@@ -1019,6 +1019,10 @@ struct SharedEncode {
     divisor: u32,
     size: FrameSize,
     fps: u32,
+    /// How many streams send its packets: the [`Staged`]s holding it. A stream moves it
+    /// with `preview.show` only while it is the one (#1807). The `Arc`'s strong count
+    /// can't say: anything reading the open sessions holds one for a moment.
+    streams: AtomicUsize,
     /// Which session this is, unique per process, for tests of what reopens.
     #[cfg(test)]
     serial: u64,
@@ -1046,6 +1050,12 @@ impl SharedEncode {
         self.session.request_keyframe();
     }
 }
+
+/// Open sessions held by a test ([`SharedEncodes::hold`]) until it is dropped.
+#[cfg(test)]
+pub(crate) struct HeldEncodes(
+    #[allow(dead_code, reason = "held only to be dropped")] Vec<Arc<SharedEncode>>,
+);
 
 /// The [`SharedEncode`]s open on a program stage, which owns this list.
 #[derive(Default)]
@@ -1089,6 +1099,13 @@ impl SharedEncodes {
             .filter_map(Weak::upgrade)
             .map(|encode| (encode.serial, lock(&encode.scene).clone()))
             .collect()
+    }
+
+    /// A hold on every open session, as anything that reads them takes for a moment,
+    /// for tests that a reader never changes what `preview.show` does (#1807).
+    #[cfg(test)]
+    pub(crate) fn hold(&self) -> HeldEncodes {
+        HeldEncodes(lock(&self.0).iter().filter_map(Weak::upgrade).collect())
     }
 
     /// How many sessions are open, for tests.
@@ -1198,6 +1215,7 @@ impl Staged {
                     },
                     size,
                     fps,
+                    streams: AtomicUsize::new(0),
                     hardware,
                 });
                 encodes.add(&session);
@@ -1218,6 +1236,8 @@ impl Staged {
                 })
                 .map_err(|err| format!("starting the preview sender: {err}"))?
         };
+        // Counted once the stream holds it, so a failed open leaves no count behind.
+        session.streams.fetch_add(1, Ordering::AcqRel);
         Ok(Self {
             session: Some(session),
             sender: Some(sender),
@@ -1292,7 +1312,7 @@ impl Staged {
         let Some(session) = self.session.as_ref() else {
             return false;
         };
-        let alone = Arc::strong_count(session) == 1;
+        let alone = session.streams.load(Ordering::Acquire) == 1;
         if !alone
             || stage
                 .preview_encodes()
@@ -1329,9 +1349,11 @@ impl Drop for Staged {
         // (`PACKET_WAIT`).
         // A picture stream's sender (no session) sees `closing` within its longer wait
         // and ends by itself; joining it would hold the hub up for that wait.
-        if self.session.take().is_none() {
+        let Some(session) = self.session.take() else {
             return;
-        }
+        };
+        session.streams.fetch_sub(1, Ordering::AcqRel);
+        drop(session);
         if let Some(sender) = self.sender.take()
             && sender.join().is_err()
         {

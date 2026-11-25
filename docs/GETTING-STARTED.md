@@ -137,6 +137,9 @@ adds, which makes soft glows and veils brighter.
    Shift down, Q and E roll the camera and R levels it again, a click lets the mouse
    turn the camera, the wheel zooms, and Shift+wheel sets the speed, which starts from
    the size of the scene. Enter saves the view. Esc leaves fly mode, then camera mode.
+   Moving the camera only looks around: once it moves, a bar under the tool bar offers
+   **Save**, which keeps the new camera for the scene, and **Revert**. Leave the scene
+   without saving and its saved camera comes back.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.
 5. To show a scene, click its row in **Scenes**: it goes on program, and the red
@@ -237,7 +240,8 @@ At show time switch to **Run**, press **▶ Play show**, and press **Continue** 
 bookmark. The run of show lists the bookmarks, and a click on one goes there at once.
 To run it from keys or a pad controller, open **File › Settings… › Keys & MIDI**, add a
 key or MIDI trigger, and give it **Continue the show**, or **Go to bookmark 1 to 8** with
-a number for each of a row of pads. An agent can build and run a show too; ask it to
+a number for each of a row of pads. To follow Bitwig over JTunnel instead, add a **Data
+trigger** such as "a scene launched on any track" and give it a bookmark. An agent can build and run a show too; ask it to
 rehearse first, since playing a show switches program.
 
 <a id="vcam"></a>

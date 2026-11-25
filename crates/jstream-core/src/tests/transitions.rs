@@ -1148,6 +1148,68 @@ fn an_item_shown_on_a_moving_3d_camera_moves_the_screen_with_it() {
     );
 }
 
+/// #1797: the held screen of a by-item Move is moved from the time the shown end is
+/// (`held`), not left at its modifiers' start. With a camera modifier on the `shown`
+/// clock the two differ, so both ends being the same camera mid-Move pins that time.
+#[test]
+fn a_held_screen_moves_from_the_time_its_shown_end_does() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let sway = jstream_protocol::CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
+        modifier_id: "sway".into(),
+        property: jstream_protocol::CameraProperty::Roll,
+        kind: jstream_protocol::MotionKind::Drift {
+            rate_per_s: jstream_protocol::Finite32::ONE,
+            wrap: None,
+        },
+        clock: jstream_protocol::MotionClock::Shown,
+        enabled: true,
+        amount: None,
+    };
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(camera_at(900.0))),
+            Edit::SceneSetCameraMotion {
+                scene_id: SceneId::new("a"),
+                motion: vec![sway],
+            },
+            add("a", "a2", "green"),
+            Edit::ItemSetVisible {
+                item_id: jstream_protocol::ItemId::new("a2"),
+                scene_id: None,
+                visible: false,
+            },
+            preset("move", "move", 400),
+            Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("move"),
+            },
+        ]),
+    )
+    .expect("a 3D scene whose camera sways from when it is shown");
+    switch(&control, "a", None).expect("to a");
+    clock.advance(1_000_000);
+    engine.replan();
+    let action = Action::ItemShow {
+        item_id: jstream_protocol::ItemId::new("a2"),
+        scene_id: None,
+    };
+    block_on(control.call(Call::Action { action })).expect("show a2");
+    let hub = engine.render_hub();
+    let shot = hub.load();
+    let shot = shot.shot();
+    assert_eq!(shot.held_camera_moves(), Some(true), "a held screen");
+    let (from, to) = shot.moved_end_cameras(200).expect("a Move runs");
+    let (from, to) = (from.expect("a held end"), to.expect("a shown end"));
+    let at_rest = shot
+        .moved_end_cameras(0)
+        .and_then(|(_, to)| to)
+        .expect("a shown end");
+    assert_ne!(to, at_rest, "the shown end sways on its shown clock");
+    assert_eq!(from, to, "the held end sways from the same time");
+}
+
 /// A scene with a video chain is one picture in a transition (ADR-0065 §6), drawn by its
 /// own camera: a Fade into or out of a 3D one draws that picture flat, through no camera,
 /// so it isn't seen through its camera a second time.

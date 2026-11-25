@@ -554,8 +554,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   distance transform of the fill, so its cost doesn't grow with its width. Fill, outline
   and background are blended on sRGB values, not in linear light. The frame must fit
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 4
-  more with an outline and 8 more with a shadow) within `max_decoded_bytes`; otherwise `create` or `update` fails
-  naming `text`. It draws at a density (as `timer` does, the same way)
+  more with an outline and 8 more with a shadow) within `max_decoded_bytes`, and its
+  glyphs, each rasterised over its own box, may draw at most `RASTER_PER_PIXEL` (8)
+  raster pixels for each frame pixel, or `MIN_RASTER` (4 Mi) in all on a smaller frame,
+  so a font whose every glyph spans the frame can't take seconds to draw (#1790; its
+  test font, `tests/data/huge-glyphs.ttf`, is a damaged copy of the bundled Roboto
+  subset); otherwise `create` or `update` fails naming `text`. It draws at a density (as `timer` does, the same way)
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)):
   `set_density(d)` draws the same layout with every length (the em size, the glyphs'
   positions, the outline, the padding, the shadow) multiplied by `d`, so the frame has `d` times the
