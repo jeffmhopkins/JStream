@@ -1483,13 +1483,25 @@ impl State {
             }
             Action::StudioSetRendering { change } => {
                 if let Some(percent) = change.model_resolution
-                    && !jstream_protocol::MODEL_RESOLUTIONS.contains(&percent)
+                    && percent != 0
+                    && !jstream_protocol::MODEL_RESOLUTION_RANGE.contains(&percent)
                 {
                     return Err(ProtocolError::invalid_argument(
                         "model_resolution",
                         format!(
-                            "3D models are drawn at one of {:?} percent (0 chooses), not {percent}",
-                            jstream_protocol::MODEL_RESOLUTIONS
+                            "3D models are drawn at 0 (the engine chooses) or {:?} percent, not {percent}",
+                            jstream_protocol::MODEL_RESOLUTION_RANGE
+                        ),
+                    ));
+                }
+                if let Some(percent) = change.min_model_resolution
+                    && !jstream_protocol::MODEL_RESOLUTION_RANGE.contains(&percent)
+                {
+                    return Err(ProtocolError::invalid_argument(
+                        "min_model_resolution",
+                        format!(
+                            "the engine lowers 3D models to no less than {:?} percent, not {percent}",
+                            jstream_protocol::MODEL_RESOLUTION_RANGE
                         ),
                     ));
                 }
@@ -6797,7 +6809,8 @@ mod tests {
 
     /// A keyframe scene can't turn its own reflections on (ADR-0170 decision 2), and
     /// `studio.set_rendering` takes only a probe size of `PROBE_RESOLUTIONS`, steps of
-    /// `SCREEN_SPACE_STEPS` and a model size of `MODEL_RESOLUTIONS`, as the engine does.
+    /// `SCREEN_SPACE_STEPS` and a model size of 0 or `MODEL_RESOLUTION_RANGE`, as the
+    /// engine does.
     #[test]
     fn reflections_and_the_probe_cap_are_refused_as_the_engine_does() {
         let engine = MockEngine::new();
@@ -6853,9 +6866,13 @@ mod tests {
                 ..jstream_protocol::RenderFeaturesChange::default()
             },
         };
-        let refused = action(&*control, models(80)).expect_err("not a size");
+        let refused = action(&*control, models(40)).expect_err("not a size");
         assert_eq!(code(&refused), Some("invalid_argument"));
         assert!(action(&*control, models(75)).is_ok());
+        assert!(
+            action(&*control, models(92)).is_ok(),
+            "any whole percentage"
+        );
         assert!(action(&*control, models(0)).is_ok());
     }
 

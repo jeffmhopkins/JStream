@@ -404,9 +404,13 @@ Contents ([Design](#design) explains the choices):
   line and an (i), then a Probe resolution select (Up to 128, 256 or 512 px,
   `max_probe_resolution`, sent with `probe_cap`) and a Reflection quality select (Low,
   Medium or High: 16, 32 or 64 steps, `screen_space_steps`, sent with
-  `reflection_steps`) and a 3D model resolution select (Automatic, Full, 85%, 75%, 67%
-  or 50%, `model_resolution`, sent with `model_resolution`,
-  [ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)). It reads the switches with
+  `reflection_steps`), a 3D model resolution select (Automatic or Fixed, with a
+  percentage field from 50 to 100 in steps of 1 beside Fixed, `model_resolution`, sent
+  with `model_resolution`; choosing Fixed starts it at 100,
+  [ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md))
+  and a Lowest automatic resolution field (50 to 100 in steps of 1, disabled while the
+  size is fixed, `min_model_resolution`, sent with `min_model_resolution`). A typed
+  percentage is rounded and held to `MODEL_RESOLUTION_RANGE` (`typed_percent`). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an
   engine that reports no `rendering` (older than 0.147) gets a line saying it has none.

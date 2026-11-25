@@ -863,7 +863,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   on app-wide, caps the
   probes' face size, sets the screen-space steps, and since 0.178 says how many pixels
   3D models are drawn with or leaves that to the engine
-  ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
+  ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)), and
+  since 0.194 the smallest size the engine may lower them to.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the

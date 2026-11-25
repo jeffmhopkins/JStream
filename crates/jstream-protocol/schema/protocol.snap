@@ -617,8 +617,17 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "min_model_resolution": {
+              "description": "The smallest size the engine may lower 3D models to while it chooses, a whole\npercentage in [`MODEL_RESOLUTION_RANGE`], or left out to keep it (since\n0.194). `studio.set_rendering` refuses any other value.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "model_resolution": {
-              "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+              "description": "How many pixels 3D models are drawn with, 0 to let the engine choose or a whole\npercentage in [`MODEL_RESOLUTION_RANGE`] (one of [`MODEL_RESOLUTIONS`] until\n0.194), or left out to keep it (since 0.178). `studio.set_rendering` refuses any\nother value.",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -17139,9 +17148,16 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "min_model_resolution": {
+          "default": 50,
+          "description": "The smallest size the engine may lower 3D models to while it chooses\n(`model_resolution` 0), as a percentage of their canvas's width and of its height\n(since 0.194): any whole percentage in [`MODEL_RESOLUTION_RANGE`]. 50, the\ndefault, lets it use every size it has; 100 keeps them whole. A size between two\nof [`MODEL_RESOLUTIONS`] is the last one it steps down to. A fixed\n`model_resolution` is drawn as set, whatever this is.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "model_resolution": {
           "default": 0,
-          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.178): one of [`MODEL_RESOLUTIONS`]. 0, the\ndefault, lets the engine choose, lowering it while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size.",
+          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.178): 0, the default, lets the engine choose,\nlowering it through [`MODEL_RESOLUTIONS`] while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size. Until\n0.194 a fixed size was one of [`MODEL_RESOLUTIONS`]; since, it is any whole\npercentage in [`MODEL_RESOLUTION_RANGE`].",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -20849,5 +20865,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.193"
+  "title": "JStream protocol 0.194"
 }
