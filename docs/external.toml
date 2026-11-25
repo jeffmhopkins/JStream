@@ -229,6 +229,14 @@ status = "unverified"
 checked_note = "Release v0.21.14's linux binary built jstream-ui with a wasm-bindgen 0.2.129 CLI on PATH; the page itself was not reachable from the session"
 
 [[external]]
+id = "cargo-nextest"
+url = "https://github.com/nextest-rs/nextest"
+relied_on = "cargo-nextest's release cargo-nextest-0.9.151-x86_64-pc-windows-msvc.zip (SHA-256 ba35ee0c…6efb) holds cargo-nextest.exe; `cargo nextest archive` packs the workspace's test binaries under target/ with target/nextest/binaries-metadata.json and cargo-metadata.json, `run --binaries-metadata --cargo-metadata` runs them without building, `--partition count:N/M` takes a share of them, and a test group with max-threads = 1 runs its tests one at a time, each test in its own process (ADR-0248)"
+review_every = "180d"
+status = "ok"
+checked_note = "Downloaded the release zip and checked its SHA-256 and contents; read the cargo-nextest-0.9.151 tag's source for the archive's target/ layout and metadata file names (reuse_build), the --binaries-metadata and --cargo-metadata flags, the count: partition and test groups' max-threads"
+
+[[external]]
 id = "cargo-fuzz-book"
 url = "https://rust-fuzz.github.io/book/cargo-fuzz.html"
 relied_on = "cargo-fuzz is installed with `cargo install cargo-fuzz`, needs a nightly toolchain, and runs a target with `cargo fuzz run <target>` (fuzz/README.md)"

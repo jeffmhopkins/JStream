@@ -1,0 +1,19 @@
+# cargo-nextest's settings. CI's Windows `test` job runs the workspace's tests with nextest,
+# split across runners (after-review.yml, ADR-0248). `cargo test` doesn't read this file.
+
+# One GPU test at a time on a runner. The packages below open compositors on WARP or
+# lavapipe, and each serializes its GPU tests inside its own test binary (`gpu_lock`,
+# `one_gpu_test_at_a_time`). nextest runs every test in its own process, so those locks no
+# longer order them: this group does, across the packages too, as `cargo test` did by
+# running one binary at a time. Their other tests are in the group as well.
+[test-groups]
+gpu = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'package(=jstream-render) | package(=jstream-core) | package(=jstream-effects) | package(=jstream-encode) | package(=jstream-daemon)'
+test-group = 'gpu'
+
+# CI: every failure is reported, each one's output as it happens and again at the end.
+[profile.ci]
+fail-fast = false
+failure-output = "immediate-final"

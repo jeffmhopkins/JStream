@@ -63,9 +63,11 @@ jobs:
 
             // ADR-0054: once review passes, run after-review.yml (Windows clippy and tests,
             // ui-e2e, macOS) on the PR's branch. It skips the dispatch if a
-            // `test (windows-latest)` run for the head SHA is queued, running or passed; one that
-            // failed or was cancelled is dispatched again. A failed dispatch (e.g. a branch
-            // without after-review.yml) is logged; merging main fixes it.
+            // `test (windows-latest)` run for the head SHA is queued, running or passed, or if
+            // an after-review run for it is still queued or running: that job starts only once
+            // the test shards it waits on finish (ADR-0248), and a second dispatch would cancel
+            // the run. One that failed or was cancelled is dispatched again. A failed dispatch
+            // (e.g. a branch without after-review.yml) is logged; merging main fixes it.
             const dispatchAfterReview = async () => {
               // ADR-0055, ADR-0231: a PR into any branch but main (a wave, a train, a stack) gets
               // no platform run; that branch's own PR into main does. A PR retargeted to main is
@@ -76,6 +78,12 @@ jobs:
               });
               const live = runs.check_runs.some((r) => r.status !== 'completed' || r.conclusion === 'success');
               if (live) return core.info('after-review jobs already queued, running or passed for this SHA');
+              const { data: started } = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: 'after-review.yml', head_sha: head, per_page: 20,
+              });
+              if (started.workflow_runs.some((r) => r.status !== 'completed')) {
+                return core.info('an after-review run is already queued or running for this SHA');
+              }
               if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
                 return core.warning('PR branch is in a fork: after-review jobs not dispatched');
               }
