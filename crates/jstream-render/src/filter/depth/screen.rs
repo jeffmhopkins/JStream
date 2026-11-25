@@ -85,7 +85,7 @@ impl ScreenReflections {
 
 impl Pass for ScreenReflections {
     /// Timed as packs are: the guard draws the 3D extras cheaper when it runs too long
-    /// (ADR-0245).
+    /// (ADR-0247).
     fn timed(&self) -> Option<&str> {
         Some(KIND)
     }

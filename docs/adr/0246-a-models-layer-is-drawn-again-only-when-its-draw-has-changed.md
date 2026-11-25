@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0244"
+id = "ADR-0246"
 title = "A model's layer is drawn again only when its draw has changed"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0244: A model's layer is drawn again only when its draw has changed
+# ADR-0246: A model's layer is drawn again only when its draw has changed
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

@@ -246,7 +246,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0240](0240-no-cue-shows-through-an-item-that-covers-the-canvas.md) | No cue shows through an item that covers the canvas | accepted | agent |  |
 | [ADR-0241](0241-a-floor-for-the-model-size-and-any-whole-percentage.md) | The engine's choice of model size has a floor, and a fixed size is any whole percentage | accepted | agent |  |
 | [ADR-0242](0242-3d-models-are-drawn-multisampled.md) | 3D models are drawn multisampled | accepted | agent |  |
-| [ADR-0243](0243-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md) | A GPU short of time draws 3D extras cheaper before it draws fewer pixels | accepted | agent |  |
-| [ADR-0244](0244-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md) | A model's layer is drawn again only when its draw has changed | accepted | agent |  |
-| [ADR-0245](0245-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md) | A 3D extra that runs too long holds the extras at their cheapest | accepted | agent |  |
+| [ADR-0245](0245-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md) | A GPU short of time draws 3D extras cheaper before it draws fewer pixels | accepted | agent |  |
+| [ADR-0246](0246-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md) | A model's layer is drawn again only when its draw has changed | accepted | agent |  |
+| [ADR-0247](0247-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md) | A 3D extra that runs too long holds the extras at their cheapest | accepted | agent |  |
 <!-- @generated end adr-index -->

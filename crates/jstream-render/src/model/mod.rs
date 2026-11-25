@@ -132,7 +132,7 @@ struct Uploaded {
     /// [`crate::Compositor::pose_model`] writes, its bind group and its slot count.
     pose: Option<(wgpu::Buffer, wgpu::BindGroup, usize)>,
     /// The palette last written to `pose`, and how many times it has changed: a draw
-    /// of the same pose can leave a layer as it is (ADR-0244).
+    /// of the same pose can leave a layer as it is (ADR-0246).
     posed: Mutex<(Vec<u8>, u64)>,
     /// The material bind groups of its last draw with a live texture (ADR-0107
     /// decision 5), kept while that texture and the material it replaces stay the same,
@@ -143,7 +143,7 @@ struct Uploaded {
     formats: Vec<(wgpu::TextureFormat, (u32, u32))>,
 }
 
-/// What a model's layer was drawn of (ADR-0244): everything its pixels depend on, so a
+/// What a model's layer was drawn of (ADR-0246): everything its pixels depend on, so a
 /// draw asked for again of the same is left as the layer holds it. Compared as it is,
 /// not hashed, so two different draws never compare equal.
 #[derive(Default)]
@@ -792,7 +792,7 @@ pub(crate) struct ModelRuntime {
     /// Blended primitives in the order they draw, kept to reuse the allocation.
     order: Vec<(f64, usize)>,
     /// What each layer a model was last drawn into was drawn of, to leave it as it is
-    /// when asked for the same draw again (ADR-0244).
+    /// when asked for the same draw again (ADR-0246).
     kept: Vec<Kept>,
     /// The draw being asked for, filled in place each draw.
     asked: Kept,
@@ -1371,7 +1371,7 @@ impl ModelRuntime {
                 .unwrap_or_else(PoisonError::into_inner);
             let (bytes, changes) = &mut *posed;
             // The same pose again writes nothing, so a layer drawn of it can be kept
-            // (ADR-0244).
+            // (ADR-0246).
             let same = bytes.len() == palette.len() * 64
                 && bytes
                     .chunks_exact(4)
@@ -1988,7 +1988,7 @@ impl ModelRuntime {
                 probe.as_ref(),
             ),
         );
-        // A layer that still holds this very draw is left as it is (ADR-0244).
+        // A layer that still holds this very draw is left as it is (ADR-0246).
         let keeps = matches!(how, DrawAs::Layer | DrawAs::LayerWithSurface(_));
         if keeps {
             let mut asked = std::mem::take(&mut self.asked);
@@ -2262,7 +2262,7 @@ impl ModelRuntime {
     }
 
     /// Remembers that `target`, with its view depth and the surface layers of `how`,
-    /// now holds the draw [`Self::asked`] describes (ADR-0244).
+    /// now holds the draw [`Self::asked`] describes (ADR-0246).
     fn keep(&mut self, target: &Image, view_depth: Option<&Image>, how: &DrawAs<'_>) {
         self.kept.retain(|kept| kept.target.strong_count() > 0);
         let mut asked = std::mem::take(&mut self.asked);
@@ -2641,7 +2641,7 @@ impl ModelRuntime {
     }
 
     /// Makes the layer's pipelines at the sample count set and at one sample, which a
-    /// GPU short of time draws with (ADR-0243), ahead of the first draw that needs them.
+    /// GPU short of time draws with (ADR-0245), ahead of the first draw that needs them.
     pub(crate) fn warm(&mut self, gpu: &Gpu) {
         self.pipelines_at(gpu, 1);
         self.pipelines_at(gpu, self.samples);

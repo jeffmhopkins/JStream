@@ -11,7 +11,7 @@
 //! extra (`ambient_occlusion`, `volumetric_fog`, `screen_space_reflections`) is timed
 //! too, under its kind, which has no `/`: one reported is not quarantined, but taken by
 //! the render thread ([`PassGuard::take_built_in`]), which holds the 3D extras at their
-//! cheapest for the rest of the run (ADR-0245). On a GPU without timestamp queries
+//! cheapest for the rest of the run (ADR-0247). On a GPU without timestamp queries
 //! nothing is timed, and a device loss is the only guard.
 
 use std::time::Duration;
@@ -200,7 +200,7 @@ mod tests {
         );
     }
 
-    /// ADR-0245: a built-in kind that ran too long is taken by `take_built_in`, not
+    /// ADR-0247: a built-in kind that ran too long is taken by `take_built_in`, not
     /// `take`, which the engine quarantines by; a pack's is the other way round.
     #[test]
     fn a_built_in_kind_is_taken_apart_from_a_packs() {

@@ -687,7 +687,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   thread converts and publishes the frames the render thread sends it through a tap
   (`runtime/vcam.rs`). The render thread's GPU-time guard quarantines an effect-pack
   kind whose pass runs too long (`runtime/pass_guard.rs`, #349; see *Runtime*), and
-  holds the 3D extras at their cheapest when one of theirs does (ADR-0245).
+  holds the 3D extras at their cheapest when one of theirs does (ADR-0247).
 - **Camera controls** (`camera_controls.rs`, #1196): each `webcam` source's
   `camera_controls` setting set on its device. After each change the control side
   compares what the drawn collection asks, live values included, with what it last
@@ -2835,7 +2835,7 @@ stand-in) always has a canvas-sized layer, effects or not. The layer is drawn wi
 100 everywhere but on the program stage's render thread while its GPU is short of time
 (see [Runtime](#runtime)), which first, at full size, draws it with one sample a pixel
 and hands its scene's view depth `Chains::economy` for the depth-aware filters
-(ADR-0243). A smaller layer, its `GpuKey::ModelDepth` and its
+(ADR-0245). A smaller layer, its `GpuKey::ModelDepth` and its
 `GpuKey::ModelSurface` layers are given the canvas as their extent, so the model is
 placed on the canvas and the pass places the layer over it
 (`golden_a_model_is_seen_through_the_scene_camera`); the scene's surface buffer merges
@@ -5323,12 +5323,12 @@ so a floor between two steps (90) is the last step down and 100 keeps models who
 floor raised past the size drawn lifts it to the floor at once, and a fixed size below
 the floor is drawn as set. Before its first step down in size the program's governor
 (`Governor::with_economy`) takes one step into economy at full size
-([ADR-0243](../../docs/adr/0243-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)):
+([ADR-0245](../../docs/adr/0245-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)):
 a rung of the same ladder, full size again, every smaller size staying in it, stepped
 into and out of by the same rules, economy last on the way up; what it saved is learned
 from the frame timed after it, taken until then to be at most half
 (`ECONOMY_WORST`). A floor of 100 still lets it take that step, and a fixed size is
-never in economy, unless the GPU-time guard holds it (*Runtime*, ADR-0245). While it lasts `Chains::economy` is set: the frame's models are drawn
+never in economy, unless the GPU-time guard holds it (*Runtime*, ADR-0247). While it lasts `Chains::economy` is set: the frame's models are drawn
 with one sample a pixel, and each scene's view depth carries it to its depth-aware
 filters (`ViewDepth::economy`), where `ambient_occlusion` takes Low's samples and
 `volumetric_fog` marches as Low does (`economy_comes_before_the_first_step_down_and_goes_last`,
@@ -5528,7 +5528,7 @@ are timed and counted the same way, under their own kinds; one reported (a kind 
 no `/`, `PassGuard::take_built_in`) is not sent to the engine but makes the governor
 hold economy for the rest of the stage's run, whatever the load or a fixed size
 (`Governor::hold_economy`,
-[ADR-0245](../../docs/adr/0245-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md),
+[ADR-0247](../../docs/adr/0247-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md),
 `a_built_in_kind_is_taken_apart_from_a_packs`, `a_held_economy_stays_whatever_the_load_and_size`).
 A GPU without timestamp queries times nothing, and only a device loss guards it.
 Each tick then takes the units' GPU times that came back and, one tick in four, times

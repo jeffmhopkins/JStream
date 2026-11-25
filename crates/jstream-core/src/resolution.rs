@@ -171,7 +171,7 @@ pub(crate) struct Governor {
     /// Whether the rendering switches fixed the size on the last tick: no economy then.
     fixed: bool,
     /// Whether economy is held for good, whatever the size, since a 3D extra's pass ran
-    /// too long ([`Self::hold_economy`], ADR-0245).
+    /// too long ([`Self::hold_economy`], ADR-0247).
     held: bool,
     /// The floor `sizes` were made for.
     made_for: u32,
@@ -255,7 +255,7 @@ impl Governor {
     /// Holds economy from now on, whatever the size and the GPU's load, even at a size
     /// the rendering switches fix: a built-in 3D extra's pass ran over half the frame
     /// budget for many frames running, which a slower GPU could take for a hang and
-    /// reset (ADR-0245). Logged once.
+    /// reset (ADR-0247). Logged once.
     pub(crate) fn hold_economy(&mut self, kind: &str) {
         if !self.held {
             tracing::warn!(
@@ -844,7 +844,7 @@ mod tests {
         assert_eq!((governor.percent().get(), governor.economy()), (85, false));
     }
 
-    /// ADR-0245: economy held after a 3D extra ran too long stays, with room to spare,
+    /// ADR-0247: economy held after a 3D extra ran too long stays, with room to spare,
     /// at full size and at a size the rendering switches fix.
     #[test]
     fn a_held_economy_stays_whatever_the_load_and_size() {

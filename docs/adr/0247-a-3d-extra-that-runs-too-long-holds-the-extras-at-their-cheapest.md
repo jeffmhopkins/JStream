@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0245"
+id = "ADR-0247"
 title = "A 3D extra that runs too long holds the extras at their cheapest"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0245: A 3D extra that runs too long holds the extras at their cheapest
+# ADR-0247: A 3D extra that runs too long holds the extras at their cheapest
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -28,7 +28,7 @@ for every frame to be late, and in the worst case long enough for a reset. The
 resolution governor reads the whole frame's time and draws models with fewer pixels
 ([ADR-0197](0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)),
 and steps into economy first
-([ADR-0243](0243-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)),
+([ADR-0245](0245-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)),
 but it steps back out once frames have room, and never acts at a size the rendering
 switches fix. A built-in kind is part of the engine, so quarantining it as a pack is
 would be wrong: a person can't re-enable it with `effect.enable`, and it isn't

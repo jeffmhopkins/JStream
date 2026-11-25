@@ -154,7 +154,7 @@ mod tests {
 
     /// #349: an effect pack's filter is timed on the GPU, under its kind, where the
     /// device has timestamp queries; a built-in filter is not, but for the 3D extras,
-    /// timed under their own kind (ADR-0245).
+    /// timed under their own kind (ADR-0247).
     #[test]
     fn an_external_filter_s_gpu_time_comes_back_under_its_kind() {
         let Some(mut opened) = open() else {
@@ -180,7 +180,7 @@ mod tests {
             &Settings::default(),
         );
         let mut builtin = crate::filter::testing::filter("sharpen", serde_json::json!({}));
-        // A built-in 3D extra is timed under its kind (ADR-0245).
+        // A built-in 3D extra is timed under its kind (ADR-0247).
         let mut extra = crate::filter::testing::filter("volumetric_fog", serde_json::json!({}));
         let clock = FilterClock::default();
         opened

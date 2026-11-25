@@ -1645,7 +1645,7 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
     // A palette of another length is ignored.
     compositor.pose_model(&uploaded, &[identity_f32(), identity_f32()]);
     assert_near(rgb(&shoot(compositor), 80, 50), BACK, (80, 50));
-    // One layer drawn again of the same pose is kept; of a new pose, drawn (ADR-0244).
+    // One layer drawn again of the same pose is kept; of a new pose, drawn (ADR-0246).
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
     let draw = ModelDraw {
         model: &uploaded,
@@ -3488,7 +3488,7 @@ fn a_texture_short_of_memory_is_uploaded_without_its_largest_levels() {
 }
 
 /// A model's layer drawn again of the same draw is left as it is, its view depth too,
-/// and holds the same pixels (ADR-0244): neither is marked as changed. A new placement,
+/// and holds the same pixels (ADR-0246): neither is marked as changed. A new placement,
 /// a material's drive, another sample count, or a write into the layer since, draws it
 /// again.
 #[test]

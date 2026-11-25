@@ -667,7 +667,7 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    its bounds, and a model whose bounds reach behind the viewer have no box and are
    drawn whole (`a_models_layer_is_bounded_by_its_models_box`).
    A model's layer that still holds the very draw it is asked for is left as it is too
-   ([ADR-0244](../../docs/adr/0244-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md)):
+   ([ADR-0246](../../docs/adr/0246-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md)):
    the model pass keeps, by the layer it drew into (`Kept`), the model and its pose
    count, the frame uniform's bytes, each material's drive, the live texture's picture
    and material, each shadow map, sky and probe picture with its count of writes and
@@ -766,7 +766,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | A reflected panorama's blurred levels (`panorama_blur.rs`): a texture the size of its mip chain with as many levels, a level uniform and bind group each, and the blur pipeline | With the chain, made the first time a model reflects the sky picture or probe capture it was built from, made again when the chain is rebuilt; the pipeline with the first such chain, or by `warm_3d` |
-| What each model layer was last drawn of (`Kept`, ADR-0244): its frame uniform's and drives' bytes, the material name of its live texture, and weak references to the layer, the model and the pictures it read | Compositor, refilled in place each draw; an entry goes when its layer has been dropped, at the next model draw that keeps one |
+| What each model layer was last drawn of (`Kept`, ADR-0246): its frame uniform's and drives' bytes, the material name of its live texture, and weak references to the layer, the model and the pictures it read | Compositor, refilled in place each draw; an entry goes when its layer has been dropped, at the next model draw that keeps one |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `depth_layer` texture (`R16Float`) and its render-target view | The returned `Image`; `render_view_depth` and `draw_model_depth` reuse it |
@@ -1484,7 +1484,7 @@ source application (`Pass::timed`, which returns the kind ID), and each of the
 built-in 3D extras `ambient_occlusion`, `volumetric_fog` and `screen_space_reflections`
 (timed under their own kind, which has no `/`, for `jstream-core` to draw them cheaper
 when one runs too long,
-[ADR-0245](../../docs/adr/0245-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md);
+[ADR-0247](../../docs/adr/0247-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md);
 the other built-in kinds return `None`), is bracketed by two empty compute passes that write a timestamp each,
 resolved and copied to a small mappable buffer in the same submit, one of 32 slots.
 `Compositor::gpu_times` polls without waiting and hands back each time whose map has
@@ -1710,7 +1710,7 @@ neither, for a kind that reads only the depth), and
 `VideoFilter::reads_depth` (`video_filter_reads_depth(kind)`) says which kinds want one.
 With none, or one of another size than the input, the kind passes its input through.
 `ViewDepth::economy` says the GPU is short of time
-([ADR-0243](../../docs/adr/0243-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)):
+([ADR-0245](../../docs/adr/0245-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)):
 `ambient_occlusion` then takes quality Low's 8 samples and `volumetric_fog` marches as
 quality Low does, whatever their settings ask (`economy_takes_quality_lows_samples`,
 `economy_marches_at_quality_low`).

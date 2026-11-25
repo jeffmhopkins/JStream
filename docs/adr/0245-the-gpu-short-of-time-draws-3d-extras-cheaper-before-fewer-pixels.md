@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0243"
+id = "ADR-0245"
 title = "A GPU short of time draws 3D extras cheaper before it draws fewer pixels"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0243: A GPU short of time draws 3D extras cheaper before it draws fewer pixels
+# ADR-0245: A GPU short of time draws 3D extras cheaper before it draws fewer pixels
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

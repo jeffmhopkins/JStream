@@ -1478,7 +1478,7 @@ canvas, while the program's GPU is short of time or the rendering switches name 
 [ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md); short of
 time, it first draws them with one sample a pixel and the scene's ambient occlusion and
 volumetric fog at their lowest quality, at full size,
-[ADR-0243](adr/0243-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)),
+[ADR-0245](adr/0245-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)),
 through the scene's camera or the item's own
 viewer, multisampled with the rendering switches' samples and resolved into the layer
 before its filters (4 until set,
@@ -1575,7 +1575,7 @@ only that part of it in the modes a transparent texel leaves unchanged (#1070), 
 group of a few small items doesn't shade the whole canvas twice. A model's layer is
 bounded the same way, by the box of its model's bounds on the canvas, and left as it is
 when it still holds the same draw of the same model, pose, camera, lights, drives and
-unchanged pictures ([ADR-0244](adr/0244-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md)). A blur, a mask, a shadow or a glow over
+unchanged pictures ([ADR-0246](adr/0246-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md)). A blur, a mask, a shadow or a glow over
 such a layer, as an item's effects, shades only that box grown by how far it reaches, and
 keeps the box for what reads it next. A layer or filter target drawn again is made
 transparent over that box rather than cleared whole (#1449). The caller walks the
@@ -1695,7 +1695,7 @@ frames running, as a blamed kind is, reported in `gpu.effect_slow` (protocol 0.1
 extras (ambient occlusion, volumetric fog, screen-space reflections) are timed too; one
 that runs too long is not quarantined, but holds the 3D extras at their cheapest for
 the rest of the stage's run
-([ADR-0245](adr/0245-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md)). The preview's
+([ADR-0247](adr/0247-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md)). The preview's
 drawing isn't guarded; a shader that hangs the GPU there is caught by the program
 stage's guard or a device loss once it goes to program. A GPU without timestamp
 queries has only the device-loss guard. Not checked yet: a forced TDR on Windows

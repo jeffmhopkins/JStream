@@ -2174,7 +2174,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                 }
                 // The pack passes' GPU times that came back since the last tick, a tick or
                 // two late, go to the guard (#349), and the built-in 3D extras' too: one
-                // of those that ran too long holds them at their cheapest (ADR-0245).
+                // of those that ran too long holds them at their cheapest (ADR-0247).
                 let mut slow_3d = None;
                 if let Some(guard) = meter.pass_guard() {
                     if !timing {
