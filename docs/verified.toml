@@ -6888,7 +6888,7 @@ stamp = { hash = "b3:6585e3f4890a3948", by = "agent:timer", note = "#1027: timer
 stamp = { hash = "b3:edd82a8bff58e940", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/timer.rs"]
-stamp = { hash = "b3:3131f672f6b37617", by = "agent:issues-thread", note = "Source::counts_from_zero is in the seams: the engine moves a timer's time zero for a show, source.restart and source.seek, calls neither restart nor seek for it and calls show only after the zero moved (review N3); a countdown or stopwatch starts again when shown again and counts on for source.seek (ADR-0214)." }
+stamp = { hash = "b3:e61be1cdef1149c2", by = "agent:dependabot-lander", note = "timer.rs only renames jiff 1.0's Timestamp::to_zoned to to_zoned_datetime; no seam, kind or behaviour the section describes changed" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/youtube_chat.rs"]
 stamp = { hash = "b3:1f7ea25589d1ce04", by = "agent:youtube-sign-in", note = "Re-read: the youtube_chat preset text (README and youtube_chat.rs module doc, from #375) cited 'ADR-0051, proposed'; ADR-0051 is now superseded and its §1 chat preset is kept by ADR-0058, so both now say 'ADR-0051 §1, kept by ADR-0058'; the preset needs no sign-in and stays a source agents can use; holds" }
@@ -8994,7 +8994,7 @@ stamp = { hash = "b3:fc6ed464fafa12c0", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:0745051556f6a5c6", by = "agent:jtunnel-discovery", note = "Cargo.toml only gains the socket2 workspace dependency; version unchanged | merge: Merged the alpha.13 train (308ea39): Cargo.toml has the train's version and this PR's socket2 workspace entry; the version text holds | kept from the merged side: Cargo.toml change is two objc2 workspace dependencies and a Core Video feature; the workspace version is untouched" }
+stamp = { hash = "b3:1d43087a49d34518", by = "agent:dependabot-lander", note = "Cargo.toml change is dependency pins (wgpu/naga 30.0.2, cef 156.7.0, jiff 1.0); workspace.package version and its rules are unchanged" }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
