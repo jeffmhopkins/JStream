@@ -13,8 +13,9 @@ use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::store::{Studio, query};
 use jstream_control::protocol::{
-    Chord, Edit, Finite32, MidiControlInfo, MotionCurve, MotionKind, MotionMidiControl,
-    ParamDescriptor, ParamType, Query, QueryResult, TimelineId, ValueBinding, ValueTarget,
+    Chord, Edit, Finite32, MidiControlInfo, MidiNoteInfo, MotionCurve, MotionKind,
+    MotionMidiControl, ParamDescriptor, ParamType, Query, QueryResult, TimelineId, ValueBinding,
+    ValueTarget,
 };
 use leptos::prelude::*;
 
@@ -190,6 +191,28 @@ pub fn long_name(binding: &ValueBinding) -> String {
         ),
         MotionKind::Audio { .. } => "An audio level drives this. Click to unbind it.".into(),
         _ => "A binding drives this. Click to unbind it.".into(),
+    }
+}
+
+/// The note in `now` played since `baseline`: the first input whose note count grew, or
+/// that wasn't there before (ADR-0202 decision 6).
+pub fn note_played(baseline: &[MidiNoteInfo], now: &[MidiNoteInfo]) -> Option<MidiNoteInfo> {
+    now.iter()
+        .find(|note| {
+            baseline
+                .iter()
+                .find(|before| before.input == note.input)
+                .is_none_or(|before| note.count > before.count)
+        })
+        .cloned()
+}
+
+/// Each input's latest note-on, or empty when the engine answers none (one older than
+/// 0.189 has no `midi.last_notes`).
+pub(crate) async fn notes(session: &crate::session::Session) -> Vec<MidiNoteInfo> {
+    match query(session, Query::MidiLastNotes).await {
+        Ok(QueryResult::MidiLastNotes { notes }) => notes,
+        _ => Vec::new(),
     }
 }
 
@@ -946,6 +969,26 @@ mod tests {
             value: 64,
             count,
         }
+    }
+
+    #[test]
+    fn learn_takes_the_input_whose_note_count_grew() {
+        let note = |input: &str, n: u8, count: u64| MidiNoteInfo {
+            input: input.into(),
+            channel: 10,
+            note: n,
+            velocity: 100,
+            count,
+        };
+        let before = [note("Pads", 36, 4), note("Keys", 60, 9)];
+        assert_eq!(note_played(&before, &before), None);
+        let now = [note("Pads", 38, 6), note("Keys", 60, 9)];
+        assert_eq!(note_played(&before, &now), Some(note("Pads", 38, 6)));
+        assert_eq!(
+            note_played(&before, &[note("Drums", 40, 1)]),
+            Some(note("Drums", 40, 1)),
+            "a new input counts"
+        );
     }
 
     #[test]
