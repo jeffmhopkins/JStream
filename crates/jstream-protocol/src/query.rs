@@ -884,7 +884,8 @@ pub enum QueryResult {
     /// The result of `capture.targets`.
     #[serde(rename = "capture.targets")]
     CaptureTargets {
-        /// The displays, then the windows, in the order the OS lists them.
+        /// The displays, then the windows, then the video devices, then the audio input
+        /// and output devices, each in the order the OS lists them.
         targets: Vec<CaptureTargetInfo>,
     },
     /// The result of `ptz.list`.
@@ -1144,14 +1145,15 @@ pub struct FontInfo {
     pub path: String,
 }
 
-/// One display, window or video capture device in a `capture.targets` result.
+/// One display, window, video capture device or audio device in a `capture.targets`
+/// result.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CaptureTargetInfo {
     /// Whether it is a display, a window or a device: the kind of source that captures
     /// it.
     pub kind: CaptureTargetKind,
     /// Its capture target ID, the value of that source's `target` setting, or of a
-    /// `webcam` source's `device` setting.
+    /// `webcam`, `audio_input` or `desktop_audio` source's `device` setting.
     pub target: String,
     /// A name to show: the display's name, the window's title (or, on macOS, its
     /// application's name when it has no usable title), or the device's name. A window's
@@ -1163,7 +1165,9 @@ pub struct CaptureTargetInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<PixelSize>,
     /// Whether it is the primary display, which a `display` source with an empty
-    /// `target` captures. Omitted when `false`, and always `false` for a window.
+    /// `target` captures, or, for an audio device, the system's default device of its
+    /// direction, which an empty `device` records (since 0.194). Omitted when `false`,
+    /// and always `false` for a window.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub primary: bool,
     /// For a device, the formats it captures in that the engine reads, in the order the
@@ -1231,6 +1235,12 @@ pub enum CaptureTargetKind {
     /// A video capture device, a webcam or a capture card, captured by a `webcam`
     /// source. Since 0.90.
     Device,
+    /// An audio input device, such as a microphone or an interface's inputs, recorded by
+    /// an `audio_input` source. Since 0.194.
+    AudioInput,
+    /// An audio output device, such as speakers or headphones, whose sound a
+    /// `desktop_audio` source records. Since 0.194.
+    AudioOutput,
     /// A kind this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a target, or a `capture_target` parameter, from a newer server, so adding
     /// a kind stays a minor change (since 0.50).

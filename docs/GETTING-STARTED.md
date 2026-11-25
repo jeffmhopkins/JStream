@@ -113,7 +113,9 @@ adds, which makes soft glows and veils brighter.
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or choose **Existing** and pick a source to reuse it); its properties open, so you can choose the
-   display or window from the list of those open now, the device (and, for a webcam,
+   display or window from the list of those open now, the device (an audio input's
+   microphone or interface, desktop audio's speakers or headphones, or, for a webcam,
+   the camera and
    its resolution, frame rate and video format, or Auto, and under **Camera** its
    brightness, exposure, white balance and the other controls the camera offers, each
    a slider with **Auto** where the camera can set it itself) or the file. In the

@@ -4026,7 +4026,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "CaptureTargetInfo": {
-      "description": "One display, window or video capture device in a `capture.targets` result.",
+      "description": "One display, window, video capture device or audio device in a `capture.targets`\nresult.",
       "properties": {
         "controls": {
           "description": "For a device, the camera controls it offers, with their ranges and values now\n(since 0.105). Omitted when empty: always for a display or a window, and for a\ndevice with none or whose controls couldn't be read.",
@@ -4051,7 +4051,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         "primary": {
-          "description": "Whether it is the primary display, which a `display` source with an empty\n`target` captures. Omitted when `false`, and always `false` for a window.",
+          "description": "Whether it is the primary display, which a `display` source with an empty\n`target` captures, or, for an audio device, the system's default device of its\ndirection, which an empty `device` records (since 0.194). Omitted when `false`,\nand always `false` for a window.",
           "type": "boolean"
         },
         "size": {
@@ -4066,7 +4066,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its size in pixels now, when the OS reports it without capturing."
         },
         "target": {
-          "description": "Its capture target ID, the value of that source's `target` setting, or of a\n`webcam` source's `device` setting.",
+          "description": "Its capture target ID, the value of that source's `target` setting, or of a\n`webcam`, `audio_input` or `desktop_audio` source's `device` setting.",
           "type": "string"
         }
       },
@@ -4093,6 +4093,16 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "device",
           "description": "A video capture device, a webcam or a capture card, captured by a `webcam`\nsource. Since 0.90.",
+          "type": "string"
+        },
+        {
+          "const": "audio_input",
+          "description": "An audio input device, such as a microphone or an interface's inputs, recorded by\nan `audio_input` source. Since 0.194.",
+          "type": "string"
+        },
+        {
+          "const": "audio_output",
+          "description": "An audio output device, such as speakers or headphones, whose sound a\n`desktop_audio` source records. Since 0.194.",
           "type": "string"
         }
       ]
@@ -16321,7 +16331,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "The result of `capture.targets`.",
           "properties": {
             "targets": {
-              "description": "The displays, then the windows, in the order the OS lists them.",
+              "description": "The displays, then the windows, then the video devices, then the audio input\nand output devices, each in the order the OS lists them.",
               "items": {
                 "$ref": "#/$defs/CaptureTargetInfo"
               },
@@ -20849,5 +20859,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.193"
+  "title": "JStream protocol 0.194"
 }

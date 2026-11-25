@@ -6,7 +6,10 @@
 //! one-parameter `source.set_settings` patch; "Reset" sends `null` for the default.
 //! A capture target parameter (a display or window source's `target`) is a list of the
 //! targets of its kind that `capture.targets` reports, read again each time the field
-//! gets focus, so a window opened since shows up. A `webcam`'s device is one too, and
+//! gets focus, so a window opened since shows up. An `audio_input`'s or a
+//! `desktop_audio`'s device is one too, listing the audio inputs or outputs with the
+//! system's default first and the device that is the default now marked. A `webcam`'s
+//! device is one too, and
 //! its format parameters (`capture_format`) are lists of what that device's listed
 //! formats offer. Its `camera_controls` is a slider per control that device lists,
 //! with an Auto box where the device can set it itself. The fields of one form share
@@ -666,8 +669,14 @@ pub fn target_choices(
     let empty = match kind {
         CaptureTargetKind::Display => "Primary display",
         CaptureTargetKind::Device => "First device listed",
+        CaptureTargetKind::AudioInput => "System default input",
+        CaptureTargetKind::AudioOutput => "System default output",
         _ => "None",
     };
+    let audio = matches!(
+        kind,
+        CaptureTargetKind::AudioInput | CaptureTargetKind::AudioOutput
+    );
     let mut choices = vec![(String::new(), empty.to_owned())];
     for target in targets.iter().filter(|t| t.kind == kind) {
         let name = if target.name.trim().is_empty() {
@@ -677,6 +686,7 @@ pub fn target_choices(
         };
         let label = match target.size {
             Some(size) => format!("{name} · {}×{}", size.width, size.height),
+            None if audio && target.primary => format!("{name} · default now"),
             None => name,
         };
         choices.push((target.target.clone(), label));
@@ -698,7 +708,9 @@ pub fn target_choices(
         }
         let gone = match kind {
             CaptureTargetKind::Display => "Display not connected",
-            CaptureTargetKind::Device => "Device not connected",
+            CaptureTargetKind::Device
+            | CaptureTargetKind::AudioInput
+            | CaptureTargetKind::AudioOutput => "Device not connected",
             _ => "Window not open",
         };
         choices.push((current.to_owned(), format!("{gone} ({current})")));
@@ -2227,6 +2239,49 @@ mod tests {
         assert_eq!(device_formats(&listed, "").len(), 4);
         assert_eq!(device_formats(&listed, "card").len(), 1);
         assert!(device_formats(&listed, "gone").is_empty());
+    }
+
+    #[test]
+    fn audio_devices_list_by_direction_with_the_default_marked() {
+        let mut mic = target(CaptureTargetKind::AudioInput, "mic", "Microphone");
+        mic.primary = true;
+        let listed = vec![
+            target(CaptureTargetKind::Device, "cam", "Webcam"),
+            mic,
+            target(CaptureTargetKind::AudioInput, "line", "Line in"),
+            target(CaptureTargetKind::AudioOutput, "spk", "Speakers"),
+        ];
+        let values = |choices: Vec<(String, String)>| {
+            choices
+                .into_iter()
+                .map(|(v, l)| format!("{v}={l}"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            values(target_choices(
+                CaptureTargetKind::AudioInput,
+                &listed,
+                "line"
+            )),
+            [
+                "=System default input",
+                "mic=Microphone · default now",
+                "line=Line in"
+            ]
+        );
+        assert_eq!(
+            values(target_choices(CaptureTargetKind::AudioOutput, &listed, "")),
+            ["=System default output", "spk=Speakers"]
+        );
+        assert_eq!(
+            values(target_choices(
+                CaptureTargetKind::AudioInput,
+                &listed,
+                "usb"
+            ))[3],
+            "usb=Device not connected (usb)",
+            "an unplugged device stays a choice"
+        );
     }
 
     #[test]

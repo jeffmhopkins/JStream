@@ -5,7 +5,9 @@
 
 use crate::describe::{kind, param};
 use crate::{Context, Source, SourceError, SourceKind};
-use jstream_protocol::{EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings};
+use jstream_protocol::{
+    CaptureTargetKind, EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings,
+};
 use serde_json::Value;
 
 /// The kind that records an input device, such as a microphone.
@@ -39,8 +41,12 @@ pub enum AudioTarget {
         /// The device's ID, as the platform lists it.
         device: Option<String>,
     },
-    /// What the system's default output device plays, followed when the default changes.
-    Desktop,
+    /// What one output device plays, by its ID, or with `None` what the system's
+    /// default output plays, followed when the default changes.
+    Desktop {
+        /// The output device's ID, as the platform lists it.
+        device: Option<String>,
+    },
     /// What one application plays: the running process whose executable has this file
     /// name, matched without regard to case, found again when the application restarts.
     App {
@@ -73,14 +79,10 @@ impl AudioTarget {
                 .trim()
                 .to_owned()
         };
+        let device = || Some(text("device")).filter(|d| !d.is_empty());
         match kind_id {
-            AUDIO_INPUT => {
-                let device = text("device");
-                Some(Self::Input {
-                    device: (!device.is_empty()).then_some(device),
-                })
-            }
-            DESKTOP_AUDIO => Some(Self::Desktop),
+            AUDIO_INPUT => Some(Self::Input { device: device() }),
+            DESKTOP_AUDIO => Some(Self::Desktop { device: device() }),
             APP_AUDIO => Some(Self::App { exe: text("exe") }),
             NETWORK_AUDIO => {
                 let (min, max, default) = LATENCY_MS;
@@ -125,19 +127,45 @@ fn line(max_len: u32) -> ParamType {
     }
 }
 
+/// The longest audio device ID a `device` setting takes.
+const MAX_DEVICE_ID: u32 = 512;
+
+/// A `device` setting: an audio device of `kind`, as `capture.targets` lists it, so a UI
+/// offers the devices to pick from.
+fn device(kind: CaptureTargetKind, description: &str) -> ParamDescriptor {
+    ParamDescriptor {
+        description: Some(description.into()),
+        ..param(
+            "device",
+            "Device",
+            ParamType::CaptureTarget {
+                kind,
+                max_len: MAX_DEVICE_ID,
+            },
+            Value::from(""),
+        )
+    }
+}
+
 /// The audio-only kinds.
 pub(crate) fn kinds() -> Vec<AudioKind> {
     vec![
         AudioKind(KindDescriptor {
-            params: vec![ParamDescriptor {
-                description: Some(
-                    "The input device's ID. Empty follows the system's default input.".into(),
-                ),
-                ..param("device", "Device", line(512), Value::from(""))
-            }],
+            params: vec![device(
+                CaptureTargetKind::AudioInput,
+                "The input device to record, as `capture.targets` lists it. Empty follows \
+                 the system's default input.",
+            )],
             ..kind(AUDIO_INPUT, "Audio input", false, true)
         }),
-        AudioKind(kind(DESKTOP_AUDIO, "Desktop audio", false, true)),
+        AudioKind(KindDescriptor {
+            params: vec![device(
+                CaptureTargetKind::AudioOutput,
+                "The output device whose sound to record, as `capture.targets` lists it. \
+                 Empty follows the system's default output.",
+            )],
+            ..kind(DESKTOP_AUDIO, "Desktop audio", false, true)
+        }),
         AudioKind(KindDescriptor {
             params: vec![ParamDescriptor {
                 description: Some(
@@ -233,7 +261,14 @@ mod tests {
         );
         assert_eq!(
             AudioTarget::of(DESKTOP_AUDIO, &Settings::new()),
-            Some(AudioTarget::Desktop)
+            Some(AudioTarget::Desktop { device: None }),
+            "a source saved before it had a device follows the default output"
+        );
+        assert_eq!(
+            AudioTarget::of(DESKTOP_AUDIO, &settings(&[("device", " speakers ")])),
+            Some(AudioTarget::Desktop {
+                device: Some("speakers".into())
+            })
         );
         let mut network = settings(&[("transport", "jtunnel"), ("sender", " Bitwig 2 ")]);
         network.insert("latency_ms", Value::from(25));
