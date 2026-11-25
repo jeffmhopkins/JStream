@@ -1307,7 +1307,7 @@ impl Chains {
         };
         let cache = &*cache;
         let mut input = &chain.input;
-        for running in running.iter_mut() {
+        for (index, running) in running.iter_mut().enumerate() {
             let Running {
                 id,
                 kind,
@@ -1316,6 +1316,12 @@ impl Chains {
                 warned,
                 ..
             } = running;
+            // Each filter's GPU time is its own part of its owner's (`profile.get`). A
+            // model source's filters are timed with its item's effects, whose places
+            // they would share, so they are no part of it.
+            let part = (!matches!(source, ChainOwner::Shown(..)))
+                .then_some(crate::profile::GpuPart::Filter(index));
+            crate::profile::gpu_part(compositor, part);
             let drawn = match (cache.get(input), cache.get(key)) {
                 (Some(from), Some(to)) => compositor.apply_filter_into(filter, from, to, clock),
                 _ => Err(RenderError::Invalid {
@@ -1323,6 +1329,7 @@ impl Chains {
                     detail: format!("no image for {input:?} or {key:?}"),
                 }),
             };
+            crate::profile::gpu_part(compositor, None);
             if let Err(error) = drawn {
                 if !*warned {
                     *warned = true;
@@ -6486,6 +6493,86 @@ mod tests {
                 "a {blend:?} card casts no shadow: {light_only:?} against {lit:?}"
             );
         }
+    }
+
+    /// `profile.get`'s GPU parts: a model that receives shadows, under an effect, comes
+    /// back with its shadow maps, its draw, its view depth and its effect timed apart,
+    /// each inside its item's GPU time, on a device that times the GPU.
+    #[test]
+    fn a_models_gpu_time_comes_back_in_parts() {
+        use crate::profile::{InputTotals, Profiler, SourceMeters};
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        if !compositor.times_gpu() {
+            return;
+        }
+        let mut graph = shadow_wall(0.0);
+        apply(&mut graph, vec![item_tint("cam", "#ff0000")]);
+        let card = Frame::new(1, 1, &[255; 4], 4).expect("invariant: 1x1 RGBA8");
+        let shot = shadow_wall_shot(
+            &graph,
+            shadow_wall_model(true),
+            shadow_wall_light(true),
+            &card,
+        );
+        let profiler = Profiler::new(
+            std::time::Duration::from_millis(33),
+            std::sync::Arc::new(SourceMeters::default()),
+        );
+        let mut meter = profiler.program_meter();
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let canvas = shot.canvas().expect("canvas");
+        let started = std::time::Instant::now();
+        // The first frame is timed; the ones after collect its times, each read back,
+        // so the GPU is done with the one before.
+        for frame in 0..4u64 {
+            cache.begin_frame();
+            meter.begin_gpu(&mut compositor);
+            snapshot::compose_metered(
+                &mut compositor,
+                (&mut cache, &mut chains, &mut meter),
+                (&shot, MediaTime::zero(Timebase::MILLIS)),
+                snapshot::View::default(),
+                &LiveParams::default(),
+                &NoCaptures,
+                snapshot::DrawAt::read(canvas),
+            )
+            .expect("compose");
+            meter.end_gpu(&mut compositor);
+            drop(cache.end_frame(&compositor));
+            meter.end_frame(
+                std::time::Duration::from_millis(1),
+                started + std::time::Duration::from_secs(frame),
+                drop,
+            );
+        }
+        let info = profiler.profile(Some(60), None, None, InputTotals::default());
+        let unit = info
+            .units
+            .iter()
+            .find(|unit| {
+                matches!(&unit.unit, jstream_protocol::ProfileUnit::ItemEffects { item_id, .. }
+                    if item_id.as_str() == "cam")
+            })
+            .expect("the wall's effects");
+        let parts: Vec<_> = unit.gpu_parts.iter().map(|part| &part.part).collect();
+        use jstream_protocol::GpuPart;
+        for part in [
+            GpuPart::ShadowMaps,
+            GpuPart::Model,
+            GpuPart::ViewDepth,
+            GpuPart::Filter { index: 0 },
+        ] {
+            assert!(parts.contains(&&part), "{part:?} is timed: {unit:?}");
+        }
+        let whole = unit.gpu_ms.expect("timed").get();
+        let sum: f32 = unit.gpu_parts.iter().map(|part| part.gpu_ms.get()).sum();
+        assert!(
+            sum <= whole + 0.001,
+            "the parts are inside the whole: {unit:?}"
+        );
     }
 
     /// A shadow map is drawn once while nothing that casts into it changes: frames of

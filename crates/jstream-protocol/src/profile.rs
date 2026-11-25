@@ -469,6 +469,56 @@ pub struct UnitProfile {
     /// `gpu_timing` is on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_ms: Option<Finite32>,
+    /// Where its GPU time went, for the parts of it timed apart (since 0.197): a 3D
+    /// model's draw, a model's or a scene's view depth, a scene's surface buffer and its
+    /// shadow maps, and each of
+    /// the first [`GPU_PART_FILTERS`] filters of its chain. Each is the average GPU time
+    /// it took in a timed frame it ran in, in milliseconds. They are inside `gpu_ms`,
+    /// which also holds the work no part names. Empty without `gpu_timing`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gpu_parts: Vec<GpuPartProfile>,
+}
+
+/// The filters of a chain whose GPU time [`UnitProfile::gpu_parts`] gives apart: the
+/// first ones in its order.
+pub const GPU_PART_FILTERS: u32 = 16;
+
+/// One part of a unit's GPU time ([`UnitProfile::gpu_parts`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GpuPartProfile {
+    /// Which part.
+    pub part: GpuPart,
+    /// The average GPU time it took in a timed frame it ran in, in milliseconds.
+    pub gpu_ms: Finite32,
+}
+
+/// A part of a unit's GPU time.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum GpuPart {
+    /// Drawing a 3D model into its layer: shaded, with its depth prepass and its
+    /// multisampled resolve.
+    Model,
+    /// Drawing a 3D model's view depth, or a 3D scene's, for the items after it and the
+    /// depth-aware filters to read.
+    ViewDepth,
+    /// Drawing a 3D scene's surface buffer for screen-space reflections: its models
+    /// whose layers didn't draw their surface, and merging those that did.
+    Surface,
+    /// Drawing a 3D scene's shadow maps.
+    ShadowMaps,
+    /// One filter of the unit's chain. An item's effects don't give apart the filters
+    /// of the 3D model source it shows, which run over its layer and count toward it.
+    Filter {
+        /// Its place in the chain, from 0.
+        index: u32,
+    },
+    /// A part this version of the protocol doesn't know. Never sent; produced only when
+    /// parsing a result from a newer server.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// A unit of drawing work, by its owner.
@@ -603,7 +653,7 @@ pub struct ThreadProfile {
 
 #[cfg(test)]
 mod tests {
-    use super::{Drawer, ProfileInfo, ProfileUnit, UnitProfile};
+    use super::{Drawer, GpuPart, GpuPartProfile, ProfileInfo, ProfileUnit, UnitProfile};
     use crate::{Finite32, ItemId, SceneId};
     use serde_json::json;
 
@@ -621,6 +671,7 @@ mod tests {
             recent_max_ms: Finite32::new(2.0).expect("finite"),
             share: Finite32::new(0.25).expect("finite"),
             gpu_ms: None,
+            gpu_parts: Vec::new(),
         };
         let value = serde_json::to_value(&unit).expect("serializes");
         assert_eq!(
@@ -628,11 +679,37 @@ mod tests {
             json!({"type": "item_effects", "scene_id": "main", "item_id": "cam"})
         );
         assert!(value.get("gpu_ms").is_none(), "no GPU time, no field");
+        assert!(value.get("gpu_parts").is_none(), "no parts, no field");
         let back: UnitProfile = serde_json::from_value(value).expect("parses");
         assert_eq!(back, unit);
         let newer: ProfileUnit =
             serde_json::from_value(json!({"type": "hologram", "x": 1})).expect("parses");
         assert_eq!(newer, ProfileUnit::Unknown);
+        let drawer: Drawer = serde_json::from_value(json!("encoder")).expect("parses");
+        assert_eq!(drawer, Drawer::Unknown);
+    }
+
+    /// A part of a unit's GPU time is tagged by `type`, a filter's carries its index,
+    /// and a newer part parses as `unknown`.
+    #[test]
+    fn gpu_parts_roundtrip_and_tolerate_newer_ones() {
+        let part = GpuPartProfile {
+            part: GpuPart::Filter { index: 2 },
+            gpu_ms: Finite32::new(0.5).expect("finite"),
+        };
+        let value = serde_json::to_value(&part).expect("serializes");
+        assert_eq!(
+            value,
+            json!({"part": {"type": "filter", "index": 2}, "gpu_ms": 0.5})
+        );
+        let back: GpuPartProfile = serde_json::from_value(value).expect("parses");
+        assert_eq!(back, part);
+        let shadows: GpuPart =
+            serde_json::from_value(json!({"type": "shadow_maps"})).expect("parses");
+        assert_eq!(shadows, GpuPart::ShadowMaps);
+        let newer: GpuPart =
+            serde_json::from_value(json!({"type": "ray_trace", "x": 1})).expect("parses");
+        assert_eq!(newer, GpuPart::Unknown);
         let drawer: Drawer = serde_json::from_value(json!("encoder")).expect("parses");
         assert_eq!(drawer, Drawer::Unknown);
     }
