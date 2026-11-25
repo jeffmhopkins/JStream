@@ -8988,7 +8988,7 @@ stamp = { hash = "b3:b3c1af2c942651ae", by = "agent:dxc-packaging", note = 'The 
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:0745051556f6a5c6", by = "agent:jtunnel-discovery", note = "Cargo.toml only gains the socket2 workspace dependency; version unchanged | merge: Merged the alpha.13 train (308ea39): Cargo.toml has the train's version and this PR's socket2 workspace entry; the version text holds | kept from the merged side: Cargo.toml change is two objc2 workspace dependencies and a Core Video feature; the workspace version is untouched" }
+stamp = { hash = "b3:0c5771de0cd62e23", by = "agent:release-alpha14", note = "Bumped the workspace version to 0.1.0-alpha.14 with cargo update -w; re-read: the section names no specific version, the apps still take version.workspace and libraries stay 0.0.0, so it holds." }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
