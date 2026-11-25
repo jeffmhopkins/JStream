@@ -66,19 +66,29 @@ test('with no item selected the panel shows the scene\'s chain, and a filter add
   await expect(panel(page)).toContainText('No video filters.');
 });
 
-test('Edit filters… on a scene row and Edit scene filters… on the canvas margin show the scene\'s chain', async ({ page, daemon }) => {
+test('Edit filters… on a scene row opens its Properties on Filters, and Edit scene filters… on the canvas margin shows the scene\'s chain', async ({ page, daemon }) => {
   await connect(page, daemon);
-  // An item is selected, and another panel is in front.
+  // An item is selected.
   await page.locator('.sources-panel li.row .row-main').first().click();
-  await showPanel(page, 'Arrange');
+  // Properties first, Edit filters second.
   await sceneRow(page, 'Intro').click({ button: 'right' });
+  await expect(menu(page).getByRole('menuitem').nth(0)).toHaveText(/^Properties…/);
+  await expect(menu(page).getByRole('menuitem').nth(1)).toHaveText('Edit filters…');
   await menu(page).getByRole('menuitem', { name: 'Edit filters…' }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Filters' })).toBeVisible();
-  await expect(panel(page).locator('.filters-title')).toHaveText('Intro');
+  const dialog = page.getByRole('dialog', { name: 'Scene properties' });
+  await expect(dialog.getByRole('tab', { name: /^Filters/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.locator('.props-side-note')).toHaveText('the whole scene');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
   // The canvas still shows Main, with the Backdrop selected.
   await expect(page.locator('.sources-panel li.row').first()).toHaveClass(/\bselected\b/);
+  // Properties… still opens on Settings.
+  await sceneRow(page, 'Intro').click({ button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Properties…' }).click();
+  await expect(dialog.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 
-  // Selecting a scene shows its chain again: Main's, with no item selected.
+  // Selecting a scene shows its chain in the Filters panel: Main's, with no item selected.
+  await showPanel(page, 'Filters');
   await sceneRow(page, 'Main').locator('.row-main').click();
   await expect(panel(page).locator('.filters-title')).toHaveText('Main');
 
@@ -128,7 +138,8 @@ test('the Scene properties dialog shows the scene\'s chain and adds to it', asyn
   await expect(dialog).toBeHidden();
   await sceneRow(page, 'Intro').click({ button: 'right' });
   await menu(page).getByRole('menuitem', { name: 'Edit filters…' }).click();
-  await expect(panel(page)).toContainText('No video filters.');
+  await expect(dialog).toContainText('No video filters.');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 
   // OK keeps what was added.
   await sceneRow(page, 'Intro').click({ button: 'right' });
@@ -139,5 +150,7 @@ test('the Scene properties dialog shows the scene\'s chain and adds to it', asyn
   await expect(videoRows(dialog).locator('.filter-name')).toHaveText(['Sharpen']);
   await dialog.getByRole('button', { name: 'OK' }).click();
   await expect(dialog).toBeHidden();
-  await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen']);
+  await sceneRow(page, 'Intro').click({ button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Edit filters…' }).click();
+  await expect(videoRows(dialog).locator('.filter-name')).toHaveText(['Sharpen']);
 });

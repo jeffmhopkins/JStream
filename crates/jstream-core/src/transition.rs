@@ -19,6 +19,7 @@
 //! children's own tracks ([`Inside`]), planned the same way inside the group's layer
 //! with the group item's progress (ADR-0049 §3).
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use jstream_graph::{Graph, Overrides};
@@ -148,6 +149,11 @@ pub(crate) struct Visual {
     /// The size of the image in pixels, which bounds its crop, when known.
     pub(crate) size: Option<[u32; 2]>,
     pub(crate) settings: ItemTransition,
+    /// Whether its effects run over the canvas, as a model's layer does, so it can't
+    /// glide (ADR-0106). Within a family it swaps to its other side at once rather than
+    /// crossfading with it: two copies of one opaque layer, each part faded, show
+    /// through.
+    pub(crate) covers_canvas: bool,
     /// Its effects' kinds and settings in order (ADR-0065), empty without: two items
     /// pair only when theirs are the same kinds in the same order, with settings a Move
     /// can blend ([`effects_pair`]).
@@ -252,6 +258,13 @@ pub(crate) struct Running {
     /// The members of its family a Move passes through on its way, in order
     /// (ADR-0166 decision 2); empty for a straight one.
     pub(crate) via: Vec<SceneId>,
+    /// Whether it shows or hides an item of the program scene where it is, from that
+    /// scene as it was drawn (ADR-0237): its other items are where the scene places
+    /// them, though their live values may have moved since it started.
+    pub(crate) in_place: bool,
+    /// The fades of the in-place Move it cut short that were still running as it
+    /// started, by item (ADR-0237 decision 2): each goes on from where it was.
+    pub(crate) carried: crate::snapshot::ShowFades,
 }
 
 impl Running {
@@ -313,6 +326,150 @@ pub(crate) fn check_via(
 /// `None` for a 2D scene or a scene that doesn't exist.
 pub(crate) fn camera_of(graph: &Graph, id: &SceneId) -> Option<SceneCamera> {
     crate::snapshot::placed_camera(graph.state(), id)
+}
+
+/// An item of the internal show scene appearing or going on its own, over program and
+/// apart from any transition program runs: `item.show`, `item.hide` and `item.toggle`
+/// (ADR-0101) on an overlay, or the show runner's fade. Kept in the studio state by
+/// item until it ends; the render thread samples it on the item's layer, over the
+/// item's own pose ([`ShowFade::sample`]), so the item's live values and motion hold.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ShowFade {
+    /// When it started, on the media clock.
+    pub(crate) start: MediaTime,
+    /// `true` when the item appears, `false` when it goes.
+    pub(crate) visible: bool,
+    pub(crate) effect: Effect,
+    pub(crate) timing: Timing,
+}
+
+impl ShowFade {
+    /// The item's own effect for showing (`visible`) or hiding it, from its
+    /// `transition` settings, as [`plan`] would run it in `run` (the default preset's,
+    /// [ADR-0101](../../../docs/adr/0101-item-show-hide-actions.md) decision 4); with
+    /// `fade_ms`, a plain fade of that length instead, with no delay (0 cuts). `None`
+    /// when it would show or go at once.
+    pub(crate) fn of(
+        settings: ItemTransition,
+        visible: bool,
+        run: Option<&Run>,
+        fade_ms: Option<u32>,
+        start: MediaTime,
+    ) -> Option<Self> {
+        let (effect, timing) = match fade_ms {
+            Some(0) => return None,
+            Some(ms) => (
+                Effect::Fade,
+                Timing {
+                    delay_ms: 0.0,
+                    duration_ms: ms as f32,
+                    easing: Easing::Linear,
+                },
+            ),
+            None => {
+                let run = run?;
+                let own = if visible {
+                    settings.appear
+                } else {
+                    settings.disappear
+                };
+                (
+                    effect(own, run.unmatched),
+                    Timing {
+                        delay_ms: settings.delay_ms as f32,
+                        duration_ms: run.duration_ms as f32,
+                        easing: settings.easing.resolve(run.easing),
+                    },
+                )
+            }
+        };
+        if effect == Effect::None && timing.delay_ms <= 0.0 {
+            return None;
+        }
+        Some(Self {
+            start,
+            visible,
+            effect,
+            timing,
+        })
+    }
+
+    /// The same change, started at `now` while `before` (the item's last one) may still
+    /// run: a reversal picks up where it is, so a fade cut short turns back from the
+    /// opacity it reached rather than jumping. Only a plain progress maps back like
+    /// this, so one with a delay on either side starts afresh.
+    pub(crate) fn after(mut self, before: Option<&Self>, now: MediaTime) -> Self {
+        self.start = now;
+        let Some(before) = before else {
+            return self;
+        };
+        let elapsed = elapsed_ms(before.start, now);
+        let running = elapsed < before.timing.end_ms();
+        if !running
+            || before.visible == self.visible
+            || before.timing.delay_ms > 0.0
+            || self.timing.delay_ms > 0.0
+            || before.timing.duration_ms <= 0.0
+        {
+            return self;
+        }
+        // The part of its way the last change had still to go is the part of this one
+        // already behind it.
+        let left = 1.0 - (elapsed / before.timing.duration_ms).clamp(0.0, 1.0);
+        let skip_ms = f64::from(left * self.timing.duration_ms);
+        let skip = MediaTime::new((skip_ms * 1000.0) as i64, jstream_media::Timebase::MICROS)
+            .rescale(now.timebase(), jstream_media::Rounding::Down);
+        self.start = skip
+            .ok()
+            .and_then(|skip| now.checked_sub(skip).ok())
+            .unwrap_or(now);
+        self
+    }
+
+    /// Milliseconds from its start until it ends.
+    pub(crate) fn end_ms(&self) -> f32 {
+        self.timing.end_ms()
+    }
+
+    /// Whether it has ended by `at`.
+    pub(crate) fn ended(&self, at: MediaTime) -> bool {
+        elapsed_ms(self.start, at) >= self.end_ms()
+    }
+
+    /// `at`, the item's pose when it is fully shown, `elapsed_ms` after the start on a
+    /// canvas of `canvas`: on its way in or out by the effect, or `None` when it draws
+    /// nothing then.
+    pub(crate) fn sample(
+        &self,
+        at: Endpoint,
+        elapsed_ms: f32,
+        canvas: [f32; 2],
+    ) -> Option<Endpoint> {
+        let track = if self.visible {
+            Track::Appear {
+                to: at,
+                effect: self.effect,
+                timing: self.timing,
+            }
+        } else {
+            Track::Disappear {
+                from: at,
+                effect: self.effect,
+                timing: self.timing,
+            }
+        };
+        track.sample(elapsed_ms, canvas)
+    }
+
+    /// How much of it shows `elapsed_ms` after the start, from 0 to 1: its opacity's
+    /// factor, for an item whose placement has no box to move.
+    pub(crate) fn shown(&self, elapsed_ms: f32) -> f32 {
+        let k = match self.effect {
+            Effect::None => self.timing.step(elapsed_ms),
+            _ => self.timing.progress(elapsed_ms).clamp(0.0, 1.0),
+        };
+        if self.visible { k } else { 1.0 - k }
+    }
 }
 
 /// Milliseconds from `start` to `at`, on the same clock.
@@ -448,7 +605,7 @@ pub(crate) fn blended_settings(
         .map(|look| look.into_iter().map(|(_, settings)| settings).collect())
 }
 
-fn effect(effect: TransitionEffect, unmatched: TransitionEffect) -> Effect {
+pub(crate) fn effect(effect: TransitionEffect, unmatched: TransitionEffect) -> Effect {
     match effect.resolve(unmatched) {
         TransitionEffect::Scale => Effect::Scale,
         TransitionEffect::Slide => Effect::Slide,
@@ -589,11 +746,49 @@ pub(crate) fn plan(
     partners.resize(tracks.len(), None);
     tracks.extend(arriving);
     partners.extend(arriving_partners);
+    if by_item {
+        swap_what_covers_the_canvas(&mut tracks);
+    }
     let end_ms = tracks
         .iter()
         .map(|(_, track)| track.end_ms())
         .fold(0.0, f32::max);
     (Planned { tracks, end_ms }, partners)
+}
+
+/// Within a family, an item whose effects cover the canvas goes and comes back rather
+/// than gliding (ADR-0106): each of its halves in `tracks` swaps at once, at the start,
+/// rather than crossfading with the other. Two copies of one opaque layer, the one
+/// fading out under the one fading in, would show what is behind them half-way.
+fn swap_what_covers_the_canvas(tracks: &mut [(Visual, Track)]) {
+    let swapped: BTreeSet<ItemId> = tracks
+        .iter()
+        .filter(|(visual, track)| visual.covers_canvas && matches!(track, Track::Appear { .. }))
+        .map(|(visual, _)| visual.item_id.clone())
+        .filter(|item| {
+            tracks.iter().any(|(visual, track)| {
+                visual.covers_canvas
+                    && &visual.item_id == item
+                    && matches!(track, Track::Disappear { .. })
+            })
+        })
+        .collect();
+    for (visual, track) in tracks.iter_mut() {
+        if !swapped.contains(&visual.item_id) {
+            continue;
+        }
+        match track {
+            Track::Appear { effect, timing, .. } | Track::Disappear { effect, timing, .. } => {
+                *effect = Effect::None;
+                *timing = Timing {
+                    delay_ms: 0.0,
+                    duration_ms: 0.0,
+                    easing: timing.easing,
+                };
+            }
+            Track::Pair { .. } | Track::Through { .. } => {}
+        }
+    }
 }
 
 /// A stinger's picture under its overlay: `from` shows until `cut_ms` and `to` from
@@ -792,6 +987,7 @@ mod tests {
             },
             size: None,
             settings: ItemTransition::default(),
+            covers_canvas: false,
             effects: Vec::new(),
             blend_from: None,
             inside: None,

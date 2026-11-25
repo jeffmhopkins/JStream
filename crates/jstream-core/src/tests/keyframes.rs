@@ -1232,6 +1232,7 @@ fn drift_x(
         item_id: ItemId::new(item),
         scene_id: scene.map(SceneId::new),
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "drift".into(),
             property: jstream_protocol::MotionProperty::X,
             effect: None,
@@ -1419,6 +1420,7 @@ fn pulse(item: &str, scene: Option<&str>) -> Edit {
         item_id: ItemId::new(item),
         scene_id: scene.map(SceneId::new),
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "pulse".into(),
             property: jstream_protocol::MotionProperty::Opacity,
             effect: None,
@@ -1523,6 +1525,7 @@ fn a_data_modifier_poses_an_item_from_live_data() {
             item_id: ItemId::new("a1"),
             scene_id: None,
             motion: vec![jstream_protocol::MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "play".into(),
                 property: jstream_protocol::MotionProperty::X,
                 effect: None,
@@ -1584,6 +1587,7 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
             item_id: ItemId::new("a1"),
             scene_id: None,
             motion: vec![jstream_protocol::MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "fader".into(),
                 property: jstream_protocol::MotionProperty::X,
                 effect: None,
@@ -1623,6 +1627,8 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
     );
 
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Faders"].map(String::from));
     let cc = |value| jstream_midi::Message::parse(&[0xB0, 7, value]).expect("a CC");
     midi.push("Faders", 0, &cc(127));
     // No follower yet (as in a preview): the control as it is, unsmoothed.
@@ -1663,6 +1669,7 @@ fn a_preview_with_no_output_smooths_a_midi_modifier_on_the_clock() {
             item_id: ItemId::new("a1"),
             scene_id: None,
             motion: vec![jstream_protocol::MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "fader".into(),
                 property: jstream_protocol::MotionProperty::X,
                 effect: None,
@@ -1703,6 +1710,8 @@ fn a_preview_with_no_output_smooths_a_midi_modifier_on_the_clock() {
     );
 
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Faders".to_owned()]);
     midi.push(
         "Faders",
         0,
@@ -1796,6 +1805,7 @@ fn jolt_and_drift() -> Edit {
         scene_id: None,
         motion: vec![
             MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "jolt".into(),
                 property: MotionProperty::Y,
                 effect: None,
@@ -1811,6 +1821,7 @@ fn jolt_and_drift() -> Edit {
                 amount: None,
             },
             MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "drift".into(),
                 property: MotionProperty::X,
                 effect: None,
@@ -2255,6 +2266,7 @@ fn pulse_halo(param: &str, amplitude: f32) -> Edit {
         item_id: ItemId::new("a1"),
         scene_id: None,
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "pulse".into(),
             property: jstream_protocol::MotionProperty::Effect,
             effect: Some(jstream_protocol::MotionEffect {
@@ -2577,6 +2589,8 @@ fn looked_up(via: &[&str]) -> Vec<String> {
         by_item: true,
         from_camera: None,
         via: via.iter().map(|id| SceneId::new(*id)).collect(),
+        in_place: false,
+        carried: Default::default(),
     };
     let white: Vec<u8> = std::iter::repeat_n([255u8; 4], 4).flatten().collect();
     let frame = Frame::new(2, 2, &white, 1).expect("2x2 RGBA8");
@@ -2716,6 +2730,7 @@ fn a_data_modifier_sets_an_effect_colour_from_a_palette() {
         item_id: ItemId::new("a1"),
         scene_id: None,
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "clip".into(),
             property: jstream_protocol::MotionProperty::Effect,
             effect: Some(jstream_protocol::MotionEffect {
@@ -2898,26 +2913,22 @@ fn move_after_a_fade_onto_the_model_scene(fade_ms: u32) -> Engine {
 
 /// #1598: a Move between two views of a 3D scene, started once the Fade onto it has
 /// ended but before a plan let that go, moves straight from the scene's camera to the
-/// keyframe's, item by item, as from the scene at rest: not from the framing camera, as
-/// if what the ended Fade left on screen were 2D.
+/// keyframe's, as from the scene at rest: not from the framing camera, as if what the
+/// ended Fade left on screen were 2D. The views differ only in their camera and the
+/// scene has a chain, so the scene's camera glides (ADR-0226).
 #[test]
 fn a_move_after_an_ended_fade_starts_from_the_scenes_camera() {
     let engine = move_after_a_fade_onto_the_model_scene(600);
     let (from, to) = (framing_across(-300.0), framing_across(300.0));
     let hub = engine.render_hub().load();
     let shot = hub.shot();
+    assert!(!shot.transitioning(), "the scene is drawn as it is");
     for (ms, k) in [(0.0, 0.0), (100.0, 0.25), (400.0, 1.0)] {
         let want = jstream_render::transition::lerp_camera(&from, &to, k);
-        let cameras = shot.track_cameras(ms).expect("a transition runs");
-        assert!(!cameras.is_empty(), "the model is a track");
-        assert!(
-            cameras.iter().all(|camera| *camera == Some(want)),
-            "at {ms} ms, every item through the moving camera: {cameras:?}, want {want:?}"
-        );
         assert_eq!(
-            shot.sky_cameras(ms),
-            Some((Some(want), Some(want))),
-            "at {ms} ms"
+            shot.gliding_camera(&SceneId::new("k"), ms),
+            Some(want),
+            "at {ms} ms, through the moving camera"
         );
     }
 }

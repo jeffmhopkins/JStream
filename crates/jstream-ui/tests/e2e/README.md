@@ -30,7 +30,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   audio sources no scene shows (`Mic · ES-9 Line`, an `audio_input`, at −3 dB and
   `Desktop audio`, a `desktop_audio`, at −8.5 dB; the mock is told both kinds produce
   audio, so they get mixer channels), and the encoder profile `High quality`. It has no outputs. It stops
-  when its standard input closes. Given `--agent-token <token>`, it serves as the
+  when its standard input closes. Each `--ptz-camera <name>` lists a PTZ camera,
+  reachable at home, which `ptz.*` actions move (`MockEngine::with_ptz_cameras`). Given `--agent-token <token>`, it serves as the
   desktop app does with agents on: the page's `--token` is the window's token, the
   agent token is the one an agent presents, and the server asks before a new agent
   connects, keeping the always-allowed ones in memory. It is a crate of its own because `jstream-ui` (layer
@@ -62,7 +63,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   `stats.tick`s the same way, since the mock runs no pipeline.
   `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
   the mock makes no frames and reports none, and returns a function that sends the
-  page a `source.size_changed`. `recordCalls` routes it too, passing everything on, and
+  page a `source.size_changed`. `liveSources` routes it to answer `data.list`, `data.get`
+  and `midi.last_controls` from what a test last gave the function it returns, since the
+  mock engine hears no DAW and no MIDI. `recordCalls` routes it too, passing everything on, and
   its `sent(type)` lists every edit or action of that type the page has sent, for the
   transition edits the mock engine refuses.
 - **Console errors fail a test.** Every console error and uncaught exception on a
@@ -133,9 +136,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Tool bars** (`tool-bars.spec.js`): the Scenes bar's arrows moving the selected
   scene up and back down, off at either end; Add scene making a scene with its name
   open, whose empty Sources list says how to add one; Scene properties and Scene
-  filters on the selected scene, and both off, with the arrows, for a keyframe, as Add source is. The Sources bar with nothing selected (only Add source
+  filters (the same dialog, on Filters) on the selected scene, and both off, with the arrows, for a keyframe, as Add source is. The Sources bar with nothing selected (only Add source
   on); Add source opening the dialog, placing the Backdrop again; the arrows restacking
-  the selected item, each off at its end of the stack; Properties and Filters on it; Remove from scene taking it out. A
+  the selected item, each off at its end of the stack; Properties and Filters (the same dialog, on Filters) on it; Remove from scene taking it out. A
   right-click on a bar opens no menu, and the panel menu still opens on an empty scene.
   Delete scene needs `delete.plan`, so it is tested natively.
 - **Scene folders** (`folders.spec.js`): New folder from the panel's and a folder's menu,
@@ -195,7 +198,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   quotes the plugin's name and says its folder stays; Cancel sends nothing, and Remove
   sends one `plugin.uninstall` and the row goes. The Inspector holds neither
   plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
-  between General, Video, 3D rendering, Audio, Plugins and Devices, and the install dialog opens
+  between General, Video, 3D rendering, Audio, Keys & MIDI, Plugins and Devices, and the install dialog opens
   centred over a moved Settings dialog and closes alone on Escape.
 - **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
   answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter
@@ -232,7 +235,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   closes on a second click of its ×, and the Inspector doesn't collapse once it is alone
   in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live, with Stream stats, Outputs and Agent activity as
-  tabs on the right, and resets to Editing.
+  tabs on the right, and resets to Editing. A drop past the bottom's row adds a second
+  full-width row under it, with its splitter, and a third past that; the outer left
+  stacks full-height columns outwards the same way; all of it survives a reload, and
+  moving the second row's panel out removes that row, the third moving in.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
   and shows the size readout, a click on empty canvas clears both, and selecting another
@@ -248,7 +254,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   on the canvas tools over an item leaves the selection alone; a row's lock button
   locks the Backdrop, after which a drag selects it but leaves it in place, the readout
   reads “640 × 360 · locked”, an arrow key sends nothing, and the item menu's checked
-  Lock unlocks it.
+  Lock unlocks it; a row's eye hides the Backdrop, after which it has no box and a click
+  where it was selects nothing, until its row is selected and it shows a dashed outline,
+  and showing it again draws a solid one (#1732).
 - **Crop** (`crop.spec.js`): the Crop tool, C, V, Escape, the item menu's Crop and a
   switch of scene enter and leave crop mode, whose readout says there is no source size
   while the engine reports none, and then a handle drag resizes as usual; with `sourceSizes` giving the Backdrop's source a size,
@@ -257,6 +265,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the left handle crops outside crop mode, and Clear crop gives the whole picture back;
   W % and H % read the size against the source's, set it, follow `source.size_changed`
   and go disabled without a size.
+- **The browser's menu and selection** (`chrome.spec.js`): a right-click on the header's
+  brand, readout and menu button, a dock tab, a panel heading and the canvas tools is
+  swallowed, while the Sources panel's search field keeps the browser's menu and opens no
+  panel menu; in Connection details the header swallows and a value doesn't, and in About
+  a version value and a link don't. A drag from
+  a dock tab across the panels, and a double-click on a tab or a caption, select no text,
+  while a double-click in the search field selects its word. File, Edit and View drop
+  straight from their buttons, each open button the same colour as its menu.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off, Select all, and New group, which
   groups the selection into "Group 1") and on the margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
@@ -267,7 +283,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   cancels the dialog. Its search box narrows the types by name ("COLOR" leaves Color,
   picked) or description ("nest" leaves Scene), shows "No source type matches." with
   Add disabled when none match, the dialog keeping its height throughout, and an empty
-  search lists them all again. An item row's menu lists the item menu's grouped lines and Delete source everywhere…, Send to back,
+  search lists them all again. An item row's menu lists the item menu's grouped lines, Properties… and Edit filters…
+  first (Edit filters… opening Properties on Filters), and Delete source everywhere…, Send to back,
   from the Order submenu, restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
   with its check following, Screenshot (source) shows a toast (the mock engine streams
@@ -282,7 +299,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   both; a placement of a shared source switches, from the Reference or clone submenu, to an independent clone and back to a
   reference in one edit each, its menu's head and checks following, and the original,
   placed once, has no switch; Ctrl+D and Ctrl+Shift+D duplicate on the canvas and in a
-  row, and Del removes there; a nested scene's menu opens it; a scene row's Rename
+  row, and Del removes there; a nested scene's menu opens it, and the Sources caption's Back to “Main” goes back up
+  with the nesting row selected; a scene row's Rename
   renames, and the Scenes panel's New scene adds one with its name field focused. The
   header's menus act as a menu bar: a click opens File, pointing at Edit and View opens
   each in its place, a click on the open menu's button closes it, after which pointing
@@ -342,6 +360,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   font", the mock's two fonts (`MOCK_FONTS`) and "Other file…" (ADR-0092); a picked
   font is saved on OK as one edit and selected when the dialog opens again, and "Other
   file…" shows the root and path, which stay shown for a path the list doesn't name.
+  With a live whole-number setting described, a drag on its field (#1734) sends
+  `live.set` values as it goes, the last one the dragged value, with `rev` unchanged
+  and no commit at the release; OK is one edit whose `ends_gesture` batch carries it.
 - **Capture targets** (`capture-targets.spec.js`): with the `window` kind described, a
   new Window capture's Properties dialog lists the mock's one window by name and size
   after None, and not its display; picking it and pressing OK is one edit, and the
@@ -354,17 +375,24 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   and `,` are read; crop (with the folded "cropped" hint), opacity, the Fit select and
   the favourite star are sent; with no item selected the scene's object count, uses and Transition
   in and out show, and a second selected item shows "+1"; an item's sections are in
-  the Transform, Motion and Behaviour tabs, each hiding the others', with no Properties
+  the Transform, Motion and Behaviour tabs (Behaviour's four hotkey rows, the item's
+  Control row among them), each hiding the others with no Properties
   section, the arrow keys moving along the strip with the focus, the tab kept across a
   reload, and the header's Properties & filters… opening the Properties dialog; X and
   Y, W and H, and W % and H % each on one row of its group, the crop's four sides two by
-  two, and no sideways scroll in the Transform tab. The mock
+  two, and no sideways scroll in the Transform tab. A drag on X (#1734) sends
+  `live.set` values of the dragged box, which the engine answers with `live.changed`,
+  before the release, with `rev` unchanged; the release is one batch with
+  `ends_gesture`, and one Undo takes the whole drag back. Dragged back to its start, the
+  newest `live.set` carries the start, and the release sends `live.cancel` and no commit
+  (#1740's review). A drag on Opacity sends `item.set_opacity` live values the same
+  way, before the release that commits them in one undoable batch (ADR-0213). The mock
   engine doesn't implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
   chain; with the Backdrop selected, its title, note, one video chain of its source
   (above the item's effects) with its count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
   drag putting it above Sharpen as one more, and × removing Sharpen; Edit filters… in
-  an item's menu selecting the item and showing the panel behind the Arrange tab; the
+  an item's menu selecting the item and opening its Properties on Filters; the
   Add filter dialog from the panel and over the Properties dialog, which Escape leaves
   open; and the Filters window on a double-click, named for the Backdrop, with the
   prototype's hint for Blur, the source's picture, and one footer of a note and Close:
@@ -387,13 +415,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Add as one edit, the new filter opening in place, where a changed setting is one more
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filters window was closed,
-  each in the problem bar.
+  each in the problem bar. A drag on Sharpen's amount (#1734, #1739) shows its value
+  under the pointer and sends it as `filter.set_settings` values of a gesture's
+  `live.set`, which the engine answers with `live.changed`, before the release, with
+  `rev` unchanged; the release is one batch with `ends_gesture`, one revision that one
+  Undo takes back (ADR-0213).
 - **Scene filters** (`scene-filters.spec.js`): with no item selected the panel showing
   Main's empty video chain with the scene note; with Sharpen and Gain described, Add
   filter offering only Sharpen, with the scene's foot, as one edit on the scene, while
   the Backdrop keeps its own two; another scene selected showing its own chain; a scene
-  row's Edit filters… showing that scene's chain from behind the Arrange tab while
-  the item stays selected, selecting a scene going back to its chain, and the canvas
+  row's menu leading with Properties… and Edit filters…, which opens Scene properties on
+  Filters while the item stays selected (Properties… still on Settings), selecting a
+  scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
   dialog's Filters segment (counting 0, then 1) listing the scene's chain and adding to
   it at once, the new filter's settings showing beside it (the footer's Defaults
@@ -469,7 +502,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
   docked in the Right sidebar the strips start vertical, 64px wide, and the button
   flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
-  master strip's loudness and true-peak warning, announced only once over 0 dBTP.
+  master strip's loudness and true-peak warning, announced only once over 0 dBTP. A drag
+  on the Mic's send to the master, under Routing, sends `send.set` values of a gesture's
+  `live.set`, which the engine answers with `live.changed`, before the release, with
+  `rev` unchanged; the release is one batch with `ends_gesture`, and one Undo takes the
+  whole drag back (ADR-0213).
 - **Labels** (`labels.spec.js`): the label manager, opened from the Sources
   panel's filter, adding a label (its icon picker open on the tag), renaming it,
   choosing an icon and a colour, a second label taking the next swatch, and Done; a
@@ -485,16 +522,80 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Channels** (`channels.spec.js`, [ADR-0183](../../../../docs/adr/0183-virtual-control-channels.md)):
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
+- **Map control** (`map-control.spec.js`, with `liveSources`): a right-click on a mixer
+  fader's number or on the fader itself opening the fader's menu (the row's control
+  button for the setting the fader names, beside the mute's and the mute keys'), Map control… opening the dialog, a Mod picked there
+  changing nothing until Use, which is one edit and names the Mod on the control button;
+  Cancel changing nothing; at a UI scale of 150% the row's menu opening at the pointer;
+  the menu's Learn taking the one MIDI control that moves
+  after it opened, as one edit; and mapping mode from the dialog's "Map by dragging":
+  the bar naming the armed Mod, a click on a setting mapping nothing, a 20 px drag up
+  showing "+10 %" and sending one edit when let go, a second drag moving the far end
+  as one more edit, and Escape closing a menu in front first and then leaving the mode, then the dialog listing that mapping as
+  an Offset, Bypass striking it through and back as an edit each, and a second Mod used
+  as Override sitting beside it, named on the button with "and 1 more" in the menu (no
+  sender name); the
+  Audio tab's "Follow the program mix" mapping the level as one edit, named Audio on the
+  button; and an item's properties from the
+  Inspector: the crop edges marked as targets, a right-click on Rotation opening its menu and the dialog on it, a 50 px
+  drag tagging the field "+90°" and sending one edit while the field keeps its stored
+  value, the same armed Mod mapping X as one more edit, and the menu naming the mapping by its
+  Mod and offset (no sender name, as it follows the live sender), its Bypass ticked after one edit, and its Remove taking the
+  rotation mapping off.
+- **Mappings** (`mappings.spec.js`): the Mappings panel from the View menu saying nothing
+  is mapped, then listing a channel made in the Channels panel as a group with
+  "+ Target…"; a search that matches nothing saying so; a click on the channel opening its
+  card; "+ Target…" arming it, which the Sources tab shows beside its "No JTunnel sender"
+  hint, and Escape disarming it; and, with a live sender, naming Mod 20 in the Sources
+  tab, which makes its channel, shown in the Mappings tab as "Camera roll (Mod 20)" with
+  the Mod's live value; and the Triggers tab saying nothing runs yet and no sequence
+  starts by itself, then binding F8 to switch to Intro.
+- **PTZ cameras** (`ptz.spec.js`, [ADR-0209](../../../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)):
+  with no camera listed, the panel's empty state naming `--ptz-camera`; with two
+  (`--ptz-camera`), the picker, the head answering, a typed zoom aiming it, the control
+  button on each axis, a preset named and saved from its menu and Save, and the selected
+  scene's shot set from the position and from a preset, then cleared, with the other
+  camera keeping its own pose; a drive held on the pad's arrow key stopped when the
+  focus leaves the pad, and a held Near stopped when the focus leaves it, read off the
+  page's WebSocket; and as the desktop app (its global stubbed, as
+  `browse.spec.js` does), the gear opening Settings › Devices' camera list, a camera
+  added without a port saved with VISCA over IP's, and a name taken already refused
+  unsaved.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
   Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
-  menu's thirteen panels, adding Live chat, which says it waits on YouTube sign-in.
+  menu's sixteen panels, adding Live chat, which says it waits on YouTube sign-in.
+- **Show** (`show.spec.js`, the Show panel alone in a tall bottom dock): a new show from
+  the empty panel, named in place; Intro and Main dragged from the Scenes panel onto V1,
+  with the drop slot showing during the drag and a pausing bookmark at each end; "Next:"
+  naming what Play brings in from the play head, a click skipping the head there and
+  then naming what starts after it; a
+  bookmark (B), a loop drawn on the ruler (L) and a trim of Main's right end, each one
+  `show.set`, and Edit › Undo taking them back one at a time; the cut badge's transition
+  menu; an audio track and a source's audio from its menu's Add source audio at m:ss, with default fades, removed with Delete; a video
+  file dropped as a browser URI list, made into a source and scene in the same batch
+  as the show; the lock refusing Delete; a trim held mid-drag and let go with Escape,
+  sending nothing; and the picker's menu duplicating, renaming and deleting a show.
+- **Show labels** (`show-labels.spec.js`): a crowded show sent as one `show.set` over
+  the page's own socket, with short program clips, keyframes in stacks, events close
+  together and thin overlay clips. No keyframe's name or count runs into the next
+  diamond, a stack of four is named once with "+3" and lists all four in its tooltip,
+  no named event pill runs into the next, a cut badge with its label clears its
+  neighbours, and a clip's name stays inside its clip; hovering a keyframe whose name
+  was left out shows it.
 - **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
   changes; with two items, Selection on, Distribute off, and Match width and height
   giving both the primary item's size.
+- **Keys & MIDI** (`keys-and-midi.spec.js`,
+  [ADR-0208](../../../../docs/adr/0208-several-actions-per-key-or-trigger.md)): on
+  Settings › Keys & MIDI, + Key takes F8, the picker binds Switch to Intro and + Action
+  adds Reset the loudness meter after it; Go live with no stream output says to add one
+  and adds nothing; a chip's ✕ unbinds one action and Remove the key. A typed MIDI note
+  40 on channel 10 is bound to Switch to Main, and the search finds it by its action
+  and not by another's. Learn isn't driven, since the mock reads no MIDI.
 - **Keyframes and hotkeys** (`keyframes.spec.js`): New keyframe on Main's row nests
   "Keyframe 1" under it with the diamond, selected, under the canvas banner, and Main's
   caret folds it away and back; in the keyframe, the eye and the X field write its
@@ -518,11 +619,17 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   of `timing` and blanks the field again.
 - **Studio mode** (`studio.spec.js`): turning studio mode on puts the canvas, the
   studio controls and the program monitor side by side, labelled "Preview · Main" and
-  "Program · Main", and turning it off takes the controls and the monitor away;
+  "Program · Main", and turning it off takes the controls and the monitor away; with
+  a 1080 × 1920 canvas they stay side by side in a 1600 × 1000 window and stack,
+  preview over the controls over program at the same width, in a 1080 × 1900 one;
   Transition and Cut are off while preview is the program scene; a scene clicked onto
   preview goes to program with Transition, and the old program scene comes back on
   preview, where the canvas shows it; with Swap off, Cut takes the preview scene and it
-  stays on preview; the Transitions panel's foot says whether studio mode is on and it has no
+  stays on preview; with studio mode off the canvas follows every program change: another
+  client's click and a hotkey (F1, bound by the other client) each show the new program
+  scene; in studio mode another client's switch moves the program label but leaves the
+  canvas on preview, and turning studio mode off then shows the program scene (#1733);
+  the Transitions panel's foot says whether studio mode is on and it has no
   preset switch picker; the preset picker lists "Cut · Default", whose editor has
   Type Cut, no duration, and counts its overrides, and whose ⋯ menu has Set as default
   checked and Delete… off; choosing Fade in Type sends its `transition.update`, Rename
@@ -531,6 +638,24 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   curve's drawing and points, and an x1 past 1 is sent as 1 in the easing's
   `transition.update`. The mock engine refuses preset edits,
   so the panel after an edit is tested natively.
+- **Sequences** (`sequence.spec.js`, the panel shown from View and its dock pulled up):
+  with every engine message held back 300 ms, two quick double-clicks on a lane show
+  two new points at once and the last `timeline.set` carries both, two clicks on M leave
+  the lane as it was, and two clicks on Play send one `timeline.play` and one
+  `timeline.stop`. "+ Trigger" offers no channel the sequence's own lanes drive, and
+  adds a trigger on another. A lane made a switch (its point held at 0 from the point's
+  menu, which a click opens) has no dots: a double-click in a gap adds a one-second bar
+  and one in a bar adds nothing, a drag on its body moves it as one `timeline.set`, a
+  drag on either end moves that end, a bar stops at the end and 0.1 s short of another,
+  the points sent are off at 0 and on at the bar, a click or a right-click opens its menu
+  (only Delete bar, typed times kept between its neighbours), and Delete removes a
+  focused one, leaving a switch lane. An on/off event's chip opens its editor on a click
+  and on a right-click, and a drag moves it by as much as the pointer moved. The zoom
+  bar reads "Whole sequence · 6 s"; + from the keyboard zooms the ruler to over three
+  times its column with 0.2 s ticks and a thumb under a third of the bar, a
+  double-click on the zoomed lane at half a second adds a point at 0.5 s, a
+  double-click on the bar fits the ruler to its column again, and Ctrl+wheel over the
+  lanes zooms in.
 - **Scene transitions** (`transitions.spec.js`): a scene row's Transition in submenu
   checks "Default (Cut)", lists the Cut preset with its kind, and sends
   `scene.set_transitions`, and Manage presets… shows the Transitions tab; a double click
@@ -565,12 +690,25 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
   readout, sends live values, and commits one `scene.set_camera` with a moved camera as
-  one revision, which one undo puts back. With a window capture in the scene, the
+  one revision, which one undo puts back. In camera mode the live aim's buttons send no
+  `scene.drive_camera` while the pointer only passes over them; a press on Pan right
+  sends pan 12 once, nothing more while the held pointer wanders off the button, and pan
+  0 once on release; Space on a focused Tilt up drives tilt once whatever its repeats and
+  stops on keyup, and Shift+Enter on Zoom in drives zoom 2 and stops once when the focus
+  moves away. With a window capture in the scene, the
   camera and Depth of field on, Follow pointer offering Add Follow pointer… (a filter on
   the capture, ADR-0120), and a camera-motion row added, the settings column's
   `scrollWidth` stays within its `clientWidth` at the dialog's width and when a
   720-wide viewport clamps the dialog; the Nearest on top check sits in front of its
   text, and the Roll field keeps room for its number.
+- **Fly mode** (`fly.spec.js`): in a scene given a camera, F turns on camera mode and
+  fly mode and the pill reads "fly ×1.00"; W held sends live values and then one
+  `scene.set_camera` with the camera and its target moved together toward the canvas;
+  Space with D raises it and moves it right while E rolls it (D stays a fly key, not the
+  Depth tool); Shift lowers it and R levels the roll (not the Turn tool); a left drag
+  turns it where it stands; Shift+wheel sets "fly ×1.49" and the plain wheel then widens
+  its field of view from the same position; Esc leaves fly mode, then camera mode; and
+  one undo takes back the last commit.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the
@@ -583,7 +721,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   checks a picture: the engine's tests check the frames.
 - **Video settings** (`video-settings.spec.js`): File › Video settings… opens Settings
   on Video, at 1920×1080 at 30 fps with Browser-style blending; a preset fills both sides, a typed
-  side of 0 turns the preset to Custom and is refused on Save; 1280×720 at 60 fps
+  side of 0 turns the preset to Custom and is kept to 1, the least the shared number
+  field takes; 1280×720 at 60 fps
   in Linear light saves as one revision and reopens with those values; Save with
   nothing changed sends nothing; and one Undo takes back all three. Scale existing scenes
   to fit starts ticked: 1280×720 then sends, in the batch with

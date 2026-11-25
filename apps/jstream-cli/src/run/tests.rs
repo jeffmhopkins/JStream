@@ -888,7 +888,7 @@ fn program_scene_golden() {
             r#""program_scene":"brb","preview_scene":"main","warm_scenes":3,"warm_gpu_mib":0,"#,
             r#""rendering":{"shadows":true,"ambient_occlusion":true,"volumetric_fog":true,"#,
             r#""floor_reflections":true,"reflection_probes":true,"max_probe_resolution":512,"#,
-            r#""screen_space_reflections":false,"screen_space_steps":16}}}}"#,
+            r#""screen_space_reflections":false,"screen_space_steps":16,"model_resolution":0,"min_model_resolution":50,"model_antialiasing":4}}}}"#,
             "\n"
         ))
     );

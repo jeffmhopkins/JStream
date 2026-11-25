@@ -644,6 +644,7 @@ mod tests {
     /// A gentle sway along x.
     fn sway() -> jstream_protocol::MotionModifier {
         jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "sway".into(),
             property: jstream_protocol::MotionProperty::X,
             effect: None,
@@ -996,6 +997,7 @@ mod tests {
         let mut c = collection();
         c.scenes[0].camera = Some(SceneCamera::framing(c.canvas));
         c.scenes[0].camera_motion = vec![jstream_control::protocol::CameraMotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "sway".into(),
             property: jstream_control::protocol::CameraProperty::PositionX,
             kind: crate::panels::motion::sized_kind("Wiggle", 6.0).expect("a kind"),

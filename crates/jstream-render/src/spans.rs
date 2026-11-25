@@ -15,6 +15,12 @@
 //! ([`Compositor::gpu_units`](crate::Compositor::gpu_units)), each unit's spans in the
 //! frame added together.
 //!
+//! One unit is named at a time and every span is one submit's, so a frame's spans never
+//! nest or overlap: its units' times add up to the GPU time of the frame's timed work.
+//! The program's render thread relies on that sum to choose the size 3D models are drawn
+//! at (ADR-0197), so a unit must never be timed inside another. A span longer than
+//! [`LONGEST`] is dropped as garbage, which makes its frame read shorter than it was.
+//!
 //! [`FRAMES`] frames may be on their way at once, each of at most [`SPANS`] spans; a
 //! frame opened while all are on their way isn't timed, and spans past the last aren't
 //! either. Copies and uploads outside a submit of the compositor's own (a texture write,
@@ -193,6 +199,7 @@ impl Spans {
         });
         encoder.resolve_query_set(&set.queries, 0..count, &set.resolve, 0);
         encoder.copy_buffer_to_buffer(&set.resolve, 0, &set.readback, 0, u64::from(count) * 8);
+        crate::gpu::count_submit();
         queue.submit([encoder.finish()]);
         set.state.store(PENDING, Ordering::Release);
         let state = Arc::clone(&set.state);

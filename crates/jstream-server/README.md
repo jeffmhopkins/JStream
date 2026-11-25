@@ -60,13 +60,20 @@ Contents (a first cut; [Design](#design) explains the choices):
   client, such as the web UI's dock, and the file that keeps them
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
 - **Pairing** (`pair.rs`): `POST /api/v1/pair` (`PAIR_PATH`), which trades the open code
-  for a device token, or for the device cookie in a browser.
+  for a device token, or for the device cookie in a browser, and `POST /api/v1/pair/ask`
+  (`PAIR_ASK_PATH`), where a device asks the person to pair it.
+- **Asks** (`asks.rs`,
+  [ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)): the
+  devices waiting for the person to answer their ask, `pairing.asked` and
+  `pairing.ask_ended`, which every admitted session hears, and `pairing.answer`, which
+  `Admitted` answers.
 - **Pairing page** (`pair_page.rs`, `pair.html`): `GET /pair` (`PAIR_PAGE_PATH`), the
   token-free page a browser pairs on, on a TLS listener only
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)).
 - **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
-  unless `ServerConfig::pairing` is off, and the agent approval calls, and holds a
+  unless `ServerConfig::pairing` is off, `pairing.answer`, and the agent approval calls,
+  and holds a
   `hello` for approval
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
 - **Listener** (`listener.rs`): accepts TCP connections with Nagle's algorithm off,
@@ -95,6 +102,12 @@ Contents (a first cut; [Design](#design) explains the choices):
   TLS-only listener for devices on the network
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), on rustls with the
   ring provider, with its own pool of open connections.
+- **Announcement** (`announce.rs`, `tls` feature): the mDNS responder that announces the
+  network listener as `_jstream._tcp.local` while `NetworkConfig::announce` is set
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)).
+- **Network switch** (`switch.rs`, `tls` feature, and `network_state.rs`): opens and
+  closes the network listener while the server runs, and the state the handlers read
+  for it ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)).
 - **Certificate** (`identity.rs`, `tls` feature): the network listener's key and
   self-signed certificate, made on the host and kept in one user-only file beside the
   token file (`identity_file`), its SHA-256 fingerprint, and the machine's names and
@@ -298,8 +311,10 @@ its own from a short code instead of the control token.
   server answers none of the three calls: they reach the session, which answers
   `unsupported`, so a host's UI hides its pairing panel. No code is ever drawn,
   `GET /pair` is 404, and the gate accepts no device token or cookie, not even one
-  already in the device file, since nothing could list or revoke it. `jstream-desktop`
-  turns it off.
+  already in the device file, since nothing could list or revoke it. While the network
+  listener is open, the server pairs whatever this says
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)). `jstream-desktop`
+  turns it off, so it pairs exactly while its network listener is open.
 - **The exchange.** `POST /api/v1/pair` (`PAIR_PATH`) with
   `{"code": "...", "name": "..."}`, and `"browser": true` from the pairing page, is
   answered without a token; it still passes the `Host` and `Origin` checks. The name is
@@ -314,6 +329,36 @@ its own from a short code instead of the control token.
 | A wrong code | 403 (its message says when that attempt voided the code) |
 | The open code | 200, `Cache-Control: no-store`, `{"device_id": "dev_…", "token": "<64 hex digits>"}` |
 | The open code, `"browser": true`, on a TLS listener | 200, `Cache-Control: no-store`, `{"device_id": "dev_…"}` and `Set-Cookie: __Host-jstream_device=<token>; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000` |
+| The device file can't be written | 500, and nothing is paired |
+
+- **Asking instead of a code**
+  ([ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)).
+  `POST /api/v1/pair/ask` (`PAIR_ASK_PATH`) with `{"name": "..."}` is answered without a
+  token, after the same `Host` and `Origin` checks, and only while the server pairs
+  devices (`ServerConfig::pairing` on or the network listener open). It opens an ask
+  (`asks.rs`): every admitted session hears `pairing.asked` with the ask's ID, the name
+  and the address it came from, and the request is held until a session answers with
+  `pairing.answer {ask_id, allow}`, for at most 2 minutes (`ASK_TIMEOUT`). At most 4
+  asks are open at once (`MAX_OPEN`), and one per address (IPv4-mapped addresses
+  compared as IPv4). A device that closes its connection ends its ask. So does closing
+  the network listener (for an ask held on it) or stopping the server: the ask ends as
+  `closed` with `503`, so a close never waits for the person's answer, and an Allow
+  that arrives as network access is turned off pairs nothing. Every session hears `pairing.ask_ended` with how it ended.
+  Allowed, the device is paired as with a code (`Devices::add`): no attempt is used up
+  and no code needs to be open. The device keeps the certificate it saw (trust on first
+  use, ADR-0235 decision 4).
+
+| Ask | Answer |
+|---|---|
+| A method other than `POST` | 405 with `Allow: POST` |
+| The server pairs no device, or a plain listener off loopback | 404 |
+| A body that isn't `Content-Type: application/json` | 415 |
+| A body over 4 KiB, one that isn't `{"name"}`, or a name that isn't allowed | 400 |
+| 4 asks open, or one from this address | 429 |
+| Allowed in JStream | 200, `Cache-Control: no-store`, `{"device_id": "dev_…", "token": "<64 hex digits>"}` |
+| Denied in JStream | 403 |
+| No answer in 2 minutes | 408 |
+| The network listener closed, or the server stopped, first | 503 |
 | The device file can't be written | 500, and nothing is paired |
 
 - **Device tokens.** A device token is 32 bytes from `getrandom` as 64 hex digits,
@@ -418,6 +463,21 @@ reach the server. With the `tls` feature, `ServerConfig::network` (a `NetworkCon
 an address and an `Identity`) opens a second listener beside the host's own, which is
 unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
 
+- **Opened and closed while it runs**
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md), `switch.rs`,
+  `network_state.rs`). `Server::network_switch` gives a `NetworkSwitch`: `open` binds a
+  listener with a `NetworkConfig` (closing one already open), `close` closes it, and
+  `set_announce` starts or stops its announcement. `ServerConfig::network` opens one at
+  `bind` through the same switch; one opened before serving starts serving with it. The
+  gate's network side and what `pairing.start` says about it are read per request from
+  the shared `NetworkState`, so they follow the switch. Closing clears that state
+  first, so a request still arriving fails its `Host` check, then stops accepting
+  (graceful), says goodbye on mDNS, and ends every WebSocket session admitted through
+  it with 1001, as at shutdown: each holds the listener's own stop signal. The
+  server's shutdown closes it the same way, and lets go of the router it served with,
+  so the shutdown's wait for sessions isn't held up.
+  `tests::network::the_network_listener_opens_and_closes_while_the_server_runs` checks
+  this.
 - **TLS only.** rustls with the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)),
   TLS 1.3 and 1.2 with rustls' default cipher suites for each, no client certificates,
   ALPN `http/1.1` (#1129 N2). A plain HTTP request gets no HTTP answer. The handshake
@@ -438,7 +498,7 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   when present, must be `https://` and that host; the configured extra origins are the
   host listener's only. The control token, and the host UI's own token (`ui_token`), are
   refused there however they are presented, with a `401` that asks for a paired device's token (`Refusal::NetworkControlToken`).
-  A device token, or a browser's device cookie, gets in while pairing is on. The
+  A device token, or a browser's device cookie, gets in while the listener is open. The
   pairing exchange and `GET /pair` are served there, sharing the code's five
   attempts with the host's listener.
 - **Limits** (#1129 N1). It has its own pool of open TCP connections, as many as
@@ -447,7 +507,8 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   WebSocket connection and MCP session limits are shared, since only a paired device
   reaches them.
 - **The host's side.** `Server::network_addr`, `network_urls` (one per name the
-  certificate carries) and `network_fingerprint` give what the host shows the person:
+  certificate carries) and `network_fingerprint`, and `NetworkSwitch::info` and what
+  `open` answers (`NetworkInfo`), give what the host shows the person:
   the addresses and the SHA-256 fingerprint, as `AB:CD:…`, the way a browser's
   certificate viewer writes it. `pairing.start`'s answer carries the same two as
   `network` (protocol 0.97), so the host UI and the CLI show them beside the code;
@@ -455,13 +516,28 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   address and fingerprint.
 - **Where it listens.** Wherever `NetworkConfig::bind` says: the daemon binds every
   interface on port 4456 unless told otherwise (#1129 N3), and says so in its help.
+- **Announcing it** (`announce.rs`,
+  [ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)). With
+  `NetworkConfig::announce` (or `NetworkSwitch::set_announce`), the served listener also runs a small mDNS responder: one
+  DNS-SD instance, `<host name>._jstream._tcp.local`, as a PTR, an SRV with the
+  listener's port and the host's `.local` name, and a TXT `v=1`, nothing more (no
+  address records: a device uses the address the answer came from). It shares UDP 5353
+  with the system's responder (address reuse) on `224.0.0.251`, announces three times a
+  second apart and then once a minute with a TTL of 120 s, answers queries for the
+  service or the instance from the local network only (a private, link-local or
+  loopback source, `announce::on_link`, as `jstream_core::lan::is_lan`) to the group at
+  most once a second, answers a one-shot query from another port to its sender with
+  its question repeated, and says goodbye with TTL 0 when the server stops. A query is read with bounds on its
+  size, questions, labels and compression pointers (backwards only). If 5353 can't be
+  opened it logs at `warn` and the listener works as before. The daemon announces with
+  `--lan` unless `--lan-quiet`; the desktop app unless its setting is off.
 
 ### Sessions
 
 Each accepted connection gets a fresh session from the `Connector`
 (`Arc<dyn Fn() -> Box<dyn Control>>`), dropped when the connection ends, wrapped in the
 server's own `Control` (`admitted.rs`), which answers `pairing.start`, `device.list` and
-`device.revoke` from the device store and `ui_settings.get` and `ui_settings.set` from
+`device.revoke` from the device store, `pairing.answer` from the open asks, and `ui_settings.get` and `ui_settings.set` from
 the UI settings (after a successful `hello`, like any call),
 renames a device's `hello` to `device:<name>`, and passes everything else through. The connection
 task speaks the envelope
@@ -689,7 +765,9 @@ the server forbids `unsafe`, and the daemon links that crate anyway. With the `t
 feature only: `rustls` (ring provider, already in the tree for `jstream-outputs`' RTMPS)
 and `tokio-rustls`, the rustls project's async adapter, for the network listener;
 `rcgen` (ring) for its certificate, a normal dependency here where it was the RTMPS
-tests' dev-dependency (#1129 N2); `ring` for the certificate's SHA-256 fingerprint.
+tests' dev-dependency (#1129 N2); `ring` for the certificate's SHA-256 fingerprint;
+`socket2`, already the workspace's for the JTunnel receiver, for the mDNS socket that
+shares port 5353 (address reuse) and joins the group ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)).
 
 ### Open questions
 

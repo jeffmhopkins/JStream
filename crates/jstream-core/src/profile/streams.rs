@@ -72,6 +72,15 @@ pub(crate) fn encoder_target(
 /// Reads one stream's running totals.
 pub(crate) type ReadStream = Box<dyn Fn() -> StreamTotals + Send + Sync>;
 
+/// Reads the video encoder encoding a stream now: its name and whether it is a
+/// hardware one. `None` once its session is gone.
+pub(crate) type ReadEncoder = Box<dyn Fn() -> Option<(String, bool)> + Send + Sync>;
+
+/// [`ReadEncoder`] for the session `handle` reads.
+pub(crate) fn encoder_of(handle: jstream_encode::StatsHandle) -> ReadEncoder {
+    Box::new(move || handle.codec().map(|codec| (codec.name, codec.hardware)))
+}
+
 /// What a stream is, for its profile.
 pub(crate) struct StreamMeter {
     /// Which stream.
@@ -82,6 +91,8 @@ pub(crate) struct StreamMeter {
     pub(crate) target_kbps: u32,
     /// Reads its totals.
     pub(crate) read: ReadStream,
+    /// Reads its video encoder.
+    pub(crate) encoder: ReadEncoder,
 }
 
 /// The streams registered now, by a number of their own: a stream registered again (an
@@ -111,6 +122,7 @@ impl StreamMeters {
                         fps: meter.fps,
                         target_kbps: meter.target_kbps,
                         totals: (meter.read)(),
+                        encoder: (meter.encoder)(),
                     },
                 )
             })
@@ -160,6 +172,9 @@ pub(super) struct StreamReading {
     fps: f32,
     target_kbps: u32,
     totals: StreamTotals,
+    /// Its video encoder's name and whether it is a hardware one; `None` when its
+    /// session had gone.
+    encoder: Option<(String, bool)>,
 }
 
 /// The streams' profiles between `base` and `now`, most frames lost first, then most
@@ -187,6 +202,7 @@ pub(super) fn stream_profiles(
             let encoded = now.encoded.saturating_sub(before.encoded);
             let encode = now.encode_nanos.saturating_sub(before.encode_nanos);
             let bytes = now.bytes.saturating_sub(before.bytes);
+            let encoder = reading.encoder.clone().unwrap_or_default();
             Some(StreamProfile {
                 stream: reading.stream.clone(),
                 fps: finite(reading.fps),
@@ -198,6 +214,8 @@ pub(super) fn stream_profiles(
                 encode_ms: ms(encode.checked_div(encoded).unwrap_or(0)),
                 kbps: kbps(bytes, span),
                 target_kbps: reading.target_kbps,
+                encoder: encoder.0,
+                hardware: encoder.1,
             })
         })
         .collect();
@@ -397,6 +415,7 @@ mod tests {
             fps: 60.0,
             target_kbps: 6000,
             totals,
+            encoder: Some(("an encoder".to_owned(), true)),
         }
     }
 
@@ -445,6 +464,10 @@ mod tests {
         assert_eq!(stream.encode_ms, Finite32::new(2.0).expect("finite"));
         assert_eq!(stream.kbps, 6000);
         assert_eq!(stream.target_kbps, 6000);
+        assert_eq!(
+            (stream.encoder.as_str(), stream.hardware),
+            ("an encoder", true)
+        );
     }
 
     #[test]

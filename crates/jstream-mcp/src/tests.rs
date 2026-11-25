@@ -246,6 +246,7 @@ fn handshake_list_and_call_round_trip() {
             "live",
             "midi",
             "output",
+            "overlay",
             "pack",
             "pairing",
             "preview",
@@ -254,6 +255,7 @@ fn handshake_list_and_call_round_trip() {
             "quality",
             "scene",
             "send",
+            "show",
             "source",
             "state",
             "studio",
@@ -446,7 +448,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(45));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(47));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -535,6 +537,10 @@ fn instructions_carry_the_design_guidance() {
         "`shadow_color`",
         "`source.sizes`",
         "`video.snapshot`",
+        "`show.continue`",
+        "`show.go_to_number`",
+        "`rehearse`",
+        "`overlay.toggle`",
         "`jstream.levels()`",
         "`page_api_audio`",
         "`jstream.midi()`",
@@ -995,6 +1001,9 @@ fn describe_api_returns_the_protocol_schema() {
     f.initialize();
     let result = f.call_tool("describe_api", json!({}));
     assert_eq!(ok(&result), &json_schema());
+    let result = f.call_tool("describe_api", json!({"name": "Action"}));
+    assert_eq!(ok(&result)["$ref"], "#/$defs/Action");
+    tool_error(&f.call_tool("describe_api", json!({"name": "nothing.here"})));
     // Only `initialize`'s `hello`: describing the API sends nothing.
     assert_eq!(f.hello_names(), ["agent-x"]);
 }

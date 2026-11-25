@@ -67,8 +67,10 @@ jobs:
             // failed or was cancelled is dispatched again. A failed dispatch (e.g. a branch
             // without after-review.yml) is logged; merging main fixes it.
             const dispatchAfterReview = async () => {
-              // ADR-0055: a PR into a wave branch gets no platform run; the wave's PR into main does.
-              if (pr.base.ref.startsWith('wave/')) return core.info('PR into a wave branch: after-review jobs not dispatched');
+              // ADR-0055, ADR-0231: a PR into any branch but main (a wave, a train, a stack) gets
+              // no platform run; that branch's own PR into main does. A PR retargeted to main is
+              // evaluated again on its `edited` event, and dispatched then.
+              if (pr.base.ref !== 'main') return core.info(`PR into ${pr.base.ref}, not main: after-review jobs not dispatched`);
               const { data: runs } = await github.rest.checks.listForRef({
                 owner, repo, ref: head, check_name: 'test (windows-latest)',
               });
@@ -152,35 +154,33 @@ jobs:
               try {
                 const cmp = async (basehead, per_page) =>
                   (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead, per_page })).data;
+                // The commits after the reviewed head, every page (the compare API lists at
+                // most 250). Only these are classified, each asked on its own whether the
+                // base branch has it, so the PR's own size doesn't matter (#1692).
                 const path = await cmp(`${from}...${head}`, 100);
-                // The base branch's own commits that a merge brought in are listed too; only
-                // the PR's own commits (on the head, not in the base) are classified.
-                const own = await cmp(`${pr.base.sha}...${head}`, 100);
-                const commits = [];
-                if (path.status === 'ahead' && path.total_commits <= 100 && path.commits.length === path.total_commits
-                    && own.total_commits <= 100 && own.commits.length === own.total_commits) {
-                  const ownShas = new Set(own.commits.map((c) => c.sha));
-                  for (const c of path.commits) {
-                    const entry = { parents: c.parents.length, parentInBase: false, files: null, inBase: !ownShas.has(c.sha) };
-                    if (entry.inBase) { commits.push(entry); continue; }
-                    if (c.parents.length === 2) {
-                      // A merge of the base: one parent is the base branch's tip or behind it.
-                      for (const p of c.parents) {
-                        const st = (await cmp(`${p.sha}...${pr.base.sha}`, 1)).status;
-                        if (st === 'ahead' || st === 'identical') entry.parentInBase = true;
-                      }
-                    } else if (c.parents.length === 1) {
-                      const { data: one } = await github.rest.repos.getCommit({ owner, repo, ref: c.sha, per_page: 100 });
-                      entry.files = (one.files ?? null) && one.files.map((f) => f.filename);
-                    }
-                    commits.push(entry);
-                  }
+                const listed = [...path.commits];
+                for (let page = 2; path.status === 'ahead' && listed.length < path.total_commits && page <= 3; page++) {
+                  const more = (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${from}...${head}`, per_page: 100, page })).data.commits;
+                  if (more.length === 0) break;
+                  listed.push(...more);
                 }
+                // Whether `sha` is in the base branch: the base's tip or behind it.
+                const inBase = async (sha) => {
+                  const st = (await cmp(`${sha}...${pr.base.sha}`, 1)).status;
+                  return st === 'ahead' || st === 'identical';
+                };
+                const files = async (sha) => {
+                  const { data: one } = await github.rest.repos.getCommit({ owner, repo, ref: sha, per_page: 100 });
+                  return (one.files ?? null) && one.files.map((f) => f.filename);
+                };
+                const commits = path.status === 'ahead' && listed.length === path.total_commits
+                  ? await classifyPath(listed, inBase, files)
+                  : [];
                 if (commits.length > 0 && onlyBaseMerges(commits)) {
-                  const files = async (base, sha) => (await cmp(`${base}...${sha}`, 300)).files ?? null;
+                  const changed = async (base, sha) => (await cmp(`${base}...${sha}`, 300)).files ?? null;
                   const reviewed = reviewedBase(comments, from) ?? pr.base.sha;
-                  const was = await files(reviewed, from);
-                  if (sameChange(was, await files(pr.base.sha, head))) {
+                  const was = await changed(reviewed, from);
+                  if (sameChange(was, await changed(pr.base.sha, head))) {
                     // ADR-0199: the compare API gives no file modes, so read them from the trees.
                     const tree = async (sha) =>
                       (await github.rest.git.getTree({ owner, repo, tree_sha: sha, recursive: 'true' })).data;
@@ -191,7 +191,9 @@ jobs:
                     core.info(`${from.slice(0, 7)} and ${head.slice(0, 7)} differ in the PR's own change: no carry`);
                   }
                 } else {
-                  core.info(`commits after ${from.slice(0, 7)} aren't only merges of the base branch: no carry`);
+                  core.info(commits.length === 0
+                    ? `couldn't list the commits after ${from.slice(0, 7)} (${path.status}, ${listed.length} of ${path.total_commits}): no carry`
+                    : `commits after ${from.slice(0, 7)} aren't only merges of the base branch: no carry`);
                 }
               } catch (e) {
                 core.warning(`could not compare ${from.slice(0, 7)} with ${head.slice(0, 7)}: ${e.message}`);
@@ -257,6 +259,26 @@ jobs:
             // one, a merge must have a parent that is in the base branch, and any other commit
             // must have one parent and touch only the stamp ledger (a `docs verify --merge`
             // restamp). Anything else, or files unknown, is no.
+            // The entries onlyBaseMerges reads, for the commits after the reviewed head. Each
+            // commit is asked `inBase(sha)` on its own (no list of the PR's own commits, which
+            // a release train's hundreds overflow, #1692); a merge's parents are asked too, and
+            // a single-parent commit of the PR's own gives its files.
+            async function classifyPath(path, inBase, files) {
+              const commits = [];
+              for (const c of path) {
+                const entry = { parents: c.parents.length, parentInBase: false, files: null, inBase: await inBase(c.sha) };
+                if (!entry.inBase) {
+                  if (c.parents.length === 2) {
+                    for (const p of c.parents) if (await inBase(p.sha)) entry.parentInBase = true;
+                  } else if (c.parents.length === 1) {
+                    entry.files = await files(c.sha);
+                  }
+                }
+                commits.push(entry);
+              }
+              return commits;
+            }
+
             function onlyBaseMerges(commits) {
               const own = commits.filter((c) => !c.inBase);
               return own.length > 0 && own.every((c) =>

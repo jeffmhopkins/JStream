@@ -101,11 +101,22 @@ const V19: &str = include_str!("fixtures/v19.json");
 /// version 1 must.
 const V20: &str = include_str!("fixtures/v20.json");
 
-/// A collection file at schema version 21, the current one: version 20 with a sequence
-/// on scene `a`, a timeline with a lane on `power` that scene `a` going on program
-/// starts and `power` falling stops (ADR-0184). The same rule applies once version 22
-/// exists.
+/// A collection file at schema version 21: version 20 with a sequence on scene `a`, a
+/// timeline with a lane on `power` that scene `a` going on program starts and `power`
+/// falling stops (ADR-0184). It must keep loading as version 1 must.
 const V21: &str = include_str!("fixtures/v21.json");
+
+/// A collection file at schema version 22: version 21 with a show that plays scene `a`
+/// then `b` with a pausing bookmark and a cue playing the sequence, a hotkey bound to
+/// its `show.go_to`, and scene `b` marked as the show scene (ADR-0210). It must keep
+/// loading as version 1 must.
+const V22: &str = include_str!("fixtures/v22.json");
+
+/// A collection file at schema version 23, the current one: version 22 with scene
+/// `a`'s own folders (ADR-0222), `looks` and `intro` inside it, keyframe `k` filed in
+/// `intro` and the sequence `power_up` in `looks`, and a scene-list folder `shows` after
+/// them in folder order. The same rule applies once version 24 exists.
+const V23: &str = include_str!("fixtures/v23.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -287,6 +298,7 @@ fn v4_graph() -> Graph {
                 scene_id: None,
                 motion: vec![
                     MotionModifier {
+                        mode: jstream_protocol::MappingMode::Add,
                         modifier_id: "sway".into(),
                         property: MotionProperty::X,
                         effect: None,
@@ -302,6 +314,7 @@ fn v4_graph() -> Graph {
                         amount: None,
                     },
                     MotionModifier {
+                        mode: jstream_protocol::MappingMode::Add,
                         modifier_id: "roll".into(),
                         property: MotionProperty::Rotation,
                         effect: None,
@@ -322,6 +335,7 @@ fn v4_graph() -> Graph {
                 item_id: ItemId::new("i3"),
                 scene_id: Some(SceneId::new("k")),
                 motion: vec![MotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: "scroll".into(),
                     property: MotionProperty::CropLeft,
                     effect: None,
@@ -371,6 +385,7 @@ fn v5_graph() -> Graph {
             Edit::SceneSetCameraMotion {
                 scene_id: SceneId::new("a"),
                 motion: vec![CameraMotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: "handheld".into(),
                     property: CameraProperty::PositionX,
                     kind: MotionKind::Wiggle {
@@ -409,6 +424,7 @@ fn v6_graph() -> Graph {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    folder: None,
                     lanes: Vec::new(),
                     starts: Vec::new(),
                     stops: Vec::new(),
@@ -593,21 +609,26 @@ fn fixture_graph() -> Graph {
                 audio_buses: vec![BusId::master()],
             },
             Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("F1"),
             },
             Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("Ctrl+Digit1"),
             },
             Edit::CanvasSetBlending {
                 blending: Blending::Linear,
             },
+            // The fixtures before version 22 hold no show (ADR-0210).
+            Edit::ShowDelete {
+                show_id: jstream_protocol::ShowId::new("evening"),
+            },
         ]
         .into_iter()
-        .chain(
-            parity::bindings()
-                .into_iter()
-                .map(|b| Edit::BindingClear { trigger: b.trigger }),
-        )
+        .chain(parity::bindings().into_iter().map(|b| Edit::BindingClear {
+            action: None,
+            trigger: b.trigger,
+        }))
         .collect::<Vec<_>>(),
         None,
     );
@@ -642,6 +663,7 @@ fn v12_graph() -> Graph {
         .map(|i| i.motion().to_vec())
         .expect("i4 is in the fixture");
     motion.push(MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "pulse".into(),
         property: MotionProperty::Effect,
         effect: Some(MotionEffect {
@@ -778,6 +800,7 @@ fn v17_graph() -> Graph {
         .map(|i| i.motion().to_vec())
         .expect("i4 is in the fixture");
     motion.push(MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "glow".into(),
         property: MotionProperty::Source,
         effect: None,
@@ -837,6 +860,8 @@ fn v19_graph() -> Graph {
     let applied = graph.apply(
         &[Edit::BindingSetValue {
             binding: ValueBinding {
+                enabled: true,
+                mode: jstream_protocol::MappingMode::Replace,
                 binding_id: "master_fader".into(),
                 input: MotionKind::Midi {
                     control: MotionMidiControl::Cc,
@@ -908,6 +933,7 @@ fn v21_graph() -> Graph {
         &[Edit::TimelineSet {
             scene_id: SceneId::new("a"),
             timeline: TimelineInfo {
+                folder: None,
                 timeline_id: TimelineId::new("power_up"),
                 name: "Power up".into(),
                 duration_ms: 3000,
@@ -951,9 +977,216 @@ fn v21_graph() -> Graph {
     graph
 }
 
+/// [`v21_graph`] with a show, a hotkey that jumps to its bookmark, and the show scene
+/// marker (ADR-0210).
+fn v22_graph() -> Graph {
+    use jstream_protocol::{
+        Action, Chord, ProgramClip, SequenceTrack, ShowBookmark, ShowCue, ShowId, ShowInfo,
+        TimelineId,
+    };
+    let mut graph = v21_graph();
+    let clip = |id: &str, scene: &str| ProgramClip {
+        clip_id: id.into(),
+        scene_id: SceneId::new(scene),
+        length_ms: 10_000,
+        preset_id: None,
+    };
+    let applied = graph.apply(
+        &[
+            Edit::ShowSet {
+                show: ShowInfo {
+                    name: "Evening".into(),
+                    program: vec![clip("open", "a"), clip("close", "b")],
+                    sequences: vec![SequenceTrack {
+                        track_id: "s1".into(),
+                        name: String::new(),
+                        cues: vec![ShowCue::new(
+                            "power",
+                            0,
+                            &Action::TimelinePlay {
+                                timeline_id: TimelineId::new("power_up"),
+                                delay_ms: None,
+                            },
+                        )],
+                    }],
+                    bookmarks: vec![ShowBookmark {
+                        bookmark_id: "break".into(),
+                        name: "Break".into(),
+                        at_ms: 10_000,
+                        pausing: true,
+                        preset_id: None,
+                        continue_after_ms: None,
+                        note: String::new(),
+                    }],
+                    ..ShowInfo::new("evening")
+                },
+            },
+            // The scene the engine would make to draw overlays over program.
+            Edit::SceneCreate {
+                scene_id: SceneId::new("show"),
+                name: "Show".into(),
+                role: None,
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F8"),
+                action: Action::ShowGoTo {
+                    show_id: ShowId::new("evening"),
+                    bookmark_id: "break".into(),
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    assert!(graph.set_show_scene(Some(SceneId::new("show"))));
+    graph
+}
+
+/// Version 22 with scene `a`'s folders (see [`V23`]).
+fn v23_graph() -> Graph {
+    let mut graph = v22_graph();
+    let folder = |id: &str, scene: Option<&str>, parent: Option<&str>| Edit::FolderCreate {
+        folder_id: FolderId::new(id),
+        name: id.to_uppercase(),
+        parent: parent.map(FolderId::new),
+        scene_id: scene.map(SceneId::new),
+    };
+    let Some((_, timeline)) = graph
+        .state()
+        .timeline(&jstream_protocol::TimelineId::new("power_up"))
+    else {
+        panic!("v22 has the sequence");
+    };
+    let timeline = jstream_protocol::TimelineInfo {
+        folder: Some(FolderId::new("looks")),
+        ..timeline.clone()
+    };
+    let applied = graph.apply(
+        &[
+            folder("looks", Some("a"), None),
+            folder("intro", Some("a"), Some("looks")),
+            folder("shows", None, None),
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("k"),
+                folder_id: Some(FolderId::new("intro")),
+            },
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v21_graph().to_collection_json(), V21);
+    assert_eq!(v23_graph().to_collection_json(), V23);
+}
+
+#[test]
+fn the_v23_fixture_loads_exactly() {
+    let expected = v23_graph();
+    let loaded = load(V23);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(21)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 23 adds a scene's own folders (ADR-0222): a folder's `scene`, a keyframe
+/// scene's `folder` and a timeline's `folder` in a version 22 file are each refused,
+/// as version 22 refused them.
+#[test]
+fn a_version_22_scene_folder_is_refused() {
+    let current: Value = serde_json::from_str(V23).expect("the v23 fixture");
+    let older = |edit: &dyn Fn(&mut Value)| {
+        let mut file: Value = serde_json::from_str(V22).expect("the v22 fixture");
+        edit(&mut file);
+        load(&file.to_string())
+    };
+    let folders = older(&|file| file["folders"] = current["folders"].clone());
+    assert!(
+        matches!(folders, Err(LoadError::Migration { from: 22, .. })),
+        "{folders:?}"
+    );
+    let keyframe = older(&|file| {
+        for scene in file["scenes"].as_array_mut().into_iter().flatten() {
+            if scene["id"] == "k" {
+                scene["folder"] = json!("intro");
+            }
+        }
+    });
+    assert!(
+        matches!(keyframe, Err(LoadError::Migration { from: 22, .. })),
+        "{keyframe:?}"
+    );
+    let timeline = older(&|file| {
+        for scene in file["scenes"].as_array_mut().into_iter().flatten() {
+            for t in scene["timelines"].as_array_mut().into_iter().flatten() {
+                t["folder"] = json!("looks");
+            }
+        }
+    });
+    assert!(
+        matches!(timeline, Err(LoadError::Migration { from: 22, .. })),
+        "{timeline:?}"
+    );
+}
+
+#[test]
+fn the_v22_fixture_loads_exactly() {
+    let expected = v22_graph();
+    let loaded = load(V22);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(20)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+    assert_eq!(
+        loaded.as_ref().ok().and_then(|g| g.state().show_scene()),
+        Some(&SceneId::new("show"))
+    );
+}
+
+/// Version 22 adds shows and the show scene marker (ADR-0210): either in a version 21
+/// file is refused, as version 21 refused it.
+#[test]
+fn a_version_21_show_or_show_scene_is_refused() {
+    let current: Value = serde_json::from_str(V22).expect("the v22 fixture");
+    for key in ["shows", "show_scene"] {
+        let mut file: Value = serde_json::from_str(V21).expect("the v21 fixture");
+        file[key] = current[key].clone();
+        assert!(
+            matches!(
+                load(&file.to_string()),
+                Err(LoadError::Migration { from: 21, .. })
+            ),
+            "a version 21 {key} loaded"
+        );
+    }
+    let mut hotkey: Value = serde_json::from_str(V21).expect("the v21 fixture");
+    hotkey["hotkeys"] = json!([{"chord": "F8", "action": {"type": "show.continue"}}]);
+    assert!(matches!(
+        load(&hotkey.to_string()),
+        Err(LoadError::Migration { from: 21, .. })
+    ));
+}
+
+/// A show scene marker naming a scene the file doesn't hold is dropped, not refused.
+#[test]
+fn a_show_scene_marker_naming_no_scene_is_dropped() {
+    let mut file: Value = serde_json::from_str(V22).expect("the v22 fixture");
+    file["show_scene"] = json!("gone");
+    let loaded = load(&file.to_string()).expect("loads");
+    assert_eq!(loaded.state().show_scene(), None);
+}
+
+/// A show scene marker naming a scene something shows (here `b`, which `b_src` places
+/// in `a`) is dropped too, as `Graph::set_show_scene` refuses it.
+#[test]
+fn a_show_scene_marker_naming_a_shown_scene_is_dropped() {
+    let mut file: Value = serde_json::from_str(V22).expect("the v22 fixture");
+    file["show_scene"] = json!("b");
+    let loaded = load(&file.to_string()).expect("loads");
+    assert_eq!(loaded.state().show_scene(), None);
 }
 
 #[test]
@@ -1773,7 +2006,7 @@ fn clone_links_round_trip() {
 #[test]
 fn hotkeys_round_trip() {
     let mut graph = fixture_graph();
-    assert_eq!(graph.state().hotkeys().len(), 0);
+    assert_eq!(graph.state().hotkeys().count(), 0);
     let applied = graph.apply(
         &[
             Edit::HotkeySet {
@@ -1839,6 +2072,60 @@ fn a_hotkey_and_a_binding_that_set_a_channel_round_trip() {
     );
     assert!(applied.is_ok(), "{applied:?}");
     assert_eq!(load(&graph.to_collection_json()), Ok(graph));
+}
+
+/// A chord and a trigger running several actions (ADR-0208) save one entry per action, in
+/// bind order, and load back the same, the chord's labels on each of its entries.
+#[test]
+fn a_chord_and_a_trigger_with_several_actions_round_trip() {
+    use jstream_protocol::Trigger;
+    let mut graph = fixture_graph();
+    let switch = Action::SceneSwitch {
+        scene_id: SceneId::new("a"),
+        preset_id: None,
+        via: Vec::new(),
+    };
+    let toggle = Action::OutputToggle {
+        output_id: OutputId::new("yt"),
+    };
+    let pad = Trigger::MidiNote {
+        note: 36,
+        channel: Some(10),
+        input: None,
+    };
+    let applied = graph.apply(
+        &[
+            Edit::HotkeySet {
+                chord: Chord::new("F9"),
+                action: toggle.clone(),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F9"),
+                action: switch.clone(),
+            },
+            Edit::BindingSet {
+                trigger: pad.clone(),
+                action: switch,
+            },
+            Edit::BindingSet {
+                trigger: pad,
+                action: toggle,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        saved["hotkeys"],
+        json!([
+            {"chord": "F9", "action": {"type": "output.toggle", "output_id": "yt"}},
+            {"chord": "F9", "action": {"type": "scene.switch", "scene_id": "a"}}
+        ])
+    );
+    assert_eq!(saved["bindings"].as_array().map(Vec::len), Some(2));
+    assert_eq!(load(&json), Ok(graph));
 }
 
 /// A binding is checked on load as `hotkey.set` checks it: here its scene is missing.
@@ -2701,11 +2988,13 @@ fn folders_labels_and_metadata_round_trip() {
     let applied = graph.apply(
         &[
             Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new("shows"),
                 name: "Shows".into(),
                 parent: None,
             },
             Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new("intros"),
                 name: "Intros".into(),
                 parent: Some(FolderId::new("shows")),

@@ -3,14 +3,18 @@
 //!
 //! The desktop app (`apps/jstream-desktop`) runs a script before the UI's own that
 //! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam, collection, network,
-//! networkOpen, browse, allowNetwork, jtunnel, setJtunnel, ptz, setPtz, saveScreenshot,
-//! openSaved, showSaved, setZoom }`: its in-process engine's WebSocket URL and control token,
+//! networkOpen, announce, browse, allowNetwork, setAnnounce, jtunnel, setJtunnel, ptz, setPtz, ptzCameras,
+//! setPtzCameras, saveScreenshot, openSaved, showSaved, setZoom }`: its in-process engine's WebSocket URL and control token,
 //! whether its virtual camera can be used, the default project's folder `collection`
 //! asset paths are relative to, whether "Allow devices on my network" was on at start and its listener
 //! opened, `browse`, which
-//! opens a native file dialog, and `allowNetwork`, which saves that setting; `jtunnel` and
+//! opens a native file dialog, and `allowNetwork`, which saves that setting and opens or
+//! closes the listener at once (ADR-0234); `announce` and `setAnnounce` are "Let
+//! devices find JStream on my network" (ADR-0233), which applies at once too; `jtunnel` and
 //! `ptz` are the JTunnel and PTZ controller settings as the app read them, and
-//! `setJtunnel` and `setPtz` save them. `saveScreenshot` saves a screenshot in Downloads and
+//! `setJtunnel` and `setPtz` save them; `ptzCameras` is the machine's PTZ camera list
+//! (ADR-0209 decision 1), which `setPtzCameras` saves and the app applies at once.
+//! `saveScreenshot` saves a screenshot in Downloads and
 //! answers its path, and `openSaved` and `showSaved` open such a file or show it in its
 //! folder (ADR-0163 §3). `setZoom` zooms the app's webview, for the UI scale
 //! (`ui_scale.rs`). In a browser the global is absent and the UI shows
@@ -20,6 +24,12 @@
 //! script: on Windows, WebView2 doesn't run it on a window handed to its opener. Such a
 //! window reads the global from its opener instead, which the browser allows only when
 //! the opener is a page of the same origin, the app's own.
+//!
+//! Files dragged from the desktop onto the app's main window reach the page as
+//! [`FILE_DROP_EVENT`]s on `window`, not as an HTML drop (the app handles the drag
+//! natively, so the webview's own drop carries no paths). [`on_file_drop`] hands any
+//! panel each step as a [`FileDrop`], and [`FileDrop::lands_on`] says whether it is
+//! over a given element.
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
@@ -41,7 +51,11 @@ pub struct HostEngine {
 
 /// The desktop app's global: this page's own, else its opener's when the opener is a
 /// page of the same origin (reading a property of a cross-origin opener throws).
+/// Off wasm (native unit tests) there is no page, so no desktop app.
 fn global() -> Option<JsValue> {
+    if cfg!(not(target_arch = "wasm32")) {
+        return None;
+    }
     let own = |target: &JsValue| {
         Reflect::get(target, &JsValue::from_str(DESKTOP_GLOBAL))
             .ok()
@@ -146,6 +160,18 @@ pub fn desktop_network() -> Option<bool> {
         .as_bool()
 }
 
+/// The desktop app's "Let devices find JStream on my network" setting as it was when
+/// the app started (ADR-0233), if the page runs in an app that has it.
+pub fn desktop_announce() -> Option<bool> {
+    let global = global()?;
+    Reflect::get(&global, &JsValue::from_str("setAnnounce"))
+        .ok()
+        .filter(JsValue::is_function)?;
+    Reflect::get(&global, &JsValue::from_str("announce"))
+        .ok()?
+        .as_bool()
+}
+
 /// Whether the desktop app said, at its start, that wheel chords are heard only while
 /// its window has the focus: macOS without the Accessibility permission, Wayland (whose
 /// GlobalShortcuts portal takes keys, not the wheel), or no hotkey listener. `false` in
@@ -158,7 +184,8 @@ pub fn desktop_wheel_focus_only() -> bool {
 }
 
 /// Whether the desktop app's network listener opened at start: `false` when the
-/// setting was on but its port was taken, and when the setting was off.
+/// setting was on but its port was taken, and when the setting was off. The page
+/// follows later switches itself, from what `allowNetwork` answers.
 pub fn desktop_network_open() -> bool {
     global()
         .and_then(|global| Reflect::get(&global, &JsValue::from_str("networkOpen")).ok())
@@ -188,6 +215,9 @@ pub struct JtunnelSetting {
     pub on: bool,
     /// The accepted senders.
     pub accepted: Vec<JtunnelSender>,
+    /// The accepted sender JStream receives from, one at a time; the others stand by.
+    /// `None`, or a name not accepted, means the first accepted.
+    pub live: Option<String>,
 }
 
 /// One accepted JTunnel sender.
@@ -200,6 +230,9 @@ pub struct JtunnelSender {
     /// "Use this sender's state" (ADR-0171 decision 1): on unless the person turns it
     /// off, and on when the JSON leaves it out.
     pub state: bool,
+    /// "Use this sender's MIDI" (ADR-0123 decision 3): off unless the person turns it
+    /// on, and off when the JSON leaves it out. On, its MIDI runs action bindings.
+    pub midi: bool,
 }
 
 impl JtunnelSetting {
@@ -216,10 +249,13 @@ impl JtunnelSetting {
                         let address = entry.get("address")?.as_str()?;
                         let state =
                             entry.get("state").and_then(serde_json::Value::as_bool) != Some(false);
+                        let midi =
+                            entry.get("midi").and_then(serde_json::Value::as_bool) == Some(true);
                         Some(JtunnelSender {
                             name: name.to_owned(),
                             address: address.to_owned(),
                             state,
+                            midi,
                         })
                     })
                     .collect()
@@ -228,7 +264,20 @@ impl JtunnelSetting {
         Self {
             on: value.get("on").and_then(serde_json::Value::as_bool) == Some(true),
             accepted,
+            live: value
+                .get("live")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
         }
+    }
+
+    /// The name of the sender JStream receives from: the one `live` names if it is
+    /// accepted, else the first accepted, as the desktop app reads it.
+    pub fn live_name(&self) -> Option<&str> {
+        self.live
+            .as_deref()
+            .filter(|name| self.accepted.iter().any(|sender| sender.name == *name))
+            .or_else(|| self.accepted.first().map(|sender| sender.name.as_str()))
     }
 
     /// The setting as the desktop app's `setJtunnel` takes it.
@@ -243,9 +292,11 @@ impl JtunnelSetting {
                         "name": sender.name,
                         "address": sender.address,
                         "state": sender.state,
+                        "midi": sender.midi,
                     })
                 })
                 .collect::<Vec<_>>(),
+            "live": self.live,
         })
         .to_string()
     }
@@ -414,37 +465,147 @@ pub async fn set_ptz(setting: &PtzSetting) -> Option<String> {
     }
 }
 
-/// Asks the desktop app to save "Allow devices on my network", which applies when it
-/// next starts. Resolves to whether it was saved.
-pub async fn allow_network(allow: bool) -> bool {
+/// The desktop app's "Control PTZ cameras" setting as it was when the app started
+/// (ADR-0209 decision 1), if the page runs in an app that has it.
+pub fn desktop_ptz_cameras() -> Option<PtzCameraSetting> {
+    let global = global()?;
+    Reflect::get(&global, &JsValue::from_str("setPtzCameras"))
+        .ok()
+        .filter(JsValue::is_function)?;
+    let value = Reflect::get(&global, &JsValue::from_str("ptzCameras")).ok()?;
+    let text = leptos::web_sys::js_sys::JSON::stringify(&value)
+        .ok()?
+        .as_string()?;
+    Some(PtzCameraSetting::parse(&text))
+}
+
+/// One camera of [`PtzCameraSetting`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PtzCameraEntry {
+    /// Its name, which shots, `ptz.*` actions and value bindings take.
+    pub name: String,
+    /// Its address and port, as `192.168.1.40:52381`.
+    pub address: String,
+    /// `visca_ip`, `udp` or `tcp`.
+    pub transport: String,
+    /// Its VISCA address on that link, 1 to 7.
+    pub visca: u8,
+}
+
+/// "Control PTZ cameras": whether JStream drives this machine's heads, and which.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PtzCameraSetting {
+    /// Whether it drives them.
+    pub on: bool,
+    /// The cameras, in the order the person added them.
+    pub cameras: Vec<PtzCameraEntry>,
+}
+
+impl PtzCameraSetting {
+    /// The setting from the desktop global's JSON; what it can't read is left out.
+    pub fn parse(text: &str) -> Self {
+        let value: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+        let cameras = value
+            .get("cameras")
+            .and_then(serde_json::Value::as_array)
+            .map(|list| {
+                list.iter()
+                    .filter_map(|entry| {
+                        Some(PtzCameraEntry {
+                            name: entry.get("name")?.as_str()?.to_owned(),
+                            address: entry.get("address")?.as_str()?.to_owned(),
+                            transport: entry.get("transport")?.as_str()?.to_owned(),
+                            visca: u8::try_from(entry.get("visca")?.as_u64()?).ok()?,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self {
+            on: value.get("on").and_then(serde_json::Value::as_bool) == Some(true),
+            cameras,
+        }
+    }
+
+    /// The setting as the desktop app's `setPtzCameras` takes it.
+    pub fn to_json(&self) -> String {
+        serde_json::json!({
+            "on": self.on,
+            "cameras": self
+                .cameras
+                .iter()
+                .map(|c| serde_json::json!({
+                    "name": c.name,
+                    "address": c.address,
+                    "transport": c.transport,
+                    "visca": c.visca,
+                }))
+                .collect::<Vec<_>>(),
+        })
+        .to_string()
+    }
+}
+
+/// Asks the desktop app to save "Control PTZ cameras", which it applies at once.
+/// Resolves to `None` when it was saved and applied, or why not.
+pub async fn set_ptz_cameras(setting: &PtzCameraSetting) -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        allow_network_js(allow).await
+        save_setting_js("setPtzCameras", &setting.to_json()).await
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let _ = allow;
+        let _ = setting;
+        Some("only the JStream app can save this".to_owned())
+    }
+}
+
+/// Asks the desktop app to save "Let devices find JStream on my network" (ADR-0233),
+/// which it applies at once. Resolves to whether it was saved.
+pub async fn set_announce(announce: bool) -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        switch_js("setAnnounce", announce).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = announce;
         false
     }
 }
 
-/// Calls `allowNetwork` on the desktop global and awaits its promise.
+/// Asks the desktop app to save "Allow devices on my network" and open or close its
+/// network listener at once (ADR-0234). Resolves to `None` when it did, or why not: it
+/// wasn't saved, or the listener couldn't open (another program has its port).
+pub async fn allow_network(allow: bool) -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        save_setting_js("allowNetwork", if allow { "true" } else { "false" }).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = allow;
+        Some("only the JStream app can save this".to_owned())
+    }
+}
+
+/// Calls the desktop global's `setAnnounce` with `on` and awaits its promise.
 #[cfg(target_arch = "wasm32")]
-async fn allow_network_js(allow: bool) -> bool {
+async fn switch_js(name: &str, on: bool) -> bool {
     use leptos::wasm_bindgen::JsCast;
     use leptos::web_sys::js_sys::{Function, Promise};
 
     let Some(global) = global() else {
         return false;
     };
-    let Some(function) = Reflect::get(&global, &JsValue::from_str("allowNetwork"))
+    let Some(function) = Reflect::get(&global, &JsValue::from_str(name))
         .ok()
         .and_then(|value| value.dyn_into::<Function>().ok())
     else {
         return false;
     };
     let Some(promise) = function
-        .call1(&global, &JsValue::from_bool(allow))
+        .call1(&global, &JsValue::from_bool(on))
         .ok()
         .and_then(|value| value.dyn_into::<Promise>().ok())
     else {
@@ -608,6 +769,119 @@ async fn browse_js(
     value.as_string().filter(|path| !path.is_empty())
 }
 
+/// The event the desktop app dispatches on `window` for each step of a drag of files
+/// from the desktop over its main window. Its bootstrap script names it too.
+pub const FILE_DROP_EVENT: &str = "jstream-desktop-drop";
+
+/// Which step of a file drag a [`FileDrop`] is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DropPhase {
+    /// The drag entered the window or moved over it: show where it would land.
+    Over,
+    /// The files were dropped.
+    Drop,
+    /// The drag left the window or was cancelled: clear any highlight.
+    Leave,
+}
+
+/// A step of a drag of files from the desktop over the desktop app's window.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FileDrop {
+    /// The step.
+    pub phase: DropPhase,
+    /// The dragged files' paths, on the app's machine (its own engine's). Empty on
+    /// [`DropPhase::Leave`].
+    pub paths: Vec<String>,
+    /// Where the pointer is, in the page's CSS pixels from the viewport's left (0 on
+    /// [`DropPhase::Leave`]).
+    pub x: f64,
+    /// Where the pointer is, in CSS pixels from the viewport's top.
+    pub y: f64,
+}
+
+impl FileDrop {
+    /// A step from the event's `detail` as JSON (`{ kind, paths, x, y }`): `None` when
+    /// it has no known `kind`. Paths that aren't strings are left out, and a missing
+    /// or non-numeric position is 0.
+    pub fn parse(text: &str) -> Option<Self> {
+        let value: serde_json::Value = serde_json::from_str(text).ok()?;
+        let phase = match value.get("kind")?.as_str()? {
+            "over" => DropPhase::Over,
+            "drop" => DropPhase::Drop,
+            "leave" => DropPhase::Leave,
+            _ => return None,
+        };
+        let paths = value
+            .get("paths")
+            .and_then(serde_json::Value::as_array)
+            .map(|paths| {
+                paths
+                    .iter()
+                    .filter_map(|path| path.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let coordinate = |name: &str| {
+            value
+                .get(name)
+                .and_then(serde_json::Value::as_f64)
+                .filter(|v| v.is_finite())
+                .unwrap_or(0.0)
+        };
+        Some(Self {
+            phase,
+            paths,
+            x: coordinate("x"),
+            y: coordinate("y"),
+        })
+    }
+
+    /// The element under the drop's position ([`element_at`]).
+    pub fn element(&self) -> Option<leptos::web_sys::Element> {
+        element_at(self.x, self.y)
+    }
+
+    /// Whether the drop is over `target` or one of its descendants, so a panel can tell
+    /// a drop on itself from one elsewhere. False on [`DropPhase::Leave`].
+    pub fn lands_on(&self, target: &leptos::web_sys::Node) -> bool {
+        self.phase != DropPhase::Leave
+            && self
+                .element()
+                .is_some_and(|element| target.contains(Some(&element)))
+    }
+}
+
+/// The topmost element at `(x, y)`, in the page's CSS pixels (`document.elementFromPoint`),
+/// if any.
+pub fn element_at(x: f64, y: f64) -> Option<leptos::web_sys::Element> {
+    leptos::prelude::document().element_from_point(x as f32, y as f32)
+}
+
+/// Calls `f` with each step of a drag of files from the desktop over the desktop app's
+/// main window, until the returned handle is removed (`WindowListenerHandle::remove`,
+/// e.g. in `on_cleanup`). Any panel may listen; each decides with
+/// [`FileDrop::lands_on`] whether a drop is its own. Outside the desktop app nothing
+/// ever sends one, so this registers nothing and returns `None`. A step the page can't
+/// read is ignored.
+pub fn on_file_drop(
+    f: impl Fn(FileDrop) + 'static,
+) -> Option<leptos::prelude::WindowListenerHandle> {
+    global()?;
+    Some(leptos::prelude::window_event_listener_untyped(
+        FILE_DROP_EVENT,
+        move |event| {
+            let drop = Reflect::get(&event, &JsValue::from_str("detail"))
+                .ok()
+                .and_then(|detail| leptos::web_sys::js_sys::JSON::stringify(&detail).ok())
+                .and_then(|text| text.as_string())
+                .and_then(|text| FileDrop::parse(&text));
+            if let Some(drop) = drop {
+                f(drop);
+            }
+        },
+    ))
+}
+
 /// The engine from the global's fields: both must be non-empty strings.
 fn engine(url: Option<String>, token: Option<String>) -> Option<HostEngine> {
     let url = url.filter(|url| !url.is_empty())?;
@@ -617,7 +891,38 @@ fn engine(url: Option<String>, token: Option<String>) -> Option<HostEngine> {
 
 #[cfg(test)]
 mod tests {
-    use super::{HostEngine, engine};
+    use super::{DropPhase, FileDrop, HostEngine, engine};
+
+    #[test]
+    fn a_file_drop_reads_the_apps_detail() {
+        assert_eq!(
+            FileDrop::parse(
+                r#"{"kind":"drop","paths":["/home/me/clip.mp4","C:\\v\\a.png"],"x":12.5,"y":40}"#
+            ),
+            Some(FileDrop {
+                phase: DropPhase::Drop,
+                paths: vec!["/home/me/clip.mp4".into(), r"C:\v\a.png".into()],
+                x: 12.5,
+                y: 40.0,
+            })
+        );
+        assert_eq!(
+            FileDrop::parse(r#"{"kind":"over","paths":["/a",3,null],"x":"1"}"#),
+            Some(FileDrop {
+                phase: DropPhase::Over,
+                paths: vec!["/a".into()],
+                x: 0.0,
+                y: 0.0,
+            })
+        );
+        assert_eq!(
+            FileDrop::parse(r#"{"kind":"leave","paths":[],"x":0,"y":0}"#).map(|d| d.phase),
+            Some(DropPhase::Leave)
+        );
+        assert_eq!(FileDrop::parse(r#"{"kind":"enter","paths":[]}"#), None);
+        assert_eq!(FileDrop::parse(r#"{"paths":[]}"#), None);
+        assert_eq!(FileDrop::parse("not json"), None);
+    }
 
     #[test]
     fn both_fields_are_needed() {
@@ -647,5 +952,30 @@ mod tests {
         ));
         assert!(!super::same_engine("", "ws://127.0.0.1:1/api/v1/ws"));
         assert!(!super::same_engine("ws://127.0.0.1:1/api/v1/ws", ""));
+    }
+
+    /// The PTZ camera list reads back as the app wrote it, skipping what it can't read.
+    #[test]
+    fn the_ptz_camera_setting_round_trips() {
+        use super::{PtzCameraEntry, PtzCameraSetting};
+        let setting = PtzCameraSetting {
+            on: true,
+            cameras: vec![PtzCameraEntry {
+                name: "Wide".into(),
+                address: "192.168.1.40:52381".into(),
+                transport: "visca_ip".into(),
+                visca: 2,
+            }],
+        };
+        assert_eq!(PtzCameraSetting::parse(&setting.to_json()), setting);
+        let partial = PtzCameraSetting::parse(
+            r#"{"on":"yes","cameras":[{"name":"x"},{"name":"Close","address":"10.0.0.9:5678","transport":"tcp","visca":1}]}"#,
+        );
+        assert!(!partial.on);
+        assert_eq!(partial.cameras.len(), 1);
+        assert_eq!(
+            PtzCameraSetting::parse("not json"),
+            PtzCameraSetting::default()
+        );
     }
 }

@@ -6,17 +6,29 @@
 //! one-parameter `source.set_settings` patch; "Reset" sends `null` for the default.
 //! A capture target parameter (a display or window source's `target`) is a list of the
 //! targets of its kind that `capture.targets` reports, read again each time the field
-//! gets focus, so a window opened since shows up. A `webcam`'s device is one too, and
+//! gets focus, so a window opened since shows up. An `audio_input`'s or a
+//! `desktop_audio`'s device is one too, listing the audio inputs or outputs with the
+//! system's default first and the device that is the default now marked. A `webcam`'s
+//! device is one too, and
 //! its format parameters (`capture_format`) are lists of what that device's listed
 //! formats offer. Its `camera_controls` is a slider per control that device lists,
 //! with an Auto box where the device can set it itself. The fields of one form share
 //! one `capture.targets` answer.
+//! A whole or decimal number is the shared click-drag [`NumberField`], with the
+//! descriptor's range, step and unit (#1734). A form whose changes go to a draft (the
+//! Properties dialog, whose live settings show at once, ADR-0091) takes a drag's value
+//! as it goes, once per animation frame, and a slider's as it moves. A form given `live`
+//! (a filter's settings, where each change is an undo step) hands a drag's or a slider's
+//! values of a parameter its kind marks `live` to it as they go, for a gesture's
+//! `live.set`, and commits once, on release, which ends the gesture (ADR-0213, #1739);
+//! any other number is committed once, on release.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::panels::learn::{Learn, LearnOwner, param_range};
+use crate::panels::number::{NumberField, Scrubbing, number_or_default, number_spec};
 use crate::store::{Studio, query};
 use jstream_control::protocol::{
     AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
@@ -215,6 +227,11 @@ fn root_from(name: &str) -> AssetRoot {
     }
 }
 
+/// What a form's `live` gets while a live parameter's number or slider is dragged
+/// (ADR-0213): the parameter and the checked value to show, or `None` when the drag
+/// ended, which ends a gesture the release's `commit` didn't.
+pub type LiveField = (String, Option<Value>);
+
 /// The fields for one kind's parameters, showing `settings`: a draft in the Properties
 /// dialog, the stored ones in a filter's settings. `commit` gets each checked change, with
 /// `null` for the default.
@@ -236,7 +253,17 @@ pub fn Form(
     /// source's.
     #[prop(optional)]
     learn: Option<LearnOwner>,
+    /// Whether `commit` takes a number's value as a drag or a slider moves it, as a
+    /// draft does (#1734); otherwise each is committed once, on release, as a filter's
+    /// settings are, where every change is an undo step.
+    #[prop(optional)]
+    follows_drags: bool,
+    /// Takes a drag's values of each parameter the kind marks `live`, to show them live
+    /// before the release's `commit` (ADR-0213). Ignored when `follows_drags`.
+    #[prop(optional, into)]
+    live: Option<Callback<LiveField>>,
 ) -> impl IntoView {
+    let live = live.filter(|_| !follows_drags);
     // One `capture.targets` answer for every capture field of this form.
     provide_context(CaptureListing::for_kind(&kind));
     let sections = sections(&kind);
@@ -256,7 +283,7 @@ pub fn Form(
                     let learn = learn.clone();
                     view! {
                         <Show when=visible>
-                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn.clone() />
+                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn.clone() follows_drags=follows_drags live=live />
                         </Show>
                     }
                 })
@@ -291,8 +318,15 @@ fn Field(
     errors: RwSignal<HashMap<String, String>>,
     commit: impl Fn(SourceId, String, Value) + Copy + Send + Sync + 'static,
     learn: Option<LearnOwner>,
+    follows_drags: bool,
+    live: Option<Callback<LiveField>>,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
+    // Only a parameter its kind marks `live` is shown live; any other is committed once.
+    let live = live.filter(|_| param.live).map(|live| {
+        let id = id_of(&param);
+        Callback::new(move |value: Option<Value>| live.run((id.clone(), value)))
+    });
     let id = param.id.clone();
     let learn = learn.zip(param_range(&param)).map(|(owner, range)| {
         let current = {
@@ -326,6 +360,10 @@ fn Field(
         studio,
         &source_id,
         settings,
+        Drags {
+            follows: follows_drags,
+            live,
+        },
     );
     let reset = {
         let source_id = source_id.clone();
@@ -336,23 +374,32 @@ fn Field(
         let id = id.clone();
         move || errors.with(|e| e.get(&id).cloned())
     };
-    let unit = match &param.ty {
-        ParamType::Int { unit, .. } | ParamType::Float { unit, .. } => unit.clone(),
-        _ => None,
-    };
     let is_default = {
         let default = param.default.clone();
         move || value() == default
     };
-    view! {
-        <div class="field prop" title=param.description.clone().unwrap_or_default()>
+    // A number field labels its own input and shows its unit in its box, so its row is
+    // no label around it.
+    let row = if number_spec(&param.ty).is_some() {
+        view! {
+            <div class="label-row">
+                <span class="label">{param.label.clone()}</span>
+                <span class="control">{input}</span>
+            </div>
+        }
+        .into_any()
+    } else {
+        view! {
             <label>
                 <span class="label">{param.label.clone()}</span>
-                <span class="control">
-                    {input}
-                    {unit.map(|u| view! { <span class="unit">{u}</span> })}
-                </span>
+                <span class="control">{input}</span>
             </label>
+        }
+        .into_any()
+    };
+    view! {
+        <div class="field prop" title=param.description.clone().unwrap_or_default()>
+            {row}
             <button class="reset" title="Reset to the default" aria-label="Reset to the default"
                 disabled=is_default on:click=reset>
                 <Icon name="reset" size=13 />
@@ -364,8 +411,25 @@ fn Field(
     }
 }
 
+/// How a number field hands on a drag: each value to `send` as it goes (`follows`, a
+/// draft), or to `live` as it goes and to `send` once on release (ADR-0213), or to
+/// `send` once on release only.
+#[derive(Clone, Copy)]
+struct Drags {
+    follows: bool,
+    /// Takes each checked value a drag shows, then `None` when it ends.
+    live: Option<Callback<Option<Value>>>,
+}
+
+/// The parameter's ID, for the closures that name it.
+fn id_of(param: &ParamDescriptor) -> String {
+    param.id.clone()
+}
+
 /// The input for one parameter type. Each sends a checked value when it is changed
-/// (a text field when it loses focus or Enter is pressed).
+/// (a text field when it loses focus or Enter is pressed). A number sends a drag's or a
+/// slider's values as they go when `drags.follows`, shows them through `drags.live`
+/// while they go and sends once on release when it has one, else sends once, on release.
 fn input_for(
     param: &ParamDescriptor,
     value: impl Fn() -> Value + Clone + Send + Sync + 'static,
@@ -373,6 +437,7 @@ fn input_for(
     studio: Studio,
     source_id: &SourceId,
     settings: Signal<Settings>,
+    drags: Drags,
 ) -> AnyView {
     let p = param.clone();
     let text = {
@@ -395,38 +460,49 @@ fn input_for(
             }
             .into_any()
         }
-        ParamType::Int { min, max, step, .. } => view! {
-            <input
-                type="number"
-                min=min.map(|n| n.to_string())
-                max=max.map(|n| n.to_string())
-                step=step.map_or_else(|| "1".to_owned(), |n| n.to_string())
-                prop:value=text
-                on:change=on_text
-            />
-        }
-        .into_any(),
+        ParamType::Int { .. } => number_input(param, value, send, drags),
         ParamType::Float { min, max, step, .. } => {
-            // A range with both ends gets a slider beside the number.
+            // A range with both ends gets a slider beside the number. In a form that
+            // follows drags it sends as it moves; with a live gesture it shows each value
+            // through it and sends on release; else it sends on release.
             let slider = min.zip(*max).map(|(lo, hi)| {
                 let on_text = on_text.clone();
                 let text = text.clone();
                 let step = step.map_or_else(|| "any".to_owned(), |n| n.to_string());
-                view! {
-                    <input type="range" min=lo.to_string() max=hi.to_string() step=step
-                        prop:value=text on:change=on_text />
+                if let (false, Some(live)) = (drags.follows, drags.live) {
+                    let p = param.clone();
+                    let shown = move |event: leptos::ev::Event| {
+                        if let Ok(v) = parse(&p, &event_target_value(&event)) {
+                            live.run(Some(v));
+                        }
+                    };
+                    let changed = move |event: leptos::ev::Event| {
+                        on_text(event);
+                        // A release `send` refused or didn't commit ends the gesture.
+                        live.run(None);
+                    };
+                    view! {
+                        <input type="range" min=lo.to_string() max=hi.to_string() step=step
+                            prop:value=text on:input=shown on:change=changed />
+                    }
+                    .into_any()
+                } else if drags.follows {
+                    view! {
+                        <input type="range" min=lo.to_string() max=hi.to_string() step=step
+                            prop:value=text on:input=on_text />
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <input type="range" min=lo.to_string() max=hi.to_string() step=step
+                            prop:value=text on:change=on_text />
+                    }
+                    .into_any()
                 }
             });
             view! {
                 {slider}
-                <input
-                    type="number"
-                    min=min.map(|n| n.to_string())
-                    max=max.map(|n| n.to_string())
-                    step=step.map_or_else(|| "any".to_owned(), |n| n.to_string())
-                    prop:value=text
-                    on:change=on_text
-                />
+                {number_input(param, value, send, drags)}
             }
             .into_any()
         }
@@ -593,8 +669,14 @@ pub fn target_choices(
     let empty = match kind {
         CaptureTargetKind::Display => "Primary display",
         CaptureTargetKind::Device => "First device listed",
+        CaptureTargetKind::AudioInput => "System default input",
+        CaptureTargetKind::AudioOutput => "System default output",
         _ => "None",
     };
+    let audio = matches!(
+        kind,
+        CaptureTargetKind::AudioInput | CaptureTargetKind::AudioOutput
+    );
     let mut choices = vec![(String::new(), empty.to_owned())];
     for target in targets.iter().filter(|t| t.kind == kind) {
         let name = if target.name.trim().is_empty() {
@@ -604,6 +686,7 @@ pub fn target_choices(
         };
         let label = match target.size {
             Some(size) => format!("{name} · {}×{}", size.width, size.height),
+            None if audio && target.primary => format!("{name} · default now"),
             None => name,
         };
         choices.push((target.target.clone(), label));
@@ -625,7 +708,9 @@ pub fn target_choices(
         }
         let gone = match kind {
             CaptureTargetKind::Display => "Display not connected",
-            CaptureTargetKind::Device => "Device not connected",
+            CaptureTargetKind::Device
+            | CaptureTargetKind::AudioInput
+            | CaptureTargetKind::AudioOutput => "Device not connected",
             _ => "Window not open",
         };
         choices.push((current.to_owned(), format!("{gone} ({current})")));
@@ -1062,6 +1147,64 @@ fn capture_format_input(
     view! { {body} }.into_any()
 }
 
+/// A whole or decimal number's field: the shared [`NumberField`] with the parameter's
+/// step, range and unit (#1734). Its values go through [`parse`], so the descriptor's
+/// check refuses what it would refuse typed. With `drags.follows`, a drag sends each
+/// frame's value, and a lost drag its start again; with `drags.live`, each frame's value
+/// goes to it, and the drag's end after the release's send.
+fn number_input(
+    param: &ParamDescriptor,
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+    drags: Drags,
+) -> AnyView {
+    let Some(spec) = number_spec(&param.ty) else {
+        return ().into_any();
+    };
+    let unit = match &param.ty {
+        ParamType::Int { unit, .. } | ParamType::Float { unit, .. } => unit.clone(),
+        _ => None,
+    };
+    let whole = matches!(param.ty, ParamType::Int { .. });
+    // A setting that is absent or null still shows a number to start from: its
+    // default, else the field's least (#1740's review, N1).
+    let default = param.default.clone();
+    let shown = Signal::derive(move || Some(number_or_default(value().as_f64(), &default, spec)));
+    let p = StoredValue::new(param.clone());
+    let check = move |v: f64| {
+        let text = if whole {
+            format!("{}", v.round() as i64)
+        } else {
+            format!("{:.*}", spec.decimals, v)
+        };
+        p.with_value(|p| parse(p, &text))
+    };
+    let put = Callback::new(move |v: f64| {
+        let checked = check(v);
+        let ok = checked.is_ok();
+        send(checked);
+        ok
+    });
+    let live = move |scrubbing: Scrubbing| match (scrubbing, drags.live) {
+        (Scrubbing::Moved(v) | Scrubbing::Cancelled(v), _) if drags.follows => {
+            put.run(v);
+        }
+        (Scrubbing::Moved(v), Some(live)) => {
+            if let Ok(value) = check(v) {
+                live.run(Some(value));
+            }
+        }
+        (Scrubbing::Ended | Scrubbing::Cancelled(_), Some(live)) => live.run(None),
+        _ => {}
+    };
+    view! {
+        <NumberField named=Signal::stored(param.label.clone()) unit=unit.unwrap_or_default()
+            value=shown step=spec.step decimals=spec.decimals min=spec.min max=spec.max
+            send=move |v| put.run(v) live=live />
+    }
+    .into_any()
+}
+
 /// A webcam's camera controls: a slider and a number for each control the device that
 /// `target` picks lists in `capture.targets`, with an Auto box for one the device can
 /// set itself. Each change sends the whole object with that control's entry set.
@@ -1196,13 +1339,35 @@ fn camera_control_row(
         }
     });
     let (min, max, step) = (control.min, control.max, control.step.max(1));
+    // The shared click-drag field (#1734), sent once on release: each value is written
+    // to the camera itself, which is no place for one per frame.
+    let number_field = {
+        let (value, send, name) = (value.clone(), send.clone(), control.name.clone());
+        let shown = shown.clone();
+        let current = Signal::derive(move || {
+            let (auto, n) = shown();
+            (!auto).then_some(f64::from(n))
+        });
+        let put = Callback::new(move |v: f64| {
+            let n = v.round() as i32;
+            if !(min..=max).contains(&n) {
+                return false;
+            }
+            send(Ok(with_control(&value(), &name, Some(Value::from(n)))));
+            true
+        });
+        view! {
+            <NumberField named=Signal::stored(control_label(&control.name)) value=current
+                step=f64::from(step) decimals=0 min=f64::from(min) max=f64::from(max)
+                send=move |v| put.run(v) />
+        }
+    };
     view! {
         <div class="camera-control">
             <span class="camera-control-name">{control_label(&control.name)}</span>
             <input type="range" min=min.to_string() max=max.to_string() step=step.to_string()
                 prop:value=number.clone() prop:disabled=is_auto.clone() on:change=on_number.clone() />
-            <input type="number" min=min.to_string() max=max.to_string() step=step.to_string()
-                prop:value=number prop:disabled=is_auto on:change=on_number />
+            {number_field}
             {auto_box}
         </div>
     }
@@ -2074,6 +2239,49 @@ mod tests {
         assert_eq!(device_formats(&listed, "").len(), 4);
         assert_eq!(device_formats(&listed, "card").len(), 1);
         assert!(device_formats(&listed, "gone").is_empty());
+    }
+
+    #[test]
+    fn audio_devices_list_by_direction_with_the_default_marked() {
+        let mut mic = target(CaptureTargetKind::AudioInput, "mic", "Microphone");
+        mic.primary = true;
+        let listed = vec![
+            target(CaptureTargetKind::Device, "cam", "Webcam"),
+            mic,
+            target(CaptureTargetKind::AudioInput, "line", "Line in"),
+            target(CaptureTargetKind::AudioOutput, "spk", "Speakers"),
+        ];
+        let values = |choices: Vec<(String, String)>| {
+            choices
+                .into_iter()
+                .map(|(v, l)| format!("{v}={l}"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            values(target_choices(
+                CaptureTargetKind::AudioInput,
+                &listed,
+                "line"
+            )),
+            [
+                "=System default input",
+                "mic=Microphone · default now",
+                "line=Line in"
+            ]
+        );
+        assert_eq!(
+            values(target_choices(CaptureTargetKind::AudioOutput, &listed, "")),
+            ["=System default output", "spk=Speakers"]
+        );
+        assert_eq!(
+            values(target_choices(
+                CaptureTargetKind::AudioInput,
+                &listed,
+                "usb"
+            ))[3],
+            "usb=Device not connected (usb)",
+            "an unplugged device stays a choice"
+        );
     }
 
     #[test]

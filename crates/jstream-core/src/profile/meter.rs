@@ -13,9 +13,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwapOption;
-use jstream_protocol::{SceneId, SourceId};
+use jstream_protocol::{SceneCamera, SceneId, SourceId};
 
 use crate::chain::ChainOwner;
+use crate::drawn_camera::{CameraRecorder, DrawnCameras};
 use crate::snapshot::CaptureKey;
 
 /// How often a meter publishes its totals.
@@ -118,14 +119,40 @@ pub(crate) struct DrawerTotals {
     pub(crate) skipped: u64,
     /// The pictures only preview streams take that were skipped (the program only).
     pub(crate) preview_skipped: u64,
+    /// The GPU submits the drawer's thread made ([`DrawMeter::submitted`]).
+    pub(crate) submits: u64,
     pub(crate) phases: [u64; PHASES],
     pub(crate) units: Vec<(UnitKey, UnitTotals)>,
+    /// The size 3D models were last drawn at, a percentage (ADR-0197); 0 before the
+    /// drawer said.
+    pub(crate) model_percent: u32,
+    /// The frames drawn with them at less than 100.
+    pub(crate) model_reduced: u64,
+}
+
+/// What a meter's publish replaced, for the caller to free (R-RT-003).
+#[derive(Debug)]
+pub(crate) enum Retired {
+    Totals(Arc<DrawerTotals>),
+    Cameras(Arc<DrawnCameras>),
+}
+
+impl Retired {
+    /// Lets go of it: frees it unless a reader still holds it.
+    pub(crate) fn free(self) {
+        match self {
+            Self::Totals(totals) => drop(totals),
+            Self::Cameras(cameras) => drop(cameras),
+        }
+    }
 }
 
 /// Where a drawer publishes, read by the control side.
 #[derive(Default)]
 pub(crate) struct DrawerSlot {
     current: ArcSwapOption<DrawerTotals>,
+    /// The cameras its latest frame drew its scenes through (`scene.drawn_camera`).
+    cameras: ArcSwapOption<DrawnCameras>,
     /// Numbers the runs that publish here.
     runs: std::sync::atomic::AtomicU64,
 }
@@ -134,6 +161,11 @@ impl DrawerSlot {
     /// The totals published last, if any.
     pub(crate) fn load(&self) -> Option<Arc<DrawerTotals>> {
         self.current.load_full()
+    }
+
+    /// Where it publishes the cameras it drew its scenes through.
+    pub(crate) fn cameras(&self) -> &ArcSwapOption<DrawnCameras> {
+        &self.cameras
     }
 
     /// A meter for a new run of the drawer, publishing here.
@@ -303,6 +335,9 @@ pub(crate) struct DrawMeter {
     maxes: SecondMaxes,
     skipped: u64,
     preview_skipped: u64,
+    submits: u64,
+    /// The thread's submit count when it was last read, or `None` before the first read.
+    submits_seen: Option<u64>,
     phases: [u64; PHASES],
     /// The phases' time in the frame being drawn, folded into `phases` when it ends.
     frame_phases: [u64; PHASES],
@@ -314,8 +349,14 @@ pub(crate) struct DrawMeter {
     gpu_timed: bool,
     /// The GPU time of the latest timed frame that came back ([`Self::take_gpu_frame`]).
     gpu_frame: Option<Duration>,
+    /// The size 3D models are drawn at ([`Self::model_percent`]), and the frames drawn
+    /// with them at less than 100.
+    model_percent: u32,
+    model_reduced: u64,
     /// Each GPU id's unit, by id, and the generation they were given in.
     gpu_units: GpuIds,
+    /// The cameras the frame being drawn drew its scenes through.
+    cameras: CameraRecorder,
 }
 
 /// The GPU ids given to units, a generation at a time.
@@ -345,13 +386,18 @@ impl Default for DrawMeter {
             maxes: SecondMaxes::default(),
             skipped: 0,
             preview_skipped: 0,
+            submits: 0,
+            submits_seen: None,
             phases: [0; PHASES],
             frame_phases: [0; PHASES],
             published: None,
             guard: None,
             gpu_timed: false,
             gpu_frame: None,
+            model_percent: 100,
+            model_reduced: 0,
             gpu_units: GpuIds::default(),
+            cameras: CameraRecorder::default(),
         }
     }
 }
@@ -394,6 +440,15 @@ impl DrawMeter {
     /// called, all its units together: what the frame cost the GPU, a frame or two ago.
     pub(crate) fn take_gpu_frame(&mut self) -> Option<Duration> {
         self.gpu_frame.take()
+    }
+
+    /// Says the size this frame's 3D models are drawn at, a percentage of their canvas's
+    /// width and of its height (ADR-0197), for `profile.get` to report.
+    pub(crate) fn model_percent(&mut self, percent: u32) {
+        self.model_percent = percent;
+        if percent < 100 {
+            self.model_reduced = self.model_reduced.saturating_add(1);
+        }
     }
 
     /// What a frame may take: the budget the meter was made with.
@@ -562,6 +617,18 @@ impl DrawMeter {
         self.preview_skipped = self.preview_skipped.saturating_add(skipped);
     }
 
+    /// Counts the GPU submits the drawer's thread has made since the last call, given
+    /// the thread's running count (`jstream_render::submits_on_this_thread`). Called at
+    /// the end of each frame, before [`Self::end_frame`]. The first call only notes the
+    /// count, so submits from before the meter's first frame are not that frame's.
+    pub(crate) fn submitted(&mut self, thread_total: u64) {
+        if let Some(seen) = self.submits_seen.replace(thread_total) {
+            self.submits = self
+                .submits
+                .saturating_add(thread_total.saturating_sub(seen));
+        }
+    }
+
     /// Forgets the time counted in a frame that failed part-way, so it isn't folded
     /// into the next frame that draws.
     pub(crate) fn discard_frame(&mut self) {
@@ -577,15 +644,25 @@ impl DrawMeter {
         self.frame_phases = [0; PHASES];
     }
 
+    /// Notes that the frame being drawn drew `scene`'s pass through `camera`
+    /// (`scene.drawn_camera`); a 2D pass, `None`, notes nothing.
+    pub(crate) fn drew_camera(&mut self, scene: &SceneId, camera: Option<SceneCamera>) {
+        self.cameras.drew(scene, camera);
+    }
+
     /// Ends a frame that took `took` from start to finish: folds each unit's time into
     /// its totals and, once [`PUBLISH_EVERY`] has passed since the last publish,
-    /// publishes the totals and hands the ones they replace to `retire`.
+    /// publishes the totals; publishes the cameras the frame drew its scenes through as
+    /// [`CameraRecorder::end_frame`] says. What either publish replaces goes to `retire`.
     pub(crate) fn end_frame(
         &mut self,
         took: Duration,
         now: Instant,
-        retire: impl FnOnce(Arc<DrawerTotals>),
+        mut retire: impl FnMut(Retired),
     ) {
+        let slot = self.slot.as_deref().map(DrawerSlot::cameras);
+        self.cameras
+            .end_frame(now, slot, |old| retire(Retired::Cameras(old)));
         let took = nanos(took);
         self.frames = self.frames.saturating_add(1);
         self.nanos = self.nanos.saturating_add(took);
@@ -606,7 +683,7 @@ impl DrawMeter {
         let published = *self.published.get_or_insert(now);
         if now.saturating_duration_since(published) >= PUBLISH_EVERY {
             self.published = Some(now);
-            self.publish(retire);
+            self.publish(|old| retire(Retired::Totals(old)));
         }
     }
 
@@ -656,8 +733,11 @@ impl DrawMeter {
             maxes: self.maxes,
             skipped: self.skipped,
             preview_skipped: self.preview_skipped,
+            submits: self.submits,
             phases: self.phases,
             units,
+            model_percent: self.model_percent,
+            model_reduced: self.model_reduced,
         });
         if let Some(old) = slot.current.swap(Some(totals)) {
             retire(old);

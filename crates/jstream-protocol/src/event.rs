@@ -5,11 +5,12 @@ use crate::command::Edit;
 use crate::error::ProtocolError;
 use crate::history::HistoryDirection;
 use crate::id::{
-    ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TimelineId,
+    ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId, ShowId, SourceId, TimelineId,
 };
 use crate::live::LiveOutcome;
 use crate::plugin::{PluginDisabledReason, PluginState};
 use crate::query::PixelSize;
+use crate::show::ShowChange;
 use crate::timeline::TimelineChange;
 use crate::transition::TransitionStarted;
 use crate::youtube::{AudienceStatsInfo, HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
@@ -62,6 +63,10 @@ pub enum Event {
         /// (0.157): a change of depth alone is a size change too.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         depth: Option<u32>,
+        /// Its length, as [`SourceSize::duration_ms`](crate::SourceSize::duration_ms)
+        /// reports it (since 0.177): the length becoming known is a size change too.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
     },
     /// The scene on program or on preview changed: after a `scene.switch` or a
     /// `studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives
@@ -341,6 +346,26 @@ pub enum Event {
         /// Which pass it is on: 0 the first.
         pass: u64,
     },
+    /// A show started, paused, continued, jumped, looped, went off script, ended or
+    /// stopped (ADR-0210, since 0.180): never once a frame. Running a show is studio
+    /// state, so it carries no `rev`; `studio.get` reports the running show in full.
+    #[serde(rename = "show.changed")]
+    ShowChanged {
+        /// The show.
+        show_id: ShowId,
+        /// What happened.
+        change: ShowChange,
+        /// Whether it runs now: `false` after `ended` and `stopped`.
+        running: bool,
+        /// Where its play head is now, in milliseconds of show time.
+        at_ms: u32,
+        /// The bookmark it paused at or jumped to. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bookmark_id: Option<String>,
+        /// The loop it wrapped in. Omitted unless `change` is `looped`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        loop_id: Option<String>,
+    },
     /// A timeline's cue fired (ADR-0115, since 0.87), once per cue on each pass, and once
     /// for each cue `timeline.seek` runs. The cue's action has its own events (a
     /// `scene.switch` cue's `studio.changed` follows).
@@ -402,6 +427,23 @@ pub enum Event {
         /// How it ended.
         outcome: crate::ApprovalOutcome,
     },
+    /// A device asked to pair and waits for the person's answer (0.193, ADR-0235). A UI
+    /// shows a prompt with Allow and Deny and answers with `pairing.answer`. Runtime
+    /// state, so no `rev`.
+    #[serde(rename = "pairing.asked")]
+    PairingAsked {
+        /// The ask.
+        ask: crate::PairingAsk,
+    },
+    /// A device's ask to pair ended (0.193, ADR-0235): answered, timed out, or the
+    /// device went away. A UI closes its prompt.
+    #[serde(rename = "pairing.ask_ended")]
+    PairingAskEnded {
+        /// The ask, as `pairing.asked` named it.
+        ask_id: String,
+        /// How it ended.
+        outcome: crate::PairingAskOutcome,
+    },
     /// The JTunnel senders `jtunnel.senders` lists changed (0.114, ADR-0123 §3): one was
     /// heard for the first time, said goodbye, or went unheard for 35 s, or the host
     /// turned receiving on, off or started it again with other senders. Runtime state,
@@ -440,10 +482,13 @@ impl Event {
             Event::ValuesChanged { .. } => Some("values.changed"),
             Event::TimelineChanged { .. } => Some("timeline.changed"),
             Event::TimelineCueFired { .. } => Some("timeline.cue_fired"),
+            Event::ShowChanged { .. } => Some("show.changed"),
             Event::CollectionFileChanged { .. } => Some("collection.file_changed"),
             Event::KindsChanged { .. } => Some("kinds.changed"),
             Event::AgentApprovalRequested { .. } => Some("agent.approval_requested"),
             Event::AgentApprovalResolved { .. } => Some("agent.approval_resolved"),
+            Event::PairingAsked { .. } => Some("pairing.asked"),
+            Event::PairingAskEnded { .. } => Some("pairing.ask_ended"),
             Event::JtunnelSendersChanged {} => Some("jtunnel.senders_changed"),
             Event::Unknown => None,
         }

@@ -3,7 +3,10 @@
 //! its colour (or the cell's own), brightness and blink rate, a remove button, a row to
 //! add a state, and a preset that fills the clip launcher states JTunnel's state
 //! documents. The table is edited as a whole value: each change sends the new object.
+//! Brightness and blink rate are the shared click-drag number fields (#1734), sent once
+//! on release: each value redraws the table, which a drag can't outlive.
 
+use crate::panels::number::NumberField;
 use jstream_control::protocol::{LOOK_ABSENT, LOOK_CELL_COLOR, MAX_LOOK_NAME, MAX_LOOKS};
 use leptos::prelude::*;
 use serde_json::{Map, Value, json};
@@ -208,6 +211,20 @@ fn look_row(
         }
     };
     let color = row.color.clone().unwrap_or_else(|| "#ffffff".into());
+    // A number's new value into the row, as a field's `send`.
+    let set = StoredValue::new(edit.clone());
+    let put = move |f: fn(&mut LookRow, f64)| {
+        move |v: f64| {
+            set.with_value(|edit| {
+                edit(Box::new(move |list: &mut Vec<LookRow>| {
+                    if let Some(r) = list.get_mut(i) {
+                        f(r, v);
+                    }
+                }));
+            });
+            true
+        }
+    };
     view! {
         <div class="looks-row">
             <input type="text" maxlength=MAX_LOOK_NAME.to_string() prop:value=row.state.clone()
@@ -221,10 +238,12 @@ fn look_row(
                         on:change=on(|r, t| r.color = Some(t)) />
                 })}
             </span>
-            <input type="number" min="0" max="1" step="0.05" prop:value=row.brightness.to_string()
-                on:change=on(|r, t| r.brightness = t.parse().unwrap_or(1.0)) />
-            <input type="number" min="0" max="16" step="0.5" prop:value=row.blink_hz.to_string()
-                on:change=on(|r, t| r.blink_hz = t.parse().unwrap_or(0.0)) />
+            <NumberField named=Signal::stored("Brightness".to_owned())
+                value=Signal::stored(Some(row.brightness)) step=0.05 decimals=2 min=0.0 max=1.0
+                send=put(|r, v| r.brightness = v) />
+            <NumberField named=Signal::stored("Blink (Hz)".to_owned()) unit="Hz"
+                value=Signal::stored(Some(row.blink_hz)) step=0.5 decimals=1 min=0.0 max=16.0
+                send=put(|r, v| r.blink_hz = v) />
             <button type="button" class="icon" title="Remove this state" on:click=remove>"×"</button>
         </div>
     }

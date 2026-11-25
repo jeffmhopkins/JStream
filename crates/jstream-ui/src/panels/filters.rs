@@ -25,8 +25,9 @@ use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::custom_shader::{self, ShaderEditor};
 use crate::panels::device_preview::{SavedPreview, Shows};
 use crate::panels::filter_presets::{preset_patch, presets};
+use crate::panels::gesture::EditDrag;
 use crate::panels::learn::LearnOwner;
-use crate::panels::properties::{Form, draft_patch, value_of};
+use crate::panels::properties::{Form, LiveField, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::settings::{SettingsDialog, SettingsPage};
 use crate::store::{Collection, Studio, apply, query};
@@ -2001,21 +2002,26 @@ fn Editor(
     let source_id = own_source(&owner);
     let owner = StoredValue::new(owner);
     let filter_id = StoredValue::new(filter_id);
-    let commit = move |_: SourceId, param: String, value: Value| {
-        let Some(s) = session.get() else {
-            return;
-        };
-        errors.update(|e| _ = e.remove(&param));
+    let edit = move |param: String, value: Value| {
         let mut patch = Settings::new();
-        patch.insert(param.clone(), value);
-        let edit = Edit::FilterSetSettings {
+        patch.insert(param, value);
+        Edit::FilterSetSettings {
             owner: owner.get_value(),
             filter_id: filter_id.get_value(),
             patch,
-        };
+        }
+    };
+    // A live setting's drag follows on output, one undo step (ADR-0213).
+    let drag = EditDrag::new();
+    let commit = move |_: SourceId, param: String, value: Value| {
+        if session.get().is_none() {
+            return;
+        }
+        errors.update(|e| _ = e.remove(&param));
+        let edit = edit(param.clone(), value);
         // Once the row has closed, the problem bar shows a refusal.
-        spawn_local(async move {
-            if let Err(error) = apply(&s, vec![edit], None).await
+        drag.commit(vec![edit], move |result| {
+            if let Err(error) = result
                 && errors
                     .try_update(|e| _ = e.insert(param, error.to_string()))
                     .is_none()
@@ -2024,12 +2030,26 @@ fn Editor(
             }
         });
     };
+    let live = live_field(drag, edit);
     let learn = LearnOwner::Filter(owner.get_value(), filter_id.get_value());
     view! {
         <div class="filter-editor">
-            <Form kind=kind source_id=source_id settings=settings errors=errors commit=commit learn=learn />
+            <Form kind=kind source_id=source_id settings=settings errors=errors commit=commit learn=learn live=live />
         </div>
     }
+}
+
+/// A filter form's `live` (ADR-0213): each value a drag shows goes out through `drag` as
+/// the setting's `filter.set_settings`, and the drag's end ends a gesture its release
+/// didn't commit.
+fn live_field(
+    drag: EditDrag,
+    edit: impl Fn(String, Value) -> Edit + Send + Sync + 'static,
+) -> Callback<LiveField> {
+    Callback::new(move |(param, value): LiveField| match value {
+        Some(value) => drag.show(vec![edit(param, value)]),
+        None => drag.end(),
+    })
 }
 
 /// The patch that puts a filter's settings back to `base`, what the dialog opened on:
@@ -3194,21 +3214,27 @@ fn FilterPane(target: Target) -> impl IntoView {
             enabled: !enabled.get_untracked(),
         }]);
     };
-    let commit = move |_: SourceId, param: String, value: Value| {
-        errors.update(|e| _ = e.remove(&param));
+    let edit = move |param: String, value: Value| {
         let mut patch = Settings::new();
-        patch.insert(param.clone(), value);
-        let edit = Edit::FilterSetSettings {
+        patch.insert(param, value);
+        Edit::FilterSetSettings {
             owner: target.with_value(|t| t.owner.clone()),
             filter_id: target.with_value(|t| t.filter_id.clone()),
             patch,
-        };
-        let Some(s) = session.get() else {
+        }
+    };
+    // A live setting's drag follows on output, one undo step (ADR-0213).
+    let drag = EditDrag::new();
+    let live = live_field(drag, edit);
+    let commit = move |_: SourceId, param: String, value: Value| {
+        errors.update(|e| _ = e.remove(&param));
+        let edit = edit(param.clone(), value);
+        if session.get().is_none() {
             return;
-        };
+        }
         dialogs.sent(std::slice::from_ref(&edit));
-        spawn_local(async move {
-            if let Err(error) = apply(&s, vec![edit], None).await
+        drag.commit(vec![edit], move |result| {
+            if let Err(error) = result
                 && errors
                     .try_update(|e| _ = e.insert(param, error.to_string()))
                     .is_none()
@@ -3304,7 +3330,7 @@ fn FilterPane(target: Target) -> impl IntoView {
                 let learn =
                     target.with_value(|t| LearnOwner::Filter(t.owner.clone(), t.filter_id.clone()));
                 view! {
-                    <Form kind=kind source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn />
+                    <Form kind=kind source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn live=live />
                 }
                 .into_any()
             }

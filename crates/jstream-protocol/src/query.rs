@@ -271,6 +271,12 @@ pub enum Query {
     /// state, so no `rev`; an input that has sent no control change is left out.
     #[serde(rename = "midi.last_controls")]
     MidiLastControls,
+    /// Each MIDI input's latest note-on (since 0.189, ADR-0202), by input name: what a
+    /// client that learns a note for a binding watches. Runtime state, so no `rev`; an
+    /// input whose latest notes hold no note-on is left out. It reads each input's last
+    /// 16 note events, so a note-off doesn't move it.
+    #[serde(rename = "midi.last_notes")]
+    MidiLastNotes,
     /// Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by
     /// ID. Runtime state, so no `rev`.
     #[serde(rename = "channel.values")]
@@ -282,6 +288,17 @@ pub enum Query {
     #[serde(rename = "scene.camera_aim")]
     SceneCameraAim {
         /// The scene whose camera to read: a keyframe scene reads its family's.
+        scene_id: crate::SceneId,
+    },
+    /// The camera a 3D scene was drawn through last (since 0.192): its camera as its
+    /// camera motion, follow camera, live aim, the 3D group it rides with and autofocus
+    /// moved it for the latest picture that drew the scene, which is where its items
+    /// are seen. What an editor outlines and hits the scene's items through. Runtime
+    /// state, so no `rev`; `camera` is omitted while no picture has drawn the scene
+    /// through a camera in the last second.
+    #[serde(rename = "scene.drawn_camera")]
+    SceneDrawnCamera {
+        /// The scene, as a picture draws it: a keyframe scene by its own ID.
         scene_id: crate::SceneId,
     },
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
@@ -495,10 +512,12 @@ impl Query {
             Query::PtzList => "ptz.list",
             Query::JtunnelSenders => "jtunnel.senders",
             Query::MidiLastControls => "midi.last_controls",
+            Query::MidiLastNotes => "midi.last_notes",
             Query::ChannelValues => "channel.values",
             Query::DataList => "data.list",
             Query::DataGet { .. } => "data.get",
             Query::SceneCameraAim { .. } => "scene.camera_aim",
+            Query::SceneDrawnCamera { .. } => "scene.drawn_camera",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
@@ -548,7 +567,8 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         encoder: Option<EncoderSessionInfo>,
         /// How many video encoder sessions the engine has open now, for every output,
-        /// and how many of them are hardware ones. Hardware encoders cap their
+        /// and how many of them are hardware ones. A preview stream's session counts
+        /// in both while it is a hardware one (since 0.185). Hardware encoders cap their
         /// concurrent sessions per GPU vendor and driver, and the engine doesn't guess
         /// the cap. Missing (from a server older than 0.13) parses as 0.
         #[serde(default)]
@@ -642,12 +662,18 @@ pub enum QueryResult {
         /// Every value binding (ADR-0178), ordered by ID. Omitted when there are none,
         /// and missing (from a server older than 0.168) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        value_bindings: Vec<ValueBinding>,
+        // Boxed, as `channels` is, to keep a call's result small.
+        value_bindings: Box<Vec<ValueBinding>>,
         /// Every channel (ADR-0183), ordered by ID. Omitted when there are none, and
         /// missing (from a server older than 0.169) parses as empty.
         // Boxed, as `master` is, to keep a call's result small.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         channels: Box<Vec<ChannelInfo>>,
+        /// Every show (ADR-0210), ordered by ID. Omitted when there are none, and
+        /// missing (from a server older than 0.180) parses as empty.
+        // Boxed, as `channels` is, to keep a call's result small.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        shows: Box<Vec<crate::ShowInfo>>,
         /// The transition presets and which one is the default (ADR-0029). Missing
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
@@ -738,6 +764,14 @@ pub enum QueryResult {
         /// decision 1, since 0.147). Omitted by an older server, which draws every effect.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rendering: Option<crate::RenderFeatures>,
+        /// The show running (ADR-0210, since 0.180), where its play head is and what it
+        /// is doing. Omitted when no show runs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        show: Option<Box<crate::RunningShow>>,
+        /// The scenes up over program as overlays (ADR-0210, since 0.180), bottom first,
+        /// whether a show or `overlay.show` put them there. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        overlays: Vec<SceneId>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]
@@ -850,7 +884,8 @@ pub enum QueryResult {
     /// The result of `capture.targets`.
     #[serde(rename = "capture.targets")]
     CaptureTargets {
-        /// The displays, then the windows, in the order the OS lists them.
+        /// The displays, then the windows, then the video devices, then the audio input
+        /// and output devices, each in the order the OS lists them.
         targets: Vec<CaptureTargetInfo>,
     },
     /// The result of `ptz.list`.
@@ -866,6 +901,14 @@ pub enum QueryResult {
         #[serde(flatten)]
         aim: crate::camera_aim::CameraAimInfo,
     },
+    /// The result of `scene.drawn_camera` (since 0.192).
+    #[serde(rename = "scene.drawn_camera")]
+    SceneDrawnCamera {
+        /// The camera the scene was drawn through last, or `None` (omitted) while no
+        /// picture has drawn it through one in the last second.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        camera: Option<crate::SceneCamera>,
+    },
     /// The result of `jtunnel.senders`.
     #[serde(rename = "jtunnel.senders")]
     JtunnelSenders {
@@ -879,6 +922,12 @@ pub enum QueryResult {
     MidiLastControls {
         /// Each input's latest control change, ordered by input name.
         controls: Vec<MidiControlInfo>,
+    },
+    /// The result of `midi.last_notes` (0.178).
+    #[serde(rename = "midi.last_notes")]
+    MidiLastNotes {
+        /// Each input's latest note-on, ordered by input name.
+        notes: Vec<crate::MidiNoteInfo>,
     },
     /// The result of `channel.values` (0.169).
     #[serde(rename = "channel.values")]
@@ -1041,10 +1090,12 @@ impl QueryResult {
             QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
             QueryResult::MidiLastControls { .. } => "midi.last_controls",
+            QueryResult::MidiLastNotes { .. } => "midi.last_notes",
             QueryResult::ChannelValues { .. } => "channel.values",
             QueryResult::DataList { .. } => "data.list",
             QueryResult::DataGet { .. } => "data.get",
             QueryResult::SceneCameraAim { .. } => "scene.camera_aim",
+            QueryResult::SceneDrawnCamera { .. } => "scene.drawn_camera",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",
@@ -1094,14 +1145,15 @@ pub struct FontInfo {
     pub path: String,
 }
 
-/// One display, window or video capture device in a `capture.targets` result.
+/// One display, window, video capture device or audio device in a `capture.targets`
+/// result.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CaptureTargetInfo {
     /// Whether it is a display, a window or a device: the kind of source that captures
     /// it.
     pub kind: CaptureTargetKind,
     /// Its capture target ID, the value of that source's `target` setting, or of a
-    /// `webcam` source's `device` setting.
+    /// `webcam`, `audio_input` or `desktop_audio` source's `device` setting.
     pub target: String,
     /// A name to show: the display's name, the window's title (or, on macOS, its
     /// application's name when it has no usable title), or the device's name. A window's
@@ -1113,7 +1165,9 @@ pub struct CaptureTargetInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<PixelSize>,
     /// Whether it is the primary display, which a `display` source with an empty
-    /// `target` captures. Omitted when `false`, and always `false` for a window.
+    /// `target` captures, or, for an audio device, the system's default device of its
+    /// direction, which an empty `device` records (since 0.195). Omitted when `false`,
+    /// and always `false` for a window.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub primary: bool,
     /// For a device, the formats it captures in that the engine reads, in the order the
@@ -1181,6 +1235,12 @@ pub enum CaptureTargetKind {
     /// A video capture device, a webcam or a capture card, captured by a `webcam`
     /// source. Since 0.90.
     Device,
+    /// An audio input device, such as a microphone or an interface's inputs, recorded by
+    /// an `audio_input` source. Since 0.195.
+    AudioInput,
+    /// An audio output device, such as speakers or headphones, whose sound a
+    /// `desktop_audio` source records. Since 0.195.
+    AudioOutput,
     /// A kind this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a target, or a `capture_target` parameter, from a newer server, so adding
     /// a kind stays a minor change (since 0.50).
@@ -1212,6 +1272,12 @@ pub struct SourceSize {
     /// (ADR-0107 decision 8, 0.157). Omitted for every other source and while `size` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub depth: Option<u32>,
+    /// How long one play of it lasts, in milliseconds, for a `media` file whose length
+    /// is known: from its container, or once a play has reached its end (since 0.177).
+    /// A file with only audio reports it beside its 1x1 `size`. Omitted for every other
+    /// source and while the length isn't known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
 }
 
 /// One scene in a `scene.list` result.

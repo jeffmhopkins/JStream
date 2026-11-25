@@ -32,12 +32,12 @@ source: crates/jstream-sources/tests/kinds.rs
     "params": [
       {
         "id": "device",
-        "type": "string",
-        "multiline": false,
+        "type": "capture_target",
+        "kind": "audio_input",
         "max_len": 512,
         "default": "",
         "label": "Device",
-        "description": "The input device's ID. Empty follows the system's default input.",
+        "description": "The input device to record, as `capture.targets` lists it. Empty follows the system's default input.",
         "live": false
       }
     ]
@@ -606,7 +606,18 @@ source: crates/jstream-sources/tests/kinds.rs
     "version": 1,
     "video": false,
     "audio": true,
-    "params": []
+    "params": [
+      {
+        "id": "device",
+        "type": "capture_target",
+        "kind": "audio_output",
+        "max_len": 512,
+        "default": "",
+        "label": "Device",
+        "description": "The output device whose sound to record, as `capture.targets` lists it. Empty follows the system's default output.",
+        "live": false
+      }
+    ]
   },
   {
     "kind_id": "display",
@@ -2413,7 +2424,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "max_len": 31,
         "default": "",
         "label": "Sender",
-        "description": "The sender's name, as its plugin shows it. JStream receives only from senders accepted on this machine.",
+        "description": "The sender's name, as its plugin shows it, or empty for the live sender (the first accepted). JStream receives only from senders accepted on this machine.",
         "live": false
       },
       {
@@ -2992,7 +3003,7 @@ source: crates/jstream-sources/tests/kinds.rs
         ],
         "default": "countdown",
         "label": "Mode",
-        "description": "Count down from Duration, count up from zero, or show the time of day. Changing it restarts the count.",
+        "description": "Count down from Duration, count up from zero, or show the time of day. Changing it restarts the count, and a countdown or stopwatch starts again each time its scene goes on program.",
         "live": false
       },
       {

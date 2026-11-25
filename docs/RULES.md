@@ -583,7 +583,9 @@ opt-in, speaks TLS only, and admits device tokens, never the control token
 ([ADR-0104](adr/0104-network-listener-over-tls.md)). The JTunnel and VISCA sockets are not control
 listeners: each is opt-in, LAN only and limited to accepted peers, and runs only
 bindings or camera actions, never the protocol
-([ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md)).
+([ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md)). Nor is the mDNS responder that
+announces the network listener: it answers queries for that one service and runs nothing
+([ADR-0233](adr/0233-announce-the-network-listener-on-mdns.md)).
 
 <a id="R-SEC-003"></a>
 ### R-SEC-003: WASM plugins are sandboxed by default
@@ -650,9 +652,12 @@ whose checks were all skipped.
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
 the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
-A PR into a `wave/*` branch skips only `doc`, `deny`, `wasm` and the after-review jobs;
-every other check runs, the Linux `test` included ([ADR-0070](adr/0070-wave-prs-run-linux-tests.md)).
-The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
+A PR into any branch but `main` (a `wave/*` branch, a train, or the PR below it in a stack)
+runs only the required Linux checks: it skips `doc`, `deny`, `wasm`, the after-review jobs and
+the checks this table marks as not required, but runs the Linux `test`
+([ADR-0070](adr/0070-wave-prs-run-linux-tests.md), [ADR-0231](adr/0231-prs-into-any-branch-but-main-run-the-light-ci.md)).
+That branch's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
+`governance` and `bench` skip draft PRs too.
 
 | Check | Runs | Required | From |
 |---|---|---|---|
@@ -674,8 +679,8 @@ The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md
 | `e2e-stream-macos` | `cargo xtask e2e-stream` on macOS: the same harness on VideoToolbox and AudioToolbox, streaming to a local `ffmpeg` RTMP server and recording to MP4 ([jstream-daemon › Real-receiver end to end](../apps/jstream-daemon/README.md#receiver-e2e)) | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | clippy on `jstream-platform-macos`, then build and unit tests on macOS | yes, from M3 ([ADR-0063](adr/0063-macos-platform-support.md)) | M0 |
-| `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
-| `perf-linux` | `cargo xtask perf --check` on lavapipe with Cisco's pinned OpenH264, then `jstream bench` judged by `xtask/perf/bench/gates-lavapipe.json` ([PERF-SUITE › The runner](../xtask/perf/README.md#runner)): on `main`, on demand, and on a PR that touches the perf suite, with its report uploaded as an artifact | no | now |
+| `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR into `main` that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
+| `perf-linux` | `cargo xtask perf --check` on lavapipe with Cisco's pinned OpenH264, then `jstream bench` judged by `xtask/perf/bench/gates-lavapipe.json` ([PERF-SUITE › The runner](../xtask/perf/README.md#runner)): on `main`, on demand, and on a PR into `main` that touches the perf suite, with its report uploaded as an artifact | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 | `fuzz` | nightly scheduled run of every fuzz target for a few minutes; a crashing input opens or updates an issue for its target ([Fuzz targets › In CI](../fuzz/README.md#ci)) | n/a | now |
 

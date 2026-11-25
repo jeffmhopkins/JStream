@@ -535,7 +535,14 @@ impl Want {
             AudioTarget::Input {
                 device: Some(device),
             } => Self::Target(AudioInputTarget::Input(DeviceId::new(device.clone()))),
-            AudioTarget::Desktop => Self::Target(AudioInputTarget::DefaultOutputLoopback),
+            AudioTarget::Desktop { device: None } => {
+                Self::Target(AudioInputTarget::DefaultOutputLoopback)
+            }
+            AudioTarget::Desktop {
+                device: Some(device),
+            } => Self::Target(AudioInputTarget::OutputLoopback(DeviceId::new(
+                device.clone(),
+            ))),
             AudioTarget::App { exe } => Self::App(exe.clone()),
             AudioTarget::Network {
                 transport: jstream_sources::Transport::Jtunnel,

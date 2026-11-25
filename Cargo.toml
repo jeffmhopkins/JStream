@@ -5,7 +5,7 @@ members = ["apps/*", "crates/*", "crates/jstream-ui/tests/e2e/mock-daemon", "xta
 [workspace.package]
 # The release version, which the apps in the portable zip take (`version.workspace`); a
 # release tag is `v` and this (docs/runbooks/release.md). Libraries stay at 0.0.0.
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.13"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jeffmhopkins/JStream"
@@ -120,6 +120,11 @@ libc = { version = "0.2", default-features = false }
 # plugin file (a DLL) in the plugin host (`jstream-plugin-clap`, ADR-0035). Already in
 # the tree at 0.9 under cef; no build script.
 libloading = { version = "0.9", default-features = false, features = ["std"] }
+# Opening the JTunnel receiver's mDNS listener (ADR-0123 §3): a UDP socket that shares port
+# 5353 with the system's own responder (SO_REUSEADDR, and SO_REUSEPORT where it exists,
+# set before bind, which `std` can't do) and joins mDNS's group. Already in the tree under
+# tokio with the same `all` feature; no build script.
+socket2 = { version = "0.6", default-features = false, features = ["all"] }
 # WGSL parsing and validation for effect packs (`jstream-effects`). Pinned to wgpu's
 # exact version (ADR-0004), so it is the copy wgpu already brings in. `wgsl-in` is the
 # only feature: no back ends, no `std`-only extras.
@@ -157,7 +162,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 # script. Only the headers the macOS crate calls.
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFData", "CFDate", "CFDictionary", "CFMachPort", "CFNumber", "CFRunLoop", "CFString"] }
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "CMTimeRange", "objc2-core-audio-types", "objc2-core-video"] }
-objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferIOSurface", "CVPixelBufferPool", "CVReturn", "objc2-io-surface"] }
 objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTDecompressionProperties", "VTDecompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
 # AudioToolbox and Core Audio's base types through the objc2 framework crates (ADR-0063 §7,
 # §12), for the AAC-LC `AudioConverter`: the converter and its properties, the codec's
@@ -200,6 +205,13 @@ objc2-security = { version = "0.3", default-features = false, features = ["std",
 # capture asks for, and the pointer's location over a captured display (`CGEventCreate`,
 # `CGEventGetLocation` and `CGDisplayBounds`). The 0.3 line, which ScreenCaptureKit's crate already brings in.
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGDirectDisplay", "CGEvent", "CGEventTypes", "CGWindow"] }
+# Metal and IOSurface through the objc2 framework crates (ADR-0063 §8, §12), for GPU
+# frames: an IOSurface plane wrapped as a Metal texture, adopted into wgpu through
+# wgpu-hal, and the `MTLSharedEvent` that says when the GPU is done with it. The 0.3 line
+# wgpu's Metal backend already brings in, so they add no crate. Only the headers the
+# macOS crate calls.
+objc2-metal = { version = "0.3", default-features = false, features = ["std", "MTLAllocation", "MTLDevice", "MTLEvent", "MTLPixelFormat", "MTLResource", "MTLTexture", "objc2-io-surface"] }
+objc2-io-surface = { version = "0.3", default-features = false, features = ["std", "IOSurfaceRef", "IOSurfaceTypes", "libc", "objc2-core-foundation"] }
 # The Objective-C runtime, blocks and dispatch queues that ScreenCaptureKit's API is made
 # of: a class for the stream's output and delegate (`objc2::define_class!`), completion
 # handler blocks (`block2`) and the serial queue frames arrive on (`dispatch2`). All three

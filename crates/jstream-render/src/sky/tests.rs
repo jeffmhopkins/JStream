@@ -993,3 +993,64 @@ fn golden_sky_a_pinned_picture_covers_the_sky_where_it_is() {
         "the second where it is pinned: {there:?}"
     );
 }
+
+/// At a slow warp the stars stream past a fraction of a pixel a frame, and none pops in:
+/// a star's glow is drawn past its cell's edges, so it never jumps on as a pixel's
+/// centre comes inside its cell, and a star that comes and goes with its cell's share
+/// of the sky fades in and out. No pixel is much brighter than any pixel around it was
+/// the frame before.
+#[test]
+fn golden_sky_a_slow_warp_fades_its_stars_in_and_out() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let camera = SceneCamera {
+        fov_deg: Finite32::new(40.0).expect("finite"),
+        ..looking([0.0; 3], [0.7, 0.2, -0.7])
+    };
+    let frame = |compositor: &mut Compositor, travel: f64| {
+        shot(
+            compositor,
+            &SkyDraw {
+                stars: 1.0,
+                warp: 0.08,
+                travel,
+                ..sky(night(), camera)
+            },
+        )
+    };
+    // How much brighter a pixel is than any pixel two or fewer away was the frame
+    // before: a star that moves lights a pixel next to one it lit, one that pops in
+    // lights a dark patch.
+    let born = |before: &Snapshot, now: &Snapshot| {
+        let light = |shot: &Snapshot, x: u32, y: u32| {
+            let [r, g, b] = rgb(shot, x, y);
+            r.max(g).max(b)
+        };
+        let mut most = 0_u8;
+        for y in 2..HEIGHT - 2 {
+            for x in 2..WIDTH - 2 {
+                let mut around = 0_u8;
+                for dy in 0..5 {
+                    for dx in 0..5 {
+                        around = around.max(light(before, x + dx - 2, y + dy - 2));
+                    }
+                }
+                most = most.max(light(now, x, y).saturating_sub(around));
+            }
+        }
+        most
+    };
+    let mut before = frame(&mut opened.compositor, 0.0);
+    let mut most = 0_u8;
+    // Steps of about a frame's travel at this warp, for two seconds.
+    for step in 1..=200_u32 {
+        let now = frame(&mut opened.compositor, f64::from(step) * 0.0004);
+        most = most.max(born(&before, &now));
+        before = now;
+    }
+    assert!(
+        most < 40,
+        "a star popped in: a pixel {most} brighter than any around it was"
+    );
+}

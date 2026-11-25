@@ -43,6 +43,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Starts an output that is stopped or failed, and stops one that is starting,\nrunning or reconnecting (since 0.181, ADR-0208), so one key or pad can go live and\nend the stream. The engine runs it as the `output.start` or `output.stop` it\nresolves to, with that action's events, audit entry and errors.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to start or stop."
+            },
+            "type": {
+              "const": "output.toggle",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace, control or non-ASCII characters, and\n`action_failed` when the engine has no credential store, the store refuses, or\nthe output's `output.start` is still opening its target (#343): send it again\nonce the start has settled.",
           "properties": {
             "key": {
@@ -361,6 +379,57 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Changes what one of this session's open preview streams of the program or of a\nscene shows (since 0.188): `scene_id`'s scene, or the program mix when it is\nomitted. The stream keeps its channel, size, rate and codec, and where nothing\nelse shares its encoder, the encoder itself, so a client's decoder goes on and\na view switching scenes shows the last picture of the old one until the first of\nthe new one, which is a keyframe, with no new stream to open. Pictures of the old\nscene may still arrive before it. Showing what it shows already succeeds and\nchanges nothing. Fails with `invalid_argument` on `channel` for a channel this\nsession doesn't have open or a stream of a source, and with `not_found` for a\n`scene_id` the collection doesn't have.",
+          "properties": {
+            "channel": {
+              "description": "The channel the stream was opened on.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene to show. Omitted for the program mix."
+            },
+            "type": {
+              "const": "preview.show",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Asks one of this session's open preview streams for a keyframe as its next\npicture (since 0.188): a client whose decoder fell behind and dropped pictures\nresumes from it rather than waiting for the stream's next regular keyframe, up to\ntwo seconds later. Succeeds for a channel that is not open.",
+          "properties": {
+            "channel": {
+              "description": "The channel the stream was opened on.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "preview.request_keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
           "properties": {
             "counts": {
@@ -548,6 +617,33 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "min_model_resolution": {
+              "description": "The smallest size the engine may lower 3D models to while it chooses, a whole\npercentage in [`MODEL_RESOLUTION_RANGE`], or left out to keep it (since\n0.194). `studio.set_rendering` refuses any other value.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "model_antialiasing": {
+              "description": "The samples a pixel of a 3D model's layer is drawn with, one of\n[`MODEL_ANTIALIASING`], or left out to keep it (since 0.196).\n`studio.set_rendering` refuses any other count.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "model_resolution": {
+              "description": "How many pixels 3D models are drawn with, 0 to let the engine choose or a whole\npercentage in [`MODEL_RESOLUTION_RANGE`] (one of [`MODEL_RESOLUTIONS`] until\n0.194), or left out to keep it (since 0.178). `studio.set_rendering` refuses any\nother value.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "reflection_probes": {
               "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
               "type": [
@@ -679,6 +775,52 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Mutes or unmutes a source's audio (ADR-0207, since 0.187), as `source.set_audio`'s\n`muted` would: `to` says how, and [`MuteTo`] says what a held key or note does\nwith `push_to_talk` and `push_to_mute`. It is collection state, as `item.show` is:\n`rev` moves on by one, `state.changed` follows and the collection saves it, but it\nis an action, so it is never a step of the sender's undo history, and another\nclient's undo that would overwrite it fails with `undo_conflict`. Setting the mute\nit already has succeeds and changes nothing. The mixer ramps the change over one\nblock, so it never clicks, and nothing is reopened. Fails with `not_found` for a\nsource not in the collection, and `invalid_argument` on `source_id` for one\nwithout audio or a `scene` source, which has no mute of its own. An action takes\nno `expected_rev` or idempotency key, so a caller that may retry sends `muted` or\n`unmuted`, not `toggle`.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "to": {
+              "$ref": "#/$defs/MuteTo",
+              "description": "What to do to its mute."
+            },
+            "type": {
+              "const": "source.mute",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Mutes or unmutes a bus, the master included (ADR-0207, since 0.187), as\n`bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with\n`not_found` for a bus not in the collection.",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus."
+            },
+            "to": {
+              "$ref": "#/$defs/MuteTo",
+              "description": "What to do to its mute."
+            },
+            "type": {
+              "const": "bus.mute",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bus_id",
+            "to"
           ],
           "type": "object"
         },
@@ -1293,7 +1435,241 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
+          "description": "Runs a show (ADR-0210, since 0.180) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+          "properties": {
+            "bookmark_id": {
+              "description": "The bookmark to start at. Omitted for the show's start.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rehearse": {
+              "description": "Whether to rehearse it on preview, leaving program, the channels and the\nmixer alone. Omitted for `false`.",
+              "type": "boolean"
+            },
+            "show_id": {
+              "$ref": "#/$defs/ShowId",
+              "description": "The show."
+            },
+            "type": {
+              "const": "show.play",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Stops the running show where it is (ADR-0210, since 0.180): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+          "properties": {
+            "type": {
+              "const": "show.stop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.180): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+          "properties": {
+            "type": {
+              "const": "show.pause",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Continues the running show (ADR-0210 decision 5, since 0.180). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+          "properties": {
+            "type": {
+              "const": "show.continue",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.180), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+          "properties": {
+            "type": {
+              "const": "show.back",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.180), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+          "properties": {
+            "type": {
+              "const": "show.skip",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.180):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+          "properties": {
+            "bookmark_id": {
+              "description": "The bookmark. One the show doesn't hold does nothing.",
+              "type": "string"
+            },
+            "show_id": {
+              "$ref": "#/$defs/ShowId",
+              "description": "The show."
+            },
+            "type": {
+              "const": "show.go_to",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show_id",
+            "bookmark_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.180), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+          "properties": {
+            "number": {
+              "description": "The bookmark's place in the show, 1 to 8.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "show.go_to_number",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "number"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.180),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+          "properties": {
+            "at_ms": {
+              "description": "Where to, in milliseconds of show time.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "show.seek",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "at_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.180), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+          "properties": {
+            "at_ms": {
+              "description": "Where, in milliseconds of show time. Omitted to disarm.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "show.arm",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.180), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to put over program."
+            },
+            "type": {
+              "const": "overlay.show",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.180).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to take down."
+            },
+            "type": {
+              "const": "overlay.hide",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.180). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "overlay.toggle",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, a `media` file plays from its start, and a `timer` countdown or\nstopwatch starts its count again (ADR-0214, since 0.183), as it does when the\nprogram shows it again. Other kinds, a `timer` clock among them, have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
           "properties": {
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -1307,6 +1683,31 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), a `timer` counts on as if it had started `at_ms` ago (since 0.183), and a\nkind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` or a `timer` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+          "properties": {
+            "at_ms": {
+              "description": "Where to play on from, in milliseconds from the start of its timeline.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source to seek."
+            },
+            "type": {
+              "const": "source.seek",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "at_ms"
           ],
           "type": "object"
         },
@@ -1338,6 +1739,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "device_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Answers a device's ask to pair (0.193, ADR-0235): `allow` pairs it, as a code\nwould, and its held `POST /api/v1/pair/ask` gets its device token; otherwise it\nis turned away. Every client gets `pairing.ask_ended`. Any admitted client may\nanswer, as any may start pairing. Fails with `not_found` for an ask that isn't\nopen (answered, timed out, or the device went away), and `action_failed` when\nthe device file can't be written (nothing is paired then). Answered by the\nserver, like `pairing.start`.",
+          "properties": {
+            "allow": {
+              "description": "Whether to pair it.",
+              "type": "boolean"
+            },
+            "ask_id": {
+              "description": "The ask, as `pairing.asked` names it.",
+              "type": "string"
+            },
+            "type": {
+              "const": "pairing.answer",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ask_id",
+            "allow"
           ],
           "type": "object"
         },
@@ -2100,6 +2524,57 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "AudioClip": {
+      "description": "A clip on an audio track: its source's fader rises to `gain_db` over `fade_in_ms`\nfrom its start, and falls back over `fade_out_ms` before its end, as a sequence lane\nmoves a fader, so the mixer shows it and a hand on the fader takes over.",
+      "properties": {
+        "clip_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "fade_in_ms": {
+          "default": 0,
+          "description": "How long it fades in, in milliseconds, `0..=60000`. Default 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fade_out_ms": {
+          "default": 0,
+          "description": "How long it fades out, in milliseconds, `0..=60000`. Default 0. The two fades\ntogether fit in `length_ms`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gain_db": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The fader's level while it is up, in dB, -100 to +24. Default 0."
+        },
+        "length_ms": {
+          "description": "How long it lasts, in milliseconds, at least 1.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId",
+          "description": "The source whose fader it moves."
+        },
+        "start_ms": {
+          "description": "When it starts, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "clip_id",
+        "source_id",
+        "start_ms",
+        "length_ms"
+      ],
+      "type": "object"
+    },
     "AudioCodec": {
       "description": "An audio codec. Serialized as a snake_case string.",
       "oneOf": [
@@ -2144,6 +2619,30 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "AudioTrack": {
+      "description": "An audio track: clips that each bring one source's fader up for their span.",
+      "properties": {
+        "clips": {
+          "description": "Its clips, in time order, none overlapping another. At most 1024. Omitted for\nnone.",
+          "items": {
+            "$ref": "#/$defs/AudioClip"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "track_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track_id"
+      ],
+      "type": "object"
     },
     "Batch": {
       "description": "One or more edits, applied atomically.\n\nThe engine checks `expected_rev`, then applies the edits in order, each against the\nstate the previous one left. If any edit fails, nothing is applied and `rev` doesn't\nchange. On success `rev` increases by exactly one, whatever the number of edits, and\nthe batch becomes one undo step for the sending client.",
@@ -3380,6 +3879,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Whether it runs. Default `true`, which isn't written.",
           "type": "boolean"
         },
+        "mode": {
+          "$ref": "#/$defs/MappingMode",
+          "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.186).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+        },
         "modifier_id": {
           "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
           "type": "string"
@@ -3541,7 +4044,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "CaptureTargetInfo": {
-      "description": "One display, window or video capture device in a `capture.targets` result.",
+      "description": "One display, window, video capture device or audio device in a `capture.targets`\nresult.",
       "properties": {
         "controls": {
           "description": "For a device, the camera controls it offers, with their ranges and values now\n(since 0.105). Omitted when empty: always for a display or a window, and for a\ndevice with none or whose controls couldn't be read.",
@@ -3566,7 +4069,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         "primary": {
-          "description": "Whether it is the primary display, which a `display` source with an empty\n`target` captures. Omitted when `false`, and always `false` for a window.",
+          "description": "Whether it is the primary display, which a `display` source with an empty\n`target` captures, or, for an audio device, the system's default device of its\ndirection, which an empty `device` records (since 0.195). Omitted when `false`,\nand always `false` for a window.",
           "type": "boolean"
         },
         "size": {
@@ -3581,7 +4084,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its size in pixels now, when the OS reports it without capturing."
         },
         "target": {
-          "description": "Its capture target ID, the value of that source's `target` setting, or of a\n`webcam` source's `device` setting.",
+          "description": "Its capture target ID, the value of that source's `target` setting, or of a\n`webcam`, `audio_input` or `desktop_audio` source's `device` setting.",
           "type": "string"
         }
       },
@@ -3608,6 +4111,16 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "device",
           "description": "A video capture device, a webcam or a capture card, captured by a `webcam`\nsource. Since 0.90.",
+          "type": "string"
+        },
+        {
+          "const": "audio_input",
+          "description": "An audio input device, such as a microphone or an interface's inputs, recorded by\nan `audio_input` source. Since 0.195.",
+          "type": "string"
+        },
+        {
+          "const": "audio_output",
+          "description": "An audio output device, such as speakers or headphones, whose sound a\n`desktop_audio` source records. Since 0.195.",
           "type": "string"
         }
       ]
@@ -3857,7 +4370,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         },
         "inputs": {
-          "description": "What sets it: at most 8 readers, each a `midi`, `data` or `channel` modifier's kind\nand parameters, whose `from` and `to` map the reading onto the channel's 0 to 1.\nA `channel` input can't lead back to this channel. Default none.",
+          "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.186,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
           "items": {
             "$ref": "#/$defs/MotionKind"
           },
@@ -3916,6 +4429,16 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "toggle",
           "description": "Switches it on if it is off, and off if it is on.",
+          "type": "string"
+        },
+        {
+          "const": "hold_on",
+          "description": "Switches it on while a key or note is held, and off on release (ADR-0207, since\n0.187; [`Action::on_release`](crate::Action::on_release)). Sent as a call, with\nnothing held, it switches it on.",
+          "type": "string"
+        },
+        {
+          "const": "hold_off",
+          "description": "Switches it off while a key or note is held, and on on release (ADR-0207, since\n0.187). Sent as a call, it switches it off.",
           "type": "string"
         }
       ]
@@ -4238,6 +4761,78 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "DataOn": {
+      "description": "When a [`Trigger::Data`] fires (ADR-0202). Each fires when its condition starts to\nhold and releases when it stops, except `changes`, which only fires. What a field\nholds when the engine starts listening, or when a key first arrives, is where it\nstarts from and fires nothing.",
+      "oneOf": [
+        {
+          "description": "The field equals `value`: the same text, or a number or `true`/`false` that\n`value` spells.",
+          "properties": {
+            "type": {
+              "const": "equals",
+              "type": "string"
+            },
+            "value": {
+              "description": "What it equals, at most [`MAX_DATA_VALUE_LEN`] bytes.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The field takes any other value.",
+          "properties": {
+            "type": {
+              "const": "changes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The field is a number at `level` or above.",
+          "properties": {
+            "level": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The level it crosses upward."
+            },
+            "type": {
+              "const": "rises",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "level"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The field is a number below `level`.",
+          "properties": {
+            "level": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The level it crosses downward."
+            },
+            "type": {
+              "const": "falls",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "level"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "DeleteTarget": {
       "description": "What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a\nlabel.",
       "oneOf": [
@@ -4413,6 +5008,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "model_frames_reduced": {
+          "default": 0,
+          "description": "The frames of the window drawn with 3D models at less than 100 (since 0.178).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_resolution": {
+          "default": 100,
+          "description": "The percentage of their canvas's width and of its height the drawer drew 3D\nmodels with at the end of the window (ADR-0197, since 0.178): 100 unless the\nprogram's render thread lowered it, or `RenderFeatures::model_resolution` set it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "over_budget": {
           "default": 0,
           "description": "The frames that took longer than `frame_budget_ms`.",
@@ -4444,6 +5053,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "submits": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average number of GPU submits the thread made per frame. Each submit costs\nthe thread a fixed time in the driver however little work it carries, so a high\ncount with a low `gpu_ms` is CPU time that batching would save. The compositor's\nown submits only: a platform's or a browser's on the same queue are not counted."
         }
       },
       "required": [
@@ -5969,7 +6583,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders\norganise only: they change no rendering, switching or nesting. Inverse:\n`folder.delete`.",
+          "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3), or, with\n`scene_id`, a folder under one scene for its keyframe scenes and sequences\n(ADR-0222, since 0.190). Folders organise only: they change no rendering,\nswitching or nesting. Inverse: `folder.delete`.",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -5988,7 +6602,18 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The folder it sits in, which must exist, else `not_found`. Omitted means top\nlevel."
+              "description": "The folder it sits in, which must exist, else `not_found`, and belong to the\nsame scene (or, like this one, to none), else `invalid_argument`. Omitted\nmeans top level."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose keyframe scenes and sequences it holds (since 0.190), which\nmust exist, else `not_found`, and not be a keyframe scene, else\n`invalid_argument`. The folder goes with the scene when it is deleted.\nOmitted makes a folder of the scene list."
             },
             "type": {
               "const": "folder.create",
@@ -6026,7 +6651,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself is `invalid_argument` (field\n`parent`), and a parent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
+          "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself, or that belongs to another\nscene than the folder (ADR-0222), is `invalid_argument` (field `parent`), and a\nparent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -6080,7 +6705,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes an empty folder. Rejected with `invalid_argument` while a scene or another\nfolder sits in it, listing them as `blockers`: move them out first, or send the\nbatch `delete.plan` returns, which moves them up to the folder's parent. Inverse:\n`folder.create` with its name and parent, then `folder.reorder` to its old\nposition (unless it was last).",
+          "description": "Deletes an empty folder. Rejected with `invalid_argument` while a scene, a\ntimeline or another folder sits in it, listing them as `blockers`: move them out\nfirst, or send the batch `delete.plan` returns, which moves them up to the\nfolder's parent. Inverse:\n`folder.create` with its name and parent, then `folder.reorder` to its old\nposition (unless it was last).",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
@@ -6098,7 +6723,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. Inverse: `scene.set_folder` with the previous folder.",
+          "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. A keyframe scene goes only in a folder of its parent\n(ADR-0222, since 0.190), and any other scene only in a folder of the scene list,\nelse `invalid_argument` on `folder_id`. Inverse: `scene.set_folder` with the\nprevious folder.",
           "properties": {
             "folder_id": {
               "anyOf": [
@@ -6496,7 +7121,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nRejected with `invalid_argument` for a chord that isn't valid (see [`Chord`]) or\nan action that can't be bound (`output.set_key`, whose stream key is never stored\nin the collection), with `already_exists` (entity `hotkey`) for a chord that is\nalready bound (rebinding is a batch of `hotkey.clear` then `hotkey.set`), and with\n`not_found` for a scene or output the action names that doesn't exist. Deleting\nthat object later removes the binding with it (ADR-0040 §3). Inverse:\n`hotkey.clear`.",
+          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nSince 0.181 (ADR-0208) a chord can run several actions: binding a chord that is\nalready bound adds this action after its others, and a press runs them all, in\nthe order they were bound. Rejected with `invalid_argument` for a chord that isn't\nvalid (see [`Chord`]) or an action that can't be bound (`output.set_key`, whose\nstream key is never stored in the collection), with `already_exists` (entity\n`hotkey`) for a chord already bound to an equal action (before 0.181, for any chord\nalready bound), and with `not_found` for a scene or output the action names that\ndoesn't exist. Deleting that object later removes that action's binding with it\n(ADR-0040 §3), leaving the chord's others. Inverse: `hotkey.clear` naming the\naction.",
           "properties": {
             "action": {
               "$ref": "#/$defs/Action",
@@ -6519,8 +7144,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes a hotkey binding. Rejected with `not_found` (entity `hotkey`) for a chord\nthat isn't bound. Inverse: `hotkey.set` with its action.",
+          "description": "Removes a hotkey binding: with `action`, that one action of the chord's, and\nwithout it, every action the chord runs (ADR-0208). The chord's labels go with its\nlast action. Rejected with `not_found` (entity `hotkey`) for a chord that isn't\nbound, or isn't bound to `action`. Inverse: `hotkey.set` with each action it\nremoved, in their order, then `hotkey.set_labels` when the chord lost its labels.",
           "properties": {
+            "action": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Action"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The one action to unbind (since 0.181, ADR-0208). Omitted unbinds them all."
+            },
             "chord": {
               "$ref": "#/$defs/Chord",
               "description": "The chord to unbind."
@@ -6563,7 +7199,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound\n(rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Inverse: `binding.clear`.",
+          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound to an equal\naction (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Since 0.181 (ADR-0208) a trigger can\nrun several actions, as a chord can: binding a trigger that is already bound adds\nthis action after its others, the engine runs them all in that order, and\n`already_exists` is only for a trigger already bound to an equal action. Inverse:\n`binding.clear` naming the action.",
           "properties": {
             "action": {
               "$ref": "#/$defs/Action",
@@ -6586,8 +7222,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that\nisn't bound. Inverse: `binding.set` with its action.",
+          "description": "Removes a binding: with `action`, that one action of the trigger's, and without\nit, every action the trigger runs (ADR-0208). Rejected with `not_found` (entity\n`binding`) for a trigger that isn't bound, or isn't bound to `action`. Inverse:\n`binding.set` with each action it removed, in their order.",
           "properties": {
+            "action": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Action"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The one action to unbind (since 0.181, ADR-0208). Omitted unbinds them all."
+            },
             "trigger": {
               "$ref": "#/$defs/Trigger",
               "description": "The trigger to unbind."
@@ -6672,6 +7319,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "channel_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets a show (ADR-0210, since 0.180): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+          "properties": {
+            "show": {
+              "$ref": "#/$defs/ShowInfo",
+              "description": "The show."
+            },
+            "type": {
+              "const": "show.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a show. A show running when it is deleted stops, and emits\n`show.changed` (`stopped`). Rejected with `not_found` (entity `show`) for an ID no\nshow has. Inverse: `show.set` with the show.",
+          "properties": {
+            "show_id": {
+              "$ref": "#/$defs/ShowId",
+              "description": "The show's ID."
+            },
+            "type": {
+              "const": "show.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show_id"
           ],
           "type": "object"
         },
@@ -7431,6 +8114,16 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "channel",
           "description": "A channel (0.169, ADR-0183). Only an error answering a `channel.*` command names\nit, so a client that sends none never reads it.",
           "type": "string"
+        },
+        {
+          "const": "show",
+          "description": "A show (0.180, ADR-0210). Only an error answering a `show.*` command names it, so\na client that sends none never reads it.",
+          "type": "string"
+        },
+        {
+          "const": "pairing_ask",
+          "description": "A device's ask to pair (0.193, ADR-0235). Only an error answering\n`pairing.answer` names it, so a client that sends none never reads it.",
+          "type": "string"
         }
       ]
     },
@@ -7553,6 +8246,15 @@ source: crates/jstream-protocol/src/fixtures.rs
             "depth": {
               "description": "Its depth, as [`SourceSize::depth`](crate::SourceSize::depth) reports it\n(0.157): a change of depth alone is a size change too.",
               "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "duration_ms": {
+              "description": "Its length, as [`SourceSize::duration_ms`](crate::SourceSize::duration_ms)\nreports it (since 0.177): the length becoming known is a size change too.",
+              "format": "uint64",
               "minimum": 0,
               "type": [
                 "integer",
@@ -8235,6 +8937,55 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "A show started, paused, continued, jumped, looped, went off script, ended or\nstopped (ADR-0210, since 0.180): never once a frame. Running a show is studio\nstate, so it carries no `rev`; `studio.get` reports the running show in full.",
+          "properties": {
+            "at_ms": {
+              "description": "Where its play head is now, in milliseconds of show time.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "bookmark_id": {
+              "description": "The bookmark it paused at or jumped to. Omitted when none is.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "change": {
+              "$ref": "#/$defs/ShowChange",
+              "description": "What happened."
+            },
+            "loop_id": {
+              "description": "The loop it wrapped in. Omitted unless `change` is `looped`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "running": {
+              "description": "Whether it runs now: `false` after `ended` and `stopped`.",
+              "type": "boolean"
+            },
+            "show_id": {
+              "$ref": "#/$defs/ShowId",
+              "description": "The show."
+            },
+            "type": {
+              "const": "show.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "show_id",
+            "change",
+            "running",
+            "at_ms"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A timeline's cue fired (ADR-0115, since 0.87), once per cue on each pass, and once\nfor each cue `timeline.seek` runs. The cue's action has its own events (a\n`scene.switch` cue's `studio.changed` follows).",
           "properties": {
             "at_ms": {
@@ -8378,6 +9129,47 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "approval_id",
+            "outcome"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A device asked to pair and waits for the person's answer (0.193, ADR-0235). A UI\nshows a prompt with Allow and Deny and answers with `pairing.answer`. Runtime\nstate, so no `rev`.",
+          "properties": {
+            "ask": {
+              "$ref": "#/$defs/PairingAsk",
+              "description": "The ask."
+            },
+            "type": {
+              "const": "pairing.asked",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ask"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A device's ask to pair ended (0.193, ADR-0235): answered, timed out, or the\ndevice went away. A UI closes its prompt.",
+          "properties": {
+            "ask_id": {
+              "description": "The ask, as `pairing.asked` named it.",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/PairingAskOutcome",
+              "description": "How it ended."
+            },
+            "type": {
+              "const": "pairing.ask_ended",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ask_id",
             "outcome"
           ],
           "type": "object"
@@ -8639,6 +9431,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "The folder it sits in. Omitted for a top-level folder."
+        },
+        "scene_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The scene whose keyframe scenes and sequences it organises, under that scene\nin the scene list (ADR-0222, since 0.190). Omitted for a folder of the scene\nlist itself."
         }
       },
       "required": [
@@ -9351,6 +10154,48 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "KeyframeMarker": {
+      "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
+      "properties": {
+        "at_ms": {
+          "description": "When it fires, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keyframe_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The keyframe scene to load. Omitted for the scene's own values."
+        },
+        "marker_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The preset whose timing the Move takes. Omitted for the default preset."
+        }
+      },
+      "required": [
+        "marker_id",
+        "at_ms"
+      ],
+      "type": "object"
+    },
     "KeyframeTiming": {
       "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
       "properties": {
@@ -9730,6 +10575,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "LoopLeave": {
+      "description": "How `show.continue` leaves a loop.",
+      "oneOf": [
+        {
+          "const": "at_once",
+          "description": "At once: the show plays on from the loop's end.",
+          "type": "string"
+        },
+        {
+          "const": "finish_pass",
+          "description": "At the end of this pass, instead of wrapping.",
+          "type": "string"
+        }
+      ]
+    },
     "Loudness": {
       "description": "BS.1770 loudness, in LUFS. Each value is absent until enough audio has been measured\nfor it, and while the signal is below the absolute gate (−70 LUFS).",
       "properties": {
@@ -9768,6 +10628,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       },
       "type": "object"
+    },
+    "MappingMode": {
+      "description": "How a mapping meets the value it drives (ADR-0203, since 0.186): it adds to it, or\nreplaces it.",
+      "oneOf": [
+        {
+          "const": "add",
+          "description": "An offset: its value is added to the stored value (multiplied into a scale), so\nthe stored value, keyframes and other mappings still count.",
+          "type": "string"
+        },
+        {
+          "const": "replace",
+          "description": "An override: its value is the value, in the property's or setting's own unit;\n`add` mappings still add on top.",
+          "type": "string"
+        }
+      ]
     },
     "MasterInfo": {
       "description": "The master stage, as `state.get` reports it: what applies to everything leaving\nJStream (ADR-0080 §1).",
@@ -9834,6 +10709,50 @@ source: crates/jstream-protocol/src/fixtures.rs
         "channel",
         "controller",
         "value",
+        "count"
+      ],
+      "type": "object"
+    },
+    "MidiNoteInfo": {
+      "description": "One MIDI input's latest note-on, in `midi.last_notes` (since 0.189, ADR-0202).",
+      "properties": {
+        "channel": {
+          "description": "Its channel, 1 to 16.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "count": {
+          "description": "How many note events (on and off) the input has sent since the engine started:\na client learning a note waits for it to grow.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input": {
+          "description": "The input, a MIDI port or a JTunnel sender by name, as a binding names it.",
+          "type": "string"
+        },
+        "note": {
+          "description": "The note number, 0 to 127.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "velocity": {
+          "description": "Its velocity, 1 to 127.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input",
+        "channel",
+        "note",
+        "velocity",
         "count"
       ],
       "type": "object"
@@ -11010,6 +11929,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Whether it applies. Default `true`; omitted when `true`.",
           "type": "boolean"
         },
+        "mode": {
+          "$ref": "#/$defs/MappingMode",
+          "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.186). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
+        },
         "modifier_id": {
           "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
           "type": "string"
@@ -11162,6 +12085,36 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "saw",
           "description": "A sawtooth: rises from -1 to 1 over each period, then jumps back.",
+          "type": "string"
+        }
+      ]
+    },
+    "MuteTo": {
+      "description": "What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.187). Serialized as\na snake_case string.\n\n`push_to_talk` and `push_to_mute` are for a held key or note: pressing it runs the\naction, and releasing it runs [`MuteTo::released`]'s\n([`Action::on_release`](crate::Action::on_release)). Sent as a call, with nothing\nheld, they are the press alone: `push_to_talk` unmutes and `push_to_mute` mutes.",
+      "oneOf": [
+        {
+          "const": "muted",
+          "description": "Mutes it.",
+          "type": "string"
+        },
+        {
+          "const": "unmuted",
+          "description": "Unmutes it.",
+          "type": "string"
+        },
+        {
+          "const": "toggle",
+          "description": "Mutes it if it is unmuted, and unmutes it if it is muted.",
+          "type": "string"
+        },
+        {
+          "const": "push_to_talk",
+          "description": "Unmutes it while held, and mutes it on release.",
+          "type": "string"
+        },
+        {
+          "const": "push_to_mute",
+          "description": "Mutes it while held, and unmutes it on release.",
           "type": "string"
         }
       ]
@@ -11335,6 +12288,26 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       },
       "type": "object"
+    },
+    "NextMonitor": {
+      "description": "What the Run view's Next monitor shows (ADR-0210 decision 13). Program is never\nslowed to draw Next.",
+      "oneOf": [
+        {
+          "const": "live",
+          "description": "The next scene, rendered live as a second picture.",
+          "type": "string"
+        },
+        {
+          "const": "still",
+          "description": "One picture of the next scene, drawn once when Next changes, while the engine has\ntime to spare.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Nothing: program alone.",
+          "type": "string"
+        }
+      ]
     },
     "OutputHealth": {
       "description": "How a running output is doing, from its own drops and link over the last ten\nseconds: the share of its video frames lost there, and whether its live link is up.\nSerialized as a snake_case string.",
@@ -11575,6 +12548,74 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "OverlayClip": {
+      "description": "A clip on an overlay track: its scene is shown over program from its start to its\nend, through the overlay's own show and hide transitions, across cuts and pauses.",
+      "properties": {
+        "clip_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "fade_in_ms": {
+          "description": "How long it fades in, in milliseconds, `0..=60000`. Default 0, which shows it\nthrough the overlay's own show transition.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fade_out_ms": {
+          "description": "How long it fades out, as `fade_in_ms`, through the overlay's own hide transition\nat 0. The two fades together fit in `length_ms`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "length_ms": {
+          "description": "How long it lasts, in milliseconds, at least 1.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene it shows."
+        },
+        "start_ms": {
+          "description": "When it starts, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "clip_id",
+        "scene_id",
+        "start_ms",
+        "length_ms"
+      ],
+      "type": "object"
+    },
+    "OverlayTrack": {
+      "description": "An overlay track: scene clips drawn over program, with gaps allowed.",
+      "properties": {
+        "clips": {
+          "description": "Its clips, in time order, none overlapping another. At most 1024. Omitted for\nnone.",
+          "items": {
+            "$ref": "#/$defs/OverlayClip"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "track_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track_id"
+      ],
+      "type": "object"
+    },
     "OverrideField": {
       "description": "One of the fields a keyframe scene can override. Each is overridden whole: a variant\nthat overrides `geometry` overrides all of it, and one that overrides `effects` the\nwhole list.",
       "oneOf": [
@@ -11730,6 +12771,54 @@ source: crates/jstream-protocol/src/fixtures.rs
         "loaded"
       ],
       "type": "object"
+    },
+    "PairingAsk": {
+      "description": "A device that asked to pair and waits for the person's answer.",
+      "properties": {
+        "address": {
+          "description": "The address it asked from, as the host shows it (`192.168.1.57`).",
+          "type": "string"
+        },
+        "ask_id": {
+          "description": "Names this ask, for `pairing.answer`. Unique while the server runs.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name the device gave: its own text, never an instruction.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ask_id",
+        "name",
+        "address"
+      ],
+      "type": "object"
+    },
+    "PairingAskOutcome": {
+      "description": "How a device's ask to pair ended (`pairing.ask_ended`).",
+      "oneOf": [
+        {
+          "const": "allowed",
+          "description": "Allowed: the device is paired.",
+          "type": "string"
+        },
+        {
+          "const": "denied",
+          "description": "Denied.",
+          "type": "string"
+        },
+        {
+          "const": "timed_out",
+          "description": "No one answered in time.",
+          "type": "string"
+        },
+        {
+          "const": "closed",
+          "description": "The device went away first.",
+          "type": "string"
+        }
+      ]
     },
     "ParamDescriptor": {
       "description": "One parameter of a kind.",
@@ -12752,6 +13841,42 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "ProgramClip": {
+      "description": "A scene clip on the program track.",
+      "properties": {
+        "clip_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "length_ms": {
+          "description": "How long it lasts, in milliseconds, at least 1. A clip whose scene plays a video\nor audio file takes the file's length when it is dropped.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition preset of the cut into it, which wins over the scenes' own in and\nout. Omitted for `Default`: the usual order (the next scene's in, the current\nscene's out, the collection's default)."
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene its start puts on program."
+        }
+      },
+      "required": [
+        "clip_id",
+        "scene_id",
+        "length_ms"
+      ],
+      "type": "object"
+    },
     "ProtocolError": {
       "description": "Why the server refused or failed a request.\n\nOn the wire each variant is an object whose `code` tag is the variant's stable\nsnake_case code (see [`ProtocolError::code`]) and whose other fields are its details.\n[`WireError`] adds the human-readable message. A code, once released, keeps its\nmeaning and its fields (R-API-001). Clients must handle codes they don't know: they\nparse as [`ProtocolError::Unknown`], and the message still explains them.",
       "oneOf": [
@@ -13138,6 +14263,31 @@ source: crates/jstream-protocol/src/fixtures.rs
         "minor"
       ],
       "type": "object"
+    },
+    "PtzAxis": {
+      "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.182).",
+      "oneOf": [
+        {
+          "const": "pan",
+          "description": "The pan position, -524287 to 524287.",
+          "type": "string"
+        },
+        {
+          "const": "tilt",
+          "description": "The tilt position, -32767 to 32767.",
+          "type": "string"
+        },
+        {
+          "const": "zoom",
+          "description": "The zoom position, 0 (the widest) to 65535.",
+          "type": "string"
+        },
+        {
+          "const": "focus",
+          "description": "The focus position, 0 to 65535. Driving it puts the head's focus in manual.",
+          "type": "string"
+        }
+      ]
     },
     "PtzCameraInfo": {
       "description": "One PTZ camera in a `ptz.list` result.",
@@ -13983,6 +15133,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Each MIDI input's latest note-on (since 0.189, ADR-0202), by input name: what a\nclient that learns a note for a binding watches. Runtime state, so no `rev`; an\ninput whose latest notes hold no note-on is left out. It reads each input's last\n16 note events, so a note-off doesn't move it.",
+          "properties": {
+            "type": {
+              "const": "midi.last_notes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by\nID. Runtime state, so no `rev`.",
           "properties": {
             "type": {
@@ -14004,6 +15167,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "type": {
               "const": "scene.camera_aim",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The camera a 3D scene was drawn through last (since 0.192): its camera as its\ncamera motion, follow camera, live aim, the 3D group it rides with and autofocus\nmoved it for the latest picture that drew the scene, which is where its items\nare seen. What an editor outlines and hits the scene's items through. Runtime\nstate, so no `rev`; `camera` is omitted while no picture has drawn the scene\nthrough a camera in the last second.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene, as a picture draws it: a keyframe scene by its own ID."
+            },
+            "type": {
+              "const": "scene.drawn_camera",
               "type": "string"
             }
           },
@@ -14321,7 +15502,7 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "encoder_sessions": {
               "default": 0,
-              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
+              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. A preview stream's session counts\nin both while it is a hardware one (since 0.185). Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
@@ -14517,6 +15698,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "Every send, ordered by bus, then by source. Missing (from a server older\nthan 0.19) parses as empty.",
               "items": {
                 "$ref": "#/$defs/SendInfo"
+              },
+              "type": "array"
+            },
+            "shows": {
+              "description": "Every show (ADR-0210), ordered by ID. Omitted when there are none, and\nmissing (from a server older than 0.180) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/ShowInfo"
               },
               "type": "array"
             },
@@ -14755,6 +15943,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               },
               "type": "array"
             },
+            "overlays": {
+              "description": "The scenes up over program as overlays (ADR-0210, since 0.180), bottom first,\nwhether a show or `overlay.show` put them there. Omitted when none is.",
+              "items": {
+                "$ref": "#/$defs/SceneId"
+              },
+              "type": "array"
+            },
             "preview_scene": {
               "anyOf": [
                 {
@@ -14787,6 +15982,17 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170\ndecision 1, since 0.147). Omitted by an older server, which draws every effect."
+            },
+            "show": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RunningShow"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The show running (ADR-0210, since 0.180), where its play head is and what it\nis doing. Omitted when no show runs."
             },
             "timelines": {
               "description": "The timelines playing (ADR-0115, since 0.87), ordered by ID, each with where\nit is now. Omitted when none is.",
@@ -15143,7 +16349,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "The result of `capture.targets`.",
           "properties": {
             "targets": {
-              "description": "The displays, then the windows, in the order the OS lists them.",
+              "description": "The displays, then the windows, then the video devices, then the audio input\nand output devices, each in the order the OS lists them.",
               "items": {
                 "$ref": "#/$defs/CaptureTargetInfo"
               },
@@ -15215,6 +16421,30 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `scene.drawn_camera` (since 0.192).",
+          "properties": {
+            "camera": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneCamera"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The camera the scene was drawn through last, or `None` (omitted) while no\npicture has drawn it through one in the last second."
+            },
+            "type": {
+              "const": "scene.drawn_camera",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `jtunnel.senders`.",
           "properties": {
             "on": {
@@ -15258,6 +16488,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "controls"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `midi.last_notes` (0.178).",
+          "properties": {
+            "notes": {
+              "description": "Each input's latest note-on, ordered by input name.",
+              "items": {
+                "$ref": "#/$defs/MidiNoteInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "midi.last_notes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "notes"
           ],
           "type": "object"
         },
@@ -15897,7 +17148,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "RenderFeatures": {
-      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]).",
+      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]). `model_resolution` is not a switch of an effect: it\nsets how many pixels 3D models are drawn with (ADR-0197).",
       "properties": {
         "ambient_occlusion": {
           "default": true,
@@ -15912,6 +17163,27 @@ source: crates/jstream-protocol/src/fixtures.rs
         "max_probe_resolution": {
           "default": 512,
           "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.165). A probe set larger captures at this.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_model_resolution": {
+          "default": 50,
+          "description": "The smallest size the engine may lower 3D models to while it chooses\n(`model_resolution` 0), as a percentage of their canvas's width and of its height\n(since 0.194): any whole percentage in [`MODEL_RESOLUTION_RANGE`]. 50, the\ndefault, lets it use every size it has; 100 keeps them whole. A size between two\nof [`MODEL_RESOLUTIONS`] is the last one it steps down to. A fixed\n`model_resolution` is drawn as set, whatever this is.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_antialiasing": {
+          "default": 4,
+          "description": "The samples each pixel of a 3D model's layer is drawn with (ADR-0242, since\n0.196): multisampled anti-aliasing, one of [`MODEL_ANTIALIASING`]. 1 draws models\nwithout it, their slanted edges stepped; more smooths their edges, thin ones\nincluded, before any filter (a bloom among them) runs over the layer, at more GPU\ntime and memory. 4, the default, is what a file or client that leaves it out\nreads as. A count the GPU can't draw draws with the most it can below it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_resolution": {
+          "default": 0,
+          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.178): 0, the default, lets the engine choose,\nlowering it through [`MODEL_RESOLUTIONS`] while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size. Until\n0.194 a fixed size was one of [`MODEL_RESOLUTIONS`]; since, it is any whole\npercentage in [`MODEL_RESOLUTION_RANGE`].",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -16033,11 +17305,92 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "RunningShow": {
+      "description": "A running show, as `studio.get` reports it in `show` (ADR-0210 decision 2).",
+      "properties": {
+        "armed_ms": {
+          "description": "The spot armed for the next `show.continue` (`show.arm`), in milliseconds of show\ntime. Omitted when none is.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "at_ms": {
+          "description": "Where its play head is, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "bookmark_id": {
+          "description": "The pausing bookmark it waits at. Omitted unless `state` is `paused` at a\nbookmark, so also omitted while `show.pause` holds it between bookmarks.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loop_id": {
+          "description": "The loop its play head is in. Omitted outside a loop.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "off_script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The scene switched by hand that took it off script. Omitted unless `state` is\n`off_script`."
+        },
+        "pass": {
+          "description": "Which pass of `loop_id` it is on: 0 the first. Omitted outside a loop.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rehearse": {
+          "description": "Whether it rehearses on preview and leaves program alone. Omitted when `false`.",
+          "type": "boolean"
+        },
+        "show_id": {
+          "$ref": "#/$defs/ShowId",
+          "description": "The show."
+        },
+        "state": {
+          "$ref": "#/$defs/ShowState",
+          "description": "Whether it plays, waits at a pausing bookmark, or was taken off script."
+        },
+        "waited_ms": {
+          "description": "How long it has waited at `bookmark_id`, in milliseconds. Omitted unless `state`\nis `paused`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "show_id",
+        "at_ms",
+        "state"
+      ],
+      "type": "object"
+    },
     "SceneCamera": {
       "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
       "properties": {
         "autofocus": {
-          "description": "Whether the focus follows whatever is at the centre of the frame (since 0.167,\nADR-0176 decision 5): with a depth of field, each frame the engine measures the\nnearest item the viewing axis meets and glides `focus_px` there, holding the last\ndistance (at first `focus_px`) while nothing is there. Off, `focus_px` is where it\nfocuses. Default `false`, which isn't written.",
+          "description": "Whether the focus follows whatever is at the centre of the frame (since 0.167,\nADR-0176 decision 5): with a depth of field, each frame the engine measures the\nnearest item the viewing axis meets that hides what is behind it (a `normal`\nitem at least half opaque, a model at its opaque surface) and glides `focus_px` there, holding the last\ndistance (at first `focus_px`) while nothing is there. Off, `focus_px` is where it\nfocuses. Default `false`, which isn't written.",
           "type": "boolean"
         },
         "blur_px": {
@@ -16046,6 +17399,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "depth_sort": {
           "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
+          "type": "boolean"
+        },
+        "fixed_aperture": {
+          "description": "Whether the depth of field behaves like a real lens with a fixed aperture (since\n0.191, ADR-0223): `blur_px` is then the blur far behind the\nfocus of the framing camera (45°, focused at its framing distance), and the blur a\nview draws with grows with the square of its focal length and shrinks as its focus\nmoves away, [`lens_blur`]: zooming in or focusing closer softens the background, so\na dolly zoom changes it. Off, `blur_px` is the blur whatever the zoom and focus.\nDefault `false`, which isn't written.",
           "type": "boolean"
         },
         "focus_px": {
@@ -16405,6 +17762,30 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "SequenceTrack": {
+      "description": "A sequence track: cues that play a sequence or run one event.",
+      "properties": {
+        "cues": {
+          "description": "Its cues, in time order. At most 1024. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/ShowCue"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "track_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track_id"
+      ],
+      "type": "object"
+    },
     "ServerMessage": {
       "description": "A message from the server to a client. Tagged by `type`.",
       "oneOf": [
@@ -16507,6 +17888,349 @@ source: crates/jstream-protocol/src/fixtures.rs
         "rev"
       ],
       "type": "object"
+    },
+    "ShowBookmark": {
+      "description": "A bookmark: a named point in show time that the show can jump to (ADR-0210\ndecision 4). A pausing one also stops the show there until `show.continue`.",
+      "properties": {
+        "at_ms": {
+          "description": "Where it is, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "bookmark_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "continue_after_ms": {
+          "description": "How long a pausing bookmark waits before it continues by itself, in milliseconds,\n1 to 3600000. Omitted to wait for `show.continue`. Only a pausing bookmark has\none.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes, shown on its flag and in \"Next\". Omitted\nmeans empty.",
+          "type": "string"
+        },
+        "note": {
+          "description": "The bookmark's show notes for the operator, in Markdown (CommonMark), at most\n16 KiB, which the Run view shows in an expandable panel. Omitted means empty.",
+          "type": "string"
+        },
+        "pausing": {
+          "description": "Whether the show pauses here until `show.continue`. Default `true`; omitted when\n`true`.",
+          "type": "boolean"
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition preset a jump here arrives with. Omitted for the show's\n`preset_id`."
+        }
+      },
+      "required": [
+        "bookmark_id",
+        "at_ms"
+      ],
+      "type": "object"
+    },
+    "ShowChange": {
+      "description": "What a running show did, as `show.changed` reports it.",
+      "oneOf": [
+        {
+          "const": "started",
+          "description": "`show.play` started it.",
+          "type": "string"
+        },
+        {
+          "const": "paused",
+          "description": "It reached a pausing bookmark, or `show.pause` held it, and waits.",
+          "type": "string"
+        },
+        {
+          "const": "continued",
+          "description": "It plays on from a pause, by `show.continue` or a bookmark's own wait.",
+          "type": "string"
+        },
+        {
+          "const": "jumped",
+          "description": "It jumped: to a bookmark, by `show.seek`, or to an armed spot. What the show\nplaced before the landing point is applied as state; one-shots are not replayed.",
+          "type": "string"
+        },
+        {
+          "const": "looped",
+          "description": "It wrapped from a loop's end to its start.",
+          "type": "string"
+        },
+        {
+          "const": "off_script",
+          "description": "A scene was switched by hand: it waits off script.",
+          "type": "string"
+        },
+        {
+          "const": "ended",
+          "description": "It reached its end and stopped there.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "`show.stop` stopped it, or another show's `show.play` replaced it, or the show\nwas deleted.",
+          "type": "string"
+        }
+      ]
+    },
+    "ShowCue": {
+      "description": "A cue on a sequence track. One that runs `timeline.play` is drawn as a clip as wide\nas the sequence; any other is a one-off event.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "What it does: an action a timeline's cue may run ([`Action::cue_problem`]),\nexcept `scene.switch`, since the program track puts scenes on program. Read as\nplain JSON, as a timeline's cue is. [`ShowCue::action`] parses it."
+        },
+        "at_ms": {
+          "description": "When it fires, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cue_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cue_id",
+        "at_ms",
+        "action"
+      ],
+      "type": "object"
+    },
+    "ShowEnd": {
+      "description": "What a show does when it reaches its end (ADR-0210 decision 11). A show never ends\nthe stream.",
+      "oneOf": [
+        {
+          "description": "It stops, and the last scene stays on program.",
+          "properties": {
+            "type": {
+              "const": "stop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "It goes back to its first bookmark, or to its start if it has none, and plays on.",
+          "properties": {
+            "type": {
+              "const": "loop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "It goes to a bookmark of its own.",
+          "properties": {
+            "bookmark_id": {
+              "description": "The bookmark.",
+              "type": "string"
+            },
+            "type": {
+              "const": "go_to",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bookmark_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ShowId": {
+      "description": "A show in the collection (ADR-0210): 1 to 64 bytes of ASCII letters, digits, `_`\nand `-`.",
+      "type": "string"
+    },
+    "ShowInfo": {
+      "description": "A show: tracks of clips in show time, bookmarks and loops (ADR-0210 decisions 2 to\n4). Every element in it (a clip, a track, a marker, a cue, a bookmark, a loop) has an\nID unique within the show.\n\nA clip naming a scene, source, timeline, keyframe or preset the collection doesn't\nhold is kept, as a timeline's cue is, and does nothing when the show reaches it, so\ndeleting a scene never shifts a show.",
+      "properties": {
+        "audio": {
+          "description": "Audio tracks (A): clips that bring a source's fader up for their span. At most 8.\nOmitted for none, and with none a show changes nothing about audio.",
+          "items": {
+            "$ref": "#/$defs/AudioTrack"
+          },
+          "type": "array"
+        },
+        "bookmarks": {
+          "description": "Its bookmarks, in time order, no two at the same time. At most 256. Omitted for\nnone.",
+          "items": {
+            "$ref": "#/$defs/ShowBookmark"
+          },
+          "type": "array"
+        },
+        "end": {
+          "$ref": "#/$defs/ShowEnd",
+          "description": "What happens when it reaches its end. Default `stop`."
+        },
+        "image_ms": {
+          "description": "How long a dropped image's clip starts, in milliseconds, 1 to 24 hours. Default\n10000; omitted when it is.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keyframes": {
+          "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/KeyframeMarker"
+          },
+          "type": "array"
+        },
+        "loops": {
+          "description": "Its loops, in time order, none overlapping another. At most 64. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/ShowLoop"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "next_monitor": {
+          "$ref": "#/$defs/NextMonitor",
+          "default": "still",
+          "description": "What the Run view's Next monitor shows. Default `still`."
+        },
+        "overlays": {
+          "description": "Overlay tracks (V2 and up), bottom first: each draws its clips' scenes over\nprogram while they last. At most 8. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/OverlayTrack"
+          },
+          "type": "array"
+        },
+        "planned_ms": {
+          "description": "How long the show is planned to run, in milliseconds of wall time, for the Run\nview's clock. Omitted for no plan.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition preset a jump arrives with, and a loop wraps with, unless the\nbookmark or loop names its own. Omitted for the collection's default preset."
+        },
+        "program": {
+          "description": "The program track (V1): scene clips end to end with no gaps, the first starting\nat 0. Each clip's start puts its scene on program. At most 1024; together at most\n24 hours. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/ProgramClip"
+          },
+          "type": "array"
+        },
+        "sequences": {
+          "description": "Sequence tracks (S): cues that play a sequence or run one event. At most 8.\nOmitted for none.",
+          "items": {
+            "$ref": "#/$defs/SequenceTrack"
+          },
+          "type": "array"
+        },
+        "show_id": {
+          "$ref": "#/$defs/ShowId",
+          "description": "Its ID, unique among the collection's shows: 1 to 64 bytes of ASCII letters,\ndigits, `_` and `-`."
+        }
+      },
+      "required": [
+        "show_id"
+      ],
+      "type": "object"
+    },
+    "ShowLoop": {
+      "description": "A loop: a span of show time that the show plays again and again once it is inside\nit, until a jump outside it or `show.continue` leaves (ADR-0210 decision 7). A\nbookmark at `start_ms` is inside the loop; one at `end_ms` is outside it.",
+      "properties": {
+        "end_ms": {
+          "description": "Where it ends, at least 100 ms after `start_ms`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "leave": {
+          "$ref": "#/$defs/LoopLeave",
+          "default": "at_once",
+          "description": "How `show.continue` leaves it. Default `at_once`."
+        },
+        "loop_id": {
+          "description": "Its ID, unique within the show.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "preset_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition preset it wraps with. Omitted for the show's `preset_id`."
+        },
+        "start_ms": {
+          "description": "Where it starts, in milliseconds of show time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "loop_id",
+        "start_ms",
+        "end_ms"
+      ],
+      "type": "object"
+    },
+    "ShowState": {
+      "description": "What a running show is doing.",
+      "oneOf": [
+        {
+          "const": "playing",
+          "description": "Its play head moves.",
+          "type": "string"
+        },
+        {
+          "const": "paused",
+          "description": "It waits for `show.continue`: at a pausing bookmark, or where `show.pause` held\nit. Program keeps running.",
+          "type": "string"
+        },
+        {
+          "const": "off_script",
+          "description": "A scene was switched by hand while it ran: it waits where it was, and\n`show.continue` goes on to the next clip.",
+          "type": "string"
+        }
+      ]
     },
     "Size": {
       "description": "A width and height, in canvas pixels.\n\nBoth components are [`Finite32`]. A non-positive component is rejected by\n[`ItemGeometry::validate`], not stored as a flip.",
@@ -16729,7 +18453,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "paints": {
           "default": 0,
-          "description": "How many times the `jstream-sources` thread painted it: a source that draws its\nown frames as they come due (`waveform`, `spectrum`, `timer`).",
+          "description": "How many times it painted: the `jstream-sources` thread's paints of a source that\ndraws its own frames as they come due (`waveform`, `spectrum`, `timer`), and each\nnew frame a `browser` page painted on the GPU that a plan took (#1556).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -16750,6 +18474,15 @@ source: crates/jstream-protocol/src/fixtures.rs
         "depth": {
           "description": "Its depth, in the same pixels as `size`, for a source with depth: a 3D model's\nbounds, front to back, at the scale its width and height are reported at\n(ADR-0107 decision 8, 0.157). Omitted for every other source and while `size` is.",
           "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long one play of it lasts, in milliseconds, for a `media` file whose length\nis known: from its container, or once a play has reached its end (since 0.177).\nA file with only audio reports it beside its 1x1 `size`. Omitted for every other\nsource and while the length isn't known.",
+          "format": "uint64",
           "minimum": 0,
           "type": [
             "integer",
@@ -16861,7 +18594,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "StreamProfile": {
-      "description": "One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached\nits encoder, what left it, and what was lost or late on the way.\n\nAn output's frames are its program feed's, from the video encoder to the muxer or\npublish target; a preview stream's go from its encoder to the client's socket. An\nencoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and\n`encode_ms` repeat; what each sends and loses after it is its own.",
+      "description": "One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached\nits encoder, what left it, and what was lost or late on the way.\n\nAn output's frames are its program feed's, from the video encoder to the muxer or\npublish target; a preview stream's go from its encoder to the client's socket. An\nencoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and\n`encode_ms` repeat; what each sends and loses after it is its own. So does one\nthat preview streams of the same picture share.",
       "properties": {
         "dropped": {
           "default": 0,
@@ -16882,6 +18615,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "encoder": {
+          "default": "",
+          "description": "The name of the video encoder encoding it now, as the platform names it: the one\nit fell back to when the one it opened refused its first frame. Empty from an\nengine that does not report it.",
+          "type": "string"
+        },
         "fps": {
           "$ref": "#/$defs/Finite32",
           "default": 0.0,
@@ -16900,6 +18638,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "hardware": {
+          "default": false,
+          "description": "Whether that encoder runs on dedicated hardware.",
+          "type": "boolean"
         },
         "kbps": {
           "default": 0,
@@ -17129,6 +18872,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "folder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FolderId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The folder it is filed in under its scene (ADR-0222, since 0.190): a folder of\nthe scene that holds it, or of that scene's parent for a keyframe scene's, else\n`invalid_argument`. Folders organise only. Omitted for none."
         },
         "labels": {
           "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",
@@ -17620,6 +19374,41 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "kind",
             "program"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One field of a JTunnel sender's live data meeting a condition (ADR-0202, since\n0.189): a Bitwig scene selected or launched, a Mod crossing a level. It reads what\na `data` motion modifier reads, only from a sender whose state is used.",
+          "properties": {
+            "field": {
+              "default": "",
+              "description": "A dotted path into the message (`selectedScene`, `values.19`), or empty for\nthe whole message.",
+              "type": "string"
+            },
+            "input": {
+              "description": "The sender, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "key": {
+              "description": "The message's key: `grid`, `params`, `track/3`. A `*` segment matches any\none segment, so `track/*` listens to every track, and the condition holds\nwhile it holds for any of them.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "data",
+              "type": "string"
+            },
+            "on": {
+              "$ref": "#/$defs/DataOn",
+              "description": "When it fires."
+            }
+          },
+          "required": [
+            "kind",
+            "key",
+            "on"
           ],
           "type": "object"
         }
@@ -18127,6 +19916,14 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII\nletters, digits, `_` and `-`.",
           "type": "string"
         },
+        "enabled": {
+          "description": "Whether it drives (ADR-0203, since 0.186): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
+          "type": "boolean"
+        },
+        "mode": {
+          "$ref": "#/$defs/MappingMode",
+          "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.186).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
+        },
         "target": {
           "$ref": "#/$defs/ValueTarget",
           "description": "What it drives."
@@ -18139,7 +19936,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "ValueTarget": {
-      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive. Serialized with an internal `type` tag.",
+      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive, or since 0.187 a switch: a mute, or whether a placement shows its item\n(ADR-0207). Serialized with an internal `type` tag.",
       "oneOf": [
         {
           "description": "A `live` number or `bool` setting of a source, which every place that draws it\nshows.",
@@ -18250,6 +20047,94 @@ source: crates/jstream-protocol/src/fixtures.rs
             "bus_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "An audio source's mute, a switch: muted at one half or more (ADR-0207, since\n0.187). A `scene` source has none.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source_mute",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A bus's mute, the master's included, a switch: muted at one half or more\n(ADR-0207, since 0.187).",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus."
+            },
+            "type": {
+              "const": "bus_mute",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bus_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Whether a placement shows its item, a switch: shown at one half or more\n(ADR-0207, since 0.187), as `item.set_visible` would set it, so it cuts, with no\nappear or disappear effect.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item it drives, as `item.set_visible`'s\n`scene_id`: omitted for the item's own."
+            },
+            "type": {
+              "const": "item_visible",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One axis of a PTZ camera's position (ADR-0209, since 0.182), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+          "properties": {
+            "axis": {
+              "$ref": "#/$defs/PtzAxis",
+              "description": "Which axis."
+            },
+            "camera": {
+              "description": "The camera's name on the machine's PTZ camera list.",
+              "type": "string"
+            },
+            "type": {
+              "const": "ptz_axis",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "camera",
+            "axis"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -18295,7 +20180,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "VideoCodec": {
-      "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP; a recording takes H.264 only so far, and its start fails with another.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
+      "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP, and a recording writes each in MP4.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
       "oneOf": [
         {
           "const": "h264",
@@ -19006,5 +20891,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.176"
+  "title": "JStream protocol 0.196"
 }

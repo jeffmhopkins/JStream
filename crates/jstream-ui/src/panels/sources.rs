@@ -42,7 +42,7 @@ use crate::panels::tree::{
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
 use jstream_control::protocol::{
     BusInfo, DeleteTarget, Edit, FilterId, FilterInfo, ItemId, LabelId, Reference, SceneId,
-    SceneRole, SourceId, SourceInfo, SourceKind,
+    SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -329,6 +329,28 @@ pub fn Sources() -> impl IntoView {
     let pasting = crate::clipboard::Pasting::from_page();
     let filter = Filter::new();
     let reorder = Reorder::new();
+    // A row with audio dragged out towards the Show panel's tracks: its source's audio
+    // (ADR-0216's "Add source audio").
+    let show_panel = use_context::<crate::panels::show::ShowPanel>();
+    let carry = move |event: &leptos::ev::PointerEvent, dropped: bool| {
+        let Some(panel) = show_panel else { return };
+        let source = reorder.dragged.get_untracked().and_then(|key| {
+            studio.collection.with_untracked(|c| {
+                let c = c.as_ref()?;
+                let (_, item) = c.item(&ItemId::new(key))?;
+                let source = c.source(&item.source_id)?;
+                source
+                    .audio
+                    .is_some()
+                    .then(|| (source.source_id.to_string(), source.name.clone()))
+            })
+        });
+        match source {
+            Some((id, name)) => panel.carry_source(&id, &name, event, dropped),
+            None if dropped => panel.carry.set(None),
+            None => {}
+        }
+    };
     // The nested scenes' rows that show their items, by item.
     let expanded = RwSignal::new(HashSet::<ItemId>::new());
     let manager = use_context::<LabelManager>();
@@ -347,6 +369,38 @@ pub fn Sources() -> impl IntoView {
         studio
             .collection
             .with(|c| c.as_ref()?.scene(&scene_id).map(|s| s.name.clone()))
+    };
+    // Back out of a nested scene (a group) to the one above it: the scene the panel came
+    // down from, kept on `trail`, or else the first scene that nests it, with the item
+    // that holds it selected.
+    let trail = StoredValue::new(Vec::<SceneId>::new());
+    let last_scene = StoredValue::new(None::<SceneId>);
+    Effect::new(move |_| {
+        let Some(to) = scene() else { return };
+        let from = last_scene.get_value();
+        if from.as_ref() != Some(&to) {
+            studio.collection.with_untracked(|c| {
+                if let Some(c) = c.as_ref() {
+                    trail.update_value(|t| step_trail(c, t, from.as_ref(), &to));
+                }
+            });
+            last_scene.set_value(Some(to));
+        }
+    });
+    let up = Memo::new(move |_| {
+        let scene_id = scene()?;
+        let prefer = trail.with_value(|t| t.last().cloned());
+        studio.collection.with(|c| {
+            let c = c.as_ref()?;
+            let (parent, item) = holder(c, &scene_id, prefer.as_ref())?;
+            Some((parent.clone(), item, c.scene(&parent)?.name.clone()))
+        })
+    });
+    let go_up = move || {
+        if let Some((parent, item, _)) = up.get_untracked() {
+            studio.select_scene(parent);
+            studio.select_item(Some(item));
+        }
     };
     // The selected scene's own items, top first.
     let all_rows = move || {
@@ -615,6 +669,11 @@ pub fn Sources() -> impl IntoView {
                         });
                     }
                 }
+                // Backspace backs out of a nested scene, as a file browser goes up.
+                "Backspace" if up.with_untracked(Option::is_some) => {
+                    event.prevent_default();
+                    go_up();
+                }
                 _ => {}
             }
         };
@@ -695,10 +754,10 @@ pub fn Sources() -> impl IntoView {
                     return;
                 }
                 if items.len() == 1 {
-                    // F2's rename, first, as OBS's menu has it.
+                    // F2's rename, after Properties and Edit filters, which lead.
                     let rename = id.clone();
                     entries.insert(
-                        0,
+                        2.min(entries.len()),
                         Entry::item("Rename", move || renaming.set(Some(rename.clone())))
                             .hint("F2"),
                     );
@@ -1006,9 +1065,25 @@ pub fn Sources() -> impl IntoView {
                 when=move || scene().is_some()
                 fallback=|| view! { <p class="placeholder">"Select a scene."</p> }
             >
-                <p class="tree-caption">
-                    "In “" {scene_name} "”, top to bottom"
-                </p>
+                <div class="tree-head">
+                    {move || up.get().map(|(_, _, parent)| {
+                        let label = format!("Back to “{parent}”");
+                        view! {
+                            <button
+                                type="button"
+                                class="tree-up"
+                                title=format!("{label} (Backspace)")
+                                aria-label=label
+                                on:click=move |_| go_up()
+                            >
+                                <Icon name="up" size=12 />
+                                {parent.clone()}
+                            </button>
+                            <span class="tree-up-sep" aria-hidden="true">"›"</span>
+                        }
+                    })}
+                    <p class="tree-caption">"In “" {scene_name} "”, top to bottom"</p>
+                </div>
                 {move || keyframe_of.get().map(|parent| view! {
                     <p class="tree-caption keyframe-note">
                         "Keyframe of “" {parent} "”: its objects. Add, remove and restack them there."
@@ -1017,9 +1092,20 @@ pub fn Sources() -> impl IntoView {
                 <ul
                     class="rows tree-rows"
                     class:reordering=move || reorder.dragged.with(Option::is_some)
-                    on:pointermove=move |event| reorder.moved(&event)
-                    on:pointerup=move |_| reorder.up(drop)
-                    on:pointercancel=move |_| reorder.cancel()
+                    on:pointermove=move |event| {
+                        reorder.moved(&event);
+                        carry(&event, false);
+                    }
+                    on:pointerup=move |event| {
+                        carry(&event, true);
+                        reorder.up(drop);
+                    }
+                    on:pointercancel=move |_| {
+                        if let Some(panel) = show_panel {
+                            panel.carry.set(None);
+                        }
+                        reorder.cancel();
+                    }
                 >
                     <For each=shown_rows key=Row::key children=row />
                 </ul>
@@ -1114,6 +1200,46 @@ pub fn page_api_grant(source: &SourceInfo, buses: &[BusInfo]) -> Option<String> 
         });
     }
     Some(format!("Page API: {}", kinds.join(", ")))
+}
+
+/// The item that nests `scene_id` one level up, and the scene it is in: in `prefer`, the
+/// scene the panel came down from, when that holds it, or else the first scene that does.
+/// None for a scene no other one nests (a top-level scene), and for a keyframe.
+fn holder(
+    c: &Collection,
+    scene_id: &SceneId,
+    prefer: Option<&SceneId>,
+) -> Option<(SceneId, ItemId)> {
+    let pick = |scene: &SceneInfo| -> Option<(SceneId, ItemId)> {
+        if &scene.scene_id == scene_id || scene.variant_of.is_some() {
+            return None;
+        }
+        let item = scene.items.iter().find(|item| {
+            c.source(&item.source_id).is_some_and(|source| {
+                matches!(&source.kind, SourceKind::Scene { scene_id: nested } if nested == scene_id)
+            })
+        })?;
+        Some((scene.scene_id.clone(), item.item_id.clone()))
+    };
+    prefer
+        .and_then(|p| c.scene(p))
+        .and_then(pick)
+        .or_else(|| c.scenes.iter().find_map(pick))
+}
+
+/// The trail of scenes the panel came down through, after the selection moves from
+/// `from` to `to`: down into a scene `from` nests adds `from`, back up to a scene on the
+/// trail cuts it there, and anything else starts it over.
+fn step_trail(c: &Collection, trail: &mut Vec<SceneId>, from: Option<&SceneId>, to: &SceneId) {
+    if let Some(at) = trail.iter().position(|s| s == to) {
+        trail.truncate(at);
+    } else if let Some(from) =
+        from.filter(|from| holder(c, to, Some(from)).is_some_and(|(scene, _)| &scene == *from))
+    {
+        trail.push(from.clone());
+    } else {
+        trail.clear();
+    }
 }
 
 #[cfg(test)]
@@ -1523,5 +1649,32 @@ mod tests {
             .as_deref(),
             Some("Page API: clock, visibility, DAW data (every sender)")
         );
+    }
+
+    #[test]
+    fn a_nested_scene_backs_out_to_the_scene_it_came_down_from() {
+        let c = nested();
+        let id = |s: &str| SceneId::new(s);
+        // A top-level scene has nothing above it; a nested one has the first holder.
+        assert_eq!(super::holder(&c, &id("main"), None), None);
+        assert_eq!(
+            super::holder(&c, &id("grp"), None),
+            Some((id("main"), ItemId::new("g")))
+        );
+        // `grp` is in `main` and in `inner`: the scene it came from wins.
+        assert_eq!(
+            super::holder(&c, &id("grp"), Some(&id("inner"))),
+            Some((id("inner"), ItemId::new("loop")))
+        );
+        // Down main → grp → inner keeps the trail; back up to grp cuts it there.
+        let mut trail = Vec::new();
+        super::step_trail(&c, &mut trail, Some(&id("main")), &id("grp"));
+        super::step_trail(&c, &mut trail, Some(&id("grp")), &id("inner"));
+        assert_eq!(trail, vec![id("main"), id("grp")]);
+        super::step_trail(&c, &mut trail, Some(&id("inner")), &id("grp"));
+        assert_eq!(trail, vec![id("main")]);
+        // A jump to an unrelated scene starts it over.
+        super::step_trail(&c, &mut trail, Some(&id("grp")), &id("main"));
+        assert!(trail.is_empty());
     }
 }

@@ -239,6 +239,24 @@ impl Devices {
             return Err(PairError::Wrong { voided });
         }
         state.pairing = None;
+        self.mint(&mut state, name, now)
+    }
+
+    /// Pairs a device named `name` (already checked) that the person allowed when it
+    /// asked (ADR-0235), with no code, and returns its ID and its new token. An open
+    /// code stays open.
+    pub(crate) fn add(&self, name: &str, now: Now) -> Result<(DeviceId, String), PairError> {
+        let mut state = lock(&self.state);
+        self.mint(&mut state, name, now)
+    }
+
+    /// Draws a new device's ID and token, keeps it, and saves the file.
+    fn mint(
+        &self,
+        state: &mut State,
+        name: &str,
+        now: Now,
+    ) -> Result<(DeviceId, String), PairError> {
         let mut bytes = [0u8; TOKEN_BYTES + 8];
         getrandom::fill(&mut bytes).map_err(PairError::Random)?;
         let token: String = bytes[..TOKEN_BYTES]
@@ -261,7 +279,7 @@ impl Devices {
                 cookie_set_at: now.unix,
             },
         );
-        if let Err(error) = self.save(&state) {
+        if let Err(error) = self.save(state) {
             state.devices.remove(&id);
             return Err(PairError::Store(error));
         }

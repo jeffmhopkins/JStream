@@ -4,7 +4,8 @@
 // preview, which the canvas then shows. The Transitions panel edits the presets, with a
 // custom curve's points. The seed puts `Main` on program. The mock engine has only the
 // initial `cut` preset, can't change presets and sends no pictures, so the editor's
-// changes are checked by what the page sends.
+// changes are checked by what the page sends. With studio mode off the canvas stands for
+// program and follows every program change, whatever made it.
 import { test, expect, connect, showPanel, recordCalls } from '../fixtures.js';
 
 /** Connects and turns studio mode on; returns the studio controls. */
@@ -44,6 +45,34 @@ test('studio mode shows preview and program side by side, with the controls betw
   await expect(page.locator('section.studio-controls')).toHaveCount(0);
 });
 
+test('a portrait canvas stacks preview over the controls over program when that shows them larger', async ({ page, daemon }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await connect(page, daemon);
+  await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Video settings…' }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByRole('combobox', { name: 'Base resolution' }).selectOption({ label: '1080 × 1920 (9:16)' });
+  await settings.getByRole('button', { name: 'Save' }).click();
+  await expect(settings).toHaveCount(0);
+
+  // In a widescreen window two 9:16 pictures fit larger side by side.
+  await page.locator('header.app-header').getByRole('button', { name: 'Studio mode' }).click();
+  const row = page.locator('.stage-row');
+  await expect(row).toHaveClass(/two-up/);
+  await expect(row).not.toHaveClass(/stacked/);
+  // In a window on a portrait monitor they stack.
+  await page.setViewportSize({ width: 1080, height: 1900 });
+  await expect(row).toHaveClass(/stacked/);
+  const canvas = await page.getByRole('region', { name: 'Canvas' }).boundingBox();
+  const controls = await page.locator('section.studio-controls').boundingBox();
+  const program = await page.getByRole('region', { name: 'Program' }).boundingBox();
+  expect(canvas.y + canvas.height).toBeLessThanOrEqual(controls.y + 1);
+  expect(controls.y + controls.height).toBeLessThanOrEqual(program.y + 1);
+  // Each picture gets the stage's width.
+  expect(Math.abs(canvas.width - program.width)).toBeLessThan(2);
+  if (process.env.JSTREAM_E2E_SHOTS) await page.screenshot({ path: `${process.env.JSTREAM_E2E_SHOTS}/studio-portrait.png` });
+});
+
 test('a transition takes preview to program, and the old program comes back to preview', async ({ page, daemon }) => {
   const studio = await openStudio(page, daemon);
   await expect(studio.getByText('That scene is already on program.', { exact: false })).toBeVisible();
@@ -69,6 +98,56 @@ test('without swap the scene stays on preview, and Cut takes it too', async ({ p
   await expect(page.locator('.stage-label.program')).toHaveText('Program · Intro');
   await expect(page.locator('.stage-label.cued')).toHaveText('Preview · Intro');
   await expect(studio.getByRole('button', { name: 'Transition' })).toBeDisabled();
+});
+
+test('with studio mode off the canvas follows every program change, a hotkey\'s and another client\'s too (#1733)', async ({ page, context, daemon }) => {
+  const other = await context.newPage();
+  await connect(page, daemon);
+  await connect(other, daemon);
+  const caption = page.locator('.canvas-caption');
+  await expect(caption).toContainText('Main');
+
+  // Another client puts Intro on program: this canvas shows it.
+  await clickScene(other, 'Intro');
+  await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Intro' })).toHaveAttribute('aria-current', 'true');
+  await expect(caption).toContainText('Intro');
+
+  // The other client binds F1 to Main, which goes on program there and here.
+  await clickScene(other, 'Main');
+  await expect(caption).toContainText('Main');
+  const row = other.locator('.panel-inspector .hotkey-row');
+  await row.getByRole('button', { name: 'Set key' }).click();
+  await other.keyboard.press('F1');
+  await expect(row.locator('kbd')).toHaveText(['F1']);
+
+  // A hotkey on this page switches back to Main from Intro: the canvas follows.
+  await clickScene(page, 'Intro');
+  await expect(caption).toContainText('Intro');
+  await page.locator('.preview.stage').focus();
+  await page.keyboard.press('F1');
+  await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Main' })).toHaveAttribute('aria-current', 'true');
+  await expect(caption).toContainText('Main');
+  await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Main' })).toHaveClass(/selected/);
+});
+
+test('in studio mode a program change leaves the preview side, and turning it off shows program (#1733)', async ({ page, context, daemon }) => {
+  // The other client connects first: studio mode is kept in the browser, which a page
+  // reads when it loads.
+  const other = await context.newPage();
+  await connect(other, daemon);
+  await openStudio(page, daemon);
+  await expect(page.locator('.stage-label').first()).toHaveText('Preview · Main');
+
+  // Another client switches program: the canvas stays on preview.
+  await clickScene(other, 'Intro');
+  await expect(page.locator('.stage-label.program')).toHaveText('Program · Intro');
+  await expect(page.locator('.stage-label').first()).toHaveText('Preview · Main');
+  await expect(page.locator('.canvas-caption')).toContainText('Main');
+
+  // Off again, the canvas stands for program and shows it.
+  await page.locator('header.app-header').getByRole('button', { name: 'Studio mode' }).click();
+  await expect(page.locator('.stage-row')).not.toHaveClass(/two-up/);
+  await expect(page.locator('.canvas-caption')).toContainText('Intro');
 });
 
 test('the Transitions panel points at the controls in studio mode', async ({ page, daemon }) => {

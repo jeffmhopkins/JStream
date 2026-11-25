@@ -15,8 +15,11 @@
 //! it one place up or down among the scenes of its folder.
 //!
 //! A scene's keyframe scenes (ADR-0024 §2) nest under it, each with the purple diamond,
-//! and the scene's caret folds them away. They stay under their scene: they aren't
-//! dragged, and a drop on one does nothing. A keyframe's menu switches to it, resets it
+//! then its sequences, and the scene's caret folds them away. The scene's own folders
+//! (ADR-0222) come first under it and hold its keyframes and sequences, for organising
+//! only: the scene menu's "New folder under" makes one, and a keyframe, a sequence or
+//! one of those folders is dragged, or moved with its menu's "Move to folder", only
+//! among the rows under its own scene. A keyframe's menu switches to it, resets it
 //! to its parent (`item.clear_override` for every field it overrides), makes another
 //! keyframe of the parent (`scene.create_variant`) and deletes it, at once, since it
 //! holds no items of its own (undo brings it back).
@@ -33,6 +36,7 @@ use crate::panels::labels::{
     LabelChips, LabelEditor, LabelManager, LabelPopover, TagButton, TagPopover, Tagged, carried,
 };
 use crate::panels::scene_properties::SceneDialog;
+use crate::panels::sequence;
 use crate::panels::studio::override_submenu;
 use crate::panels::tree::{
     Filter, Reorder, SearchBar, Side, Star, Tool, ToolBar, dropped_at, indent,
@@ -40,8 +44,8 @@ use crate::panels::tree::{
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary, reset_edits};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Action, Chord, DeleteTarget, Edit, FilterOwner, FolderId, LabelId, SceneId, SceneInfo,
-    TimelineId,
+    Action, Chord, DeleteTarget, Edit, FilterOwner, FolderId, KeyframeEdge, LabelId, SceneEdge,
+    SceneId, SceneInfo, TimelineId, TimelineInfo, TimelineTrigger,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -117,15 +121,93 @@ impl Row {
 enum Node {
     Folder(FolderId),
     Scene(SceneId),
+    Sequence(TimelineId),
 }
 
 impl Node {
     fn of(key: &str) -> Node {
-        match key.strip_prefix(FOLDER_KEY) {
-            Some(id) => Node::Folder(FolderId::new(id)),
+        if let Some(id) = key.strip_prefix(FOLDER_KEY) {
+            return Node::Folder(FolderId::new(id));
+        }
+        match key.strip_prefix(SEQUENCE_KEY) {
+            Some(id) => Node::Sequence(TimelineId::new(id)),
             None => Node::Scene(SceneId::new(key)),
         }
     }
+}
+
+/// The rows a row moves among (ADR-0222): `Some(None)` for the scene list, or
+/// `Some(Some(scene))` for what sits under `scene`: its folders, keyframes and
+/// sequences. `None` for a row naming nothing.
+fn space_of(collection: &Collection, node: &Node) -> Option<Option<SceneId>> {
+    match node {
+        Node::Scene(id) => Some(collection.scene(id)?.variant_of.clone()),
+        Node::Folder(id) => Some(collection.folder(id)?.scene_id.clone()),
+        Node::Sequence(id) => {
+            let (scene, _) = collection.timeline(id)?;
+            Some(Some(
+                scene
+                    .variant_of
+                    .clone()
+                    .unwrap_or_else(|| scene.scene_id.clone()),
+            ))
+        }
+    }
+}
+
+/// `folder`, if it is one of `owner`'s folders (ADR-0222), or of the scene list for
+/// `None`: anything filed in a folder that isn't shows unfiled.
+fn filed_in(
+    collection: &Collection,
+    folder: Option<&FolderId>,
+    owner: Option<&SceneId>,
+) -> Option<FolderId> {
+    folder
+        .filter(|f| {
+            collection
+                .folder(f)
+                .is_some_and(|f| f.scene_id.as_ref() == owner)
+        })
+        .cloned()
+}
+
+/// The folder a sequence is filed in under its scene, if it names one of its scene's.
+fn sequence_folder(collection: &Collection, timeline_id: &TimelineId) -> Option<FolderId> {
+    let (scene, timeline) = collection.timeline(timeline_id)?;
+    let owner = scene.variant_of.as_ref().unwrap_or(&scene.scene_id);
+    filed_in(collection, timeline.folder.as_ref(), Some(owner))
+}
+
+/// `owner`'s folders (ADR-0222) in tree order, each with its path of names, for a
+/// "Move to folder" menu.
+fn scene_folders(collection: &Collection, owner: &SceneId) -> Vec<(FolderId, String)> {
+    fn walk(
+        collection: &Collection,
+        owner: &SceneId,
+        parent: Option<&FolderId>,
+        path: &str,
+        seen: &mut HashSet<FolderId>,
+        out: &mut Vec<(FolderId, String)>,
+    ) {
+        for folder in &collection.folders {
+            if folder.scene_id.as_ref() != Some(owner)
+                || parent_of(collection, &folder.folder_id).as_ref() != parent
+                || !seen.insert(folder.folder_id.clone())
+            {
+                continue;
+            }
+            let path = if path.is_empty() {
+                folder.name.clone()
+            } else {
+                format!("{path} / {}", folder.name)
+            };
+            out.push((folder.folder_id.clone(), path.clone()));
+            walk(collection, owner, Some(&folder.folder_id), &path, seen, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(collection, owner, None, "", &mut HashSet::new(), &mut out);
+    out
 }
 
 /// The folder `folder_id` sits in, if it names one that exists.
@@ -137,13 +219,11 @@ fn parent_of(collection: &Collection, folder_id: &FolderId) -> Option<FolderId> 
         .filter(|p| collection.folder(p).is_some())
 }
 
-/// The folder a scene sits in, if it names one that exists.
+/// The folder a scene sits in, if it names one that exists and is of its kind: one of
+/// its parent's for a keyframe scene (ADR-0222), else one of the scene list's.
 fn folder_of(collection: &Collection, scene_id: &SceneId) -> Option<FolderId> {
-    collection
-        .scene(scene_id)?
-        .folder
-        .clone()
-        .filter(|f| collection.folder(f).is_some())
+    let scene = collection.scene(scene_id)?;
+    filed_in(collection, scene.folder.as_ref(), scene.variant_of.as_ref())
 }
 
 /// Whether `folder_id` is `inside` or a folder somewhere within it.
@@ -204,7 +284,8 @@ impl Walk<'_> {
     fn level(&mut self, parent: Option<&FolderId>, depth: usize, out: &mut Vec<Row>) {
         let collection = self.collection;
         for folder in &collection.folders {
-            if parent_of(collection, &folder.folder_id).as_ref() != parent
+            if folder.scene_id.is_some()
+                || parent_of(collection, &folder.folder_id).as_ref() != parent
                 || !self.seen.insert(folder.folder_id.clone())
             {
                 continue;
@@ -239,62 +320,138 @@ impl Walk<'_> {
                 .filter(|k| k.variant_of.as_ref() == Some(&scene.scene_id))
                 .copied()
                 .collect();
-            let shown: Vec<&SceneInfo> = keyframes
+            let has_folders = collection
+                .folders
                 .iter()
-                .filter(|k| (self.shows)(&k.name, k.meta.favourite, &k.meta.labels))
-                .copied()
-                .collect();
-            let sequences: Vec<Row> = scene
-                .timelines
-                .iter()
-                .filter(|t| (self.shows)(&crate::panels::sequence::timeline_name(t), false, &[]))
-                .map(|t| Row::Sequence {
-                    timeline_id: t.timeline_id.clone(),
-                    name: crate::panels::sequence::timeline_name(t),
-                    depth: depth + 1,
-                })
-                .collect();
+                .any(|f| f.scene_id.as_ref() == Some(&scene.scene_id));
+            let mut under = Vec::new();
+            self.family(scene, &keyframes, None, depth + 1, &mut under);
             if (self.shows)(&scene.name, scene.meta.favourite, &scene.meta.labels) {
                 out.push(Row::scene(
                     scene,
                     depth,
                     collection.parent_of(&scene.scene_id),
-                    !keyframes.is_empty() || !scene.timelines.is_empty(),
+                    !keyframes.is_empty() || !scene.timelines.is_empty() || has_folders,
                 ));
             }
             if !self.folded.contains(&scene.scene_id) {
-                out.extend(
-                    shown
-                        .into_iter()
-                        .map(|k| Row::scene(k, depth + 1, Some(scene), false)),
-                );
-                out.extend(sequences);
+                out.extend(under);
+            }
+        }
+    }
+
+    /// What sits in `parent` under `scene` (the scene itself for `None`), at `depth`
+    /// (ADR-0222): its folders there in folder order, each followed by its contents
+    /// unless collapsed, then its keyframe scenes filed there in display order, then its
+    /// sequences filed there.
+    fn family(
+        &mut self,
+        scene: &SceneInfo,
+        keyframes: &[&SceneInfo],
+        parent: Option<&FolderId>,
+        depth: usize,
+        out: &mut Vec<Row>,
+    ) {
+        let collection = self.collection;
+        let owner = Some(&scene.scene_id);
+        for folder in &collection.folders {
+            if folder.scene_id.as_ref() != owner
+                || parent_of(collection, &folder.folder_id).as_ref() != parent
+                || !self.seen.insert(folder.folder_id.clone())
+            {
+                continue;
+            }
+            let mut inner = Vec::new();
+            self.family(
+                scene,
+                keyframes,
+                Some(&folder.folder_id),
+                depth + 1,
+                &mut inner,
+            );
+            if self.filtering && inner.is_empty() {
+                continue;
+            }
+            let open = self.filtering || !self.collapsed.contains(&folder.folder_id);
+            out.push(Row::Folder {
+                folder_id: folder.folder_id.clone(),
+                name: folder.name.clone(),
+                depth,
+                open,
+                kept: self.filtering,
+            });
+            if open {
+                out.extend(inner);
+            }
+        }
+        let here =
+            |folder: Option<&FolderId>| filed_in(collection, folder, owner).as_ref() == parent;
+        for keyframe in keyframes {
+            if here(keyframe.folder.as_ref())
+                && (self.shows)(
+                    &keyframe.name,
+                    keyframe.meta.favourite,
+                    &keyframe.meta.labels,
+                )
+            {
+                out.push(Row::scene(keyframe, depth, Some(scene), false));
+            }
+        }
+        for timeline in &scene.timelines {
+            let name = crate::panels::sequence::timeline_name(timeline);
+            if here(timeline.folder.as_ref()) && (self.shows)(&name, false, &[]) {
+                out.push(Row::Sequence {
+                    timeline_id: timeline.timeline_id.clone(),
+                    name,
+                    depth,
+                });
             }
         }
     }
 }
 
 /// The edits that move the row `moved` to the `side` of the row `target` (S19), as one
-/// batch: a scene or folder dropped into a folder goes in it; dropped beside a row it
-/// joins that row's folder, and beside a row of its own kind it also takes the position
-/// there. Nothing for a drop where it already is, or a folder dropped on itself or
-/// anything within it.
+/// batch: a scene, keyframe, sequence or folder dropped into a folder goes in it;
+/// dropped beside a row it joins that row's folder, and beside a row of its own kind it
+/// also takes the position there (sequences keep their order by ID). A row moves only
+/// among the rows of its own space (ADR-0222): the scene list's, or those under one
+/// scene, so a keyframe or sequence stays under its scene. Nothing for a drop where it
+/// already is, a drop into another space, or a folder dropped on itself or anything
+/// within it.
 fn moved(collection: &Collection, moved: &Node, target: &Node, side: Side) -> Vec<Edit> {
     // The folder the target's row sits in, or, for into, the target folder itself.
     let into = match (target, side) {
         (Node::Folder(folder), Side::Into) => Some(folder.clone()),
-        (Node::Scene(_), Side::Into) => return Vec::new(),
+        (Node::Scene(_) | Node::Sequence(_), Side::Into) => return Vec::new(),
         (Node::Folder(folder), _) => parent_of(collection, folder),
         (Node::Scene(scene), _) => folder_of(collection, scene),
+        (Node::Sequence(timeline), _) => sequence_folder(collection, timeline),
     };
     let mut edits = Vec::new();
-    // Keyframes stay under their scene: they aren't dragged, and a drop on one does
-    // nothing.
-    let keyframe = |node: &Node| matches!(node, Node::Scene(id) if collection.is_keyframe(id));
-    if keyframe(moved) || keyframe(target) {
-        return edits;
+    // The space the drop lands in: the target folder's for into, else the target row's.
+    let lands = match (target, side) {
+        (Node::Folder(folder), Side::Into) => collection.folder(folder).map(|f| f.scene_id.clone()),
+        _ => space_of(collection, target),
+    };
+    match (space_of(collection, moved), lands) {
+        (Some(from), Some(to)) if from == to => {}
+        _ => return edits,
     }
     match moved {
+        Node::Sequence(timeline_id) => {
+            let Some((scene, timeline)) = collection.timeline(timeline_id) else {
+                return edits;
+            };
+            if sequence_folder(collection, timeline_id) != into {
+                edits.push(Edit::TimelineSet {
+                    scene_id: scene.scene_id.clone(),
+                    timeline: TimelineInfo {
+                        folder: into,
+                        ..timeline.clone()
+                    },
+                });
+            }
+        }
         Node::Scene(scene_id) => {
             if collection.scene(scene_id).is_none() {
                 return edits;
@@ -411,6 +568,38 @@ pub fn Scenes() -> impl IntoView {
     let folded = RwSignal::new(HashSet::<SceneId>::new());
 
     let menus = use_context::<Menus>();
+    // A scene dragged out of the list towards the Show panel's tracks.
+    let show_panel = use_context::<crate::panels::show::ShowPanel>();
+    let carry = move |event: &leptos::ev::PointerEvent, dropped: bool| {
+        let Some(panel) = show_panel else { return };
+        // Only a scene of the list is carried: a keyframe or a sequence stays here.
+        let carried = reorder.dragged.get_untracked().map(|k| Node::of(&k));
+        let Some(Node::Scene(scene)) = carried.filter(|node| {
+            studio
+                .collection
+                .with_untracked(|c| c.as_ref().is_some_and(|c| space_of(c, node) == Some(None)))
+        }) else {
+            if dropped {
+                panel.carry.set(None);
+            }
+            return;
+        };
+        let name = studio
+            .collection
+            .with_untracked(|c| {
+                c.as_ref()
+                    .and_then(|c| c.scene(&scene).map(|s| s.name.clone()))
+            })
+            .unwrap_or_default();
+        panel.carry.set(Some(crate::panels::show::Carry {
+            scene: scene.to_string(),
+            source: None,
+            name,
+            x: f64::from(event.client_x()),
+            y: f64::from(event.client_y()),
+            dropped,
+        }));
+    };
     let dock = use_context::<DockState>();
     let scene_dialog = use_context::<SceneDialog>();
     let pasting = crate::clipboard::Pasting::from_page();
@@ -476,12 +665,16 @@ pub fn Scenes() -> impl IntoView {
         renaming.set(Some(scene_id.to_string()));
     };
     // Adds a folder named "New folder" in `parent`, with its name open for editing (the
-    // menus' New folder).
-    let new_folder = move |parent: Option<FolderId>| {
+    // menus' New folder): one of the scene list's, or with `scene` one under that scene
+    // for its keyframes and sequences (ADR-0222), which unfolds.
+    let new_folder = move |parent: Option<FolderId>, scene: Option<SceneId>| {
         let Some(s) = session.get() else { return };
         let folder_id = FolderId::new(studio.fresh_id(&s, "folder"));
         if let Some(parent) = &parent {
             open_folder(parent);
+        }
+        if let Some(scene) = &scene {
+            folded.update(|f| _ = f.remove(scene));
         }
         studio.apply(
             &s,
@@ -489,10 +682,67 @@ pub fn Scenes() -> impl IntoView {
                 folder_id: folder_id.clone(),
                 name: "New folder".into(),
                 parent,
+                scene_id: scene,
             }],
         );
         renaming.set(Some(format!("{FOLDER_KEY}{folder_id}")));
     };
+    // Files keyframe `scene_id` in `folder`, one of its parent's, or takes it out.
+    let file_keyframe = move |scene_id: SceneId, folder: Option<FolderId>| {
+        if let Some(folder) = &folder {
+            open_folder(folder);
+        }
+        send(Edit::SceneSetFolder {
+            scene_id,
+            folder_id: folder,
+        });
+    };
+    // Files sequence `timeline_id` in `folder`, one of its scene's, or takes it out.
+    let file_sequence = move |timeline_id: TimelineId, folder: Option<FolderId>| {
+        let edit = studio.collection.with_untracked(|c| {
+            let (scene, timeline) = c.as_ref()?.timeline(&timeline_id)?;
+            (timeline.folder != folder).then(|| Edit::TimelineSet {
+                scene_id: scene.scene_id.clone(),
+                timeline: TimelineInfo {
+                    folder: folder.clone(),
+                    ..timeline.clone()
+                },
+            })
+        });
+        if let Some(folder) = &folder {
+            open_folder(folder);
+        }
+        if let Some(edit) = edit {
+            send(edit);
+        }
+    };
+    // The "Move to folder" submenu of a keyframe or sequence under `owner`, now in
+    // `current`: no folder, then each of the scene's folders, the current one checked.
+    let move_to_folder =
+        move |owner: SceneId,
+              current: Option<FolderId>,
+              file: std::rc::Rc<dyn Fn(Option<FolderId>)>| {
+            let folders = studio.collection.with_untracked(|c| {
+                c.as_ref()
+                    .map(|c| scene_folders(c, &owner))
+                    .unwrap_or_default()
+            });
+            if folders.is_empty() {
+                return Entry::submenu("Move to folder", Vec::new());
+            }
+            let none = {
+                let file = file.clone();
+                Entry::item("No folder", move || file(None)).checked(current.is_none())
+            };
+            let entries = std::iter::once(none)
+                .chain(folders.into_iter().map(|(folder_id, path)| {
+                    let on = current.as_ref() == Some(&folder_id);
+                    let file = file.clone();
+                    Entry::item(path, move || file(Some(folder_id.clone()))).checked(on)
+                }))
+                .collect();
+            Entry::submenu("Move to folder", entries)
+        };
 
     let switch = move |scene_id: SceneId| {
         if let Some(s) = session.get() {
@@ -506,21 +756,27 @@ pub fn Scenes() -> impl IntoView {
             );
         }
     };
-    // A new keyframe scene of `parent`, unfolded and selected so it can be arranged.
-    let new_keyframe = move |parent: SceneId| {
+    // A new keyframe scene of `parent`, in `folder` (one of the parent's, ADR-0222) if
+    // given, unfolded and selected so it can be arranged.
+    let new_keyframe = move |parent: SceneId, folder: Option<FolderId>| {
         let Some(s) = session.get() else { return };
         let count = studio
             .collection
             .with_untracked(|c| c.as_ref().map_or(0, |c| c.keyframes_of(&parent).count()));
         let scene_id = SceneId::new(studio.fresh_id(&s, "scene"));
-        studio.apply(
-            &s,
-            vec![Edit::SceneCreateVariant {
+        let mut edits = vec![Edit::SceneCreateVariant {
+            scene_id: scene_id.clone(),
+            variant_of: parent.clone(),
+            name: keyframe_name(count),
+        }];
+        if let Some(folder) = &folder {
+            open_folder(folder);
+            edits.push(Edit::SceneSetFolder {
                 scene_id: scene_id.clone(),
-                variant_of: parent.clone(),
-                name: keyframe_name(count),
-            }],
-        );
+                folder_id: Some(folder.clone()),
+            });
+        }
+        studio.apply(&s, edits);
         folded.update(|f| _ = f.remove(&parent));
         studio.select_scene(scene_id);
     };
@@ -599,10 +855,13 @@ pub fn Scenes() -> impl IntoView {
                 !c.folders
                     .iter()
                     .any(|f| f.parent.as_ref() == Some(&folder_id))
-                    && !c
-                        .scenes
-                        .iter()
-                        .any(|sc| sc.folder.as_ref() == Some(&folder_id))
+                    && !c.scenes.iter().any(|sc| {
+                        sc.folder.as_ref() == Some(&folder_id)
+                            || sc
+                                .timelines
+                                .iter()
+                                .any(|t| t.folder.as_ref() == Some(&folder_id))
+                    })
             })
         });
         if empty {
@@ -820,12 +1079,25 @@ pub fn Scenes() -> impl IntoView {
                 if let Some((parent, parent_name)) = parent.clone() {
                     let (switch_id, reset_id, delete_id) = (id.clone(), id.clone(), id.clone());
                     let new_parent = parent.clone();
+                    let folder_parent = parent.clone();
                     let delete_name = name.clone();
-                    let overrides = studio.collection.with_untracked(|c| {
-                        c.as_ref()
-                            .and_then(|c| c.scene(&id))
-                            .is_some_and(|s| !s.overrides.is_empty())
+                    let (overrides, folder) = studio.collection.with_untracked(|c| {
+                        c.as_ref().map_or((false, None), |c| {
+                            (
+                                c.scene(&id).is_some_and(|s| !s.overrides.is_empty()),
+                                folder_of(c, &id),
+                            )
+                        })
                     });
+                    let (new_in, folder_in) = (folder.clone(), folder.clone());
+                    let move_menu = {
+                        let id = id.clone();
+                        move_to_folder(
+                            parent.clone(),
+                            folder,
+                            std::rc::Rc::new(move |to| file_keyframe(id.clone(), to)),
+                        )
+                    };
                     menus.open(
                         &event,
                         vec![
@@ -835,12 +1107,24 @@ pub fn Scenes() -> impl IntoView {
                             Entry::Sep,
                             Entry::submenu("Transition in", Vec::new()),
                             Entry::submenu("Transition out", Vec::new()),
+                            sequence::trigger_submenu(
+                                studio,
+                                session,
+                                parent.clone(),
+                                keyframe_watches(&parent, &id),
+                            ),
                             Entry::Sep,
                             Entry::item(format!("Reset to “{parent_name}”"), move || {
                                 reset_keyframe(reset_id.clone());
                             })
                             .disabled_if(!overrides),
-                            Entry::item("New keyframe", move || new_keyframe(new_parent.clone())),
+                            Entry::item("New keyframe", move || {
+                                new_keyframe(new_parent.clone(), new_in.clone());
+                            }),
+                            Entry::item("New folder", move || {
+                                new_folder(folder_in.clone(), Some(folder_parent.clone()));
+                            }),
+                            move_menu,
                             Entry::Sep,
                             Entry::item("Delete keyframe", move || {
                                 delete_keyframe(
@@ -920,6 +1204,24 @@ pub fn Scenes() -> impl IntoView {
                 menus.open(
                     &event,
                     vec![
+                        Entry::item("Properties…", move || {
+                            if let Some(dialog) = scene_dialog {
+                                dialog.open(props_id.clone());
+                            }
+                        })
+                        .hint("Double-click")
+                        .disabled_if(scene_dialog.is_none()),
+                        Entry::item("Edit filters…", move || match scene_dialog {
+                            Some(dialog) => dialog.open_filters(filters_id.clone()),
+                            None => show_filters(
+                                filters,
+                                dock,
+                                FilterOwner::Scene {
+                                    scene_id: filters_id.clone(),
+                                },
+                            ),
+                        }),
+                        Entry::Sep,
                         Entry::item("Show in preview", move || {
                             if let Some(s) = session.get() {
                                 studio.act(
@@ -935,23 +1237,8 @@ pub fn Scenes() -> impl IntoView {
                         Entry::Sep,
                         override_submenu(studio, session, dock, &id, true),
                         override_submenu(studio, session, dock, &id, false),
+                        sequence::trigger_submenu(studio, session, id.clone(), scene_watches(&id)),
                         Entry::Sep,
-                        Entry::item("Properties…", move || {
-                            if let Some(dialog) = scene_dialog {
-                                dialog.open(props_id.clone());
-                            }
-                        })
-                        .hint("Double-click")
-                        .disabled_if(scene_dialog.is_none()),
-                        Entry::item("Edit filters…", move || {
-                            show_filters(
-                                filters,
-                                dock,
-                                FilterOwner::Scene {
-                                    scene_id: filters_id.clone(),
-                                },
-                            );
-                        }),
                         crate::projector::pop_out(studio, Some(id.clone())),
                         crate::screenshot::entry(
                             "Screenshot (scene)",
@@ -963,8 +1250,16 @@ pub fn Scenes() -> impl IntoView {
                         keep_warm,
                         Entry::Sep,
                         Entry::item("New scene", move || new_scene(scene_folder.clone())),
-                        Entry::item("New keyframe", move || new_keyframe(keyframe_id.clone())),
-                        Entry::item("New folder", move || new_folder(folder.clone())),
+                        Entry::item("New keyframe", move || {
+                            new_keyframe(keyframe_id.clone(), None)
+                        }),
+                        Entry::item("New folder", move || new_folder(folder.clone(), None)),
+                        {
+                            let id = id.clone();
+                            Entry::item(format!("New folder under “{name}”"), move || {
+                                new_folder(None, Some(id.clone()));
+                            })
+                        },
                         Entry::Sep,
                         Entry::item("Copy", move || {
                             if let Some(p) = pasting {
@@ -1061,11 +1356,7 @@ pub fn Scenes() -> impl IntoView {
                 aria-current=move || on_program.get().then_some("true")
                 on:contextmenu=on_row_context
                 on:keydown=on_key
-                on:pointerdown=move |event| {
-                    if !is_keyframe {
-                        press(press_key.clone())(event);
-                    }
-                }
+                on:pointerdown=press(press_key.clone())
             >
                 <span class="tree-caret">{caret}</span>
                 <Show
@@ -1174,11 +1465,26 @@ pub fn Scenes() -> impl IntoView {
                     let (scene_in, folder_in) = (id.clone(), id.clone());
                     let rename_key = key.clone();
                     let (delete_id, delete_name) = (id.clone(), name.clone());
+                    // A folder under a scene (ADR-0222) makes keyframes of that scene.
+                    let owner = studio.collection.with_untracked(|c| {
+                        c.as_ref()
+                            .and_then(|c| c.folder(&id))
+                            .and_then(|f| f.scene_id.clone())
+                    });
+                    let folder_owner = owner.clone();
+                    let new_here = match owner {
+                        Some(owner) => Entry::item("New keyframe", move || {
+                            new_keyframe(owner.clone(), Some(scene_in.clone()));
+                        }),
+                        None => Entry::item("New scene", move || new_scene(Some(scene_in.clone()))),
+                    };
                     menus.open(
                         &event,
                         vec![
-                            Entry::item("New scene", move || new_scene(Some(scene_in.clone()))),
-                            Entry::item("New folder", move || new_folder(Some(folder_in.clone()))),
+                            new_here,
+                            Entry::item("New folder", move || {
+                                new_folder(Some(folder_in.clone()), folder_owner.clone());
+                            }),
                             Entry::item("Rename", move || renaming.set(Some(rename_key.clone())))
                                 .hint("F2"),
                             Entry::Sep,
@@ -1349,11 +1655,21 @@ pub fn Scenes() -> impl IntoView {
             }
         };
         let clear_keys = move || {
-            let edits = chords
-                .get_untracked()
-                .into_iter()
-                .map(|chord| Edit::HotkeyClear { chord })
-                .collect();
+            let play = Action::TimelinePlay {
+                timeline_id: id.get_value(),
+                delay_ms: None,
+            };
+            let edits = studio.collection.with_untracked(|c| {
+                c.as_ref()
+                    .map(|c| {
+                        chords
+                            .get_untracked()
+                            .iter()
+                            .flat_map(|chord| c.unbind_edits(chord, &play))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            });
             send_all(edits);
         };
         let on_row_context = {
@@ -1369,6 +1685,31 @@ pub fn Scenes() -> impl IntoView {
                 let has_keys = !chords.get_untracked().is_empty();
                 let key = key.clone();
                 let toggle_play = toggle_play.clone();
+                // Its scene's folders (ADR-0222): a keyframe scene's sequence files in
+                // its parent's.
+                let filed = studio.collection.with_untracked(|c| {
+                    let c = c.as_ref()?;
+                    let (scene, _) = id.with_value(|id| c.timeline(id))?;
+                    let owner = scene
+                        .variant_of
+                        .clone()
+                        .unwrap_or_else(|| scene.scene_id.clone());
+                    Some((owner, id.with_value(|id| sequence_folder(c, id))))
+                });
+                let folder_entries = filed.map(|(owner, folder)| {
+                    let new_owner = owner.clone();
+                    let new_in = folder.clone();
+                    [
+                        Entry::item("New folder", move || {
+                            new_folder(new_in.clone(), Some(new_owner.clone()));
+                        }),
+                        move_to_folder(
+                            owner,
+                            folder,
+                            std::rc::Rc::new(move |to| file_sequence(id.get_value(), to)),
+                        ),
+                    ]
+                });
                 menus.open(
                     &event,
                     vec![
@@ -1379,8 +1720,14 @@ pub fn Scenes() -> impl IntoView {
                         Entry::item("Set key…", move || keying.set(Some(id.get_value()))),
                         Entry::item("Remove key", clear_keys).disabled_if(!has_keys),
                         Entry::Sep,
+                    ]
+                    .into_iter()
+                    .chain(folder_entries.into_iter().flatten())
+                    .chain([
+                        Entry::Sep,
                         Entry::item("Delete sequence", delete).hint("Del").danger(),
-                    ],
+                    ])
+                    .collect(),
                 );
             }
         };
@@ -1404,6 +1751,11 @@ pub fn Scenes() -> impl IntoView {
             <li
                 class="row tree-row seq-tree-row"
                 class:selected=selected
+                class:drop-before=drop_side(key.clone(), Side::Before)
+                class:drop-after=drop_side(key.clone(), Side::After)
+                class:dragging=dragging(key.clone())
+                data-tree-id=key.clone()
+                on:pointerdown=press(key.clone())
                 style:padding-left=indent(depth)
                 title="Sequence: click to open it, right-click for its menu"
                 on:contextmenu=on_row_context
@@ -1498,7 +1850,7 @@ pub fn Scenes() -> impl IntoView {
             &event,
             vec![
                 Entry::item("New scene", move || new_scene(None)),
-                Entry::item("New folder", move || new_folder(None)),
+                Entry::item("New folder", move || new_folder(None, None)),
                 Entry::Sep,
                 Entry::item("Paste scene", move || {
                     if let Some(p) = pasting {
@@ -1590,10 +1942,13 @@ pub fn Scenes() -> impl IntoView {
             "sliders",
             // A keyframe has no chain of its own: the graph refuses filter edits there.
             move || selected().is_none() || selected_keyframe(),
-            move || {
-                if let Some(scene_id) = selected() {
+            // Scene properties on its Filters segment, as the row menu's Edit filters….
+            move || match (scene_dialog, selected()) {
+                (Some(dialog), Some(scene_id)) => dialog.open_filters(scene_id),
+                (None, Some(scene_id)) => {
                     show_filters(filters, dock, FilterOwner::Scene { scene_id });
                 }
+                _ => {}
             },
         ),
         Tool::new("Move up", "up", move || !can_step(true), move || step(true)),
@@ -1614,9 +1969,20 @@ pub fn Scenes() -> impl IntoView {
             <ul
                 class="rows tree-rows"
                 class:reordering=move || reorder.dragged.with(Option::is_some)
-                on:pointermove=move |event| reorder.moved(&event)
-                on:pointerup=move |_| reorder.up(drop)
-                on:pointercancel=move |_| reorder.cancel()
+                on:pointermove=move |event| {
+                    reorder.moved(&event);
+                    carry(&event, false);
+                }
+                on:pointerup=move |event| {
+                    carry(&event, true);
+                    reorder.up(drop);
+                }
+                on:pointercancel=move |_| {
+                    if let Some(panel) = show_panel {
+                        panel.carry.set(None);
+                    }
+                    reorder.cancel();
+                }
             >
                 <For each=shown_rows key=|row| row.clone() children=row />
             </ul>
@@ -1689,9 +2055,52 @@ pub fn RenameField(value: String, done: impl Fn(String) + Clone + 'static) -> im
     }
 }
 
+/// The triggers a scene's menu offers to start a sequence on (A14): the scene going on
+/// program, and leaving it.
+pub fn scene_watches(scene_id: &SceneId) -> Vec<(&'static str, TimelineTrigger)> {
+    vec![
+        (
+            "Play when it goes on program",
+            TimelineTrigger::Scene {
+                scene_id: scene_id.clone(),
+                edge: SceneEdge::Shown,
+                delay_ms: 0,
+            },
+        ),
+        (
+            "Play when it leaves program",
+            TimelineTrigger::Scene {
+                scene_id: scene_id.clone(),
+                edge: SceneEdge::Hidden,
+                delay_ms: 0,
+            },
+        ),
+    ]
+}
+
+/// The triggers a keyframe's menu offers to start a sequence on (A14): the keyframe of
+/// `parent` loading, and leaving.
+pub fn keyframe_watches(
+    parent: &SceneId,
+    keyframe_id: &SceneId,
+) -> Vec<(&'static str, TimelineTrigger)> {
+    let watch = |edge| TimelineTrigger::Keyframe {
+        scene_id: parent.clone(),
+        keyframe_id: Some(keyframe_id.clone()),
+        edge,
+        delay_ms: 0,
+    };
+    vec![
+        ("Play when it loads", watch(KeyframeEdge::Loads)),
+        ("Play when it leaves", watch(KeyframeEdge::Leaves)),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Modifiers, Node, Row, keyframe_name, moved, picks_on_press, rows, stepped};
+    use super::{
+        Modifiers, Node, Row, keyframe_name, moved, picks_on_press, rows, scene_folders, stepped,
+    };
     use crate::panels::tree::Side;
     use crate::store::Collection;
     use jstream_control::protocol::{
@@ -1728,6 +2137,7 @@ mod tests {
 
     fn folder(id: &str, parent: Option<&str>) -> FolderInfo {
         FolderInfo {
+            scene_id: None,
             folder_id: id.into(),
             name: id.to_uppercase(),
             parent: parent.map(FolderId::new),
@@ -2059,6 +2469,158 @@ mod tests {
             shown(&rows(&c, &none, &HashSet::new(), true, &lights)),
             ["~Lights up@1"]
         );
+    }
+
+    /// Scene B with its own folders (ADR-0222): Looks, with Intro inside it, holding
+    /// keyframe K1 and sequence Lights up; keyframe K2 and sequence Fade unfiled; and a
+    /// scene-list folder Show holding A.
+    fn scene_folder_collection() -> Collection {
+        let mut b = scene("b", None, false);
+        let mut lights =
+            crate::panels::sequence::empty_sequence("lights_up".into(), "Lights up".into());
+        lights.folder = Some("intro".into());
+        b.timelines = vec![
+            crate::panels::sequence::empty_sequence("fade".into(), "Fade".into()),
+            lights,
+        ];
+        let mut k1 = scene("k1", Some("intro"), false);
+        k1.variant_of = Some("b".into());
+        let mut k2 = scene("k2", None, false);
+        k2.variant_of = Some("b".into());
+        let owned = |id: &str, parent: Option<&str>| FolderInfo {
+            scene_id: Some("b".into()),
+            ..folder(id, parent)
+        };
+        Collection {
+            scenes: vec![scene("a", Some("show"), false), b, k1, k2],
+            folders: vec![
+                owned("intro", Some("looks")),
+                folder("show", None),
+                owned("looks", None),
+            ],
+            ..Collection::default()
+        }
+    }
+
+    #[test]
+    fn a_scenes_folders_come_first_under_it_and_hold_its_keyframes_and_sequences() {
+        let c = scene_folder_collection();
+        let all = |_: &str, _: bool, _: &[LabelId]| true;
+        let none = HashSet::new();
+        assert_eq!(
+            shown(&rows(&c, &none, &HashSet::new(), false, &all)),
+            [
+                "SHOW/@0",
+                "A@1",
+                "B@0",
+                "LOOKS/@1",
+                "INTRO/@2",
+                "K1@3",
+                "~Lights up@3",
+                "K2@1",
+                "~Fade@1",
+            ]
+        );
+        // A shut folder hides what it holds; the scene's caret folds them all away.
+        assert_eq!(
+            shown(&rows(
+                &c,
+                &HashSet::from([FolderId::new("looks")]),
+                &HashSet::new(),
+                false,
+                &all
+            )),
+            ["SHOW/@0", "A@1", "B@0", "LOOKS/-@1", "K2@1", "~Fade@1"]
+        );
+        assert_eq!(
+            shown(&rows(
+                &c,
+                &none,
+                &HashSet::from([SceneId::new("b")]),
+                false,
+                &all
+            )),
+            ["SHOW/@0", "A@1", "B@0"]
+        );
+        // A filter keeps the folders of what matches.
+        let lights = |name: &str, _: bool, _: &[LabelId]| name == "Lights up";
+        assert_eq!(
+            shown(&rows(&c, &none, &HashSet::new(), true, &lights)),
+            ["LOOKS/+@1", "INTRO/+@2", "~Lights up@3"]
+        );
+        assert_eq!(
+            scene_folders(&c, &SceneId::new("b")),
+            [
+                (FolderId::new("looks"), "LOOKS".to_owned()),
+                (FolderId::new("intro"), "LOOKS / INTRO".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn keyframes_sequences_and_a_scenes_folders_move_only_under_their_scene() {
+        let c = scene_folder_collection();
+        let (k1, k2) = (scene_node("k1"), scene_node("k2"));
+        let (fade, lights) = (
+            Node::Sequence("fade".into()),
+            Node::Sequence("lights_up".into()),
+        );
+        let (looks, intro, show) = (
+            folder_node("looks"),
+            folder_node("intro"),
+            folder_node("show"),
+        );
+        // A keyframe dropped into one of its scene's folders goes in it, and beside a
+        // row there joins that row's folder.
+        assert_eq!(
+            moved(&c, &k2, &looks, Side::Into),
+            [Edit::SceneSetFolder {
+                scene_id: "k2".into(),
+                folder_id: Some("looks".into()),
+            }]
+        );
+        assert_eq!(
+            moved(&c, &k2, &lights, Side::After),
+            [Edit::SceneSetFolder {
+                scene_id: "k2".into(),
+                folder_id: Some("intro".into()),
+            }]
+        );
+        // A sequence likewise, as its whole timeline with the new folder.
+        let [Edit::TimelineSet { scene_id, timeline }]: [Edit; 1] =
+            moved(&c, &fade, &intro, Side::Into)
+                .try_into()
+                .expect("one edit")
+        else {
+            panic!("a timeline.set");
+        };
+        assert_eq!(scene_id, SceneId::new("b"));
+        assert_eq!(timeline.folder, Some(FolderId::new("intro")));
+        assert_eq!(timeline.name, "Fade");
+        // Out of a folder: beside an unfiled row.
+        let [Edit::TimelineSet { timeline, .. }]: [Edit; 1] = moved(&c, &lights, &k2, Side::Before)
+            .try_into()
+            .expect("one edit")
+        else {
+            panic!("a timeline.set");
+        };
+        assert_eq!(timeline.folder, None);
+        // A scene's folder moves among its scene's folders.
+        assert_eq!(
+            moved(&c, &intro, &k2, Side::After),
+            [Edit::FolderSetParent {
+                folder_id: "intro".into(),
+                parent: None,
+            }]
+        );
+        // Nothing crosses between the scene list and a scene's rows.
+        assert_eq!(moved(&c, &k1, &show, Side::Into), []);
+        assert_eq!(moved(&c, &scene_node("a"), &looks, Side::Into), []);
+        assert_eq!(moved(&c, &looks, &show, Side::Into), []);
+        assert_eq!(moved(&c, &fade, &scene_node("a"), Side::After), []);
+        assert_eq!(moved(&c, &show, &k2, Side::After), []);
+        // Nothing for a drop where it already is.
+        assert_eq!(moved(&c, &k1, &intro, Side::Into), []);
     }
 
     #[test]

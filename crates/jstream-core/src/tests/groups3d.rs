@@ -365,9 +365,126 @@ fn a_3d_groups_children_stay_in_its_space_during_a_move() {
     );
 }
 
+/// A Move between two views of a 3D scene with a video chain that differ only in their
+/// camera draws the scene as it is, chain and all, through a camera that glides from one
+/// view to the other (ADR-0226), rather than track by track with its chain paused
+/// (ADR-0180), an item that can't glide included. Once the Move ends, the keyframe's own
+/// camera is drawn.
+#[test]
+fn a_camera_only_move_in_a_3d_family_keeps_its_chain() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    let start = SceneCamera::framing(Canvas::DEFAULT);
+    let end = {
+        let mut camera = start;
+        camera.position.z = finite(camera.position.z.get() + 300.0);
+        camera
+    };
+    batch(
+        &control,
+        edits(vec![
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            // The wall's effect runs over the canvas, as a model's layer does, so it
+            // can't glide (ADR-0106): it goes and comes back the same.
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("wall"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("wall_fx"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("wall"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            // Only the camera differs: it steps back.
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(end),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("move"),
+                name: "Move".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ]),
+    )
+    .expect("a keyframe and a move");
+    let action = Action::SceneSwitch {
+        scene_id: SceneId::new("k"),
+        preset_id: Some(TransitionPresetId::new("move")),
+        via: Vec::new(),
+    };
+    super::block_on(control.call(Call::Action { action })).expect("switch");
+    clock.advance(200_000);
+    engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
+    let k = SceneId::new("k");
+    assert!(
+        !shot.transitioning(),
+        "no tracks: the scene is drawn as it is"
+    );
+    assert!(shot.scene_chain(&k).is_some(), "with its chain");
+    let half = shot.gliding_camera(&k, 200.0).expect("its camera glides");
+    let z = half.position.z.get();
+    let (from, to) = (start.position.z.get(), end.position.z.get());
+    assert!(
+        (z - (from + to) / 2.0).abs() < 1.0,
+        "half-way between the views at half-time: {z} from {from} to {to}"
+    );
+    if pixel(&control, 960, 540).is_some() {
+        assert_eq!(
+            pixel(&control, 960, 540),
+            Some(RED),
+            "the child is still in front of the wall half-way"
+        );
+    }
+    clock.advance(400_000);
+    engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
+    assert!(!shot.transitioning());
+    assert!(
+        shot.gliding_camera(&k, 600.0).is_none(),
+        "the glide is over"
+    );
+    assert!(shot.scene_chain(&k).is_some(), "the chain stays");
+}
+
 /// An item with an effect shown with a Fade on a keyframe scene of a 3D scene is drawn
 /// through the keyframe's camera while it appears: the red card, 400 px square, fades in
-/// at its place, and the wall around it stays as it is.
+/// at its place, and the wall around it stays as it is. The scene has a chain, which
+/// keeps running while the card appears (ADR-0237): the keyframe is drawn as it is, the
+/// card fading in its pass, rather than track by track with the chain paused.
 #[test]
 fn an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera() {
     use jstream_media::Timebase;
@@ -467,12 +584,18 @@ fn an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera() {
     });
     clock.advance(200_000);
     engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
     assert!(
-        engine.render_hub().load().shot().transitioning(),
-        "it appears"
+        !shot.transitioning(),
+        "no tracks: the keyframe is drawn as it is"
     );
-    // The scene has a chain, so it crossfades as one picture (ADR-0065 §6): the wall
-    // is still there, seen through k's camera, not the picture seen through it again.
+    assert!(
+        shot.scene_chain(&SceneId::new("k")).is_some(),
+        "with its chain, while the card appears"
+    );
+    // The wall is still there, seen through k's camera, and the card fades in at its
+    // place in the keyframe's pass.
     let [red, green, blue, _] = pixel(&control, 200, 200).expect("an adapter");
     assert!(
         red == 0 && green == 0 && blue > 150,
@@ -487,6 +610,32 @@ fn an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera() {
     engine.replan();
     assert_eq!(pixel(&control, 200, 200), Some(BLUE), "the wall, after");
     assert_eq!(pixel(&control, 960, 540), Some(RED), "the card, after");
+    // Hidden, it fades out the same way, the chain still running.
+    call(Action::ItemHide {
+        item_id: ItemId::new("card"),
+        scene_id: None,
+    });
+    clock.advance(200_000);
+    engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
+    assert!(!shot.transitioning(), "no tracks while it goes");
+    assert!(
+        shot.scene_chain(&SceneId::new("k")).is_some(),
+        "with its chain, while the card goes"
+    );
+    let [red, green, blue, _] = pixel(&control, 960, 540).expect("an adapter");
+    assert!(
+        red > 64 && green == 0 && blue > 64,
+        "the card half gone over the wall: {red} {green} {blue}"
+    );
+    clock.advance(400_000);
+    engine.replan();
+    assert_eq!(
+        pixel(&control, 960, 540),
+        Some(BLUE),
+        "the wall, once it has gone"
+    );
 }
 
 /// An effect's setting changed after its first frame reaches the card in a 3D scene:
@@ -559,7 +708,7 @@ fn an_effect_setting_changed_later_reaches_a_3d_card() {
 
 /// #1632: a Move between two views of a 3D scene drawn as one picture through its chain,
 /// started once the Fade onto it from a 2D scene has ended but before a plan let that
-/// go, moves item by item as from the scene at rest, so the group's red child, 200 px
+/// go, moves as from the scene at rest (here, its camera alone glides, ADR-0226), so the group's red child, 200 px
 /// nearer than the wall, stays in front of it half-way; it is not the Fade's flat
 /// picture of the scene leaving under the keyframe's items.
 #[test]
@@ -633,8 +782,15 @@ fn a_3d_groups_children_stay_in_its_space_in_a_move_after_a_fade() {
     switch("k", Some("move"));
     clock.advance(200_000);
     engine.replan();
+    // The views differ only in their camera, so the Move runs as the scene gliding its
+    // camera (ADR-0226).
     assert!(
-        engine.render_hub().load().shot().transitioning(),
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .gliding_camera(&SceneId::new("k"), 200.0)
+            .is_some(),
         "the Move runs"
     );
     assert_eq!(
@@ -653,6 +809,7 @@ fn drift_x(item: &str, rate: f32) -> Edit {
         item_id: ItemId::new(item),
         scene_id: None,
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "drift".into(),
             property: jstream_protocol::MotionProperty::X,
             effect: None,
@@ -928,4 +1085,539 @@ fn a_3d_groups_legacy_transform_child_is_placed_through_it() {
         Some([0, 0, 0, 0xff]),
         "not where it is in the group's own canvas"
     );
+}
+
+/// Two items hidden one after the other on a filtered 3D keyframe, the second while the
+/// first still fades, keep the scene's chain running throughout (ADR-0237): the second
+/// Move starts from what is on screen, the first card part way gone, and is drawn as
+/// the scene too. Another item that a sequence's lane moves meanwhile, here by an edit,
+/// differs at its ends only by that, so the Moves still draw the scene as it is.
+#[test]
+fn items_hidden_one_after_another_on_a_3d_keyframe_keep_its_chain() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    let call = |action: Action| {
+        super::block_on(control.call(Call::Action { action })).expect("action");
+    };
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("rig_item"),
+            },
+            place(
+                "main",
+                "card",
+                "red",
+                boxed(700.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            place(
+                "main",
+                "beam",
+                "red",
+                boxed(1220.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ]),
+    )
+    .expect("two cards and a keyframe");
+    call(Action::SceneSwitch {
+        scene_id: SceneId::new("k"),
+        preset_id: None,
+        via: Vec::new(),
+    });
+    batch(
+        &control,
+        edits(vec![Edit::TransitionSetDefault {
+            preset_id: TransitionPresetId::new("fade"),
+        }]),
+    )
+    .expect("fade by default");
+    let k = SceneId::new("k");
+    let check = |when: &str| {
+        engine.replan();
+        let loaded = engine.render_hub().load();
+        let shot = loaded.shot();
+        assert!(!shot.transitioning(), "no tracks {when}");
+        assert!(shot.scene_chain(&k).is_some(), "the chain runs {when}");
+    };
+    call(Action::ItemHide {
+        item_id: ItemId::new("card"),
+        scene_id: None,
+    });
+    clock.advance(100_000);
+    batch(
+        &control,
+        edits(vec![Edit::ItemSetGeometry {
+            item_id: ItemId::new("beam"),
+            scene_id: Some(SceneId::new("k")),
+            geometry: boxed(1260.0, 540.0, (300.0, 300.0), 200.0),
+        }]),
+    )
+    .expect("the beam moves on");
+    clock.advance(100_000);
+    check("while the card goes and the beam moves on");
+    call(Action::ItemHide {
+        item_id: ItemId::new("beam"),
+        scene_id: None,
+    });
+    clock.advance(100_000);
+    check("while the beam goes after it");
+    clock.advance(200_000);
+    check("once the card has gone");
+}
+
+/// Items shown one after another on a 3D scene keep its chain running while an item that
+/// can't glide stays on it (ADR-0237 decision 2): the second show starts while the first
+/// is still running, from what is on screen, where that item is both going and coming
+/// back. On a streaming PC, a hologram's second cue showed its cards beside a cockpit
+/// model and dropped the chain.
+#[test]
+fn items_shown_one_after_another_beside_an_item_that_cant_glide_keep_the_chain() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    let call = |action: Action| {
+        super::block_on(control.call(Call::Action { action })).expect("action");
+    };
+    let hidden = |item: &str| Edit::ItemSetVisible {
+        item_id: ItemId::new(item),
+        scene_id: None,
+        visible: false,
+    };
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("rig_item"),
+            },
+            place(
+                "main",
+                "beam",
+                "red",
+                boxed(700.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            place(
+                "main",
+                "card",
+                "red",
+                boxed(1220.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            hidden("beam"),
+            hidden("card"),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            // The wall's effect runs over the canvas, as a model's layer does, so it
+            // can't glide (ADR-0106): it goes and comes back the same.
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("wall"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("wall_fx"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("wall"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ]),
+    )
+    .expect("two cards, a wall that can't glide and a keyframe");
+    batch(
+        &control,
+        edits(vec![Edit::TransitionSetDefault {
+            preset_id: TransitionPresetId::new("fade"),
+        }]),
+    )
+    .expect("fade by default");
+    let main = SceneId::new("main");
+    let check = |when: &str| {
+        engine.replan();
+        let loaded = engine.render_hub().load();
+        let shot = loaded.shot();
+        assert!(!shot.transitioning(), "no tracks {when}");
+        assert!(shot.scene_chain(&main).is_some(), "the chain runs {when}");
+    };
+    for (visible, what) in [(true, "shown"), (false, "hidden")] {
+        let act = |item: &str| {
+            let item_id = ItemId::new(item);
+            call(if visible {
+                Action::ItemShow {
+                    item_id,
+                    scene_id: None,
+                }
+            } else {
+                Action::ItemHide {
+                    item_id,
+                    scene_id: None,
+                }
+            });
+        };
+        act("beam");
+        clock.advance(120_000);
+        check(&format!("while the beam is {what}"));
+        act("card");
+        clock.advance(80_000);
+        check(&format!("while the card is {what} after it"));
+        clock.advance(200_000);
+        check(&format!("once the beam is {what}"));
+        clock.advance(400_000);
+        check(&format!("once both are {what}"));
+    }
+}
+
+/// A second show or hide on a 3D scene, partway through the first, carries the first
+/// item's fade on from where it is (ADR-0237 decision 2): the card, half gone or half
+/// come, neither jumps back nor starts its fade again, whether the second cue is another
+/// item's or the card's own turned back.
+#[test]
+fn a_second_show_or_hide_carries_a_fade_on_from_where_it_is() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    // An item and whether the cue shows it.
+    type Cue = (&'static str, bool);
+    // What the card starts as, its first cue, and the second cue.
+    let cases: [(bool, Cue, Cue); 3] = [
+        (true, ("card", false), ("beam", false)),
+        (true, ("card", false), ("card", true)),
+        (false, ("card", true), ("beam", false)),
+    ];
+    for (shown, first, second) in cases {
+        let _gpu = super::one_gpu_test_at_a_time();
+        let clock = FakeClock::new(Timebase::MICROS);
+        let engine = Engine::new();
+        engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+        let (engine, control) = rig_with(true, engine);
+        if pixel(&control, 960, 540).is_none() {
+            return;
+        }
+        let call = |(item, visible): (&str, bool)| {
+            let item_id = ItemId::new(item);
+            let action = if visible {
+                Action::ItemShow {
+                    item_id,
+                    scene_id: None,
+                }
+            } else {
+                Action::ItemHide {
+                    item_id,
+                    scene_id: None,
+                }
+            };
+            super::block_on(control.call(Call::Action { action })).expect("action");
+        };
+        batch(
+            &control,
+            edits(vec![
+                Edit::ItemRemove {
+                    item_id: ItemId::new("rig_item"),
+                },
+                place(
+                    "main",
+                    "card",
+                    "red",
+                    boxed(700.0, 540.0, (300.0, 300.0), 200.0),
+                ),
+                place(
+                    "main",
+                    "beam",
+                    "red",
+                    boxed(1220.0, 540.0, (300.0, 300.0), 200.0),
+                ),
+                Edit::ItemSetVisible {
+                    item_id: ItemId::new("card"),
+                    scene_id: None,
+                    visible: shown,
+                },
+                Edit::FilterAdd {
+                    owner: jstream_protocol::FilterOwner::Scene {
+                        scene_id: SceneId::new("main"),
+                    },
+                    chain: jstream_protocol::FilterChain::Video,
+                    filter_id: jstream_protocol::FilterId::new("look"),
+                    kind: "sharpen".into(),
+                    settings: Settings::default(),
+                    enabled: None,
+                    index: None,
+                },
+                Edit::TransitionCreate {
+                    preset_id: TransitionPresetId::new("fade"),
+                    name: "Fade".into(),
+                    kind: "fade".into(),
+                    duration_ms: 400,
+                    easing: Easing::Linear,
+                    settings: Settings::default(),
+                },
+            ]),
+        )
+        .expect("two cards");
+        batch(
+            &control,
+            edits(vec![Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("fade"),
+            }]),
+        )
+        .expect("fade by default");
+        let half = |when: &str| {
+            engine.replan();
+            let loaded = engine.render_hub().load();
+            let shot = loaded.shot();
+            assert!(
+                !shot.transitioning() && shot.scene_chain(&SceneId::new("main")).is_some(),
+                "drawn as the scene, with its chain, {when}: {first:?} then {second:?}"
+            );
+            let [red, green, blue, _] = pixel(&control, 700, 540).expect("an adapter");
+            assert!(
+                (100..=160).contains(&red) && green == 0 && (95..=155).contains(&blue),
+                "the card half there {when}: {red} {green} {blue}, {first:?} then {second:?}"
+            );
+        };
+        call(first);
+        clock.advance(200_000);
+        half("half-way");
+        call(second);
+        clock.advance(1_000);
+        half("just after the second cue");
+    }
+}
+
+/// Whatever cues overlap on a 3D scene with a chain (items shown and hidden, views
+/// switched, each cutting the last short at any point), an item whose effects cover
+/// the canvas, as a model's layer does, never shows what is behind it: the wall stays
+/// solid blue at every step. Between views that move only the camera, the scene is drawn
+/// as itself, chain and all, throughout (ADR-0237); a view that moves an item is drawn
+/// track by track, where the wall swaps at once rather than crossfading with itself.
+#[test]
+fn no_overlap_of_cues_shows_through_what_covers_the_canvas() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    // The cues: an item shown or hidden with its Fade, or a Move to a view.
+    const CUES: [(&str, Option<bool>); 7] = [
+        ("card", Some(true)),
+        ("card", Some(false)),
+        ("beam", Some(true)),
+        ("beam", Some(false)),
+        ("main", None),
+        ("k", None),
+        ("k2", None),
+    ];
+    // A small fixed generator, so every run plays the same sequences.
+    let mut seed = 0x2545_f491_u32;
+    let mut next = |below: u32| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        seed % below
+    };
+    let sequences: Vec<Vec<(usize, u64)>> = (0..6)
+        .map(|_| {
+            (0..6)
+                .map(|_| (next(7) as usize, u64::from(next(9)) * 50))
+                .collect()
+        })
+        .collect();
+    let views = |scene: &str| scene == "main" || scene == "k";
+    for cues in sequences {
+        let _gpu = super::one_gpu_test_at_a_time();
+        let clock = FakeClock::new(Timebase::MICROS);
+        let engine = Engine::new();
+        engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+        let (engine, control) = rig_with(true, engine);
+        if pixel(&control, 960, 540).is_none() {
+            return;
+        }
+        let back = {
+            let mut camera = SceneCamera::framing(Canvas::DEFAULT);
+            camera.position.z = finite(camera.position.z.get() + 300.0);
+            camera
+        };
+        let effect = |owner: jstream_protocol::FilterOwner, id: &str| Edit::FilterAdd {
+            owner,
+            chain: jstream_protocol::FilterChain::Video,
+            filter_id: jstream_protocol::FilterId::new(id),
+            kind: "sharpen".into(),
+            settings: Settings::default(),
+            enabled: None,
+            index: None,
+        };
+        let preset = |id: &str, kind: &str| Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new(id),
+            name: id.into(),
+            kind: kind.into(),
+            duration_ms: 400,
+            easing: Easing::Linear,
+            settings: Settings::default(),
+        };
+        let mut setup = vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("rig_item"),
+            },
+            place(
+                "main",
+                "card",
+                "red",
+                boxed(700.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            place(
+                "main",
+                "beam",
+                "red",
+                boxed(1220.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            effect(
+                jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                "look",
+            ),
+            // The wall's effect runs over the canvas, as a model's layer does.
+            effect(
+                jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("wall"),
+                },
+                "wall_fx",
+            ),
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("wall"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            preset("fade", "fade"),
+            preset("move", "move"),
+        ];
+        // Two views: `k` steps the camera back, and `k2` also moves the beam.
+        for view in ["k", "k2"] {
+            setup.push(Edit::SceneCreateVariant {
+                scene_id: SceneId::new(view),
+                variant_of: SceneId::new("main"),
+                name: view.into(),
+            });
+            setup.push(Edit::SceneSetCamera {
+                scene_id: SceneId::new(view),
+                camera: Some(back),
+            });
+        }
+        setup.push(Edit::ItemSetGeometry {
+            item_id: ItemId::new("beam"),
+            scene_id: Some(SceneId::new("k2")),
+            geometry: boxed(1220.0, 340.0, (300.0, 300.0), 200.0),
+        });
+        batch(&control, edits(setup)).expect("the rig");
+        batch(
+            &control,
+            edits(vec![Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("fade"),
+            }]),
+        )
+        .expect("fade by default");
+        let mut seen = Vec::new();
+        let mut moved = false;
+        let mut program = "main";
+        for (cue, wait) in cues.iter().map(|&(cue, wait)| (CUES[cue], wait)) {
+            seen.push(cue);
+            let action = match cue {
+                (item, Some(true)) => Action::ItemShow {
+                    item_id: ItemId::new(item),
+                    scene_id: None,
+                },
+                (item, Some(false)) => Action::ItemHide {
+                    item_id: ItemId::new(item),
+                    scene_id: None,
+                },
+                (scene, None) => {
+                    moved |= !views(scene);
+                    program = scene;
+                    Action::SceneSwitch {
+                        scene_id: SceneId::new(scene),
+                        preset_id: Some(TransitionPresetId::new("move")),
+                        via: Vec::new(),
+                    }
+                }
+            };
+            super::block_on(control.call(Call::Action { action })).expect("the cue");
+            let mut left = wait.max(25);
+            while left > 0 {
+                let step = left.min(100);
+                clock.advance(step * 1000);
+                left -= step;
+                engine.replan();
+                // Once a view that moves an item has played, a later Move can be drawn
+                // track by track; until then, it is the scene as itself.
+                if !moved {
+                    let loaded = engine.render_hub().load();
+                    let shot = loaded.shot();
+                    assert!(
+                        !shot.transitioning() && shot.scene_chain(&SceneId::new(program)).is_some(),
+                        "drawn as the scene, with its chain, after {seen:?}"
+                    );
+                }
+                assert_eq!(
+                    pixel(&control, 960, 860),
+                    Some(BLUE),
+                    "the wall shows through after {seen:?}"
+                );
+            }
+        }
+    }
 }

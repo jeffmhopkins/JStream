@@ -4,7 +4,7 @@
 //! source whose page paints on the stage's device, an output that leaves the GPU path
 //! mid-run when compositing keeps failing on it (#451), one whose fallback hangs (#577),
 //! and an encoder that takes GPU frames getting the program converted into NV12 encode
-//! targets.
+//! targets, native ones and two-plane ones.
 //!
 //! A software adapter stands in for the platform's media adapter, and a fake capture
 //! backend delivers `GpuFrame`s on it. A machine with no adapter skips; CI, which
@@ -516,15 +516,20 @@ fn first_pixel(frame: &MixFrame) -> Option<[u8; 4]> {
     let luma = *frame.out.first()?;
     let chroma = frame.size.width() as usize * frame.size.height() as usize;
     let (cb, cr) = (*frame.out.get(chroma)?, *frame.out.get(chroma + 1)?);
+    Some(limited_to_rgb(luma, cb, cr))
+}
+
+/// The RGBA8 of BT.709 limited-range `luma`, `cb` and `cr`.
+fn limited_to_rgb(luma: u8, cb: u8, cr: u8) -> [u8; 4] {
     let y = 1.164_38 * (f32::from(luma) - 16.0);
     let (cb, cr) = (f32::from(cb) - 128.0, f32::from(cr) - 128.0);
     let channel = |v: f32| v.round().clamp(0.0, 255.0) as u8;
-    Some([
+    [
         channel(y + 1.792_74 * cr),
         channel(y - 0.213_25 * cb - 0.532_91 * cr),
         channel(y + 2.112_40 * cb),
         255,
-    ])
+    ]
 }
 
 /// Whether `pixel` is [`RED`], give or take the 1 a round trip through NV12 can add to
@@ -1346,9 +1351,15 @@ fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
     use crate::effect_packs::test_pack::{self, KIND, Temp};
     use jstream_protocol::{Event, FilterChain, FilterId, FilterOwner, Query, QueryResult};
 
-    /// Far more than half a 30 fps frame on any adapter, at the size below.
+    /// Far more than half a 30 fps frame on a software adapter at [`SOFTWARE_SIZE`], and
+    /// on a GPU at [`HARDWARE_SIZE`].
     const SLOW: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    var c = src(in.uv);\n    for (var i = 0; i < 20000; i++) {\n        c = fract(c * 1.0001 + vec4<f32>(0.0001));\n    }\n    return c;\n}\n";
-    const SIZE: u32 = 128;
+    /// About 0.4 s a pass on lavapipe and 1.3 s on WARP.
+    const SOFTWARE_SIZE: u32 = 128;
+    /// 64 times the pixels: a Radeon 780M runs the pass over 128 × 128 in under half a
+    /// frame, so the guard never tripped there (#1723). Not more, so that a pass stays
+    /// well inside Windows' 2 s GPU timeout on a slower GPU.
+    const HARDWARE_SIZE: u32 = 1024;
 
     let _gpu = one_gpu_test_at_a_time();
     if !have_software_gpu() {
@@ -1356,9 +1367,12 @@ fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
     }
     // The adapter the render thread opens on: one without timestamp queries times
     // nothing, and only a device loss guards it.
-    let timed = Compositor::open(OpenOptions::hardware())
-        .map(|mut compositor| compositor.time_passes())
-        .unwrap_or(false);
+    let (timed, software) = Compositor::open(OpenOptions::hardware())
+        .map(|mut compositor| {
+            let software = compositor.adapter().get_info().device_type == wgpu::DeviceType::Cpu;
+            (compositor.time_passes(), software)
+        })
+        .unwrap_or((false, true));
     if !timed {
         let _ = writeln!(
             std::io::stderr(),
@@ -1413,9 +1427,14 @@ fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
         },
     )
     .expect("a scene drawing a pack filter");
-    let pixels = vec![255; (SIZE * SIZE * 4) as usize];
+    let size = if software {
+        SOFTWARE_SIZE
+    } else {
+        HARDWARE_SIZE
+    };
+    let pixels = vec![255; (size * size * 4) as usize];
     engine
-        .set_source_frame(&SourceId::new("bg"), SIZE, SIZE, &pixels)
+        .set_source_frame(&SourceId::new("bg"), size, size, &pixels)
         .expect("a frame for bg");
     block_on(control.call(switch_call("main"))).expect("scene.switch");
 
@@ -1554,9 +1573,9 @@ impl Drop for Release {
     }
 }
 
-/// An [`OpenDraw`] whose compositor on the platform's context draws one frame (the CPU
-/// stand-in's) and then fails every frame, and whose open on a device of its own hangs
-/// until `release` is set.
+/// An [`OpenDraw`] whose compositor on the platform's context draws the mix's first draw
+/// and one frame (the CPU stand-in's) and then fails every frame, and whose open on a
+/// device of its own hangs until `release` is set.
 fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
     Arc::new(move |context: Option<&GpuContext>| {
         if context.is_none() {
@@ -1568,13 +1587,14 @@ fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
             return Err("released after the test".to_owned());
         }
         let mut inner = (cpu_draw())(context)?;
-        let mut drawn = false;
+        let mut drawn = 0;
         let draw: DrawFn = Box::new(
             move |shot, scenes, live, captures, frames, at, meter, warm| {
-                if drawn {
+                // The first draw is pushed to no one; the second is the frame.
+                if drawn == 2 {
                     return Err(DrawError::Failed("device removed".to_owned()));
                 }
-                drawn = true;
+                drawn += 1;
                 inner(shot, scenes, live, captures, frames, at, meter, warm)
             },
         );
@@ -1810,6 +1830,229 @@ fn a_gpu_encoder_gets_nv12_encode_targets_and_no_readback() {
     assert_eq!(stats.readbacks, 0, "a GPU-only program reads nothing back");
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(engine.output_stats().is_none());
+}
+
+/// GPU interop on the software device whose encode targets are two-plane frames
+/// (`GpuFrame::planar`): an `R8Unorm` Y texture and a half-size `Rg8Unorm` CbCr texture
+/// with one hold, as on a backend with no NV12 texture format (wgpu's Metal backend).
+/// It keeps the context and every target's two textures (not the frame, whose holds the
+/// ring counts), so a test can read them back.
+#[derive(Default)]
+struct PlanarGpu {
+    stages: Arc<AtomicU64>,
+    /// The context it opened, and each target's Y and CbCr textures with the number of
+    /// its last stage.
+    made: Mutex<(Option<GpuContext>, Vec<PlanarTarget>)>,
+}
+
+/// A target [`PlanarGpu`] made: its Y and CbCr textures, and the number of its last
+/// stage among all targets' (0 before its first).
+type PlanarTarget = (wgpu::Texture, wgpu::Texture, Arc<AtomicU64>);
+
+/// A hold counting its stages into a total, and keeping the number of its last.
+#[derive(Debug)]
+struct PlaneSync {
+    total: Arc<AtomicU64>,
+    own: Arc<AtomicU64>,
+}
+
+impl FrameSync for PlaneSync {
+    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+        let at = self.total.fetch_add(1, Ordering::Relaxed) + 1;
+        self.own.store(at, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+impl GpuInterop for PlanarGpu {
+    fn open_device(&self) -> Result<GpuContext, PlatformError> {
+        let context = SoftwareGpu.open_device()?;
+        self.made.lock().unwrap_or_else(PoisonError::into_inner).0 = Some(context.clone());
+        Ok(context)
+    }
+
+    fn encode_target(
+        &self,
+        context: &GpuContext,
+        size: FrameSize,
+    ) -> Result<GpuFrame, PlatformError> {
+        let plane = |label, format, width, height| {
+            context.device().create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+        };
+        let (width, height) = (size.width(), size.height());
+        let y = plane(
+            "jstream-core-test-y",
+            wgpu::TextureFormat::R8Unorm,
+            width,
+            height,
+        );
+        let uv = plane(
+            "jstream-core-test-uv",
+            wgpu::TextureFormat::Rg8Unorm,
+            width / 2,
+            height / 2,
+        );
+        let info = VideoFrameInfo {
+            size,
+            format: PixelFormat::Nv12,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::MICROS),
+        };
+        let own = Arc::new(AtomicU64::new(0));
+        let sync = Arc::new(PlaneSync {
+            total: Arc::clone(&self.stages),
+            own: Arc::clone(&own),
+        });
+        self.made
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .1
+            .push((y.clone(), uv.clone(), own));
+        Ok(GpuFrame::planar(y, uv, info, sync))
+    }
+}
+
+/// The texel at `(x, y)` of a one-mip `texture` of `texel` bytes a texel, copied back on
+/// `context`'s queue.
+fn read_texel(
+    context: &GpuContext,
+    texture: &wgpu::Texture,
+    texel: u32,
+    x: u32,
+    y: u32,
+) -> Vec<u8> {
+    let device = context.device();
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("jstream-core-test-texel"),
+        size: u64::from(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x, y, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+                rows_per_image: Some(1),
+            },
+        },
+        wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+    );
+    {
+        let _submitting = context.submit_lock().lock();
+        context.queue().submit([encoder.finish()]);
+    }
+    let (send, recv) = std::sync::mpsc::channel();
+    buffer
+        .slice(..)
+        .map_async(wgpu::MapMode::Read, move |result| {
+            let _ = send.send(result);
+        });
+    device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    recv.recv_timeout(Duration::from_secs(30))
+        .expect("the map finishes")
+        .expect("the map succeeds");
+    buffer.slice(..).get_mapped_range().expect("mapped")[..texel as usize].to_vec()
+}
+
+/// An output whose encoder takes GPU frames, on a platform whose encode targets are
+/// two-plane frames (`GpuFrame::planar`), gets the program converted into them as into
+/// native NV12 ones: each conversion stages the target's one hold, the encoder encodes
+/// them, nothing is read back, and the Y and CbCr textures of the target written last
+/// hold the program's red in BT.709 limited range.
+#[test]
+fn a_gpu_encoder_gets_planar_encode_targets_written() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let gpu = Arc::new(PlanarGpu::default());
+    let mut backends = backends(
+        &clock,
+        Arc::clone(&gpu) as Arc<dyn GpuInterop>,
+        GpuMode::Deliver,
+    );
+    backends.codecs = Arc::new(GpuCodecs);
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(gpu_draw())
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut encoded = false;
+    while Instant::now() < deadline {
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(20));
+        let stats = engine.output_stats().expect("running");
+        // A few ticks past the capture's first frames, so the last one converted shows
+        // the capture.
+        if stats.video.encoded >= 3
+            && stats.gpu_captures >= 3
+            && gpu.stages.load(Ordering::Relaxed) >= 6
+        {
+            encoded = true;
+            break;
+        }
+    }
+    let stats = engine.output_stats().expect("running");
+    assert!(
+        encoded,
+        "no planar encode target was converted and encoded: {stats:?}"
+    );
+    assert_eq!(stats.readbacks, 0, "a GPU-only program reads nothing back");
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
+
+    // The target written last holds the program's red, read from its two textures. (The
+    // first ticks' may hold black, drawn before the capture's first frame.)
+    let made = gpu.made.lock().unwrap_or_else(PoisonError::into_inner);
+    let context = made.0.as_ref().expect("the context was opened");
+    let (y, uv, _) = made
+        .1
+        .iter()
+        .max_by_key(|(_, _, staged)| staged.load(Ordering::Relaxed))
+        .expect("a target was made");
+    let (w, h) = (y.width(), y.height());
+    for (x, row) in [(0, 0), (w / 2, h / 2), (w - 2, h - 2)] {
+        let luma = read_texel(context, y, 1, x, row)[0];
+        let chroma = read_texel(context, uv, 2, x / 2, row / 2);
+        assert!(
+            is_red(limited_to_rgb(luma, chroma[0], chroma[1])),
+            "({x}, {row}) of the last target holds Y {luma}, CbCr {chroma:?}, not red"
+        );
+    }
 }
 
 /// A GPU that has not finished the conversions of two earlier ticks gets no more of

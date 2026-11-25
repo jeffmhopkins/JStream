@@ -1,6 +1,6 @@
 {
   "identifier": "network",
-  "description": "The app's own main window may save the \"Allow devices on my network\" setting, which applies at the next start. No other command is granted.",
+  "description": "The app's own main window may save the \"Allow devices on my network\" setting and, under it, \"Let devices find JStream on my network\", which apply at once. No other command is granted.",
   "windows": ["main"],
-  "permissions": ["allow-set-network"]
+  "permissions": ["allow-set-network", "allow-set-network-announce"]
 }

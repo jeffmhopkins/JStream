@@ -1149,6 +1149,7 @@ mod tests {
             collection.scenes.push(keyframe);
         }
         collection.scenes[0].timelines = vec![TimelineInfo {
+            folder: None,
             lanes: Vec::new(),
             starts: Vec::new(),
             stops: Vec::new(),
