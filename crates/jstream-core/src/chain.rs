@@ -1055,6 +1055,11 @@ pub(crate) struct Chains {
     /// canvas's width and of its height (ADR-0197): 100 unless the program stage's
     /// render thread lowered it to keep its frames in time.
     pub(crate) model_percent: crate::resolution::Percent,
+    /// Whether this frame's 3D extras are drawn cheaper while the GPU is short of time
+    /// ([`crate::resolution::Governor::economy`]): its models with one sample a pixel,
+    /// and its ambient occlusion and volumetric fog at their lowest quality
+    /// (`ViewDepth::economy`).
+    pub(crate) economy: bool,
     /// Whether a model's layer was drawn since this was last cleared: the render thread
     /// lowers [`Self::model_percent`] only while there is one to gain from it.
     pub(crate) model_drawn: bool,
@@ -1454,10 +1459,12 @@ impl Chains {
             }
             depth.reflection = reflection;
             depth.surface = surface;
+            depth.economy = self.economy;
             return;
         }
         let fresh = jstream_render::ViewDepth {
             view: Some(view),
+            economy: self.economy,
             lights: Arc::from(lights),
             shadows: owned(cache),
             reflection,
@@ -6926,6 +6933,50 @@ mod tests {
             luma(switching) > 150,
             "lit while switching: {switching:?} (landed {landed:?})"
         );
+    }
+
+    /// While the GPU is short of time (`Chains::economy`) a frame's models are drawn with
+    /// one sample a pixel, whatever the rendering switches ask, and with the samples
+    /// they ask again after it.
+    #[test]
+    fn in_economy_models_are_drawn_with_one_sample() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+            ],
+        );
+        let shot = model_shot(&graph, "plane");
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains {
+            economy: true,
+            ..Chains::default()
+        };
+        let mut samples = |chains: &mut Chains| {
+            draw_points(
+                &mut compositor,
+                (&mut cache, chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 18)],
+            );
+            compositor.model_antialiasing()
+        };
+        assert_eq!(samples(&mut chains), 1);
+        chains.economy = false;
+        // The default (ADR-0242).
+        assert_eq!(samples(&mut chains), 4);
     }
 
     /// In a 3D scene a model is seen through the scene's camera (ADR-0107 decision 6): a

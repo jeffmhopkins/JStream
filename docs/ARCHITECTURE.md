@@ -1475,7 +1475,10 @@ uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and draw
 per placement into a canvas-sized layer (or one with fewer pixels that stands for the
 canvas, while the program's GPU is short of time or the rendering switches name a size,
 [ADR-0197](adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md),
-[ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)),
+[ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md); short of
+time, it first draws them with one sample a pixel and the scene's ambient occlusion and
+volumetric fog at their lowest quality, at full size,
+[ADR-0243](adr/0243-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)),
 through the scene's camera or the item's own
 viewer, multisampled with the rendering switches' samples and resolved into the layer
 before its filters (4 until set,

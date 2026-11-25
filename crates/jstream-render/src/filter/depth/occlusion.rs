@@ -115,6 +115,10 @@ fn values(settings: &Settings) -> Values {
     }
 }
 
+/// The samples a pixel takes while the GPU is short of time (`ViewDepth::economy`):
+/// quality Low's.
+const ECONOMY_SAMPLES: u32 = 8;
+
 /// The most samples a pixel takes: `sample.wgsl`'s `kernel`.
 const MAX_SAMPLES: usize = 16;
 
@@ -206,12 +210,21 @@ impl Pass for AmbientOcclusion {
         let Some(depth) = depth else {
             return copy(ctx, input, output);
         };
+        // Short of time, it takes the fewest samples whatever its quality.
+        let values = Values {
+            samples: if depth.economy {
+                ECONOMY_SAMPLES
+            } else {
+                self.values.samples
+            },
+            ..self.values
+        };
         let share = ctx.scratch(input.width().div_ceil(2), input.height().div_ceil(2))?;
         ctx.draw(&Draw {
             shader: SAMPLE,
             input: depth.image.as_ref(),
             aux: None,
-            params: &sample_uniforms(&self.values, depth),
+            params: &sample_uniforms(&values, depth),
             target: &share,
         })?;
         let inputs = [input.clone(), share.clone(), depth.image.as_ref().clone()];
@@ -220,7 +233,7 @@ impl Pass for AmbientOcclusion {
             APPLY.into(),
             &inputs,
             &system,
-            &apply_uniforms(&self.values, depth),
+            &apply_uniforms(&values, depth),
             output,
         )
     }

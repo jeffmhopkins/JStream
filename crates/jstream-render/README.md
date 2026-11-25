@@ -1685,6 +1685,11 @@ decision 1): the camera's `CameraView` and the scene's lights (`ViewDepth::new` 
 neither, for a kind that reads only the depth), and
 `VideoFilter::reads_depth` (`video_filter_reads_depth(kind)`) says which kinds want one.
 With none, or one of another size than the input, the kind passes its input through.
+`ViewDepth::economy` says the GPU is short of time
+([ADR-0243](../../docs/adr/0243-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)):
+`ambient_occlusion` then takes quality Low's 8 samples and `volumetric_fog` marches as
+quality Low does, whatever their settings ask (`economy_takes_quality_lows_samples`,
+`economy_marches_at_quality_low`).
 They are built by `VideoFilter::new` but listed by `depth_filter_descriptors()`, not
 `video_filter_descriptors()`: the engine adds that list to its kinds because it draws the
 view depth they read (`jstream-core`'s `kinds.rs`), and an engine that didn't would leave

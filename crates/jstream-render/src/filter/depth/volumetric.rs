@@ -62,6 +62,10 @@ const MAX_DISTANCE: f32 = jstream_protocol::MAX_DRAWN_PX;
 /// The scene lights the shader takes, as a `scene`-lit model does.
 const MAX_LIGHTS: usize = crate::MAX_SCENE_LIGHTS;
 
+/// The steps a ray takes while the GPU is short of time (`ViewDepth::economy`): quality
+/// Low's, marched at half size.
+const ECONOMY_STEPS: u32 = 24;
+
 /// The noise repeats every this many of its features, so its drift can be wrapped.
 const NOISE_PERIOD: f64 = 256.0;
 
@@ -343,7 +347,16 @@ impl Pass for VolumetricFog {
                 && d.focal_px.is_finite()
                 && d.focal_px > 0.0
         });
-        let params = depth.and_then(|d| uniforms(&self.values, d, ctx.clock()));
+        // Short of time, it marches at quality Low whatever its quality.
+        let values = match depth {
+            Some(d) if d.economy => Values {
+                steps: self.values.steps.min(ECONOMY_STEPS),
+                half: true,
+                ..self.values
+            },
+            _ => self.values,
+        };
+        let params = depth.and_then(|d| uniforms(&values, d, ctx.clock()));
         let (Some(depth), Some(params)) = (depth, params) else {
             return copy(ctx, input, output);
         };
@@ -355,7 +368,7 @@ impl Pass for VolumetricFog {
                 .get(slot)
                 .map_or_else(|| depth.image.as_ref().clone(), |s| s.image.clone())
         };
-        if !self.values.half {
+        if !values.half {
             let inputs = [input.clone(), depth.image.as_ref().clone(), map(0), map(1)];
             let system = system(input, &inputs);
             return ctx.draw_program(SHADER.into(), &inputs, &system, &params, output);
@@ -373,7 +386,7 @@ impl Pass for VolumetricFog {
         let inputs = [input.clone(), marched, depth.image.as_ref().clone()];
         let system = crate::filter::program_system(input, output, &inputs);
         let alpha = Uniforms::new()
-            .vec4([self.values.color[3], 0.0, 0.0, 0.0])
+            .vec4([values.color[3], 0.0, 0.0, 0.0])
             .finish();
         ctx.draw_program(APPLY.into(), &inputs, &system, &alpha, output)
     }

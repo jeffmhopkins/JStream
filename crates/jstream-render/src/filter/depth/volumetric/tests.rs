@@ -459,3 +459,32 @@ fn fog_marched_at_half_size_matches_every_pixel_marched_and_keeps_to_its_edges()
         }
     }
 }
+
+/// While the GPU is short of time (`ViewDepth::economy`) it marches as quality Low
+/// does, whatever its quality: High draws what Low draws.
+#[test]
+fn economy_marches_at_quality_low() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let input = solid(&opened.compositor, W, H, [40, 90, 200, 255]);
+    let noisy = |quality: &str| {
+        filter(
+            KIND,
+            json!({"density": 2.0, "noise": 0.8, "noise_scale_px": 40.0,
+                   "falloff_px": 0.0, "quality": quality}),
+        )
+    };
+    let shot = |opened: &mut Opened, quality: &str, economy: bool| {
+        let mut fog = noisy(quality);
+        let mut depth = split_depth(opened, 13, 300.0, 3000.0);
+        depth.economy = economy;
+        fog.set_depth(Some(depth));
+        apply(opened, &mut fog, &input)
+    };
+    let low = shot(&mut opened, "low", false);
+    let high = shot(&mut opened, "high", false);
+    let saving = shot(&mut opened, "high", true);
+    assert_ne!(high.rgba(), low.rgba(), "the quality shows");
+    assert_eq!(saving.rgba(), low.rgba());
+}

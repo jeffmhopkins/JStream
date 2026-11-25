@@ -6854,8 +6854,12 @@ pub(crate) fn compose_metered(
     let beat = shot.beat_at(at);
     compositor.set_blending(shot.blending);
     // Every model of the frame is drawn with the samples the rendering switches ask
-    // for (ADR-0242).
-    compositor.set_model_antialiasing(shot.features.model_antialiasing);
+    // for (ADR-0242), and one while the GPU is short of time (`Chains::economy`).
+    compositor.set_model_antialiasing(if chains.economy {
+        1
+    } else {
+        shot.features.model_antialiasing
+    });
     // A follow camera no frame has drawn for a while starts again at rest.
     chains.cameras().sweep(at);
     let uploads = Instant::now();

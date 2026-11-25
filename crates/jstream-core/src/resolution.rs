@@ -3,7 +3,10 @@
 //! that the outputs' frames are not the ones that give way. [`Governor`] chooses the
 //! size once a tick from the GPU time of the frames that were timed and from whether the
 //! GPU has fallen behind; `snapshot` draws a model's layers at what it chose
-//! ([`crate::chain::Chains::model_percent`]).
+//! ([`crate::chain::Chains::model_percent`]). Before its first step down in size, a
+//! governor made [`Governor::with_economy`] first draws the 3D scene's costliest
+//! extras cheaper at full size ([`crate::chain::Chains::economy`]): its models with one
+//! sample a pixel, and its ambient occlusion and volumetric fog at their lowest quality.
 
 use std::time::Duration;
 
@@ -44,14 +47,28 @@ const START_S: u32 = 3;
 /// [`STEPS`].
 const NO_FLOOR: u32 = STEPS[STEPS.len() - 1];
 
+/// How many sizes the governor may choose among: each of [`STEPS`], and full size again
+/// in economy.
+const RUNGS: usize = STEPS.len() + 1;
+
+/// What a frame's GPU time in economy is taken to be at most of its time before, until
+/// a step into it has shown what it saved: the cheaper extras are not all of a frame.
+const ECONOMY_WORST: f64 = 0.5;
+
 /// The sizes the governor chooses among while it may go no smaller than `floor`
 /// (`RenderFeatures::min_model_resolution`), largest first, and how many there are:
 /// each of [`STEPS`] above `floor`, then `floor` itself. A floor between two steps is
 /// the last step down; one at or below the smallest step leaves [`STEPS`] as they are.
-fn ladder(floor: u32) -> ([u32; STEPS.len()], usize) {
+/// With `economy`, full size comes twice: the second, and every size after it, in
+/// economy ([`Governor::economy`]), so the floor holds the size and not the extras.
+fn ladder(floor: u32, economy: bool) -> ([u32; RUNGS], usize) {
     let floor = floor.clamp(NO_FLOOR, STEPS[0]);
-    let mut sizes = [0; STEPS.len()];
+    let mut sizes = [0; RUNGS];
     let mut rungs = 0;
+    if economy {
+        sizes[0] = STEPS[0];
+        rungs = 1;
+    }
     for step in STEPS.iter().copied().filter(|step| *step > floor) {
         sizes[rungs] = step;
         rungs += 1;
@@ -61,9 +78,11 @@ fn ladder(floor: u32) -> ([u32; STEPS.len()], usize) {
 }
 
 /// What a frame's GPU time at each of `sizes` is taken to be of its time at the size
-/// before, until a step down has shown it: all of it growing with the model's pixels.
+/// before, until a step down has shown it: all of it growing with the model's pixels,
+/// and at most [`ECONOMY_WORST`] of it into economy, the same size again.
 fn worst(sizes: &[u32], step: usize) -> f64 {
     match step.checked_sub(1) {
+        Some(larger) if step < sizes.len() && sizes[larger] == sizes[step] => ECONOMY_WORST,
         Some(larger) if step < sizes.len() && sizes[larger] > 0 => {
             let side = f64::from(sizes[step]) / f64::from(sizes[larger]);
             side * side
@@ -145,8 +164,12 @@ pub(crate) struct Governor {
     /// Which of `sizes` models are drawn at.
     step: usize,
     /// The sizes it chooses among, largest first ([`ladder`]); the first `rungs` count.
-    sizes: [u32; STEPS.len()],
+    sizes: [u32; RUNGS],
     rungs: usize,
+    /// Whether full size comes twice in `sizes`, the second in economy.
+    economy: bool,
+    /// Whether the rendering switches fixed the size on the last tick: no economy then.
+    fixed: bool,
     /// The floor `sizes` were made for.
     made_for: u32,
     /// The floor it is to choose above, from [`Self::set_floor`].
@@ -176,7 +199,7 @@ pub(crate) struct Governor {
     before: Option<(usize, f64)>,
     /// What a frame's GPU time at each of `sizes` is of its time at the size before
     /// ([`worst`], or what a step down showed).
-    saved: [f64; STEPS.len()],
+    saved: [f64; RUNGS],
 }
 
 impl Governor {
@@ -187,11 +210,13 @@ impl Governor {
             period if period > 0.0 => (1.0 / period).round().clamp(1.0, 1000.0) as u32,
             _ => 30,
         };
-        let (sizes, rungs) = ladder(NO_FLOOR);
+        let (sizes, rungs) = ladder(NO_FLOOR, false);
         Self {
             step: 0,
             sizes,
             rungs,
+            economy: false,
+            fixed: false,
             made_for: NO_FLOOR,
             floor: NO_FLOOR,
             budget,
@@ -209,6 +234,20 @@ impl Governor {
         }
     }
 
+    /// The governor, stepping into economy before its first step down in size.
+    pub(crate) fn with_economy(mut self) -> Self {
+        self.economy = true;
+        self.reladder(self.floor);
+        self
+    }
+
+    /// Whether this frame's 3D extras are drawn cheaper: models with one sample a pixel,
+    /// ambient occlusion and volumetric fog at their lowest quality. Never while the
+    /// rendering switches fix the size.
+    pub(crate) fn economy(&self) -> bool {
+        self.economy && !self.fixed && self.step > 0
+    }
+
     /// The smallest size it may choose from the next tick on, a percentage held to the
     /// smallest of [`STEPS`] to 100 (`RenderFeatures::min_model_resolution`). A fixed
     /// size is drawn as set whatever this is.
@@ -221,7 +260,8 @@ impl Governor {
     /// What it knew of the old sizes says nothing of the new ones.
     fn reladder(&mut self, floor: u32) {
         let was = self.percent().get();
-        let (sizes, rungs) = ladder(floor);
+        let was_economy = self.economy();
+        let (sizes, rungs) = ladder(floor, self.economy);
         self.sizes = sizes;
         self.rungs = rungs;
         self.made_for = floor;
@@ -229,6 +269,10 @@ impl Governor {
             .iter()
             .rposition(|size| *size >= was)
             .unwrap_or(rungs - 1);
+        // Full size out of economy is the first of its two.
+        if self.economy && !was_economy && self.step == 1 && sizes[0] == was {
+            self.step = 0;
+        }
         self.saved = std::array::from_fn(|step| worst(&sizes[..rungs], step));
         self.before = None;
         if self.percent().get() != was {
@@ -273,6 +317,7 @@ impl Governor {
         behind: bool,
         models: bool,
     ) -> Percent {
+        self.fixed = matches!(mode, Mode::Fixed(_));
         if let Mode::Fixed(fixed) = mode {
             // A fixed size between two steps, or below the floor, is on no rung of the
             // sizes: they become the steps above it and it.
@@ -371,11 +416,19 @@ impl Governor {
         } else {
             base
         };
-        tracing::info!(
-            percent = self.sizes[self.step],
-            behind,
-            "3D models are drawn with fewer pixels: the GPU is short of time"
-        );
+        if self.economy && self.step == 1 {
+            tracing::info!(
+                behind,
+                "3D extras are drawn cheaper (one sample a pixel, the lowest ambient \
+                 occlusion and volumetric fog): the GPU is short of time"
+            );
+        } else {
+            tracing::info!(
+                percent = self.sizes[self.step],
+                behind,
+                "3D models are drawn with fewer pixels: the GPU is short of time"
+            );
+        }
     }
 
     fn up(&mut self) {
@@ -387,10 +440,14 @@ impl Governor {
         self.before = None;
         // Until a frame at the new size is timed, it isn't known to have room for more.
         self.roomy = !self.timed;
-        tracing::info!(
-            percent = self.sizes[self.step],
-            "3D models are drawn with more pixels: the GPU has time to spare"
-        );
+        if self.economy && self.step == 0 {
+            tracing::info!("3D extras are drawn in full again: the GPU has time to spare");
+        } else {
+            tracing::info!(
+                percent = self.sizes[self.step],
+                "3D models are drawn with more pixels: the GPU has time to spare"
+            );
+        }
     }
 }
 
@@ -551,15 +608,18 @@ mod tests {
 
     #[test]
     fn a_floor_between_two_steps_is_the_last_step_down() {
-        assert_eq!(super::ladder(90), ([100, 90, 0, 0, 0], 2));
-        assert_eq!(super::ladder(85), ([100, 85, 0, 0, 0], 2));
-        assert_eq!(super::ladder(50), (STEPS, STEPS.len()));
+        let steps = [STEPS[0], STEPS[1], STEPS[2], STEPS[3], STEPS[4], 0];
+        assert_eq!(super::ladder(90, false), ([100, 90, 0, 0, 0, 0], 2));
+        assert_eq!(super::ladder(85, false), ([100, 85, 0, 0, 0, 0], 2));
+        assert_eq!(super::ladder(50, false), (steps, STEPS.len()));
         assert_eq!(
-            super::ladder(10),
-            (STEPS, STEPS.len()),
+            super::ladder(10, false),
+            (steps, STEPS.len()),
             "held to the smallest"
         );
-        assert_eq!(super::ladder(100), ([100, 0, 0, 0, 0], 1));
+        assert_eq!(super::ladder(100, false), ([100, 0, 0, 0, 0, 0], 1));
+        assert_eq!(super::ladder(90, true), ([100, 100, 90, 0, 0, 0], 3));
+        assert_eq!(super::ladder(100, true), ([100, 100, 0, 0, 0, 0], 2));
         let mut governor = governor();
         governor.set_floor(90);
         for _ in 0..1000 {
@@ -715,6 +775,70 @@ mod tests {
             governor.tick(Auto, ms(40.0), true, true);
         }
         assert_eq!(governor.percent().get(), 100);
+    }
+
+    /// A governor with economy steps into it, at full size, before its first step down
+    /// in size, keeps it on every smaller size, and steps out of it last on the way back
+    /// up: the extras cost less to give up than the model's pixels.
+    #[test]
+    fn economy_comes_before_the_first_step_down_and_goes_last() {
+        let mut governor = Governor::new(Duration::from_micros(33_333)).with_economy();
+        for _ in 0..super::START_S * FPS {
+            governor.tick(Auto, None, false, true);
+        }
+        assert!(!governor.economy());
+        governor.tick(Auto, None, true, true);
+        assert_eq!(
+            (governor.percent().get(), governor.economy()),
+            (100, true),
+            "first the extras"
+        );
+        for _ in 0..super::SETTLE {
+            governor.tick(Auto, None, true, true);
+        }
+        governor.tick(Auto, None, true, true);
+        assert_eq!((governor.percent().get(), governor.economy()), (85, true));
+        // Back up: the size first, then the extras.
+        assert_eq!(run(&mut governor, 6 * FPS, 10.0), 100);
+        assert!(governor.economy(), "still cheaper");
+        run(&mut governor, 6 * FPS, 10.0);
+        assert_eq!((governor.percent().get(), governor.economy()), (100, false));
+    }
+
+    /// A floor of 100 keeps the size but not the extras, and a size the rendering
+    /// switches fix draws them in full.
+    #[test]
+    fn economy_holds_under_a_floor_of_100_and_never_at_a_fixed_size() {
+        let mut governor = Governor::new(Duration::from_micros(33_333)).with_economy();
+        for _ in 0..super::START_S * FPS {
+            governor.tick(Auto, None, false, true);
+        }
+        governor.set_floor(100);
+        for _ in 0..1000 {
+            governor.tick(Auto, ms(40.0), true, true);
+        }
+        assert_eq!((governor.percent().get(), governor.economy()), (100, true));
+        for _ in 0..10 {
+            governor.tick(Mode::of(85), ms(40.0), true, true);
+        }
+        assert_eq!((governor.percent().get(), governor.economy()), (85, false));
+    }
+
+    /// What the step into economy saved is learned as a step down in size is: a frame
+    /// of 31 ms that economy made 20 ms is expected back at 31, so it stays, and one it
+    /// made 12 ms at under 19, so it steps back out after the wait.
+    #[test]
+    fn economy_steps_out_by_what_it_saved() {
+        let mut governor = Governor::new(Duration::from_micros(33_333)).with_economy();
+        for _ in 0..super::START_S * FPS {
+            governor.tick(Auto, None, false, true);
+        }
+        assert_eq!(run(&mut governor, 12, 31.0), 100);
+        assert!(governor.economy(), "three long frames");
+        run(&mut governor, 3000, 20.0);
+        assert!(governor.economy(), "20 ms of 31 leaves no room for 31");
+        run(&mut governor, 6 * FPS, 12.0);
+        assert!(!governor.economy(), "12 ms of 31 is 19 ms expected");
     }
 
     #[test]
