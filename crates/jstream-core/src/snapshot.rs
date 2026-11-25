@@ -1197,6 +1197,12 @@ impl Shot {
     pub(crate) fn model_resolution(&self) -> u32 {
         self.features.model_resolution
     }
+
+    /// The smallest size the render thread may lower 3D models to while it chooses
+    /// (`RenderFeatures::min_model_resolution`).
+    pub(crate) fn min_model_resolution(&self) -> u32 {
+        self.features.min_model_resolution
+    }
 }
 
 impl Shot {

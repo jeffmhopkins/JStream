@@ -2153,6 +2153,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                 let mode = crate::resolution::Mode::of(program.model_resolution());
                 let governor = governor
                     .get_or_insert_with(|| crate::resolution::Governor::new(meter.budget()));
+                governor.set_floor(program.min_model_resolution());
                 // An output's first frames are long whatever size models are drawn at.
                 if frames.iter().any(|frame| frame.priming && !frame.local) {
                     governor.output_started();

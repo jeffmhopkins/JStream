@@ -444,13 +444,25 @@ impl Engine {
             )));
         }
         if let Some(percent) = change.model_resolution
-            && !jstream_protocol::MODEL_RESOLUTIONS.contains(&percent)
+            && percent != 0
+            && !jstream_protocol::MODEL_RESOLUTION_RANGE.contains(&percent)
         {
             return Some(Err(ProtocolError::invalid_argument(
                 "model_resolution",
                 format!(
-                    "3D models are drawn at one of {:?} percent (0 chooses), not {percent}",
-                    jstream_protocol::MODEL_RESOLUTIONS
+                    "3D models are drawn at 0 (the engine chooses) or {:?} percent, not {percent}",
+                    jstream_protocol::MODEL_RESOLUTION_RANGE
+                ),
+            )));
+        }
+        if let Some(percent) = change.min_model_resolution
+            && !jstream_protocol::MODEL_RESOLUTION_RANGE.contains(&percent)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "min_model_resolution",
+                format!(
+                    "the engine lowers 3D models to no less than {:?} percent, not {percent}",
+                    jstream_protocol::MODEL_RESOLUTION_RANGE
                 ),
             )));
         }
