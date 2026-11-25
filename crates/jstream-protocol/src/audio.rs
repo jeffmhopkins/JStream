@@ -49,6 +49,50 @@ pub enum AudioFollow {
     WhenShown,
 }
 
+/// What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.187). Serialized as
+/// a snake_case string.
+///
+/// `push_to_talk` and `push_to_mute` are for a held key or note: pressing it runs the
+/// action, and releasing it runs [`MuteTo::released`]'s
+/// ([`Action::on_release`](crate::Action::on_release)). Sent as a call, with nothing
+/// held, they are the press alone: `push_to_talk` unmutes and `push_to_mute` mutes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum MuteTo {
+    /// Mutes it.
+    Muted,
+    /// Unmutes it.
+    Unmuted,
+    /// Mutes it if it is unmuted, and unmutes it if it is muted.
+    Toggle,
+    /// Unmutes it while held, and mutes it on release.
+    PushToTalk,
+    /// Mutes it while held, and unmutes it on release.
+    PushToMute,
+}
+
+impl MuteTo {
+    /// The mute this sets on press, given whether it is muted now.
+    pub fn muted(self, now: bool) -> bool {
+        match self {
+            MuteTo::Muted | MuteTo::PushToMute => true,
+            MuteTo::Unmuted | MuteTo::PushToTalk => false,
+            MuteTo::Toggle => !now,
+        }
+    }
+
+    /// What releasing a held key or note sets: muted again after `push_to_talk`, unmuted
+    /// after `push_to_mute`, and nothing for the others.
+    pub fn released(self) -> Option<MuteTo> {
+        match self {
+            MuteTo::PushToTalk => Some(MuteTo::Muted),
+            MuteTo::PushToMute => Some(MuteTo::Unmuted),
+            MuteTo::Muted | MuteTo::Unmuted | MuteTo::Toggle => None,
+        }
+    }
+}
+
 /// A source's audio settings, as `source.list` and `state.get` report them. Only an
 /// audio source has them: a source whose kind produces audio, or a `scene` source (a
 /// nested scene, whose audio is its contents').

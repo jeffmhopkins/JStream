@@ -67,6 +67,7 @@ use crate::config::{ServerConfig, Token};
 use crate::devices::{Devices, LAPSE};
 use crate::error::ServerError;
 use crate::listener::On;
+use crate::network_state::NetworkState;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use jstream_control::WS_TOKEN_PROTOCOL_PREFIX;
@@ -280,9 +281,9 @@ pub(crate) struct Gate {
     /// `ServerConfig::ui_token`.
     ui_token: Option<Token>,
     devices: Arc<Devices>,
-    /// Whether device tokens are accepted: only while the server listens on loopback or
-    /// on a TLS listener.
-    devices_allowed: bool,
+    /// Whether device tokens can be accepted on the host's listener: only while it
+    /// listens on loopback or is TLS, and then while the server pairs devices.
+    devices_possible: bool,
     /// Whether the listener is reached over TLS (`ServerConfig::tls`).
     tls: bool,
     /// The port the server listens on.
@@ -291,10 +292,11 @@ pub(crate) struct Gate {
     hosts: Vec<String>,
     /// Lowercase `scheme://host[:port]` values, besides `http://<accepted host>`.
     extra_origins: Vec<String>,
-    /// The network listener's side, when there is one (ADR-0104).
-    network: Option<NetworkSide>,
-    /// Whether the server pairs devices at all (`ServerConfig::pairing`): on the network
-    /// listener, which is TLS, that alone decides whether device tokens get in.
+    /// The network listener's side, while it is open (ADR-0104). The host opens and
+    /// closes it while serving (`NetworkSwitch`), so it is read per request.
+    network: Arc<NetworkState>,
+    /// `ServerConfig::pairing`. The server also pairs devices while its network listener
+    /// is open, whatever this says.
     pairing: bool,
     /// The credential refusals of the current window, for logging them (#354).
     failures: Mutex<Failures>,
@@ -303,10 +305,29 @@ pub(crate) struct Gate {
 /// What the gate accepts on the network listener (ADR-0104 §2, §3): TLS, its own port,
 /// the names its certificate carries or the address a connection arrived on, and device
 /// tokens only.
-struct NetworkSide {
+pub(crate) struct NetworkSide {
     port: u16,
     /// Lowercase names and addresses (IPv6 in brackets), without a port.
     names: Vec<String>,
+}
+
+impl NetworkSide {
+    /// The side of a network listener on `port` whose certificate carries `names` (host
+    /// names and addresses).
+    #[cfg(feature = "tls")]
+    pub(crate) fn new(port: u16, names: &[String]) -> NetworkSide {
+        let names = names
+            .iter()
+            .map(|name| {
+                let name = name.to_ascii_lowercase();
+                match name.parse::<Ipv6Addr>() {
+                    Ok(v6) => format!("[{v6}]"),
+                    Err(_) => name,
+                }
+            })
+            .collect();
+        NetworkSide { port, names }
+    }
 }
 
 /// One listener's rules, as the checks read them.
@@ -385,42 +406,31 @@ impl Gate {
             token: config.token.clone(),
             ui_token: config.ui_token.clone(),
             devices,
-            devices_allowed: config.pairing && (local.ip().is_loopback() || config.tls),
+            devices_possible: local.ip().is_loopback() || config.tls,
             tls: config.tls,
             port,
             hosts,
             extra_origins,
-            network: None,
+            network: Arc::default(),
             pairing: config.pairing,
             failures: Mutex::default(),
         }
     }
 
-    /// Adds the network listener's side: it listens on `port`, and its certificate
-    /// carries `names` (host names and addresses).
-    #[cfg(feature = "tls")]
-    pub(crate) fn with_network(mut self, port: u16, names: &[String]) -> Gate {
-        let names = names
-            .iter()
-            .map(|name| {
-                let name = name.to_ascii_lowercase();
-                match name.parse::<Ipv6Addr>() {
-                    Ok(v6) => format!("[{v6}]"),
-                    Err(_) => name,
-                }
-            })
-            .collect();
-        self.network = Some(NetworkSide { port, names });
-        self
+    /// The network listener's state, which the server's `NetworkSwitch` sets.
+    pub(crate) fn network_state(&self) -> Arc<NetworkState> {
+        Arc::clone(&self.network)
     }
 
-    /// The rules for a request that came `on` a listener. A request said to come on the
-    /// network listener when there is none gets the host's (it can't happen).
-    fn side(&self, on: On) -> Side<'_> {
-        match (on, &self.network) {
+    /// The rules for a request that came `on` a listener, with the network listener's
+    /// side `open` as it is now. A request said to come on the network listener when
+    /// there is none (it closed since) gets the host's rules, which its `Host` fails.
+    fn side<'a>(&'a self, on: On, open: Option<&'a NetworkSide>) -> Side<'a> {
+        match (on, open) {
             (On::Network(local), Some(network)) => Side {
                 tls: true,
-                devices: self.pairing,
+                // Open, the network listener pairs devices.
+                devices: true,
                 port: network.port,
                 control: false,
                 hosts: Hosts::Network {
@@ -430,7 +440,7 @@ impl Gate {
             },
             _ => Side {
                 tls: self.tls,
-                devices: self.devices_allowed,
+                devices: self.devices_possible && (self.pairing || open.is_some()),
                 port: self.port,
                 control: true,
                 hosts: Hosts::Fixed(&self.hosts),
@@ -494,7 +504,8 @@ impl Gate {
         peer: SocketAddr,
         on: On,
     ) -> Result<(), Refusal> {
-        let result = self.check_host_and_origin(headers, self.side(on));
+        let open = self.network.side();
+        let result = self.check_host_and_origin(headers, self.side(on, open.as_deref()));
         if let Err(refusal) = result {
             refusal.log(peer);
         }
@@ -511,7 +522,8 @@ impl Gate {
     /// credential the token is. On the network listener the control token is refused
     /// (ADR-0104 §3).
     pub(crate) fn check_on(&self, headers: &HeaderMap, on: On) -> Result<Credential, Refusal> {
-        let side = self.side(on);
+        let open = self.network.side();
+        let side = self.side(on, open.as_deref());
         self.check_host_and_origin(headers, side)?;
         let token = if headers.contains_key(header::AUTHORIZATION) {
             single(headers, &header::AUTHORIZATION).and_then(credentials)

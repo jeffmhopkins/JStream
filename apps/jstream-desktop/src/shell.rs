@@ -17,12 +17,17 @@
 //!   ([`crate::network`]), and no other. The UI calls them through the bootstrap
 //!   global's `browse` and `allowNetwork`, and talks to the engine only over the
 //!   WebSocket API. The scheme's one other answer is the update check.
+//! - Files dragged from the desktop onto the main window are handled by Tauri, not the
+//!   page, so the page gets no HTML drop with paths. Each step of the drag (over, drop,
+//!   leave) is handed to the page instead as an event with the paths and the pointer's
+//!   position in CSS pixels ([`bootstrap::drop_script`]). The app reads no dropped file.
 //! - Closing the main window quits the app, closing any projector with it. When the app
 //!   exits, the host stops: the server closes its connections and the engine stops, each
 //!   step against a deadline and logged with how long it took (`Host::stop`).
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
+use crate::bootstrap::{self, DropKind};
 use crate::host::Host;
 use crate::links;
 use crate::ui::{self, Ui};
@@ -32,7 +37,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::http::{Response, StatusCode};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
-use tauri::{AppHandle, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
+use tauri::{
+    AppHandle, DragDropEvent, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder,
+    WindowEvent, Wry,
+};
 
 /// The window's label.
 const MAIN: &str = "main";
@@ -159,6 +167,57 @@ fn open_projector(
     }
 }
 
+/// The dragged paths the page can hold: a path that isn't UTF-8 is left out, as a
+/// picked one is (`pick.rs`).
+fn utf8_paths(paths: Vec<PathBuf>) -> Vec<String> {
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            path.into_os_string()
+                .into_string()
+                .inspect_err(|_| tracing::warn!("a dragged path is not UTF-8, so it is left out"))
+                .ok()
+        })
+        .collect()
+}
+
+/// Tells the page in window `label` a step of a drag of files over it
+/// ([`bootstrap::drop_script`]). Tauri's native drag handling means the webview gets no
+/// HTML drop with paths, so this is how a panel learns of one. `dragged` keeps the
+/// paths from the drag's start, as Tauri names them only then and at the drop.
+fn forward_drag(app: &AppHandle<Wry>, label: &str, drag: DragDropEvent, dragged: &mut Vec<String>) {
+    let Some(window) = app.get_webview_window(label) else {
+        return;
+    };
+    // Only WebView2 reports physical pixels (`bootstrap::css_position`).
+    let scale = if cfg!(windows) {
+        window.scale_factor().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let (kind, position) = match drag {
+        DragDropEvent::Enter { paths, position } => {
+            *dragged = utf8_paths(paths);
+            (DropKind::Over, Some(position))
+        }
+        DragDropEvent::Over { position } => (DropKind::Over, Some(position)),
+        DragDropEvent::Drop { paths, position } => {
+            *dragged = utf8_paths(paths);
+            (DropKind::Drop, Some(position))
+        }
+        DragDropEvent::Leave => (DropKind::Leave, None),
+        _ => return,
+    };
+    let (x, y) = position.map_or((0.0, 0.0), |p| bootstrap::css_position(p.x, p.y, scale));
+    let script = bootstrap::drop_script(kind, dragged, x, y);
+    if kind != DropKind::Over {
+        dragged.clear();
+    }
+    if let Err(error) = window.eval(script) {
+        tracing::warn!(%error, "could not tell the page about a file drag");
+    }
+}
+
 /// A scheme reply as the response the webview takes. A builder failure is an empty 500.
 fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
     let mut response =
@@ -176,10 +235,16 @@ fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
 
 /// Runs the app until its window closes: `ui` serves the pages, `script` (if the
 /// engine started) hands them the engine, `host` is stopped on exit, and
-/// `network_file` is where `set_network` saves "Allow devices on my network",
+/// `network_file` is where `set_network` saves "Allow devices on my network" (and
+/// `set_network_announce` "Let devices find JStream on my network"),
 /// `jtunnel_file` where `set_jtunnel` saves "Receive from JTunnel senders", and
 /// `ptz_file` where `set_ptz_controllers` saves "Accept a PTZ controller", whose open
-/// endpoints `ptz_controllers` holds until exit.
+/// endpoints `ptz_controllers` holds until exit, and `ptz_cameras_file` where
+/// `set_ptz_cameras` saves "Control PTZ cameras" and applies it to the engine.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one per setting the window saves, and the controllers it holds"
+)]
 pub fn run(
     ui: Ui,
     script: Option<String>,
@@ -188,11 +253,20 @@ pub fn run(
     jtunnel_file: Option<PathBuf>,
     ptz_file: Option<PathBuf>,
     ptz_controllers: Option<jstream_core::PtzControllers>,
+    ptz_cameras_file: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let start = start_url()?;
     let mut builder = tauri::Builder::default().manage(crate::folders::Saved::default());
     if let Some(file) = network_file {
-        builder = builder.manage(crate::network::Setting(file));
+        let live = host.as_ref().map(|host| {
+            let (switch, runtime) = host.network_switch();
+            crate::network::Live {
+                switch,
+                runtime,
+                token_file: file.parent().unwrap_or(&file).join(crate::host::TOKEN_FILE),
+            }
+        });
+        builder = builder.manage(crate::network::Setting { file, live });
     }
     if let Some(path) = jtunnel_file {
         let engine = host.as_ref().map(Host::engine).unwrap_or_default();
@@ -201,12 +275,18 @@ pub fn run(
     if let Some(file) = ptz_file {
         builder = builder.manage(crate::ptz::File(file));
     }
+    if let Some(path) = ptz_cameras_file {
+        let engine = host.as_ref().map(Host::engine).unwrap_or_default();
+        builder = builder.manage(crate::ptz_cameras::File { path, engine });
+    }
     let app = builder
         .invoke_handler(tauri::generate_handler![
             crate::pick::pick_path,
             crate::network::set_network,
+            crate::network::set_network_announce,
             crate::jtunnel::set_jtunnel,
             crate::ptz::set_ptz_controllers,
+            crate::ptz_cameras::set_ptz_cameras,
             crate::screenshots::save_screenshot,
             crate::screenshots::open_saved,
             crate::screenshots::show_saved,
@@ -253,7 +333,14 @@ pub fn run(
         })?;
     let mut host = host;
     let mut ptz_controllers = ptz_controllers;
+    // The paths of the drag over the main window: Tauri names them only when it enters.
+    let mut dragged: Vec<String> = Vec::new();
     app.run(move |app, event| match event {
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::DragDrop(drag),
+            ..
+        } if label == MAIN => forward_drag(app, &label, drag, &mut dragged),
         RunEvent::WindowEvent {
             label,
             event: WindowEvent::CloseRequested { .. },

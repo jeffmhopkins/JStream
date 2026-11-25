@@ -13,6 +13,7 @@ mod cache;
 mod color;
 mod compositor;
 mod convert;
+mod downscale;
 mod error;
 mod filter;
 mod gpu;
@@ -35,6 +36,7 @@ mod wipe;
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::{Compositor, ModelUploader};
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
+pub use downscale::{Downscaled, Downscaler};
 pub use error::{NO_ADAPTER_HINT, RenderError};
 pub use filter::{
     DepthReflection, DepthShadow, DepthSurface, ExternalFilter, ExternalProgram,

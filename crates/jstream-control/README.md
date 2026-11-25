@@ -108,7 +108,7 @@ its own, and is used with default features off.
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
 `dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
-mixes, buses, sends, hotkey, controller and value bindings, channels, folders and labels in memory, with an
+mixes, buses, sends, hotkey, controller and value bindings, channels, shows, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -173,24 +173,38 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     a `waveform` drawing it holds, #362), an empty `bus.set_fader`, a monitor
     `BusMonitor::problem` refuses (on `monitor.<field>`, after the bus), sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB;
-  - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
+  - hotkeys: `hotkey.set`'s chord spelling, an action the chord runs already (a chord
+    runs several, in bind order, ADR-0208), an action
     `Action::bind_problem` refuses, a wheel chord bound to an action that takes no
-    steps (ADR-0112 §3) and a missing named scene, output or preset (only `cut`
-    exists), in that order, and
-    `hotkey.clear` of an unbound chord; `hotkey.set_labels` of an unbound chord, then a
-    missing or repeated label (ADR-0133). Deleting a scene, source, output or encoder
-    profile removes the bindings naming it, with their labels, and lists them in the
+    steps (ADR-0112 §3) and a missing named scene, source, output, bus or preset (only
+    `cut` exists), in that order, and
+    `hotkey.clear` of an unbound chord or of an action it doesn't run, restored in its
+    exact order on undo; `hotkey.set_labels` of an unbound chord, then a
+    missing or repeated label (ADR-0133). Deleting a scene, source, output, encoder
+    profile or bus removes the bindings naming it, with their labels, and lists them in the
     batch result's `removed_hotkeys`; undo restores both.
-  - controller bindings (ADR-0122): `binding.set`'s `Trigger::problem`, an
-    already-bound trigger, then the hotkeys' action checks (`check_bindable`, shared),
-    and `binding.clear` of an unbound trigger. The same deletes remove the controller
+  - controller bindings (ADR-0122): `binding.set`'s `Trigger::problem`, an action the
+    trigger runs already, then the hotkeys' action checks (`check_bindable`, shared),
+    and `binding.clear` of an unbound trigger or action. The same deletes remove the controller
     bindings naming what they delete, listed in `removed_bindings`.
   - value bindings (ADR-0178): `binding.set_value`'s `ValueBinding::problem` only, since
     the mock describes no kinds' settings, and `binding.clear_value` of an unknown ID.
-    `midi.last_controls` answers the controls `MockEngine::move_control` moved.
+    `midi.last_controls` answers the controls `MockEngine::move_control` moved. `midi.last_notes`
+    answers no notes: no MIDI input plays here.
   - channels (ADR-0183): `channel.set`'s `ChannelInfo::problem`, `channel.delete` of an
     unknown ID, and `channel.values`, which answers each channel at its default (its
     `off_value` while off) with no driver, since the mock follows no controls.
+  - shows (ADR-0210): `show.set`'s `ShowInfo::problem` and the limit of 64, and
+    `show.delete` of an unknown ID, which takes the bindings naming the show with it.
+    The mock runs no show: the `show.*` run actions and `overlay.*` answer `internal`,
+    and `studio.get` reports no `show` and no `overlays`.
+  - PTZ cameras ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)):
+    none unless `MockEngine::with_ptz_cameras` names some, each reachable at pan, tilt
+    and zoom 0 and focus 4096. `ptz.list` answers them; a `ptz.*` action on one succeeds
+    (`ptz.aim` moves its reported pose and `ptz.home` centres pan and tilt, the rest
+    change nothing), on an unlisted camera is `invalid_argument`, and with none listed is
+    `action_failed`, as the engine's are. `MockEngine::ptz_actions` lists the actions
+    taken. There is no head, so no drive ever moves the pose.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;
@@ -206,13 +220,14 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `scene.set_camera` and `source.set_meta`, in `mock/organise.rs`)
   make the graph's checks with the protocol's own `check_color`, `check_icon`,
   `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
-  background or reflections): a missing parent, folder or label, a folder inside itself, a
-  label listed twice, and no deleting a folder that holds a scene or folder or a label a
+  background or reflections): a missing parent, folder or label, a folder inside itself,
+  a folder, scene or timeline filed under the wrong owner (ADR-0222: a scene's own
+  folders hold its keyframes and timelines, and go with it on its delete), a
+  label listed twice, and no deleting a folder that holds a scene, timeline or folder or a label a
   source, scene or hotkey binding carries (with the graph's `blockers`; scenes carry labels since
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md), bindings since
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)). `label.members`
-  lists a label's scenes, sources and bindings as the graph does; the mock has no
-  timelines, so it lists none. Reads report the folders, labels and
+  lists a label's scenes, sources and bindings as the graph does, but not timelines. Reads report the folders, labels and
   each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
   a scene's or source's delete restores its folder and metadata;
 - scene cameras (`scene.set_camera`, in `mock/organise.rs`,
@@ -237,6 +252,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)) are checked
   with `camera_aim_check`, then `not_found` or `action_failed` for a scene that draws
   through no camera, and keep nothing, so `scene.camera_aim` always answers the home aim;
+  the mock draws no pictures, so `scene.drawn_camera` answers no camera (`not_found` for
+  a missing scene);
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
   keyframe scene, which write its override of an item in its parent's tree (its own,
@@ -282,7 +299,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   don't report it and `output.set_key` answers `not_found` for it. It runs no
   encoders, so `output.status` reports no encoder session and zero sessions; its
   `cleartext` follows the output's kind by the engine's rule;
-- the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
+- the pairing calls (`pairing.start`, `pairing.answer`, `device.list`, `device.revoke`) answered with
   `unsupported`, as the in-process engine answers them: only a server in front of a
   session serves them
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), and the UI
@@ -358,16 +375,19 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   step touches. So an undo that succeeds against the mock succeeds against the engine
   too, but not the other way round;
 - live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` with
-  the engine's checks in its order (1 to 256 values, each `item.set_transform`,
-  `item.set_geometry`, `item.set_crop` or `source.set_settings`, at most 16 open
-  gestures per client, then each value as a batch edit named `values.<n>`), each key of
-  a settings patch a parameter of its own
-  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md); describing no
+  the engine's checks in its order (1 to 256 values, each a setter
+  `is_live_adjustable` takes, a fader's carrying its gain alone (`live_problem`), at most
+  16 open gestures per client, a `send.set` naming a send that exists
+  (`values.<n>.bus_id`), then each value as a batch edit named `values.<n>`), each
+  key of a source's or a filter's settings patch a parameter of its own, and an item's
+  opacity, each fader and each send one each
+  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md),
+  [ADR-0213](../../docs/adr/0213-number-drags-follow-live.md); describing no
   kinds, it doesn't check their `live` flags), takeover of a parameter another gesture
   holds, `live.cancel` (a no-op for a gesture that isn't open), `live.list`, a batch's
   `ends_gesture` (`invalid_argument` unless the client has it open, checked after the
   idempotency key and before `expected_rev`, as the engine does), live values
-  dropped with their item or source, and a session's gestures expiring when its `MockControl` is
+  dropped with their item, source, filter, bus or send, and a session's gestures expiring when its `MockControl` is
   dropped. It emits `live.changed` with each `live.set`'s values and `live.ended` after
   the commit's `state.changed`. With no render thread and no clock, it doesn't coalesce
   `live.changed` (the engine sends at most as many) and lets go of a committed
@@ -382,11 +402,16 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   only keeps the numbers for `studio.get`, since the mock runs no sources),
   `studio.set_rendering` (`invalid_argument` for a `screen_space_steps` that isn't one
   of `SCREEN_SPACE_STEPS`, a `max_probe_resolution` that isn't one of
-  `PROBE_RESOLUTIONS`, or a `model_resolution` that isn't one of `MODEL_RESOLUTIONS`; it only keeps the switches for `studio.get`, since the
+  `PROBE_RESOLUTIONS`, a `model_resolution` that is neither 0 nor in
+  `MODEL_RESOLUTION_RANGE`, a `min_model_resolution` outside it, or a
+  `model_antialiasing` that isn't one of `MODEL_ANTIALIASING`; it only keeps the switches for `studio.get`, since the
   mock draws nothing), `item.show`,
   `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
   `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
-  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `item.trigger_motion`
+  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `source.mute` and
+  `bus.mute` the same way (the `source.set_audio` or `bus.set_fader` mute, nothing for a
+  mute already set, `not_found` for a missing target and the edit's refusals,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), `item.trigger_motion`
   (#1107: `not_found` for a missing item, `invalid_argument` for a malformed
   `modifier_id`, and otherwise nothing, since the mock draws nothing), `studio.get`,
   and `studio.changed` for each and after a batch, undo or redo that creates the first
@@ -398,10 +423,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   missing scene) except that the mock, which keeps no families, doesn't check that a
   stop is in the destination's family, and the
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
-  `internal`. So do timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
-  the `timeline.*` edits and actions, `source.restart` and `source.seek` answer
-  `internal`, and
-  `studio.get` lists no timeline playing. So do keyframe tracks
+  `internal`. Timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)) are
+  stored and checked as the graph checks them (`timeline.set`: the scene exists,
+  `TimelineInfo::problem`, an ID no other scene holds and at most `MAX_TIMELINES` in a
+  scene; `timeline.delete`; undoing a scene's delete restores its timelines), and
+  `timeline.play`, `timeline.seek` and `timeline.stop` send `timeline.changed` and list
+  what plays in `studio.get`. The mock keeps no clock: a timeline it plays stays where
+  it started until it is stopped or deleted (`removed`), never ending, looping or firing
+  a cue, and a play's delay and the triggers are ignored. `source.restart` and
+  `source.seek` answer `internal`. So do keyframe tracks
   ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): `scene.set_keyframe` answers
   `internal`, and `studio.get` lists no placed keyframe;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is

@@ -179,7 +179,7 @@ test('an item\'s sections are in tabs, and its settings in the Properties dialog
   await tab('Behaviour').click();
   await expect(tab('Behaviour')).toHaveAttribute('aria-selected', 'true');
   await expect(inspector(page).getByLabel('Glide to other scenes')).toBeVisible();
-  await expect(inspector(page).locator('.hotkey-row')).toHaveCount(3);
+  await expect(inspector(page).locator('.hotkey-row')).toHaveCount(4);
   await expect(field(page, 'X')).toBeHidden();
 
   // The arrow keys move along the strip, and the focus follows.
@@ -260,4 +260,67 @@ test('dragging a box field shows it live before the release, and undoes in one s
   await page.getByRole('menu', { name: 'Edit' }).getByRole('menuitem', { name: 'Undo' }).click();
   await expect.poll(() => rev(page)).toBe(start + 2);
   await expect(field(page, 'X')).toHaveValue('640');
+});
+
+// #1740's review, N2: a drag back to where it started shows the start again, rather
+// than keeping the last other frame until the release.
+test('dragging a box field back to its start shows the start live', async ({ page, daemon }) => {
+  const frames = socketFrames(page);
+  await selectBackdrop(page, daemon);
+  await expect(field(page, 'X')).toHaveValue('640');
+  const start = await rev(page);
+  const box = await field(page, 'X').boundingBox();
+  const y = box.y + box.height / 2;
+  const lives = () => frames.sent.filter((f) => f.includes('"live.set"'));
+  await page.mouse.move(box.x + 20, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 50, y, { steps: 5 });
+  await expect(field(page, 'X')).toHaveValue('650');
+  await expect.poll(() => lives().at(-1)).toMatch(/"center":\{"x":970(\.0)?,/);
+  await page.mouse.move(box.x + 20, y, { steps: 5 });
+  await expect(field(page, 'X')).toHaveValue('640');
+  await expect.poll(() => lives().at(-1)).toMatch(/"center":\{"x":960(\.0)?,/);
+  // Released where it started: nothing to commit, and the gesture is cancelled.
+  await page.mouse.up();
+  await expect.poll(() => frames.sent.some((f) => f.includes('"live.cancel"'))).toBe(true);
+  expect(frames.sent.some((f) => f.includes('"ends_gesture"'))).toBe(false);
+  expect(await rev(page)).toBe(start);
+});
+
+// #1739 (ADR-0213): a drag on the opacity follows on output, as a box field does: its
+// values go out as a gesture's `live.set` before the release, which commits the
+// gesture in one batch, so one Undo takes the whole drag back.
+test('dragging the opacity shows it live before the release, and undoes in one step', async ({ page, daemon }) => {
+  const frames = socketFrames(page);
+  await selectBackdrop(page, daemon);
+  const opacity = field(page, 'Opacity');
+  await expect(opacity).toHaveValue('100');
+  const start = await rev(page);
+  await opacity.scrollIntoViewIfNeeded();
+  const box = await opacity.boundingBox();
+  const y = box.y + box.height / 2;
+  const lives = () => frames.sent.filter((f) => f.includes('"live.set"'));
+  // From the field's right end, so the press lands on it however narrow it is.
+  const right = box.x + box.width - 3;
+  await page.mouse.move(right, y);
+  await page.mouse.down();
+  // One step of 1 % per 3 px: 30 px to the left is 10 % less.
+  await page.mouse.move(right - 30, y, { steps: 6 });
+  await expect(opacity).toHaveValue('90');
+  await expect.poll(() => lives().length).toBeGreaterThan(0);
+  await expect.poll(() => frames.received.some((f) => f.includes('"live.changed"'))).toBe(true);
+  expect(lives().at(-1)).toContain('"item.set_opacity"');
+  await expect.poll(() => lives().at(-1)).toMatch(/"opacity":0\.9[0-9]*[,}]/);
+  expect(frames.sent.some((f) => f.includes('"ends_gesture"'))).toBe(false);
+  expect(await rev(page)).toBe(start);
+
+  await page.mouse.up();
+  await expect.poll(() => rev(page)).toBe(start + 1);
+  expect(frames.sent.filter((f) => f.includes('"ends_gesture"'))).toHaveLength(1);
+  await expect(opacity).toHaveValue('90');
+
+  await page.locator('header.app-header .top-menu[data-menu="edit"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'Edit' }).getByRole('menuitem', { name: 'Undo' }).click();
+  await expect.poll(() => rev(page)).toBe(start + 2);
+  await expect(opacity).toHaveValue('100');
 });

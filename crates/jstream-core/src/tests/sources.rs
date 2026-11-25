@@ -490,6 +490,165 @@ fn a_timer_restarts_when_its_restart_counter_changes() {
     timer_reaches(&engine, &timer_frame(&restarted, 1.0, 3_000), "00:57");
 }
 
+/// A countdown `t` of 60 s on scene `a`, with an empty scene `b`, and `a` on program.
+fn a_countdown_on_a() -> (Engine, FakeClock, crate::InProcessControl, Settings) {
+    let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    let countdown = settings(&[("duration", json!(60))]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            source("t", "timer", countdown.clone()),
+            add("a", "i1", "t"),
+        ]),
+    )
+    .expect("created");
+    block_on(control.call(super::switch_call("a"))).expect("a on program");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00"
+    );
+    (engine, clock, control, countdown)
+}
+
+/// ADR-0214: a countdown starts again each time its scene goes on program, and a
+/// rebuild for its look after that keeps the new count.
+#[test]
+fn a_timer_starts_again_when_its_scene_goes_on_program() {
+    let (engine, clock, control, countdown) = a_countdown_on_a();
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+
+    block_on(control.call(super::switch_call("b"))).expect("b on program");
+    clock.advance(20_000);
+    block_on(control.call(super::switch_call("a"))).expect("a on program again");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00 again, from its first plan"
+    );
+    clock.advance(3_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 3_000), "00:57");
+
+    let red = settings(&[("duration", json!(60)), ("color", json!("#ff0000ff"))]);
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("t"),
+            patch: settings(&[("color", json!("#ff0000ff"))]),
+        }),
+    )
+    .expect("restyled");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&red, 1.0, 3_000),
+        "still 00:57, in red"
+    );
+}
+
+/// ADR-0214: a countdown the program shows through a switch, on both scenes, keeps
+/// counting: only being shown again starts it again.
+#[test]
+fn a_timer_on_both_scenes_keeps_counting_through_a_switch() {
+    let (engine, clock, control, countdown) = a_countdown_on_a();
+    batch(&control, edits(vec![add("b", "i2", "t")])).expect("on b too");
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+    block_on(control.call(super::switch_call("b"))).expect("b on program");
+    clock.advance(2_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 12_000), "00:48");
+}
+
+/// ADR-0214 with the internal show scene (alpha.13 ST4): a countdown on it is planned
+/// with the program mix, so it keeps counting through a program switch and starts again
+/// when its item is shown again.
+#[test]
+fn a_timer_on_the_show_scene_starts_again_when_its_item_is_shown() {
+    let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    let countdown = settings(&[("duration", json!(60))]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            create("show"),
+            source("t", "timer", countdown.clone()),
+            add("show", "i1", "t"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.set_show_scene(Some(SceneId::new("show"))));
+    block_on(control.call(super::switch_call("a"))).expect("a on program");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00 over program"
+    );
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+
+    block_on(control.call(super::switch_call("b"))).expect("b on program");
+    clock.advance(2_000);
+    timer_reaches(
+        &engine,
+        &timer_frame(&countdown, 1.0, 12_000),
+        "00:48: still shown through the switch",
+    );
+
+    visible(&control, false);
+    clock.advance(20_000);
+    visible(&control, true);
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00 again once shown again"
+    );
+}
+
+/// ADR-0214: `source.restart` starts a countdown on program again, and `source.seek`
+/// counts it on from a point.
+#[test]
+fn source_restart_and_seek_start_a_timer_again() {
+    let (engine, clock, control, countdown) = a_countdown_on_a();
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+
+    let act = |action: Action| {
+        block_on(control.call(Call::Action { action })).expect("the action");
+    };
+    act(Action::SourceRestart {
+        source_id: SourceId::new("t"),
+    });
+    timer_reaches(
+        &engine,
+        &timer_frame(&countdown, 1.0, 0),
+        "01:00 after a restart",
+    );
+    clock.advance(2_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 2_000), "00:58");
+
+    act(Action::SourceSeek {
+        source_id: SourceId::new("t"),
+        at_ms: 30_000,
+    });
+    timer_reaches(
+        &engine,
+        &timer_frame(&countdown, 1.0, 30_000),
+        "00:30 after a seek",
+    );
+    // Past the frame its change is woken on.
+    clock.advance(1_500);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 31_500), "00:29");
+}
+
 /// A `display` or `window` source shows what the pipeline captures for its target:
 /// the primary display by default, the one its `target` names otherwise. Sources that
 /// capture the same thing share one capture, and a window source with no window chosen
@@ -1308,6 +1467,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    folder: None,
                     lanes: Vec::new(),
                     starts: Vec::new(),
                     stops: Vec::new(),
@@ -1327,6 +1487,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    folder: None,
                     lanes: Vec::new(),
                     starts: Vec::new(),
                     stops: Vec::new(),
@@ -2385,4 +2546,145 @@ fn a_page_at_fps_0_follows_the_programs_frame_rate() {
         opened + 1,
         "only the following page opened again"
     );
+}
+
+/// ADR-0212 (#1737): a warm scene's still image is published for the program stage to
+/// keep uploaded, before any plan shows it, as the same frame the program draws once
+/// the scene is switched to, so the upload the stage made is the one it draws.
+#[test]
+fn a_warm_scenes_still_is_published_as_the_frame_the_program_draws() {
+    let dir = temp_dir("warm-still");
+    let rgba = [0u8, 0xff, 0, 0xff].repeat(4 * 4);
+    let png = crate::snapshot::encode_png(4, 4, &rgba).expect("a PNG");
+    fs::write(dir.join("pic.png"), png).expect("the image");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "pic.png".into(),
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("main"),
+            create("b"),
+            source("pic", "image", settings(&[("file", file.to_value())])),
+            add("b", "i1", "pic"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the image was built");
+    let key = crate::snapshot::GpuKey::Frame(SourceId::new("pic"));
+    let warm = || {
+        hub.load_warm_stills()
+            .iter()
+            .find(|(at, _)| *at == key)
+            .map(|(_, frame)| frame.version())
+    };
+    assert_eq!(warm(), None, "b is neither preview nor shown");
+
+    let act = |action| {
+        block_on(control.call(Call::Action { action })).expect("the action applies");
+    };
+    act(Action::StudioSetPreview {
+        scene_id: SceneId::new("b"),
+    });
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while warm().is_none() && Instant::now() < deadline {
+        engine.replan();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let published = warm().expect("the Preview scene's still is published");
+
+    act(Action::SceneSwitch {
+        scene_id: SceneId::new("b"),
+        preset_id: None,
+        via: Vec::new(),
+    });
+    assert_eq!(
+        hub.load()
+            .shot()
+            .frame(&SourceId::new("pic"))
+            .map(crate::snapshot::Frame::version),
+        Some(published),
+        "the program draws the frame that was kept uploaded"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// A show's jump into a timed program clip (one whose scene draws a `media` file) seeks
+/// the file to that spot, and a jump within the clip seeks it again (ADR-0210 decision
+/// 9); the next clip's file is held at its first frame until the cut.
+#[test]
+fn a_show_jump_into_a_timed_clip_seeks_its_file() {
+    let dir = temp_dir("show-media-seek");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(false)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    let mut show = jstream_protocol::ShowInfo::new("s");
+    show.program = ["a", "b"]
+        .into_iter()
+        .map(|scene| jstream_protocol::ProgramClip {
+            clip_id: format!("c{scene}"),
+            scene_id: SceneId::new(scene),
+            length_ms: 1_000,
+            preset_id: None,
+        })
+        .collect();
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            source("video", "media", video),
+            add("b", "i1", "video"),
+            Edit::ShowSet { show },
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the file is open");
+    engine.replan();
+    let act = |action| {
+        block_on(control.call(Call::Action { action })).expect("done");
+    };
+    act(Action::ShowPlay {
+        show_id: jstream_protocol::ShowId::new("s"),
+        bookmark_id: None,
+        rehearse: false,
+    });
+    assert_eq!(engine.upcoming().as_deref(), Some("b"));
+    act(Action::ShowSeek { at_ms: 1_500 });
+    assert!(plays(&engine, 5), "the jump lands 500 ms into the file");
+    act(Action::ShowSeek { at_ms: 1_200 });
+    assert!(plays(&engine, 2), "a jump within the clip seeks it again");
+    let _ = fs::remove_dir_all(dir);
 }

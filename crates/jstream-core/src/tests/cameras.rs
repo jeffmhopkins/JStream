@@ -101,6 +101,7 @@ fn camera_motion_redraws_every_frame() {
     let control = connected(&engine);
     batch(&control, edits(scenes())).expect("scenes");
     let sway = CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "sway".into(),
         property: CameraProperty::Roll,
         kind: MotionKind::Drift {
@@ -137,6 +138,7 @@ fn a_controller_drives_a_scene_camera() {
     batch(&control, edits(scenes())).expect("scenes");
     let f = |v: f32| Finite32::new(v).expect("finite");
     let zoom = CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "zoom".into(),
         property: CameraProperty::Fov,
         kind: MotionKind::Midi {
@@ -171,6 +173,8 @@ fn a_controller_drives_a_scene_camera() {
         "nothing sent yet"
     );
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Bitwig", "Other"].map(String::from));
     let cc = |channel: u8, value| {
         jstream_midi::Message::parse(&[0xB0 | channel, 25, value]).expect("a CC")
     };
@@ -262,6 +266,243 @@ fn autofocus_measures_the_item_at_the_centre() {
     };
     assert_eq!(shot.centre_distance(&family, away, at), None);
     assert_eq!(shot.centre_distance(&SceneId::new("b"), framing, at), None);
+    // With a video chain, the scene is drawn by a chain phase's pass, not the program's,
+    // and autofocus measures it there.
+    batch(
+        &control,
+        Batch::single(Edit::FilterAdd {
+            owner: jstream_protocol::FilterOwner::Scene {
+                scene_id: SceneId::new("a"),
+            },
+            chain: jstream_protocol::FilterChain::Video,
+            filter_id: jstream_protocol::FilterId::new("look"),
+            kind: "sharpen".into(),
+            settings: Default::default(),
+            enabled: None,
+            index: None,
+        }),
+    )
+    .expect("a scene chain");
+    let snapshot = hub.load();
+    let met = snapshot
+        .shot()
+        .centre_distance(&family, framing, at)
+        .expect("the screen is at the centre, through the chain");
+    assert!(
+        (met - f64::from(framing.target_distance())).abs() < 0.5,
+        "{met}"
+    );
+}
+
+/// Autofocus focuses only on what hides what is behind it: a card in front of the screen
+/// is met while it is a normal, opaque card, and passed over once it is blended onto
+/// what is behind it (a glow or a hologram added on) or mostly faded, so showing or
+/// hiding it doesn't pull the focus off the scene behind.
+#[test]
+fn autofocus_sees_through_blended_and_faded_items() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut setup = scenes();
+    for (id, depth) in [("back", 0.0), ("glow", 500.0)] {
+        setup.push(Edit::SourceCreate {
+            source_id: SourceId::new(id),
+            name: id.into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: jstream_protocol::Settings(
+                [
+                    ("color".to_owned(), serde_json::json!("#ff0000ff")),
+                    ("width".to_owned(), serde_json::json!(400)),
+                    ("height".to_owned(), serde_json::json!(300)),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            duplicated_from: None,
+        });
+        let mut geometry = ItemGeometry::try_new(
+            Vec2::new(960.0, 540.0).expect("finite"),
+            Size::try_new(400.0, 300.0).expect("size"),
+        )
+        .expect("geometry");
+        geometry.depth_px = jstream_protocol::Finite32::new(depth).expect("finite");
+        setup.push(Edit::ItemAdd {
+            scene_id: SceneId::new("a"),
+            item_id: ItemId::new(id),
+            source_id: SourceId::new(id),
+            transform: None,
+            geometry: Some(geometry),
+            opacity: None,
+            blend: None,
+        });
+    }
+    batch(&control, edits(setup)).expect("scenes");
+    block_on(control.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: None,
+            via: Vec::new(),
+        },
+    }))
+    .expect("on program");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let framing = SceneCamera::framing(Canvas::DEFAULT);
+    let distance = f64::from(framing.target_distance());
+    let family = SceneId::new("a");
+    let at = jstream_media::MediaTime::new(0, jstream_media::Timebase::MICROS);
+    let met = || {
+        hub.load()
+            .shot()
+            .centre_distance(&family, framing, at)
+            .expect("something is at the centre")
+    };
+    assert!(
+        (met() - (distance - 500.0)).abs() < 0.5,
+        "the card in front"
+    );
+    let glow = |edit: Edit| batch(&control, Batch::single(edit)).expect("an edit");
+    glow(Edit::ItemSetBlend {
+        item_id: ItemId::new("glow"),
+        blend: jstream_protocol::BlendMode::Additive,
+    });
+    assert!(
+        (met() - distance).abs() < 0.5,
+        "added on, it is seen through"
+    );
+    glow(Edit::ItemSetBlend {
+        item_id: ItemId::new("glow"),
+        blend: jstream_protocol::BlendMode::Normal,
+    });
+    glow(Edit::ItemSetOpacity {
+        item_id: ItemId::new("glow"),
+        scene_id: None,
+        opacity: jstream_protocol::Finite32::new(0.3).expect("finite"),
+    });
+    assert!(
+        (met() - distance).abs() < 0.5,
+        "mostly faded, it is seen through"
+    );
+    glow(Edit::ItemSetOpacity {
+        item_id: ItemId::new("glow"),
+        scene_id: None,
+        opacity: jstream_protocol::Finite32::new(0.8).expect("finite"),
+    });
+    assert!(
+        (met() - (distance - 500.0)).abs() < 0.5,
+        "mostly opaque, it is met"
+    );
+}
+
+/// ADR-0218: autofocus meets a model at the surface it draws, not at its item's flat box:
+/// a cube 300 px deep is met at its front face, 150 px before its item's plane, from in
+/// front and from behind; and from inside it, where only the backs of its faces are
+/// seen, it isn't met.
+#[test]
+fn autofocus_meets_a_model_at_its_surface() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut setup = scenes();
+    setup.push(Edit::SourceCreate {
+        source_id: SourceId::new("cube"),
+        name: "Cube".into(),
+        kind: SourceKind::Builtin {
+            kind: "model".into(),
+        },
+        settings: jstream_protocol::Settings(
+            [("shape".to_owned(), serde_json::json!("cube"))]
+                .into_iter()
+                .collect(),
+        ),
+        duplicated_from: None,
+    });
+    setup.push(Edit::ItemAdd {
+        scene_id: SceneId::new("a"),
+        item_id: ItemId::new("cube"),
+        source_id: SourceId::new("cube"),
+        transform: None,
+        geometry: Some(
+            ItemGeometry::try_new(
+                Vec2::new(960.0, 540.0).expect("finite"),
+                Size::try_new(400.0, 300.0).expect("size"),
+            )
+            .expect("geometry"),
+        ),
+        opacity: None,
+        blend: None,
+    });
+    batch(&control, edits(setup)).expect("scenes");
+    block_on(control.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: None,
+            via: Vec::new(),
+        },
+    }))
+    .expect("on program");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let framing = SceneCamera::framing(Canvas::DEFAULT);
+    let snapshot = hub.load();
+    let shot = snapshot.shot();
+    let family = SceneId::new("a");
+    let at = jstream_media::MediaTime::new(0, jstream_media::Timebase::MICROS);
+    let distance = f64::from(framing.target_distance());
+    // The first measure starts the cube's hierarchy building on a thread of its own;
+    // until it is built, the cube isn't met and the screen behind it is.
+    let start = std::time::Instant::now();
+    // The cube fits the item's 300 px height, so its front face is 150 px nearer.
+    let met = loop {
+        let met = shot.centre_distance(&family, framing, at);
+        if let Some(met) = met.filter(|met| *met < distance - 1.0) {
+            break met;
+        }
+        assert!(
+            met.is_some_and(|met| (met - distance).abs() < 0.5),
+            "the screen, until the cube is built: {met:?}"
+        );
+        assert!(start.elapsed().as_secs() < 30, "the cube is at the centre");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    assert!((met - (distance - 150.0)).abs() < 0.5, "{met}");
+    let behind = SceneCamera {
+        position: jstream_protocol::Vec3::new(960.0, 540.0, -1000.0).expect("finite"),
+        target: jstream_protocol::Vec3::new(960.0, 540.0, 0.0).expect("finite"),
+        ..framing
+    };
+    let met = shot
+        .centre_distance(&family, behind, at)
+        .expect("the cube's back is at the centre");
+    assert!((met - 850.0).abs() < 0.5, "{met}");
+    let inside = SceneCamera {
+        position: jstream_protocol::Vec3::new(960.0, 540.0, 0.0).expect("finite"),
+        target: jstream_protocol::Vec3::new(960.0, 540.0, -100.0).expect("finite"),
+        ..framing
+    };
+    assert_eq!(shot.centre_distance(&family, inside, at), None);
+    // Flipped, the cube draws its outward faces still, and is met at its front face.
+    let mut flipped = ItemGeometry::try_new(
+        Vec2::new(960.0, 540.0).expect("finite"),
+        Size::try_new(400.0, 300.0).expect("size"),
+    )
+    .expect("geometry");
+    flipped.flip_h = true;
+    batch(
+        &control,
+        Batch::single(Edit::ItemSetGeometry {
+            scene_id: None,
+            item_id: ItemId::new("cube"),
+            geometry: flipped,
+        }),
+    )
+    .expect("flipped");
+    let snapshot = hub.load();
+    let met = snapshot
+        .shot()
+        .centre_distance(&family, framing, at)
+        .expect("the flipped cube is at the centre");
+    assert!((met - (distance - 150.0)).abs() < 0.5, "flipped: {met}");
 }
 
 /// ADR-0120: a Follow pointer filter on a capture in a 2D scene supplies the scene's
@@ -461,4 +702,99 @@ fn a_scene_cameras_live_aim_is_driven_aimed_and_read() {
         left,
         "it stays where the drive left it"
     );
+}
+
+/// `scene.drawn_camera`: the camera a picture drew a 3D scene through, after its camera
+/// motion moved it, which is where an editor outlines its items. Nothing is drawn yet,
+/// so it answers none; once a metered frame draws the scene, it answers the moved
+/// camera, not the stored one; an unknown scene is not found.
+#[test]
+fn drawn_camera_answers_the_camera_a_picture_drew_the_scene_through() {
+    use crate::chain::Chains;
+    use crate::snapshot::{DrawAt, LiveParams, NoCaptures, View, compose_metered};
+    use jstream_media::{FrameSize, MediaTime, Timebase};
+    use jstream_protocol::{Query, QueryResult};
+    use jstream_render::ResourceCache;
+    use std::time::Instant;
+
+    let _gpu = crate::tests::one_gpu_test_at_a_time();
+    let Some(mut compositor) = crate::snapshot::tests::gpu() else {
+        return;
+    };
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    batch(&control, edits(scenes())).expect("scenes");
+    // The camera slides right at 100 px a second on the engine's clock.
+    let slide = CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
+        modifier_id: "slide".into(),
+        property: CameraProperty::PositionX,
+        kind: MotionKind::Drift {
+            rate_per_s: Finite32::new(100.0).expect("finite"),
+            wrap: None,
+        },
+        clock: MotionClock::Engine,
+        enabled: true,
+        amount: None,
+    };
+    batch(
+        &control,
+        Batch::single(Edit::SceneSetCameraMotion {
+            scene_id: SceneId::new("a"),
+            motion: vec![slide],
+        }),
+    )
+    .expect("motion");
+    let drawn = |scene: &str| {
+        super::query(
+            &control,
+            Query::SceneDrawnCamera {
+                scene_id: SceneId::new(scene),
+            },
+        )
+    };
+    let camera_of = |answer| match answer {
+        QueryResult::SceneDrawnCamera { camera } => camera,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(
+        camera_of(drawn("a").expect("a")),
+        None,
+        "nothing drew it yet"
+    );
+
+    let snapshot = engine.render_hub().load();
+    let mut meter = engine.profiler().program_meter();
+    let mut cache = ResourceCache::new();
+    cache.begin_frame();
+    let at = MediaTime::new(2_000, Timebase::new(1, 1000).expect("valid"));
+    compose_metered(
+        &mut compositor,
+        (&mut cache, &mut Chains::default(), &mut meter),
+        (snapshot.shot(), at),
+        View::default(),
+        &LiveParams::default(),
+        &NoCaptures,
+        DrawAt::read(FrameSize::new(640, 360).expect("size")),
+    )
+    .expect("drawn");
+    drop(cache.end_frame(&compositor));
+    let started = Instant::now();
+    meter.end_frame(started.elapsed(), started, drop);
+
+    let stored = SceneCamera::framing(Canvas::DEFAULT);
+    let camera = camera_of(drawn("a").expect("a")).expect("drawn through a camera");
+    assert!(
+        (camera.position.x.get() - (stored.position.x.get() + 200.0)).abs() < 0.5,
+        "moved 200 px right in 2 s: {camera:?}"
+    );
+    assert_eq!(camera.position.y, stored.position.y);
+    assert_eq!(camera.target.x, stored.target.x, "a position move only");
+    assert_eq!(
+        camera_of(drawn("b").expect("b")),
+        None,
+        "a 2D scene has none"
+    );
+    let failed = drawn("nope").expect_err("unknown");
+    assert_eq!(code(&failed), Some("not_found"));
 }

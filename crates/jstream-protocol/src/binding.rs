@@ -11,8 +11,11 @@
 
 use crate::command::Action;
 use crate::filter::FilterOwner;
-use crate::id::{BusId, FilterId, SourceId};
-use crate::motion::{MAX_MOTION_PARAM_LEN, MotionKind, check_motion_id};
+use crate::finite::Finite32;
+use crate::id::{BusId, FilterId, ItemId, SceneId, SourceId};
+use crate::motion::{
+    MAX_DATA_FIELD_LEN, MAX_DATA_KEY_LEN, MAX_MOTION_PARAM_LEN, MotionKind, check_motion_id,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -70,7 +73,94 @@ pub enum Trigger {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         input: Option<String>,
     },
+    /// One field of a JTunnel sender's live data meeting a condition (ADR-0202, since
+    /// 0.189): a Bitwig scene selected or launched, a Mod crossing a level. It reads what
+    /// a `data` motion modifier reads, only from a sender whose state is used.
+    Data {
+        /// The sender, or missing for any.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+        /// The message's key: `grid`, `params`, `track/3`. A `*` segment matches any
+        /// one segment, so `track/*` listens to every track, and the condition holds
+        /// while it holds for any of them.
+        key: String,
+        /// A dotted path into the message (`selectedScene`, `values.19`), or empty for
+        /// the whole message.
+        #[serde(default)]
+        field: String,
+        /// When it fires.
+        on: DataOn,
+    },
 }
+
+/// When a [`Trigger::Data`] fires (ADR-0202). Each fires when its condition starts to
+/// hold and releases when it stops, except `changes`, which only fires. What a field
+/// holds when the engine starts listening, or when a key first arrives, is where it
+/// starts from and fires nothing.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DataOn {
+    /// The field equals `value`: the same text, or a number or `true`/`false` that
+    /// `value` spells.
+    Equals {
+        /// What it equals, at most [`MAX_DATA_VALUE_LEN`] bytes.
+        value: String,
+    },
+    /// The field takes any other value.
+    Changes,
+    /// The field is a number at `level` or above.
+    Rises {
+        /// The level it crosses upward.
+        level: Finite32,
+    },
+    /// The field is a number below `level`.
+    Falls {
+        /// The level it crosses downward.
+        level: Finite32,
+    },
+}
+
+// A level is finite, so its bits order and hash it as a whole trigger needs.
+impl Eq for DataOn {}
+
+impl std::hash::Hash for DataOn {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            DataOn::Equals { value } => value.hash(state),
+            DataOn::Changes => {}
+            DataOn::Rises { level } | DataOn::Falls { level } => level.get().to_bits().hash(state),
+        }
+    }
+}
+
+impl PartialOrd for DataOn {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DataOn {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let rank = |on: &DataOn| match on {
+            DataOn::Equals { .. } => 0,
+            DataOn::Changes => 1,
+            DataOn::Rises { .. } => 2,
+            DataOn::Falls { .. } => 3,
+        };
+        match (self, other) {
+            (DataOn::Equals { value: a }, DataOn::Equals { value: b }) => a.cmp(b),
+            (DataOn::Rises { level: a }, DataOn::Rises { level: b })
+            | (DataOn::Falls { level: a }, DataOn::Falls { level: b }) => {
+                a.get().total_cmp(&b.get())
+            }
+            _ => rank(self).cmp(&rank(other)),
+        }
+    }
+}
+
+/// The longest `value` a [`DataOn::Equals`] holds, in bytes.
+pub const MAX_DATA_VALUE_LEN: usize = 255;
 
 impl Trigger {
     /// Why this is not a valid trigger, as the field and the reason, or `None` if it is.
@@ -78,6 +168,12 @@ impl Trigger {
     /// same one.
     pub fn problem(&self) -> Option<(&'static str, String)> {
         let (field, number, channel, input) = match self {
+            Trigger::Data {
+                input,
+                key,
+                field,
+                on,
+            } => return data_problem(input.as_deref(), key, field, on),
             Trigger::MidiNote {
                 note,
                 channel,
@@ -130,8 +226,14 @@ impl Trigger {
         match self {
             Trigger::MidiNote { input, .. }
             | Trigger::MidiCc { input, .. }
-            | Trigger::MidiProgram { input, .. } => input.as_deref(),
+            | Trigger::MidiProgram { input, .. }
+            | Trigger::Data { input, .. } => input.as_deref(),
         }
+    }
+
+    /// Whether a MIDI message fires it, rather than live data.
+    pub fn is_midi(&self) -> bool {
+        !matches!(self, Trigger::Data { .. })
     }
 
     /// The channel the trigger is limited to, 1 to 16, if any.
@@ -140,16 +242,98 @@ impl Trigger {
             Trigger::MidiNote { channel, .. }
             | Trigger::MidiCc { channel, .. }
             | Trigger::MidiProgram { channel, .. } => *channel,
+            Trigger::Data { .. } => None,
         }
     }
 }
 
+/// Why a data trigger isn't valid, as [`Trigger::problem`] gives it.
+fn data_problem(
+    input: Option<&str>,
+    key: &str,
+    field: &str,
+    on: &DataOn,
+) -> Option<(&'static str, String)> {
+    if let Some(problem) = input.and_then(input_problem) {
+        return Some(problem);
+    }
+    let printable = |s: &str| !s.chars().any(char::is_control);
+    if key.is_empty() || key.len() > MAX_DATA_KEY_LEN || !printable(key) {
+        return Some((
+            "key",
+            format!("must be 1 to {MAX_DATA_KEY_LEN} bytes with no control characters"),
+        ));
+    }
+    if key.split('/').any(|seg| seg.contains('*') && seg != "*") {
+        return Some(("key", "a `*` must be a whole segment: `track/*`".into()));
+    }
+    if field.len() > MAX_DATA_FIELD_LEN || !printable(field) {
+        return Some((
+            "field",
+            format!("must be at most {MAX_DATA_FIELD_LEN} bytes with no control characters"),
+        ));
+    }
+    if let DataOn::Equals { value } = on
+        && (value.len() > MAX_DATA_VALUE_LEN || !printable(value))
+    {
+        return Some((
+            "on.value",
+            format!("must be at most {MAX_DATA_VALUE_LEN} bytes with no control characters"),
+        ));
+    }
+    None
+}
+
+/// Why an input name isn't valid, as a trigger names one.
+fn input_problem(name: &str) -> Option<(&'static str, String)> {
+    if name.is_empty() {
+        return Some((
+            "input",
+            "must not be empty: leave it out for any input".into(),
+        ));
+    }
+    if name.len() > MAX_INPUT_NAME_LEN {
+        return Some((
+            "input",
+            format!("must be at most {MAX_INPUT_NAME_LEN} bytes"),
+        ));
+    }
+    if name.chars().any(char::is_control) {
+        return Some(("input", "must not hold control characters".into()));
+    }
+    None
+}
+
 impl fmt::Display for Trigger {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Trigger::Data {
+            input,
+            key,
+            field,
+            on,
+        } = self
+        {
+            let path = if field.is_empty() {
+                key.clone()
+            } else {
+                format!("{key} {field}")
+            };
+            match on {
+                DataOn::Equals { value } => write!(f, "data {path} equal to {value}")?,
+                DataOn::Changes => write!(f, "data {path} changing")?,
+                DataOn::Rises { level } => write!(f, "data {path} rising to {}", level.get())?,
+                DataOn::Falls { level } => write!(f, "data {path} falling below {}", level.get())?,
+            }
+            return match input {
+                Some(input) => write!(f, " from {input}"),
+                None => Ok(()),
+            };
+        }
         let (what, n) = match self {
             Trigger::MidiNote { note, .. } => ("note", note),
             Trigger::MidiCc { controller, .. } => ("CC", controller),
             Trigger::MidiProgram { program, .. } => ("program", program),
+            Trigger::Data { .. } => return Ok(()),
         };
         write!(f, "MIDI {what} {n}")?;
         match self.channel() {
@@ -209,13 +393,30 @@ pub struct MidiControlInfo {
     pub count: u64,
 }
 
+/// One MIDI input's latest note-on, in `midi.last_notes` (since 0.189, ADR-0202).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MidiNoteInfo {
+    /// The input, a MIDI port or a JTunnel sender by name, as a binding names it.
+    pub input: String,
+    /// Its channel, 1 to 16.
+    pub channel: u8,
+    /// The note number, 0 to 127.
+    pub note: u8,
+    /// Its velocity, 1 to 127.
+    pub velocity: u8,
+    /// How many note events (on and off) the input has sent since the engine started:
+    /// a client learning a note waits for it to grow.
+    pub count: u64,
+}
+
 /// How many value bindings a collection holds (ADR-0178). One more is
 /// `invalid_argument`.
 pub const MAX_VALUE_BINDINGS: usize = 256;
 
 /// The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in
 /// the collection that isn't an item's or a camera's, which their own motion modifiers
-/// drive. Serialized with an internal `type` tag.
+/// drive, or since 0.187 a switch: a mute, or whether a placement shows its item
+/// (ADR-0207). Serialized with an internal `type` tag.
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -258,6 +459,81 @@ pub enum ValueTarget {
         /// The bus it sends into.
         bus_id: BusId,
     },
+    /// An audio source's mute, a switch: muted at one half or more (ADR-0207, since
+    /// 0.187). A `scene` source has none.
+    SourceMute {
+        /// The source.
+        source_id: SourceId,
+    },
+    /// A bus's mute, the master's included, a switch: muted at one half or more
+    /// (ADR-0207, since 0.187).
+    BusMute {
+        /// The bus.
+        bus_id: BusId,
+    },
+    /// Whether a placement shows its item, a switch: shown at one half or more
+    /// (ADR-0207, since 0.187), as `item.set_visible` would set it, so it cuts, with no
+    /// appear or disappear effect.
+    ItemVisible {
+        /// The item.
+        item_id: ItemId,
+        /// The scene whose placement of the item it drives, as `item.set_visible`'s
+        /// `scene_id`: omitted for the item's own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// One axis of a PTZ camera's position (ADR-0209, since 0.182), in the head's own
+    /// counts (ADR-0146 §5): the engine aims the head there as the value moves. The
+    /// camera is named as `ptz.*` actions and shots name it, so a collection carries
+    /// the mapping to a machine that lists a camera by that name; on a machine that
+    /// doesn't, it drives nothing.
+    PtzAxis {
+        /// The camera's name on the machine's PTZ camera list.
+        camera: String,
+        /// Which axis.
+        axis: PtzAxis,
+    },
+}
+
+/// An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.182).
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PtzAxis {
+    /// The pan position, -524287 to 524287.
+    Pan,
+    /// The tilt position, -32767 to 32767.
+    Tilt,
+    /// The zoom position, 0 (the widest) to 65535.
+    Zoom,
+    /// The focus position, 0 to 65535. Driving it puts the head's focus in manual.
+    Focus,
+}
+
+impl PtzAxis {
+    /// Every axis, in this order.
+    pub const ALL: [PtzAxis; 4] = [PtzAxis::Pan, PtzAxis::Tilt, PtzAxis::Zoom, PtzAxis::Focus];
+
+    /// The lowest and highest counts the protocol carries for it. A head's own range is
+    /// usually narrower: a mapping's `from` and `to` pick the part it uses.
+    pub fn range(self) -> (i32, i32) {
+        match self {
+            PtzAxis::Pan => (-crate::ptz::MAX_PTZ_PAN, crate::ptz::MAX_PTZ_PAN),
+            PtzAxis::Tilt => (-crate::ptz::MAX_PTZ_TILT, crate::ptz::MAX_PTZ_TILT),
+            PtzAxis::Zoom | PtzAxis::Focus => (0, i32::from(u16::MAX)),
+        }
+    }
+
+    /// Its name on the wire.
+    pub fn name(self) -> &'static str {
+        match self {
+            PtzAxis::Pan => "pan",
+            PtzAxis::Tilt => "tilt",
+            PtzAxis::Zoom => "zoom",
+            PtzAxis::Focus => "focus",
+        }
+    }
 }
 
 impl ValueTarget {
@@ -269,7 +545,11 @@ impl ValueTarget {
             }
             ValueTarget::SourceGain { .. }
             | ValueTarget::BusGain { .. }
-            | ValueTarget::SendGain { .. } => None,
+            | ValueTarget::SendGain { .. }
+            | ValueTarget::SourceMute { .. }
+            | ValueTarget::BusMute { .. }
+            | ValueTarget::ItemVisible { .. }
+            | ValueTarget::PtzAxis { .. } => None,
         }
     }
 }
@@ -288,6 +568,19 @@ impl fmt::Display for ValueTarget {
             ValueTarget::SendGain { source_id, bus_id } => {
                 write!(f, "the send of source {source_id} into bus {bus_id}")
             }
+            ValueTarget::SourceMute { source_id } => write!(f, "the mute of source {source_id}"),
+            ValueTarget::BusMute { bus_id } => write!(f, "the mute of bus {bus_id}"),
+            ValueTarget::ItemVisible {
+                item_id,
+                scene_id: None,
+            } => write!(f, "whether item {item_id} shows"),
+            ValueTarget::ItemVisible {
+                item_id,
+                scene_id: Some(scene_id),
+            } => write!(f, "whether item {item_id} shows in scene {scene_id}"),
+            ValueTarget::PtzAxis { camera, axis } => {
+                write!(f, "the {} of PTZ camera {camera}", axis.name())
+            }
         }
     }
 }
@@ -305,8 +598,8 @@ pub struct ValueBinding {
     /// Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII
     /// letters, digits, `_` and `-`.
     pub binding_id: String,
-    /// What it reads: a `midi`, `data` or (since 0.169) `channel` modifier's kind and
-    /// parameters.
+    /// What it reads: a `midi`, `data`, (since 0.169) `channel` or (since 0.186,
+    /// ADR-0206) `audio` modifier's kind and parameters.
     #[serde(flatten)]
     pub input: MotionKind,
     /// What it drives.
@@ -317,6 +610,26 @@ pub struct ValueBinding {
     /// fully. Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
+    /// Whether it replaces its target's value or adds to it (ADR-0203, since 0.186).
+    /// Default `replace`, omitted. Each target takes its stored value, or the last moved
+    /// `replace` binding's by ID, plus every moved `add` binding's, kept in its range.
+    #[serde(
+        default = "crate::MappingMode::replace",
+        skip_serializing_if = "crate::MappingMode::is_replace"
+    )]
+    pub mode: crate::MappingMode,
+    /// Whether it drives (ADR-0203, since 0.186): false bypasses it, its target showing
+    /// what the others give. Default `true`, omitted.
+    #[serde(default = "enabled", skip_serializing_if = "is_true")]
+    pub enabled: bool,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 impl ValueBinding {
@@ -328,11 +641,20 @@ impl ValueBinding {
         }
         if !matches!(
             self.input,
-            MotionKind::Midi { .. } | MotionKind::Data { .. } | MotionKind::Channel { .. }
+            MotionKind::Midi { .. }
+                | MotionKind::Data { .. }
+                | MotionKind::Channel { .. }
+                | MotionKind::Audio { .. }
         ) {
             return Some((
                 "kind".into(),
-                "a value binding reads a `midi` control, a `data` field or a `channel`".into(),
+                "a value binding reads a `midi` control, a `data` field, a `channel` or an `audio` level".into(),
+            ));
+        }
+        if self.mode == crate::MappingMode::Unknown {
+            return Some((
+                "mode".into(),
+                "is not one this version of the protocol knows".into(),
             ));
         }
         if let Some(reason) = crate::motion::amount_problem(self.amount.as_deref()) {
@@ -340,6 +662,11 @@ impl ValueBinding {
         }
         if let Some((field, reason)) = self.input.problem() {
             return Some((field.into(), reason.into()));
+        }
+        if let ValueTarget::PtzAxis { camera, .. } = &self.target
+            && let Some(reason) = crate::ptz::camera_name_problem(camera)
+        {
+            return Some(("target.camera".into(), reason));
         }
         if let Some(param) = self.target.param()
             && (param.is_empty()
@@ -463,5 +790,42 @@ mod tests {
         }))
         .expect("an unknown action still parses");
         assert_eq!(later.action(), None);
+    }
+
+    /// ADR-0209: a PTZ axis target names a camera and an axis, on the wire as
+    /// `ptz_axis`, and its camera name is checked as `ptz.*` checks one.
+    #[test]
+    fn a_value_binding_can_aim_a_ptz_axis() {
+        use super::{PtzAxis, ValueBinding, ValueTarget};
+        let target = ValueTarget::PtzAxis {
+            camera: "wide".into(),
+            axis: PtzAxis::Zoom,
+        };
+        assert_eq!(
+            serde_json::to_value(&target).expect("serializes"),
+            json!({"type": "ptz_axis", "camera": "wide", "axis": "zoom"})
+        );
+        assert_eq!(target.to_string(), "the zoom of PTZ camera wide");
+        assert_eq!(target.param(), None);
+        let binding: ValueBinding = serde_json::from_value(json!({
+            "binding_id": "zoom_knob", "kind": "midi", "controller": 1,
+            "from": 0, "to": 16384,
+            "target": {"type": "ptz_axis", "camera": "wide", "axis": "zoom"}
+        }))
+        .expect("parses");
+        assert_eq!(binding.problem(), None);
+        let unnamed = ValueBinding {
+            target: ValueTarget::PtzAxis {
+                camera: String::new(),
+                axis: PtzAxis::Pan,
+            },
+            ..binding
+        };
+        assert_eq!(
+            unnamed.problem().map(|p| p.0),
+            Some("target.camera".to_owned())
+        );
+        assert_eq!(PtzAxis::Pan.range(), (-0x7_FFFF, 0x7_FFFF));
+        assert_eq!(PtzAxis::Focus.range(), (0, 65535));
     }
 }

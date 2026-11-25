@@ -381,6 +381,7 @@ fn a_scene_sheet_hears_audio_motion() {
                 item_id: ItemId::new("lamp"),
                 scene_id: None,
                 motion: vec![MotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: "pulse".into(),
                     property: MotionProperty::Opacity,
                     effect: None,

@@ -36,22 +36,32 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   wired as the daemon's is, plus the virtual camera on Windows and Linux) and its server on a free port, with a token made fresh
   at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
   on, the window on a token of its own, and a new agent held until the person answers;
-  and with `Network` the TLS network listener and pairing); `vcam_status`, whether the
+  and with `Network` the paired devices' file, and the TLS network listener opened at
+  start when the setting is on); `vcam_status`, whether the
   camera is registered and current.
 - **Network access** (`network.rs`): "Allow devices on my network"
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), the setting in the
   data folder's `network.json`, the network listener's configuration, and `set_network`,
-  the command that saves it.
+  the command that saves it and opens or closes the listener at once
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)); and "Let devices
+  find JStream on my network"
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)) in the same
+  file, saved and applied by `set_network_announce`.
 - **JTunnel** (`jtunnel.rs`): "Receive from JTunnel senders"
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), the setting and
-  its accepted senders in the data folder's `jtunnel.json`, starting the engine's
-  JTunnel receiver from it, and `set_jtunnel`, the command that saves it and applies
-  it at once.
+  its accepted senders and the one live sender in the data folder's `jtunnel.json`,
+  starting the engine's JTunnel receiver with the live sender, and `set_jtunnel`, the
+  command that saves it and applies it at once.
 - **PTZ controllers** (`ptz.rs`): "Accept a PTZ controller"
   ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
   §3), the setting with its endpoints and allowed controllers in the data folder's
   `ptz_controllers.json`, opening the engine's controller endpoints from it, and
   `set_ptz_controllers`, the command that saves it.
+- **PTZ cameras** (`ptz_cameras.rs`): "Control PTZ cameras"
+  ([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1), the
+  switch and the machine's camera list in the data folder's `ptz_cameras.json`, giving
+  the engine its cameras from it at start (`Engine::start_ptz`), and `set_ptz_cameras`,
+  the command that saves it and applies it at once.
 - **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows, macOS, X11 and Wayland): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
@@ -64,9 +74,12 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   the virtual camera's status, the default project's folder (so a picked file under it
   can be stored relative to the collection), whether "Allow devices on my network" is on,
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
-  the JTunnel setting as it was at start with `setJtunnel`, which saves it, and
-  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands, and
-  `setZoom`, which zooms the window for the UI scale.
+  "Let devices find JStream on my network" with `setAnnounce`, which saves it,
+  the JTunnel setting as it was at start with `setJtunnel`, which saves it, the PTZ
+  controller setting with `setPtz`, the PTZ camera list with `setPtzCameras`,
+  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands,
+  `setZoom`, which zooms the window for the UI scale, and `drop_script`, the event that
+  tells the page about files dragged onto the window.
 - **The person's folders** (`folders.rs`, `screenshots.rs`;
   [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
   the default project in `Documents\JStream`, which `host::startup_project` moves the
@@ -83,9 +96,10 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   tested everywhere), shutdown, and the commands the page may call: a native file,
   save or folder dialog (`pick.rs`; on Linux the FileChooser portal's, on macOS AppKit's
   panels), saving the
-  network setting (`network.rs`), the JTunnel setting (`jtunnel.rs`) and the PTZ
-  controller setting (`ptz.rs`), and saving, opening and showing a screenshot
-  (`screenshots.rs`).
+  network setting (`network.rs`), the JTunnel setting (`jtunnel.rs`), the PTZ
+  controller setting (`ptz.rs`) and the PTZ camera list (`ptz_cameras.rs`), and saving, opening and showing a screenshot
+  (`screenshots.rs`); and the main window's drags of files from the desktop, passed on
+  to the page as `bootstrap::drop_script` events ([Design](#design)).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -98,8 +112,10 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   script's escaping, the command line, the virtual camera's status values, the
   capped log file (user-only, checked on Unix), the update check's request and the
   replies it gives a releases list, a rate limit and a malformed message, the network
-  setting (off until saved on, user-only, off when malformed), the JTunnel setting (off
-  until turned on, user-only, a refused sender never saved, off when malformed), the network listener and
+  setting (off until saved on, user-only, off when malformed; announcing on until saved
+  off, each switch keeping the other), the JTunnel setting (off
+  until turned on, user-only, a refused sender never saved, off when malformed, a
+  sender's MIDI running no bindings until its `midi` is on), the network listener and
   pairing it turns on, the UI folder inside a macOS app, the control token registered
   for redaction, the default project's path, its move from the data folder with its
   stream keys and recent-list place, and a screenshot's name, its never-replacing save
@@ -279,30 +295,38 @@ folder, and its log `logs\cef.log`.
   token. A port in use stops the start with a page that says to pass `--port`. Pairing
   stays off unless network access is on.
 - **Devices on the network.** Settings › Devices › "Allow devices on my network" (off
-  until turned on) saves `network.json` in the data folder; it applies at the next
-  start. On, the app also listens on every interface on port 4456 (the daemon's
+  until turned on) saves `network.json` in the data folder and applies at once
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)). On, the app also listens on every interface on port 4456 (the daemon's
   `--lan` port), TLS only, admitting paired devices only
-  ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), and pairs devices:
+  ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), announces itself on
+  mDNS unless "Let devices find JStream on my network", just under it, is off
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)), and pairs devices:
   Settings › Devices then opens a pairing code and shows the addresses to open and the
   certificate's fingerprint to compare. The certificate (`token.tls`, made the
   first time) and the paired devices (`token.devices`) are kept beside the `token` file, the daemon's
   files, so the two share them. When the port is in use (a daemon with `--lan`), the
-  app starts without network access, the log says why, and Settings › Devices says
-  devices can't connect. Windows may ask to let JStream through its firewall the first
+  listener doesn't open, the log says why, and Settings › Devices says devices can't
+  connect. Windows may ask to let JStream through its firewall the first
   time, and on a network marked Public it blocks other devices. Turning the setting off
-  applies at the next start and keeps the paired devices, which work again if it is
-  turned back on: revoke them on the same page to end their access for good.
+  closes the listener at once, ending the devices' sessions, and keeps the paired
+  devices, which work again when it is turned back on: revoke them on the same page to
+  end their access for good.
 - **JTunnel senders.** Settings › Devices › "Receive from JTunnel senders" (off until
   turned on) and its list of accepted senders, each a tunnel name and the address and
   port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
-  in the data folder; they apply at the next start. On, the app receives each accepted
+  in the data folder and apply at once, with no restart. Several senders may be accepted, but one is
+  live at a time ([ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)): Make live switches, and a sender accepted becomes live. The
+  readers that name no input (what Learn and Map make for a JTunnel source) follow
+  whichever sender is live. On, the app receives the live
   sender's audio and MIDI as the daemon's `--jtunnel-accept` does
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and the DAW state of
   each, unless its "Use this sender's state" is unticked, as `--jtunnel-no-state` does
-  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), and lists the
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), lets a
+  sender's MIDI run the collection's MIDI action bindings only once its "Use this
+  sender's MIDI" is ticked, as `--jtunnel-midi` does (off by default,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), and lists the
   senders that answer on the network, each not yet accepted with Accept…, which asks
-  before adding it (so turning it on with no sender, then restarting, is how to find
-  the first one). The page shows why a sender was refused, and the log names the
+  before adding it (so turning it on with no sender is how to find the first one). The page shows why a sender was refused, and the log names the
   senders at start.
 - **PTZ controllers.** Settings › Devices › "Accept a PTZ controller" (off until turned
   on), its endpoints (an address and port of this machine on the LAN, a transport, a
@@ -312,6 +336,13 @@ folder, and its log `logs\cef.log`.
   scene cameras as the daemon's `--ptz-controller` lets it
   ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)). The page
   shows why an endpoint was refused, and the log names the endpoints at start.
+- **PTZ cameras.** Settings › Devices › "Control PTZ cameras" (off until turned on) and
+  its cameras (a name, a LAN address and port, a transport and a VISCA address) save
+  `ptz_cameras.json` in the data folder, and apply at once: the engine drives the heads
+  listed, as the daemon's `--ptz-camera` lets it
+  ([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)), from the PTZ
+  panel, scene shots, hotkeys and mappings. The page shows why a camera was refused,
+  and the log names the cameras when they start.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager; on Linux in the Secret Service, else a `0600`
   file, [ADR-0071](../../docs/adr/0071-linux-secret-store.md); on macOS in the login
@@ -383,8 +414,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   (`LinuxBackends`, keys in the Secret Service or its `0600` file, the ScreenCast
   portal's restore tokens in the data folder's `capture-tokens`, and
   `LinuxProcessCpu` and `LinuxThreadCpu` for the readouts below), and on macOS too
-  (the daemon's `macos_backends`: no virtual camera, the engine's own GPU device until
-  the Metal interop, keys in the Keychain, `MacosProcessCpu` and `MacosThreadCpu`);
+  (the daemon's `macos_backends`: no virtual camera, the engine's device on Metal through
+  `MetalGpu`, keys in the Keychain, `MacosProcessCpu` and `MacosThreadCpu`);
   elsewhere it has no backends.
   Everywhere it watches the data folder's `effects` for effect packs
   (`Engine::watch_effect_packs`) and starts the engine's stats heartbeat, so the header's readout shows the
@@ -412,24 +443,36 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   command `set_network`, granted to the main window by the `network` capability and to
   nothing else. It is not a UI setting (`ui_settings.set`), because any engine client
   (an agent with `--mcp`, a paired device) can write those, and widening who can reach the
-  engine is the person's choice. It is read once at start, so a change applies at the
-  next start. On, `Host::start` gets a `Network`: `ServerConfig::network` on
-  `0.0.0.0:4456` with the certificate from `jstream_server::identity` (made the first
-  time, kept when its names are out of date, with a warning in the log, never renewed
-  silently), `device_file` beside the token file, and pairing on, so the loopback
-  listener (which the window uses) opens codes and `pairing.start` names the network
-  listener's addresses and fingerprint (protocol 0.97). A certificate that can't be
-  used is logged and the app starts without network access. Any other failed start with
-  the listener (most likely its port in use) is logged and retried without it; a cause
-  that isn't the listener's fails the retry too, with its own error. The page is told
-  whether the listener opened (`networkOpen`), so Settings › Devices says when the
-  setting is on but devices can't connect.
+  engine is the person's choice. It is read at start, and the command applies a change
+  at once: it saves it, then opens or closes the listener through the host's
+  `NetworkSwitch` (`network::Setting`), answering why the listener couldn't open, if it
+  couldn't ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)).
+  `{"announce": false}` in the same file turns off announcing the listener
+  on mDNS ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)):
+  on unless that, saved the same way by `setAnnounce` and the command
+  `set_network_announce`, which the same capability grants. Each save keeps the other
+  key. `Host::start` always gets a `Network` with `device_file` beside the token file,
+  and pairing off; the server pairs while the network listener is open, so the loopback
+  listener (which the window uses) then opens codes and `pairing.start` names the
+  network listener's addresses and fingerprint (protocol 0.97). With the setting on, the
+  `Network` also carries the listener to open at start: `0.0.0.0:4456`, announced
+  unless turned off, with the certificate from `jstream_server::identity` (made the
+  first time, kept when its names are out of date, with a warning in the log, never
+  renewed silently). The host opens it through the server's `NetworkSwitch` after
+  binding, and keeps the switch, which `network::Setting` uses to switch it later. A
+  certificate that can't be used, or a listener that can't open (most likely its port
+  in use), is logged and the app runs without network access. The page is told whether
+  the listener opened (`networkOpen`), so Settings › Devices says when the setting is on
+  but devices can't connect, and `allowNetwork` answers the same when switched on.
 - **JTunnel** (`jtunnel.rs`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   decisions 1 and 3). The setting is `{"on": true, "accepted": [{"name": "Bitwig",
-  "address": "192.168.1.5:9000", "state": true}]}` in the data folder's `jtunnel.json`
+  "address": "192.168.1.5:9000", "state": true, "midi": false}], "live": "Bitwig"}` in the data folder's `jtunnel.json`
+  (`live` names the one sender received from, [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md); left out, or naming a sender no
+  longer accepted, the first accepted is live)
   (`state` is "Use this sender's state",
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 1, on
-  when left out, as for a newly accepted sender, so a file from before it reads as on), per machine
+  when left out, as for a newly accepted sender, so a file from before it reads as on;
+  `midi` is "Use this sender's MIDI", ADR-0123 decision 3, off when left out), per machine
   and never in the collection, so opening a collection never turns it on. It is written
   user-only (a leftover temporary file is removed first, so it never keeps another
   mode) and replaced whole, and only once the engine would take it
@@ -440,7 +483,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   else, never a protocol call an engine client could make. It is read at start, after
   the engine's backends, whose media clock stamps the arrivals, and applied again each
   time `set_jtunnel` saves it, so no change needs a restart (`apply`): on, the app calls
-  `Engine::start_jtunnel` with the accepted senders (none is fine: the receiver then
+  `Engine::start_jtunnel` with the live sender alone, every accepted one still checked
+  (none is fine: the receiver then
   only finds senders, `jtunnel.senders`, protocol 0.114), which replaces a receiver
   already running, so a sender accepted, removed, or with its state turned off takes
   effect at once; off, `Engine::stop_jtunnel`. A refused setting or a socket that can't
@@ -460,6 +504,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   calls `Engine::start_ptz_controllers` and keeps the handle until it exits, closing the
   endpoints first so their drives stop; a refused setting or a port that can't be bound
   is logged and the app runs without them. Off, no endpoint socket is open.
+- **PTZ cameras** (`ptz_cameras.rs`,
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1,
+  [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md) §1). The setting is
+  `{"on": true, "cameras": [{"name": "Wide", "address": "192.168.1.40:52381",
+  "transport": "visca_ip", "visca": 1}]}` in the data folder's `ptz_cameras.json`, kept
+  as the PTZ controller setting is: per machine, user-only, replaced whole, and saved
+  only once the engine would take it (`PtzCamera::new`, `PtzSetup::new`), even while
+  off; a missing, unreadable or malformed file is off. Only the page's `setPtzCameras`
+  saves it, through the Tauri command `set_ptz_cameras`, which the `ptz` capability
+  grants to the main window and nothing else. At start, and again on each save, the app
+  gives the engine the list (`Engine::start_ptz`, an empty one while off), which
+  replaces the running heads at once; a socket that can't be opened is logged at start,
+  and on a save the page is told the list was saved but didn't apply. The command holds
+  only a weak handle on the engine, as `set_jtunnel` does.
 - **Hotkeys while another app has the focus.** On Windows, macOS and Linux the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
@@ -478,8 +536,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   its own, installed only while one is set. The tap needs the Accessibility permission,
   asked for the first time a wheel chord is set; without it `set` returns the wheel
   chords with that reason, which is logged, and they are heard only while JStream has
-  the focus. So the app never sees any other key; a press
-  runs the binding's action as an `action` call from that session, and nothing it
+  the focus. So the app never sees any other key; each chord is registered once, and a
+  press runs every action bound to it, in bind order, as `action` calls from that
+  session, carrying on past one that fails
+  ([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)), and nothing it
   hears is kept or sent anywhere else. A registered chord goes to JStream even while
   its window has the focus, so the page doesn't run it twice. A chord another
   application holds already is logged and heard only while JStream has the focus. The
@@ -534,13 +594,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   (not Windows: on Linux the camera finds its device only when it starts). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the default
   project's folder (ADR-0163), `network`, whether "Allow devices on my network" was on at start,
-  `networkOpen`, whether its listener then opened, `wheelFocusOnly`, whether wheel
+  `networkOpen`, whether its listener then opened, `announce`, whether "Let devices find
+  JStream on my network" was on, `wheelFocusOnly`, whether wheel
   chords were heard only while the window had the focus (macOS without Accessibility,
   Wayland, or no listener that hears the wheel),
   and two functions. `browse` calls the app's command `pick_path` and resolves to the
   filesystem path the person picked, or null if they cancelled or the dialog failed.
   `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was
-  saved, false when the command fails too (see *Network access*). `jtunnel` is the
+  saved, false when the command fails too (see *Network access*), and
+  `setAnnounce(on)` does the same through `set_network_announce`. `jtunnel` is the
   JTunnel setting as the app read it at start, and `setJtunnel(setting)` calls
   `set_jtunnel` and resolves to null when it was saved, or why not (see *JTunnel*).
   `saveScreenshot(png, name)` sends the PNG's bytes as the raw body of
@@ -551,6 +613,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `open` or `xdg-open` as one argument, and Show in folder runs Explorer's `/select`,
   `open -R`, or `xdg-open` on its folder. `setZoom(factor)` calls `set_zoom` and
   returns at once (see *UI scale*).
+- **Files dragged onto the window.** Tauri handles a drag of files from the desktop
+  natively, so the page gets no HTML drop with paths. `shell.rs` hears the main
+  window's drag events and runs `bootstrap::drop_script` in its webview for each step:
+  it dispatches `jstream-desktop-drop` on `window` with `{ kind, paths, x, y }`, `kind`
+  `over` (the drag entered or moved), `drop` or `leave`, `paths` the dragged files'
+  UTF-8 paths (Tauri names them as the drag enters and at the drop; the app keeps them
+  between), and `x`, `y` the pointer in the page's CSS pixels. Only WebView2 reports
+  physical pixels, so on Windows the position is divided by the window's scale factor;
+  WKWebView and WebKitGTK already report logical points. The detail is a JSON string
+  the page parses, so no file name can end the script. The app reads no dropped file
+  and grants no command for it: the page decides what to do with the paths, over the
+  WebSocket API as with a picked one (`jstream-ui`'s `host::on_file_drop`). A projector
+  window isn't told.
 - **UI scale** (`zoom.rs`). View › UI scale and Ctrl with `=`, `-` or `0` scale the UI
   from 50 % to 150 % (`jstream-ui`'s `ui_scale.rs`). In the app, the UI asks `set_zoom`
   to zoom the main window's webview, as a browser's own zoom does, so the device pixel
@@ -590,7 +665,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   backslash, quote, space or percent escape can reach its command line. Every
   other new window is refused, and a
   projector can open none. The page gets the Tauri commands `pick_path` (`pick.rs`),
-  `set_network` (`network.rs`), `set_jtunnel`, `set_ptz_controllers`,
+  `set_network` and `set_network_announce` (`network.rs`), `set_jtunnel`, `set_ptz_controllers`, `set_ptz_cameras`,
   `save_screenshot`, `open_saved` and `show_saved` (`screenshots.rs`), and `set_zoom`
   (`zoom.rs`), and no other.
   `build.rs` declares them to `tauri-build`, which writes an `allow-` permission for

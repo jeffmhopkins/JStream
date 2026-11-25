@@ -106,12 +106,15 @@ fuzz_target!(|data: &[u8]| {
     };
 
     let mut muxer: Box<dyn Muxer> = if flags & 0x01 == 0 {
-        // fMP4 carries H.264 only.
         let config = Fmp4Config {
-            video: video_codec.map(|_| fmp4::VideoTrack {
+            video: video_codec.map(|codec| fmp4::VideoTrack {
                 width: 1280,
                 height: 720,
-                avc: None,
+                config: match codec {
+                    Codec::H264 => fmp4::VideoConfig::Avc(None),
+                    Codec::Hevc => fmp4::VideoConfig::Hevc(None),
+                    _ => fmp4::VideoConfig::Av1(None),
+                },
             }),
             audio: has_audio.then_some(fmp4::AudioTrack {
                 config: audio,

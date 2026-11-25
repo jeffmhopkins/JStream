@@ -5,8 +5,9 @@
 //! or reuses the channel it follows already, and gives that channel a lane.
 //!
 //! A switch lane is an ordinary lane whose points all use the `hold` curve at 0 or 1
-//! ([ADR-0184] decision 1): it is drawn as bars where it is on, and a double-click adds
-//! a one-second bar.
+//! ([ADR-0184] decision 1): it is drawn as bars where it is on, off before the first,
+//! and edited as bars (`insert_bar`, `drag_bar`) written back as points (`bar_points`),
+//! so editing one never makes it a curve.
 //!
 //! [ADR-0183]: ../../../../docs/adr/0183-virtual-control-channels.md
 //! [ADR-0184]: ../../../../docs/adr/0184-sequences-lanes-and-triggers.md
@@ -225,7 +226,7 @@ pub fn switch_bars(points: &[LanePoint], duration_ms: u32, from: bool) -> Vec<(u
 }
 
 /// Turns a switch lane on from `at_ms` for `len_ms` (kept within the length), then
-/// back to whatever it was there before: a bar added by a double-click.
+/// back to whatever it was there before.
 pub fn add_bar(points: &mut Vec<LanePoint>, at_ms: u32, len_ms: u32, duration_ms: u32, from: bool) {
     let at_ms = at_ms.min(duration_ms.saturating_sub(1));
     let end = at_ms.saturating_add(len_ms.max(1)).min(duration_ms);
@@ -236,6 +237,111 @@ pub fn add_bar(points: &mut Vec<LanePoint>, at_ms: u32, len_ms: u32, duration_ms
     if !after {
         points.insert(n + 1, hold(end, false));
     }
+}
+
+/// The shortest bar a switch lane keeps: a tenth of a second.
+pub const MIN_BAR_MS: u32 = 100;
+
+/// Which part of a bar a drag holds: the whole bar, or one of its ends.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Grip {
+    /// The bar, moved without changing its length.
+    Body,
+    /// Its start, where it switches on.
+    Start,
+    /// Its end, where it switches off.
+    End,
+}
+
+/// A switch lane's points for `bars` (in time order, apart or touching): off from 0 up
+/// to the first bar, on at each bar's start and off at its end, so the lane is the same
+/// whatever its channel was when the sequence starts. Touching bars join. No bars: one
+/// point at the end that switches it off, as a new lane changes nothing before it.
+pub fn bar_points(bars: &[(u32, u32)], duration_ms: u32) -> Vec<LanePoint> {
+    let mut joined: Vec<(u32, u32)> = Vec::new();
+    for &(a, b) in bars.iter().filter(|(a, b)| b > a && *a < duration_ms) {
+        match joined.last_mut() {
+            Some(last) if a <= last.1 => last.1 = last.1.max(b),
+            _ => joined.push((a, b.min(duration_ms))),
+        }
+    }
+    if joined.is_empty() {
+        return vec![hold(duration_ms, false)];
+    }
+    let mut points = Vec::new();
+    if joined[0].0 > 0 {
+        points.push(hold(0, false));
+    }
+    for (a, b) in joined {
+        points.push(hold(a, true));
+        if b < duration_ms {
+            points.push(hold(b, false));
+        }
+    }
+    points
+}
+
+/// The room bar `n` (or a new bar at `n`) has: from [`MIN_BAR_MS`] after the bar before
+/// it, or 0, to [`MIN_BAR_MS`] before the bar after it, or the end. Bars never touch,
+/// so two never join into one by being dragged together.
+fn room(bars: &[(u32, u32)], n: usize, next: usize, duration_ms: u32) -> (u32, u32) {
+    let lo = n
+        .checked_sub(1)
+        .and_then(|p| bars.get(p))
+        .map_or(0, |p| p.1 + MIN_BAR_MS);
+    let hi = bars
+        .get(next)
+        .map_or(duration_ms, |p| p.0.saturating_sub(MIN_BAR_MS));
+    (lo, hi.max(lo))
+}
+
+/// Where bar `n` of `bars` goes when `grip` is dragged to `at_ms` (for the body: its
+/// start goes there). It stays in its room (`room`) and in `0..duration_ms`, and keeps
+/// [`MIN_BAR_MS`]; moved whole it keeps its length.
+pub fn drag_bar(
+    bars: &[(u32, u32)],
+    n: usize,
+    grip: Grip,
+    at_ms: u32,
+    duration_ms: u32,
+) -> (u32, u32) {
+    let Some(&(a, b)) = bars.get(n) else {
+        return (0, 0);
+    };
+    let (lo, hi) = room(bars, n, n + 1, duration_ms);
+    match grip {
+        Grip::Body => {
+            let len = b - a;
+            let start = at_ms.clamp(lo, hi.saturating_sub(len).max(lo));
+            (start, (start + len).min(hi))
+        }
+        Grip::Start => (at_ms.clamp(lo, b.saturating_sub(MIN_BAR_MS).max(lo)), b),
+        Grip::End => (a, at_ms.clamp((a + MIN_BAR_MS).min(hi), hi)),
+    }
+}
+
+/// `bars` with a new bar `len_ms` long from `at_ms`, kept in the gap's room (`room`)
+/// (so cut short before the next bar and the end), and its place among them; `None`
+/// when `at_ms` is in a bar or the gap has no room for [`MIN_BAR_MS`].
+pub fn insert_bar(
+    bars: &[(u32, u32)],
+    at_ms: u32,
+    len_ms: u32,
+    duration_ms: u32,
+) -> Option<(Vec<(u32, u32)>, usize)> {
+    if bars.iter().any(|&(a, b)| at_ms >= a && at_ms < b) {
+        return None;
+    }
+    let n = bars.partition_point(|&(a, _)| a < at_ms);
+    let (lo, hi) = room(bars, n, n, duration_ms);
+    let start = at_ms.max(lo);
+    let end = start.saturating_add(len_ms).min(hi);
+    if end < start + MIN_BAR_MS {
+        return None;
+    }
+    let mut out = bars.to_vec();
+    out.insert(n, (start, end));
+    Some((out, n))
 }
 
 #[cfg(test)]
@@ -306,6 +412,89 @@ mod tests {
             switch_bars(&switch_points(false, 6000), 6000, true),
             vec![(0, 6000)]
         );
+    }
+
+    #[test]
+    fn bars_are_dragged_between_their_neighbours() {
+        let bars = vec![(1000, 2000), (4000, 5000)];
+        assert_eq!(drag_bar(&bars, 0, Grip::Body, 2500, 6000), (2500, 3500));
+        assert_eq!(
+            drag_bar(&bars, 0, Grip::Body, 3500, 6000),
+            (2900, 3900),
+            "stops a tenth before the next bar"
+        );
+        assert_eq!(
+            drag_bar(&bars, 1, Grip::Body, 5800, 6000),
+            (5000, 6000),
+            "and at the end"
+        );
+        assert_eq!(drag_bar(&bars, 1, Grip::Body, 100, 6000), (2100, 3100));
+        assert_eq!(
+            drag_bar(&bars, 0, Grip::Start, 1950, 6000),
+            (1900, 2000),
+            "keeps a tenth"
+        );
+        assert_eq!(drag_bar(&bars, 1, Grip::Start, 500, 6000), (2100, 5000));
+        assert_eq!(drag_bar(&bars, 0, Grip::End, 4500, 6000), (1000, 3900));
+        assert_eq!(drag_bar(&bars, 1, Grip::End, 9000, 6000), (4000, 6000));
+        assert_eq!(drag_bar(&bars, 1, Grip::End, 0, 6000), (4000, 4100));
+    }
+
+    #[test]
+    fn a_bar_is_added_only_in_room_for_it() {
+        let bars = vec![(1000, 2000)];
+        assert_eq!(insert_bar(&bars, 1500, 1000, 6000), None, "in a bar");
+        assert_eq!(
+            insert_bar(&bars, 0, 1000, 6000),
+            Some((vec![(0, 900), (1000, 2000)], 0)),
+            "cut short"
+        );
+        assert_eq!(insert_bar(&bars, 850, 1000, 6000), None, "no room");
+        assert_eq!(
+            insert_bar(&bars, 2000, 1000, 6000),
+            Some((vec![(1000, 2000), (2100, 3100)], 1)),
+            "kept apart"
+        );
+        assert_eq!(
+            insert_bar(&bars, 5500, 1000, 6000),
+            Some((vec![(1000, 2000), (5500, 6000)], 1))
+        );
+        assert_eq!(insert_bar(&bars, 5950, 1000, 6000), None);
+    }
+
+    #[test]
+    fn bar_points_are_the_bars_whatever_the_channel_was() {
+        let bars = vec![(1000, 2000), (2000, 3000), (5000, 6000)];
+        let points = bar_points(&bars, 6000);
+        let lane = TimelineLane {
+            target: jstream_control::protocol::LaneTarget {
+                channel: "c".into(),
+            },
+            points: points.clone(),
+            on: true,
+        };
+        assert!(is_switch(&lane));
+        assert_eq!(
+            points
+                .iter()
+                .map(|p| (p.at_ms, p.value.get()))
+                .collect::<Vec<_>>(),
+            vec![(0, 0.0), (1000, 1.0), (3000, 0.0), (5000, 1.0)],
+            "touching bars join"
+        );
+        for from in [false, true] {
+            assert_eq!(
+                switch_bars(&points, 6000, from),
+                vec![(1000, 3000), (5000, 6000)]
+            );
+        }
+        assert_eq!(
+            switch_bars(&bar_points(&[(0, 500)], 6000), 6000, true),
+            vec![(0, 500)]
+        );
+        let none = bar_points(&[], 6000);
+        assert_eq!(none.len(), 1);
+        assert_eq!(switch_bars(&none, 6000, false), vec![]);
     }
 
     #[test]
@@ -417,6 +606,8 @@ mod tests {
             },
             target: found[0].target.clone(),
             amount: None,
+            enabled: true,
+            mode: jstream_control::protocol::MappingMode::Replace,
         });
         assert_eq!(
             followed_channel(&c, &found[0].target).as_deref(),

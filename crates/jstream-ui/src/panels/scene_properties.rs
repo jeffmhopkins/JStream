@@ -28,24 +28,32 @@ use crate::panels::number::{NumberField, into_draft};
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
     Action, CameraMotionModifier, Chord, Edit, FilterId, FilterOwner, Finite32, ItemId,
-    SceneCamera, SceneId, SceneRole, SourceKind, TransitionPresetId, check_camera_motion,
-    parse_rgba,
+    MAX_BLUR_PX, SceneCamera, SceneId, SceneRole, SourceKind, TransitionPresetId,
+    check_camera_motion, lens_blur, parse_rgba,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
-/// The dialog's state as context: the scene it shows while open.
+/// The dialog's state as context: the scene it shows while open, and whether it opens
+/// on its Filters segment.
 #[derive(Clone, Copy)]
-pub struct SceneDialog(RwSignal<Option<SceneId>>);
+pub struct SceneDialog(RwSignal<Option<SceneId>>, RwSignal<bool>);
 
 impl SceneDialog {
     /// A closed dialog.
     pub fn new() -> SceneDialog {
-        SceneDialog(RwSignal::new(None))
+        SceneDialog(RwSignal::new(None), RwSignal::new(false))
     }
 
     /// Opens the dialog on `scene_id`.
     pub fn open(&self, scene_id: SceneId) {
+        self.1.set(false);
+        self.0.set(Some(scene_id));
+    }
+
+    /// Opens the dialog on `scene_id`, on its Filters segment (a menu's Edit filters…).
+    pub fn open_filters(&self, scene_id: SceneId) {
+        self.1.set(true);
         self.0.set(Some(scene_id));
     }
 }
@@ -287,7 +295,13 @@ pub fn scene_edits(
         };
         let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
-            edits.push(Edit::HotkeyClear { chord });
+            // Only the switch to this scene: the chord's other actions stay (ADR-0208).
+            let switch = Action::SceneSwitch {
+                scene_id: scene_id.clone(),
+                preset_id: None,
+                via: Vec::new(),
+            };
+            edits.extend(collection.unbind_edits(&chord, &switch));
         }
         if let Some(chord) = draft.hotkey.clone() {
             edits.push(Edit::HotkeySet {
@@ -324,7 +338,8 @@ pub fn SceneProperties() -> impl IntoView {
             };
             move || {
                 if present.get() {
-                    Some(view! { <SceneBody scene_id=scene_id.clone() close=close /> })
+                    let filters = dialog.1.get_untracked();
+                    Some(view! { <SceneBody scene_id=scene_id.clone() filters=filters close=close /> })
                 } else {
                     request_animation_frame(close);
                     None
@@ -335,7 +350,12 @@ pub fn SceneProperties() -> impl IntoView {
 }
 
 #[component]
-fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static) -> impl IntoView {
+fn SceneBody(
+    scene_id: SceneId,
+    /// Whether it opens on the Filters segment rather than Settings.
+    filters: bool,
+    close: impl Fn() + Copy + Send + Sync + 'static,
+) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let Some(opened) = studio
@@ -367,7 +387,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     // Filter edits apply at once; Cancel puts back each one the dialog sent.
     let undo = FilterUndo::begin(std::slice::from_ref(&owner));
     let selected = RwSignal::new(None::<FilterId>);
-    let on_filters = RwSignal::new(false);
+    let on_filters = RwSignal::new(filters);
     let note = match parent {
         Some(parent) => format!("those of “{parent}”, which this keyframe follows"),
         None => "the whole scene".to_owned(),
@@ -640,6 +660,23 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                                     }
                                 />
                                 <span>"Autofocus"</span>
+                            </label>
+                            <label class="camera-check">
+                                <input
+                                    type="checkbox"
+                                    aria-label="Real lens"
+                                    title="Zooming in or focusing closer softens the background, as with a real lens"
+                                    prop:checked=move || draft.with(|d| d.camera.is_some_and(|c| c.fixed_aperture))
+                                    on:change=move |event| {
+                                        let on = event_target_checked(&event);
+                                        draft.update(|d| {
+                                            if let Some(camera) = d.camera.as_mut() {
+                                                real_lens(camera, on, canvas.height);
+                                            }
+                                        });
+                                    }
+                                />
+                                <span>"Real lens"</span>
                             </label>
                             <div class="axis-row camera-row">
                                 <span class="label">"Focus distance"</span>
@@ -1078,7 +1115,26 @@ fn depth_of_field(camera: &mut SceneCamera, on: bool) {
     } else {
         camera.focus_px = None;
         camera.blur_px = Finite32::ZERO;
+        camera.fixed_aperture = false;
     }
+}
+
+/// Turns `camera`'s fixed aperture on or off (ADR-0223), keeping the blur it draws with
+/// at its zoom and focus now: on, `blur_px` becomes the aperture that blurs by it here;
+/// off, the blur the aperture gives here. Either at most [`MAX_BLUR_PX`], so at an
+/// extreme zoom or focus, where the blur kept would need more, it draws less than before.
+fn real_lens(camera: &mut SceneCamera, on: bool, height: u32) {
+    if camera.fixed_aperture != on
+        && let Some(focus) = camera.focus_px
+    {
+        let scale = lens_blur(1.0, height as f32, camera.fov_deg.get(), focus.get());
+        let blur = camera.blur_px.get();
+        let kept = if on { blur / scale } else { blur * scale };
+        if let Some(kept) = Finite32::new(kept.clamp(0.0, MAX_BLUR_PX)) {
+            camera.blur_px = kept;
+        }
+    }
+    camera.fixed_aperture = on;
 }
 
 /// The blur Depth of field starts with, in canvas pixels.
@@ -1234,6 +1290,7 @@ mod tests {
             scene_edits(&c, &a, &before, &draft("A", Some("F3"))),
             Ok(vec![
                 Edit::HotkeyClear {
+                    action: Some(switch("a")),
                     chord: Chord::new("F1")
                 },
                 Edit::HotkeySet {
@@ -1249,6 +1306,20 @@ mod tests {
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", None)),
             Ok(vec![Edit::HotkeyClear {
+                action: Some(switch("a")),
+                chord: Chord::new("F1")
+            }])
+        );
+        // The chord's other actions stay bound (ADR-0208).
+        let mut shared = c.clone();
+        let reset = Action::AudioResetLoudness {};
+        shared
+            .hotkeys
+            .push(HotkeyBinding::new(Chord::new("F1"), &reset));
+        assert_eq!(
+            scene_edits(&shared, &a, &before, &draft("A", None)),
+            Ok(vec![Edit::HotkeyClear {
+                action: Some(switch("a")),
                 chord: Chord::new("F1")
             }])
         );
@@ -1700,6 +1771,41 @@ mod tests {
         depth_of_field(&mut camera, false);
         assert_eq!((camera.focus_px, camera.blur_px.get()), (None, 0.0));
         assert!(!camera.autofocus);
+    }
+
+    /// ADR-0223: turning Real lens on or off keeps the blur the camera draws with at its
+    /// zoom and focus now, and turning the depth of field off turns it off.
+    #[test]
+    fn real_lens_keeps_the_blur_it_draws_with() {
+        let canvas = Collection::default().canvas;
+        let drawn = |c: SceneCamera| {
+            c.view(canvas)
+                .expect("a valid camera")
+                .focus()
+                .expect("a depth of field")
+                .blur
+        };
+        let mut camera = SceneCamera::framing(canvas);
+        depth_of_field(&mut camera, true);
+        camera.fov_deg = Finite32::new(30.0).expect("finite");
+        camera.focus_px = Finite32::new(camera.target_distance() * 1.5);
+        let before = drawn(camera);
+        real_lens(&mut camera, true, canvas.height);
+        assert!(camera.fixed_aperture);
+        assert!(
+            (drawn(camera) - before).abs() < 1e-3,
+            "{} vs {before}",
+            drawn(camera)
+        );
+        camera.fov_deg = Finite32::new(15.0).expect("finite");
+        assert!(drawn(camera) > before, "zooming in softens the background");
+        let zoomed = drawn(camera);
+        real_lens(&mut camera, false, canvas.height);
+        assert!(!camera.fixed_aperture);
+        assert!((drawn(camera) - zoomed).abs() < 1e-3);
+        real_lens(&mut camera, true, canvas.height);
+        depth_of_field(&mut camera, false);
+        assert!(!camera.fixed_aperture);
     }
 
     /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, or from the

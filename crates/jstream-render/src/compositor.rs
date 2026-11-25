@@ -678,6 +678,21 @@ impl Compositor {
         self.blending
     }
 
+    /// Sets the samples every 3D model this compositor draws from now on is drawn with
+    /// (ADR-0242): multisampled anti-aliasing of its layer, resolved into the layer
+    /// before any filter runs over it. 1 draws models without it, as a new compositor
+    /// does. A count the device can't draw steps down to the most it can; returns the
+    /// count models now draw with. A lit card's quad isn't multisampled, as it has no
+    /// edge inside its layer.
+    pub fn set_model_antialiasing(&mut self, samples: u32) -> u32 {
+        self.models.set_samples(&self.gpu, samples)
+    }
+
+    /// The samples set by [`Self::set_model_antialiasing`], as the device draws them.
+    pub fn model_antialiasing(&self) -> u32 {
+        self.models.samples()
+    }
+
     /// How long the last [`Self::render`] spent waiting for its readback: the GPU
     /// finishing the frame and the copy to the CPU. Zero for a render with no readback.
     /// A profile counts it apart from the composite it follows (ADR-0103).

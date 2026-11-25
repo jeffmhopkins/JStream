@@ -198,8 +198,9 @@ impl Graph {
                 .bindings()
                 .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                 .collect(),
-            value_bindings: self.value_bindings().cloned().collect(),
+            value_bindings: Box::new(self.value_bindings().cloned().collect()),
             channels: Box::new(self.channels().cloned().collect()),
+            shows: Box::new(self.shows().cloned().collect()),
             folders: self.state.folders().iter().map(Folder::to_info).collect(),
             labels: self.state.labels().iter().map(Label::to_info).collect(),
         }
@@ -291,6 +292,7 @@ impl Folder {
             folder_id: self.id.clone(),
             name: self.name.clone(),
             parent: self.parent.clone(),
+            scene_id: self.scene.clone(),
         }
     }
 }
@@ -473,8 +475,9 @@ mod tests {
                 master: Default::default(),
                 hotkeys: vec![],
                 bindings: vec![],
-                value_bindings: vec![],
+                value_bindings: Box::default(),
                 channels: Box::default(),
+                shows: Box::default(),
                 folders: Vec::new(),
                 labels: Vec::new(),
             }

@@ -55,6 +55,12 @@ and calls this crate.
   The layer may have fewer pixels than the canvas it stands for, its extent
   ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)):
   the model is placed on the extent's canvas and the layer holds the same picture, less sharp.
+  It is drawn multisampled, with the samples `Compositor::set_model_antialiasing` last
+  set (1, none, until set; a count the device can't draw steps down to the most it can,
+  `model/msaa.rs`), its colour resolved into the layer as the pass ends and a surface
+  buffer drawn with it resolved to the nearest sample of each texel
+  (`surface_resolve.wgsl`); a lit card's quad is drawn with one sample
+  ([ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)).
   The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
@@ -87,10 +93,16 @@ and calls this crate.
   `dropping` (0 to 1, easing out over the last 0.15 toward its setting, [ADR-0186](../../docs/adr/0186-the-sky-eases-out-of-warp-toward-rest.md)) the deep sky returns early, squeezed ahead, and zooms back out to its
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
-  about 0.6 px wide. Up to `MAX_SKY_PICTURES` (4) `SkyPicture`s are drawn over all of
+  about 0.6 px wide. A pixel looks at the cells of its column and the columns either side
+  from six star widths behind it to six ahead (at most two cells each way), so a star's
+  glow isn't cut off at its cell's edges. A cell keeps its star while its share of the
+  sky, which changes as the cells stream past, is above the star's dice roll, and the
+  star fades in over the last 20% of that share (`star_weight`). So at a slow warp no
+  star or streak pops in as the stars stream past
+  (`golden_sky_a_slow_warp_fades_its_stars_in_and_out`). Up to `MAX_SKY_PICTURES` (4) `SkyPicture`s are drawn over all of
   it, bottom first, each read through the tangent plane at its centre (`pinned`, one
   texture binding each, 7 to 10), covering what is behind it and fading as the deep sky
-  does at warp ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
+  does at warp, times its own `opacity` ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
   [ADR-0198](../../docs/adr/0198-an-arrival-can-be-a-planet-with-its-sun.md),
   `golden_sky_a_pinned_picture_covers_the_sky_where_it_is`). The engine places the layer under the scene's items with no camera.
   Its two pipelines (the frame's and the bright stars' table's) are made on the first
@@ -310,14 +322,30 @@ and calls this crate.
   is not the encoder's NV12 texture.
 - `Nv12Converter` turns that sRGB output into NV12 for the encoders
   ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline) step 4). The target
-  is either the plane views of a native `NV12` texture (`Nv12Target::nv12_texture`,
-  for the platform's `encode_target`) or `Nv12Planes`, an `R8Unorm` Y texture and an
-  `Rg8Unorm` CbCr texture at half size, which every adapter can render to and which
-  `Nv12Planes::read` copies back as packed NV12 for the CPU fallback. The colour is
+  is the plane views of a native `NV12` texture (`Nv12Target::nv12_texture`), two
+  plane textures the platform made over one surface (`Nv12Target::plane_textures`, an
+  `R8Unorm` Y and a half-size `Rg8Unorm` CbCr, where wgpu has no NV12 format, as on
+  Metal), or `Nv12Planes`, an `R8Unorm` Y texture and an `Rg8Unorm` CbCr texture at
+  half size, which every adapter can render to and which `Nv12Planes::read` copies back
+  as packed NV12 for the CPU fallback. `Nv12Target::gpu_frame` picks the first or the
+  second for the platform's `encode_target`, by whether the `GpuFrame` is two-plane. The colour is
   `jstream-media`'s `ColorInfo`: BT.709 only, limited range (the default) or full.
   `Nv12Converter::submit` runs a pass into a platform `GpuFrame` in a submit of its
   own on a compositor's queue, which is how `jstream-core`'s render thread feeds an
   encoder that takes GPU frames.
+- `Downscaler` scales a frame the compositor drew down to a smaller size on the GPU
+  (`downscale.rs`), so a consumer that wants a smaller picture of what was already drawn
+  (a preview stream of the program) gets it without a second composite. One fullscreen
+  pass writes each target texel as the exact box average of the source texels it
+  covers, each weighted by how much of it is covered, read with `textureLoad` (which the
+  sRGB view decodes to linear) and averaged premultiplied, then written back as straight
+  alpha. A target (`Downscaler::target`, a `Downscaled`) is the output's format and
+  usages, `Rgba8UnormSrgb` with `RENDER_ATTACHMENT | COPY_SRC | TEXTURE_BINDING`, so a
+  readback ring or `Nv12Converter` reads the returned `Output` as it would the
+  compositor's. `Downscaler::submit` runs the pass in a submit of its own; the caller
+  submits it before anything draws into the source again, since the compositor reuses
+  its output texture for its next frame of that size
+  (`a_scaled_texel_averages_what_it_covers`).
 - **A lost device** (a driver reset after a hang, Windows' TDR, a removed GPU; #349).
   Every compositor sets wgpu's device-lost callback and uncaptured-error handler on its
   device, its own or the context's (wgpu keeps one of each per device, and the program
@@ -682,7 +710,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    records the pass into its own encoder, after the composite, and stages a shared
    target's `FrameSync` before that submit. `Nv12Converter::submit` does that for a
    platform `GpuFrame`: it stages the frame, records the pass, transitions the frame's
-   texture to `PRESENT` as the composite does with the frames it samples, and submits,
+   texture (both plane textures of a two-plane frame) to `PRESENT` as the composite
+   does with the frames it samples, and submits,
    holding the compositor's `SubmitLock` from the stage through the submit as `render`
    does.
 
@@ -721,11 +750,14 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Surface pipelines (a model drawn into a surface buffer, the layer pipelines with a surface beside the layer, and the merge) and the buffer's depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another; a bind group per merge |
 | Model depth targets (`Depth32Float`) | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
+| Multisampled model targets (ADR-0242): colour (`Rgba16Float`) and depth (`Depth32Float`) at the count `set_model_antialiasing` set, and a surface buffer's three with their resolve bind group once a model is drawn with one; the surface resolve pipeline | The size and count of the last two multisampled draws (`model/msaa.rs`), made again for another; none while models draw with one sample; the pipeline with the compositor |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
 | `Nv12Planes` textures | The planes value |
+| `Downscaler` pipeline and layout | The downscaler |
+| `Downscaled` texture, view and uniform, and the bind group of the source it last read | The target; the bind group made again when the source texture changes |
 | A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
 | A multi-pass filter's scratch layers | Its `VideoFilter`: reused by the next call at the same size; replaced for a new size, and dropped when a call asks for fewer ([Filters](#filters)) |
 | A filter draw's uniform buffers | Its `VideoFilter`: rewritten by the next call's same draw; made again for another compositor or parameter size, and dropped when a call draws fewer times. They hold no texture ([Filters](#filters)) |
@@ -845,7 +877,8 @@ engine only passes cameras the graph accepted.
 **Depth of field.** A camera with `focus_px` and a `blur_px` above 0
 ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) blurs each fragment by its own
 distance along the view: `Shape.dof` carries the focus as a `w` (`focus / f`), the far
-blur and the shape's largest blur to every vertex, and `composite.wgsl`'s `source` works
+blur (the view's, which a fixed-aperture camera scales by its zoom and focus,
+[ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)) and the shape's largest blur to every vertex, and `composite.wgsl`'s `source` works
 out `r = blur · |w − focus| / w`, at most that largest blur and 64 px, from the
 fragment's interpolated `w`. Under half a pixel it takes the
 one sample as before. Otherwise it averages 16 taps on a golden-angle spiral over the
@@ -914,7 +947,9 @@ so a pixel that several surfaces cover is shaded once, at the nearest, and not o
 surface: the shading is by far the dearer part (up to five textures, eight lights, the
 shadow taps and the sky), and a model seen from inside, such as a room or a cockpit, has
 several surfaces behind most pixels. The clip position is `@invariant`, so both draws
-place a fragment at the same depth. The shading draws the primitives last to first:
+place a fragment at the same depth. Drawn multisampled (ADR-0242), both draws and the depth
+target have the layer's samples: the depth and the `Equal` test are per sample and the
+shading still runs once a pixel, and the colour resolves into the layer as the pass ends. The shading draws the primitives last to first:
 where two lie in one plane both pass the equal test and the later draw replaces the
 earlier, so that order shows the first of them, as before (inside one primitive the
 triangles still draw in index order, so of two of its own in one plane the later shows)
@@ -1073,7 +1108,9 @@ A scene's **surface buffer**, for its screen-space reflections (ADR-0170 decisio
 `Compositor::clear_surface(targets)` clears three canvas-sized layers and a depth of
 their size. `Compositor::draw_model_with_surface(draw, target, surface)` draws a model's
 layer and, from the same shading (`fs_with_surface`, its opaque primitives only), its
-surface into three layers of the layer's size, cleared first; then
+surface into three layers of the layer's size, cleared first (multisampled, the
+surface is drawn at the layer's samples and `surface_resolve.wgsl` keeps each texel's
+nearest sample, its largest `1 / w`, never a blend, ADR-0242 decision 3); then
 `Compositor::merge_model_surface(layers, targets)` merges them into the buffer
 ([ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)) where
 they are nearer than what it holds (`surface_merge.wgsl`, one full-screen triangle cut
@@ -1209,8 +1246,10 @@ scene's pixels, over a canvas-sized composite) and pack effects and shader sourc
 parameters the engine can't tell apart. A test fails on a pixel parameter that is neither
 scaled nor named as counting in something else. So `Pass::reach` counts in texels, from
 the scaled settings; `video_filter_outset` in extent pixels, as the settings do; and the
-pad (`set_pad`) in texels, which only an item's effects layer has, whose texels are its
-extent pixels.
+pad (`set_pad`) in texels, which only an item's effects layer has. Core places that layer
+at its box's size, and one scaled down to fit the largest layer side at the box's canvas
+size, so its texels per extent pixel are the scale core works the pad out at
+([ADR-0219](../../docs/adr/0219-a-big-items-effects-layer-is-placed-at-its-boxs-size.md), #1720).
 
 **The harness.**
 
@@ -2089,7 +2128,11 @@ taps reach it, which centre-sited chroma would not do. Odd sizes, a size mismatc
 BT.601 and a non-sRGB source are refused. `submit` stages its frame once, with the
 compositor's `SubmitLock` held and free again after the submit, and leaves the
 conversion in the planes, with a plane texture standing in for the platform's
-target. The native path (plane views of an `NV12`
+target. A two-plane frame (`GpuFrame::planar`) converts through
+`Nv12Target::gpu_frame` and `submit` to the same bytes as the planes path, with its one
+hold staged once, and `plane_textures` refuses planes of the wrong format, size or
+usage; a one-texture `R8Unorm` frame is not an NV12 target, and frame equality covers
+both planes. The native path (plane views of an `NV12`
 texture, compared with the planes path) runs where the adapter has
 `TEXTURE_FORMAT_NV12`. It skips on lavapipe, which offers the feature but writes its
 plane-1 render into plane 0's memory (the Y plane's first rows came back holding the

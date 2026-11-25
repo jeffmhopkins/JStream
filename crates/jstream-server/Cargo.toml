@@ -19,7 +19,7 @@ workspace = true
 # The network listener (ADR-0104): a second, TLS-only listener for devices on the network,
 # with a self-signed certificate made on the host. The daemon and the desktop app turn it
 # on; without it the server listens on loopback only, as before.
-tls = ["dep:rcgen", "dep:ring", "dep:rustls", "dep:tokio-rustls"]
+tls = ["dep:rcgen", "dep:ring", "dep:rustls", "dep:socket2", "dep:tokio-rustls"]
 
 [dependencies]
 axum.workspace = true
@@ -47,6 +47,9 @@ rcgen = { workspace = true, optional = true }
 ring = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 tokio-rustls = { workspace = true, optional = true }
+# The mDNS socket that announces the network listener (ADR-0233): port 5353 shared with
+# the system's responder. `tls` only.
+socket2 = { workspace = true, optional = true }
 # A span per connection; accepted and refused upgrades are logged (R-RS-005).
 tracing.workspace = true
 

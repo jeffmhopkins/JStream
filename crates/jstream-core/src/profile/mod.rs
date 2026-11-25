@@ -30,7 +30,7 @@ use crate::chain::ChainOwner;
 use crate::lock;
 
 use meter::{BUCKETS, PHASES, UnitTotals, bucket_top, nanos};
-pub(crate) use meter::{DrawMeter, DrawerSlot, DrawerTotals, Phase, UnitKey};
+pub(crate) use meter::{DrawMeter, DrawerSlot, DrawerTotals, Phase, Retired, UnitKey};
 pub(crate) use streams::{
     InputTotals, MixerGuard, MixerMeter, MixerSource, StreamGuard, StreamMeter, StreamRegistry,
     StreamTotals,
@@ -219,6 +219,17 @@ impl Profiler {
     /// A meter for a new run of the program stage's render thread.
     pub(crate) fn program_meter(&self) -> DrawMeter {
         self.program.meter(self.budget())
+    }
+
+    /// The camera `scene` was drawn through last by the program stage or the preview
+    /// hub, the most recent one, while one of them drew it in the last second
+    /// (`scene.drawn_camera`).
+    pub(crate) fn drawn_camera(
+        &self,
+        scene: &jstream_protocol::SceneId,
+        now: Instant,
+    ) -> Option<jstream_protocol::SceneCamera> {
+        crate::drawn_camera::latest([self.program.cameras(), self.preview.cameras()], scene, now)
     }
 
     /// A meter for a new run of the preview hub's thread.
@@ -595,10 +606,14 @@ fn unit(key: &UnitKey) -> ProfileUnit {
             ChainOwner::Scene(scene_id) => ProfileUnit::SceneChain {
                 scene_id: scene_id.clone(),
             },
-            ChainOwner::Item(scene_id, item_id) => ProfileUnit::ItemEffects {
-                scene_id: scene_id.clone(),
-                item_id: item_id.clone(),
-            },
+            // A model source's filters over an item's layer are timed with the item
+            // (`run_chains`), so this arm only names them the same way.
+            ChainOwner::Item(scene_id, item_id) | ChainOwner::Shown(_, scene_id, item_id) => {
+                ProfileUnit::ItemEffects {
+                    scene_id: scene_id.clone(),
+                    item_id: item_id.clone(),
+                }
+            }
             ChainOwner::Master(mix_id) => ProfileUnit::MasterChain {
                 mix_id: mix_id.clone(),
             },

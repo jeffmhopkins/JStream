@@ -276,6 +276,38 @@ fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
     assert_eq!(status(&engine, "mic"), None);
 }
 
+/// A `desktop_audio` source with a `device` records what that output device plays,
+/// rather than the default output's.
+#[test]
+fn desktop_audio_with_a_device_records_that_output() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let speakers = jstream_platform::fake::FAKE_SPEAKERS;
+    batch(
+        &control,
+        Batch::single(audio_source(
+            "desk",
+            "desktop_audio",
+            Some(("device", speakers)),
+        )),
+    )
+    .expect("desk");
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(eventually(
+        || status(&engine, "desk") == Some(AudioStatus::Recording)
+    ));
+    assert_eq!(
+        audio.input_targets(),
+        vec![AudioInputTarget::OutputLoopback(
+            jstream_platform::DeviceId::new(speakers)
+        )]
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
+}
+
 /// Shows or hides the item that places the media file.
 fn show_clip(control: &crate::InProcessControl, visible: bool) {
     batch(
@@ -1518,6 +1550,8 @@ fn a_network_audio_source_records_an_accepted_jtunnel_sender_once_it_is_heard() 
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // No discovery: nothing joins mDNS's group or asks the network.
+    setup.discover = None;
     let engine = engine(&audio, &clock);
     engine.start_jtunnel(&setup).expect("a receiver");
     let control = connected(&engine);
@@ -1565,6 +1599,8 @@ fn a_jtunnel_senders_clock_publishes_the_tempo_values() {
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // No discovery: nothing joins mDNS's group or asks the network.
+    setup.discover = None;
     let engine = engine(&audio, &clock);
     engine.start_jtunnel(&setup).expect("a receiver");
     let control = connected(&engine);
@@ -1907,6 +1943,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
         palette: std::collections::BTreeMap::new(),
     };
     let modifier = |id: &str, kind: MotionKind, enabled: bool| MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: id.into(),
         property: MotionProperty::X,
         effect: None,
@@ -1951,6 +1988,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             Edit::SceneSetCameraMotion {
                 scene_id: SceneId::new("a"),
                 motion: vec![CameraMotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: "pan".into(),
                     property: CameraProperty::Pan,
                     kind: data(None, 0),
@@ -1961,6 +1999,8 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             },
             Edit::BindingSetValue {
                 binding: ValueBinding {
+                    enabled: true,
+                    mode: jstream_protocol::MappingMode::Replace,
                     binding_id: "master".into(),
                     input: data(None, 4),
                     target: ValueTarget::BusGain {
@@ -1971,6 +2011,8 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             },
             Edit::BindingSetValue {
                 binding: ValueBinding {
+                    enabled: true,
+                    mode: jstream_protocol::MappingMode::Replace,
                     binding_id: "master-2".into(),
                     input: data(None, 1),
                     target: ValueTarget::BusGain {

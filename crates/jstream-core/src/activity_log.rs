@@ -147,6 +147,20 @@ fn describe_action(action: &Action, state: &State) -> String {
             format!("Put {} on preview", scene(state, scene_id))
         }
         Action::ItemShow { item_id, .. } => format!("Showed {}", item(state, item_id)),
+        // Described before it runs, so a toggle reads the mute it is about to flip.
+        Action::SourceMute { source_id, to } => {
+            let now = state
+                .source(source_id)
+                .and_then(|s| s.audio())
+                .is_some_and(|audio| audio.muted);
+            format!("{} {}", muted_verb(to.muted(now)), source(state, source_id))
+        }
+        Action::BusMute { bus_id, to } => {
+            let bus = state.bus(bus_id);
+            let now = bus.is_some_and(|bus| bus.muted());
+            let name = named(bus.map(|bus| bus.name()), bus_id.as_str());
+            format!("{} bus {name}", muted_verb(to.muted(now)))
+        }
         Action::ItemHide { item_id, .. } => format!("Hid {}", item(state, item_id)),
         // Described before it runs: it shows an item hidden there, and hides one shown.
         Action::ItemToggle { item_id, scene_id } => format!(
@@ -162,6 +176,9 @@ fn describe_action(action: &Action, state: &State) -> String {
             format!("Started output {}", quote(output_id.as_str()))
         }
         Action::OutputStop { output_id } => format!("Stopped output {}", quote(output_id.as_str())),
+        Action::OutputToggle { output_id } => {
+            format!("Started or stopped output {}", quote(output_id.as_str()))
+        }
         Action::OutputSetKey { output_id, .. } => {
             format!("Set the stream key of output {}", quote(output_id.as_str()))
         }
@@ -174,12 +191,16 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::AudioResetLoudness {} => "Reset the loudness meter".to_owned(),
         Action::PreviewSubscribe { .. } => "Opened a preview stream".to_owned(),
         Action::PreviewUnsubscribe { .. } => "Closed a preview stream".to_owned(),
+        Action::PreviewShow { .. } => "Changed what a preview stream shows".to_owned(),
+        Action::PreviewRequestKeyframe { .. } => "Asked a preview stream for a keyframe".to_owned(),
         Action::YoutubeSignIn => "Started a YouTube sign-in".to_owned(),
         Action::YoutubeSignOut => "Signed out of YouTube".to_owned(),
         Action::YoutubeCreateBroadcast { .. } => "Created a YouTube broadcast".to_owned(),
         Action::YoutubeBindBroadcast { .. } => "Bound a YouTube broadcast".to_owned(),
         Action::YoutubeTransitionBroadcast { .. } => "Moved a YouTube broadcast on".to_owned(),
         Action::PairingStart => "Started pairing a device".to_owned(),
+        Action::PairingAnswer { allow: true, .. } => "Allowed a device to pair".to_owned(),
+        Action::PairingAnswer { allow: false, .. } => "Refused a device's ask to pair".to_owned(),
         Action::DeviceRevoke { .. } => "Revoked a paired device".to_owned(),
         Action::AgentApprove { .. } => "Answered an agent's request to connect".to_owned(),
         Action::AgentForget { .. } => "Removed an approved agent".to_owned(),
@@ -265,10 +286,10 @@ fn describe_action(action: &Action, state: &State) -> String {
             fade(*fade_ms)
         ),
         Action::ChannelSwitch { channel_id, to } => match to {
-            jstream_protocol::ChannelSwitch::On => {
+            jstream_protocol::ChannelSwitch::On | jstream_protocol::ChannelSwitch::HoldOn => {
                 format!("Switched channel {} on", channel(state, channel_id))
             }
-            jstream_protocol::ChannelSwitch::Off => {
+            jstream_protocol::ChannelSwitch::Off | jstream_protocol::ChannelSwitch::HoldOff => {
                 format!("Switched channel {} off", channel(state, channel_id))
             }
             jstream_protocol::ChannelSwitch::Toggle => {
@@ -594,11 +615,29 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         Edit::HotkeySetLabels { chord, .. } => {
             format!("Changed the labels of the hotkey {}", chord.as_str())
         }
-        Edit::HotkeyClear { chord } => format!("Cleared the hotkey {}", chord.as_str()),
+        Edit::HotkeyClear {
+            chord,
+            action: None,
+        } => format!("Cleared the hotkey {}", chord.as_str()),
+        Edit::HotkeyClear {
+            chord,
+            action: Some(action),
+        } => format!(
+            "Unbound {} from {}",
+            humanize(action.name()),
+            chord.as_str()
+        ),
         Edit::BindingSet { trigger, action } => {
             format!("Bound {trigger} to {}", humanize(action.name()))
         }
-        Edit::BindingClear { trigger } => format!("Cleared the binding of {trigger}"),
+        Edit::BindingClear {
+            trigger,
+            action: None,
+        } => format!("Cleared the binding of {trigger}"),
+        Edit::BindingClear {
+            trigger,
+            action: Some(action),
+        } => format!("Unbound {} from {trigger}", humanize(action.name())),
         Edit::TimelineSet {
             scene_id,
             timeline: info,
@@ -747,6 +786,11 @@ fn named(name: Option<&str>, id: &str) -> String {
     quote(name.unwrap_or(id))
 }
 
+/// "Muted" or "Unmuted".
+fn muted_verb(muted: bool) -> &'static str {
+    if muted { "Muted" } else { "Unmuted" }
+}
+
 fn scene(state: &State, scene_id: &SceneId) -> String {
     named(state.scene(scene_id).map(|s| s.name()), scene_id.as_str())
 }
@@ -891,7 +935,13 @@ mod tests {
             "Bound MIDI note 36 on channel 10 from Pads to scene switch"
         );
         assert_eq!(
-            super::describe_edit(&Edit::BindingClear { trigger }, graph.state()),
+            super::describe_edit(
+                &Edit::BindingClear {
+                    action: None,
+                    trigger
+                },
+                graph.state()
+            ),
             "Cleared the binding of MIDI note 36 on channel 10 from Pads"
         );
     }

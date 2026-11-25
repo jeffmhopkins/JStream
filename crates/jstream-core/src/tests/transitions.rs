@@ -1084,6 +1084,70 @@ fn an_item_shown_on_a_3d_keyframe_keeps_its_camera() {
     );
 }
 
+/// An item shown on program in a 3D scene whose camera moves on its own (here a sway on
+/// its roll) starts its Move from the camera the screen showed, the scene's camera moved
+/// by its motion, not from the scene's camera without it: the held screen is moved by
+/// the family's motion as the scene is, so the camera doesn't jump away and glide back.
+#[test]
+fn an_item_shown_on_a_moving_3d_camera_moves_the_screen_with_it() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let sway = jstream_protocol::CameraMotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
+        modifier_id: "sway".into(),
+        property: jstream_protocol::CameraProperty::Roll,
+        kind: jstream_protocol::MotionKind::Drift {
+            rate_per_s: jstream_protocol::Finite32::ONE,
+            wrap: None,
+        },
+        clock: jstream_protocol::MotionClock::Engine,
+        enabled: true,
+        amount: None,
+    };
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(camera_at(900.0))),
+            Edit::SceneSetCameraMotion {
+                scene_id: SceneId::new("a"),
+                motion: vec![sway],
+            },
+            add("a", "a2", "green"),
+            Edit::ItemSetVisible {
+                item_id: jstream_protocol::ItemId::new("a2"),
+                scene_id: None,
+                visible: false,
+            },
+            preset("move", "move", 400),
+            Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("move"),
+            },
+        ]),
+    )
+    .expect("a 3D scene whose camera sways");
+    switch(&control, "a", None).expect("to a");
+    clock.advance(1_000_000);
+    engine.replan();
+    let hub = engine.render_hub();
+    assert_eq!(
+        hub.load().shot().held_camera_moves(),
+        None,
+        "a is on program"
+    );
+    let action = Action::ItemShow {
+        item_id: jstream_protocol::ItemId::new("a2"),
+        scene_id: None,
+    };
+    block_on(control.call(Call::Action { action })).expect("show a2");
+    clock.advance(100_000);
+    engine.replan();
+    assert_eq!(
+        hub.load().shot().held_camera_moves(),
+        Some(true),
+        "the screen's camera sways as the scene's does"
+    );
+}
+
 /// A scene with a video chain is one picture in a transition (ADR-0065 §6), drawn by its
 /// own camera: a Fade into or out of a 3D one draws that picture flat, through no camera,
 /// so it isn't seen through its camera a second time.

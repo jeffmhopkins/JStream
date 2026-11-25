@@ -147,10 +147,10 @@ fn the_reflection_steps_are_one_of_the_counts() {
     assert_eq!(rendering(&control), Some(set_to), "nothing changed");
 }
 
-/// How many pixels 3D models are drawn with (ADR-0197) is the engine's choice, 0, or one
-/// of the sizes: another is refused and changes nothing.
+/// How many pixels 3D models are drawn with (ADR-0197) is the engine's choice, 0, or a
+/// whole percentage from 50 to 100 (since 0.194): another is refused and changes nothing.
 #[test]
-fn the_model_resolution_is_the_engines_choice_or_one_of_the_sizes() {
+fn the_model_resolution_is_the_engines_choice_or_a_percentage() {
     let engine = Engine::new().with_cpu_compositor();
     let control = connected(&engine);
     assert_eq!(
@@ -165,12 +165,23 @@ fn the_model_resolution_is_the_engines_choice_or_one_of_the_sizes() {
             ..RenderFeaturesChange::default()
         },
     );
+    assert_eq!(
+        rendering(&control).map(|now| now.model_resolution),
+        Some(75)
+    );
+    set(
+        &control,
+        RenderFeaturesChange {
+            model_resolution: Some(92),
+            ..RenderFeaturesChange::default()
+        },
+    );
     let set_to = rendering(&control).expect("reported");
-    assert_eq!(set_to.model_resolution, 75);
+    assert_eq!(set_to.model_resolution, 92, "any whole percentage");
     let refused = block_on(control.call(Call::Action {
         action: Action::StudioSetRendering {
             change: RenderFeaturesChange {
-                model_resolution: Some(80),
+                model_resolution: Some(40),
                 shadows: Some(false),
                 ..RenderFeaturesChange::default()
             },
@@ -180,5 +191,79 @@ fn the_model_resolution_is_the_engines_choice_or_one_of_the_sizes() {
         matches!(&refused, Err(error) if error.to_string().contains("model_resolution")),
         "{refused:?}"
     );
+    assert_eq!(rendering(&control), Some(set_to), "nothing changed");
+}
+
+#[test]
+fn the_smallest_model_resolution_is_a_percentage_from_50_to_100() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    assert_eq!(
+        rendering(&control).map(|now| now.min_model_resolution),
+        Some(50),
+        "every size until it is set"
+    );
+    set(
+        &control,
+        RenderFeaturesChange {
+            min_model_resolution: Some(90),
+            ..RenderFeaturesChange::default()
+        },
+    );
+    let set_to = rendering(&control).expect("reported");
+    assert_eq!(set_to.min_model_resolution, 90);
+    for refused in [49, 101] {
+        let refused = block_on(control.call(Call::Action {
+            action: Action::StudioSetRendering {
+                change: RenderFeaturesChange {
+                    min_model_resolution: Some(refused),
+                    shadows: Some(false),
+                    ..RenderFeaturesChange::default()
+                },
+            },
+        }));
+        assert!(
+            matches!(&refused, Err(error) if error.to_string().contains("min_model_resolution")),
+            "{refused:?}"
+        );
+    }
+    assert_eq!(rendering(&control), Some(set_to), "nothing changed");
+}
+
+/// ADR-0242 decision 2: models are drawn with 4 samples until it is set, and only a count
+/// of `MODEL_ANTIALIASING` is taken.
+#[test]
+fn the_model_antialiasing_is_one_of_the_counts() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    assert_eq!(
+        rendering(&control).map(|now| now.model_antialiasing),
+        Some(4),
+        "4x until it is set"
+    );
+    set(
+        &control,
+        RenderFeaturesChange {
+            model_antialiasing: Some(1),
+            ..RenderFeaturesChange::default()
+        },
+    );
+    let set_to = rendering(&control).expect("reported");
+    assert_eq!(set_to.model_antialiasing, 1);
+    for refused in [0, 3, 16] {
+        let refused = block_on(control.call(Call::Action {
+            action: Action::StudioSetRendering {
+                change: RenderFeaturesChange {
+                    model_antialiasing: Some(refused),
+                    shadows: Some(false),
+                    ..RenderFeaturesChange::default()
+                },
+            },
+        }));
+        assert!(
+            matches!(&refused, Err(error) if error.to_string().contains("model_antialiasing")),
+            "{refused:?}"
+        );
+    }
     assert_eq!(rendering(&control), Some(set_to), "nothing changed");
 }

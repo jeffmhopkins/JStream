@@ -244,6 +244,8 @@ fn deleted_object(edit: &Edit) -> Option<(EntityKind, &str)> {
         Edit::OutputDelete { output_id } => Some((EntityKind::Output, output_id.as_str())),
         Edit::EncoderDelete { profile_id } => Some((EntityKind::Encoder, profile_id.as_str())),
         Edit::TransitionDelete { preset_id } => Some((EntityKind::Transition, preset_id.as_str())),
+        Edit::BusDelete { bus_id } => Some((EntityKind::Bus, bus_id.as_str())),
+        Edit::ShowDelete { show_id } => Some((EntityKind::Show, show_id.as_str())),
         _ => None,
     }
 }
@@ -512,6 +514,9 @@ fn apply_edit(
     if let Some(applied) = crate::value::apply(state, kinds, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::show::apply(state, edit, at) {
+        return applied;
+    }
     if let Some(applied) = crate::channel::apply(state, edit, at) {
         return applied;
     }
@@ -587,6 +592,8 @@ fn apply_edit(
                 return Err(blocked(at, "scene_id", &target, blockers));
             }
             let scene = state.scenes.remove(si);
+            // Its folders go with it (ADR-0222), and come back before its timelines.
+            let folders = crate::organise::remove_scene_folders(state, scene_id)?;
             let mut inverse = vec![match &scene.variant_of {
                 Some(parent) => Edit::SceneCreateVariant {
                     scene_id: scene.id.clone(),
@@ -653,6 +660,7 @@ fn apply_edit(
                 inverse.extend(keyframe::write_edits(&scene.id, item_id, o));
             }
             inverse.extend(crate::camera::restore(&scene));
+            inverse.extend(folders);
             inverse.extend(crate::timeline::restore(&scene));
             Ok(inverse)
         }

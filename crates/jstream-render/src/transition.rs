@@ -190,6 +190,11 @@ impl Stops {
         self.0.is_none()
     }
 
+    /// The stops, in order.
+    pub fn iter(&self) -> impl Iterator<Item = &Endpoint> {
+        self.0.iter().flat_map(|stops| stops.iter())
+    }
+
     /// `from`, the stops and `to`, in order, in `out`; how many there are.
     fn path(&self, from: Endpoint, to: Endpoint, out: &mut [Endpoint; MAX_STOPS]) -> usize {
         out[0] = from;
@@ -456,6 +461,9 @@ pub fn lerp_camera(from: &SceneCamera, to: &SceneCamera, k: f32) -> SceneCamera 
         blur_px,
         // The engine focuses an autofocus camera as it draws it (ADR-0176 decision 5).
         autofocus: to.autofocus,
+        // Its view scales the blur by the zoom and focus it is at, so a glide between
+        // two fixed-aperture cameras blurs as a lens moving between them would.
+        fixed_aperture: to.fixed_aperture,
     };
     if camera.validate().is_ok() {
         camera
@@ -585,6 +593,9 @@ pub fn move_camera(
         blur_px: finite(blur_px.clamp(0.0, MAX_BLUR_PX)),
         // The engine focuses an autofocus camera as it draws it (ADR-0176 decision 5).
         autofocus: to.autofocus,
+        // Its view scales the blur by the zoom and focus it is at, so a glide between
+        // two fixed-aperture cameras blurs as a lens moving between them would.
+        fixed_aperture: to.fixed_aperture,
     };
     if camera.validate().is_ok() {
         camera
@@ -1119,6 +1130,7 @@ mod tests {
             focus_px: None,
             blur_px: Finite32::ZERO,
             autofocus: false,
+            fixed_aperture: false,
         };
         let from = camera(0.0, 40.0, 350.0);
         let to = camera(100.0, 60.0, 10.0);
@@ -1155,6 +1167,7 @@ mod tests {
             focus_px: focus.and_then(Finite32::new),
             blur_px: Finite32::new(blur).expect("finite"),
             autofocus: false,
+            fixed_aperture: false,
         };
         let pulled = super::lerp_camera(&camera(Some(400.0), 4.0), &camera(Some(800.0), 8.0), 0.25);
         assert_eq!(pulled.focus_px.map(Finite32::get), Some(500.0));

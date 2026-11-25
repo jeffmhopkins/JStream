@@ -181,13 +181,15 @@ pub struct ServerConfig {
     /// person turns network access on; [`ServerConfig::new`] leaves it off.
     #[cfg(feature = "tls")]
     pub network: Option<crate::NetworkConfig>,
-    /// Whether the server pairs devices at all (ADR-0044, ADR-0047). Off, it answers no
-    /// `pairing.start`, `device.list` or `device.revoke` itself: they reach the session,
-    /// which answers `unsupported`, so a host's UI hides its pairing panel. No code is
-    /// then drawn, and the gate accepts no device token or cookie, even one already in
-    /// `device_file`.
-    /// [`ServerConfig::new`] leaves it on; a host whose engine serves only itself, like
-    /// the desktop app's webview, turns it off.
+    /// Whether the server pairs devices while its network listener is closed (ADR-0044,
+    /// ADR-0047). While the network listener is open it pairs whatever this says
+    /// (ADR-0234). Off and closed, it answers no `pairing.start`, `pairing.answer`,
+    /// `device.list` or `device.revoke` itself: they reach the session, which answers
+    /// `unsupported`, so a host's UI hides its pairing panel. No code is then drawn, no
+    /// device may ask to pair, and the gate accepts no device token or cookie, even one
+    /// already in `device_file`.
+    /// [`ServerConfig::new`] leaves it on; the desktop app turns it off, so it pairs
+    /// exactly while its network listener is open.
     pub pairing: bool,
     /// A second token, for the host's own UI (ADR-0131 §2): the desktop app makes one at
     /// launch, keeps it only in memory and gives it to its webview. It admits a client

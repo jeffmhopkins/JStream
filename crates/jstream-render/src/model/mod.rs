@@ -18,6 +18,15 @@ use crate::image::{DEPTH_LAYER_FORMAT, Image, LAYER_FORMAT, Owner};
 use crate::mips::{Mips, Region};
 use crate::scene::Color;
 
+use msaa::Drawn;
+
+/// The model shader, after the filters' colour helpers, so a picture decodes as every
+/// pass decodes it.
+const SOURCE: &str = concat!(
+    include_str!("../filter/colour.wgsl"),
+    include_str!("model.wgsl")
+);
+
 /// The depth format: reversed, so `f32`'s precision near 0 is spent far away.
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Bytes of one vertex: position, normal, tangent, texture coordinate and colour.
@@ -607,11 +616,19 @@ pub(crate) struct ModelRuntime {
     /// draw that had any, and their textures, so a steady frame makes no bind group
     /// (ADR-0151 decisions 3 and 9).
     shadow_bind: Option<([Option<wgpu::Texture>; FRAME_TEXTURES], wgpu::BindGroup)>,
-    /// The opaque primitives' depth, drawn before their shading.
-    prepass: wgpu::RenderPipeline,
-    /// Their shading, where the prepass left their depth.
-    opaque: wgpu::RenderPipeline,
-    blended: wgpu::RenderPipeline,
+    /// The layer's pipelines at each sample count drawn with (ADR-0242), made the
+    /// first time a count is: single-sampled first.
+    layer: Vec<(u32, LayerPipelines)>,
+    /// The model shader and its pipeline layout, which a count's pipelines are made of.
+    shader: wgpu::ShaderModule,
+    layout: wgpu::PipelineLayout,
+    /// The samples a model's layer is drawn with (ADR-0242), as
+    /// [`Self::set_samples`] last set it and the device takes: 1 draws it aliased.
+    samples: u32,
+    /// The multisampled targets of the sizes drawn last, and the pass that resolves a
+    /// multisampled surface buffer.
+    msaa: msaa::Targets,
+    surface_resolve: msaa::SurfaceResolve,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
     depth_only: wgpu::RenderPipeline,
     /// What a screen-space reflection reads of each model (ADR-0170 decision 4), for a
@@ -727,11 +744,6 @@ impl ModelRuntime {
             }],
         });
         let rest_pose = pose_bind(&gpu.device, &pose_layout, &[IDENTITY_MAT4]).1;
-        // The filters' colour helpers, so a picture decodes as every pass decodes it.
-        const SOURCE: &str = concat!(
-            include_str!("../filter/colour.wgsl"),
-            include_str!("model.wgsl")
-        );
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-model"),
             source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
@@ -745,120 +757,8 @@ impl ModelRuntime {
             ],
             immediate_size: 0,
         });
-        // The opaque primitives draw twice: their depth first (`fs_prepass`), then their
-        // shading where it is equal, which writes no depth; blended ones test it.
-        #[derive(Clone, Copy, PartialEq)]
-        enum Kind {
-            Prepass,
-            Opaque,
-            Blended,
-        }
-        // With `surface`, the pass also has a surface buffer's three targets, which only
-        // the opaque shading writes (`fs_with_surface`, ADR-0170 decision 4).
-        let pipeline = |kind: Kind, surface: bool| {
-            let unwritten = Some(wgpu::ColorTargetState {
-                format: LAYER_FORMAT,
-                blend: None,
-                write_mask: wgpu::ColorWrites::empty(),
-            });
-            let written = Some(wgpu::ColorTargetState {
-                format: LAYER_FORMAT,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            });
-            let beside = if kind == Kind::Opaque {
-                written
-            } else {
-                unwritten
-            };
-            let targets = [
-                Some(wgpu::ColorTargetState {
-                    format: LAYER_FORMAT,
-                    blend: (kind != Kind::Prepass)
-                        .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                    write_mask: if kind == Kind::Prepass {
-                        wgpu::ColorWrites::empty()
-                    } else {
-                        wgpu::ColorWrites::ALL
-                    },
-                }),
-                beside.clone(),
-                beside.clone(),
-                beside,
-            ];
-            let desc = wgpu::RenderPipelineDescriptor {
-                label: Some(match (kind, surface) {
-                    (Kind::Prepass, false) => "jstream-render-model-prepass",
-                    (Kind::Opaque, false) => "jstream-render-model-opaque",
-                    (Kind::Blended, false) => "jstream-render-model-blended",
-                    (Kind::Prepass, true) => "jstream-render-model-prepass-surface",
-                    (Kind::Opaque, true) => "jstream-render-model-opaque-surface",
-                    (Kind::Blended, true) => "jstream-render-model-blended-surface",
-                }),
-                layout: Some(&layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    buffers: &[Some(wgpu::VertexBufferLayout {
-                        array_stride: VERTEX_STRIDE,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![
-                            0 => Float32x3,
-                            1 => Float32x3,
-                            2 => Float32x4,
-                            3 => Float32x2,
-                            4 => Float32x4,
-                            5 => Uint16x4,
-                            6 => Float32x4,
-                        ],
-                    })],
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    // A front face winds clockwise on the y-down canvas, which is
-                    // clockwise in clip space too. The shader discards back faces, since
-                    // a mirrored placement swaps them.
-                    front_face: wgpu::FrontFace::Cw,
-                    cull_mode: None,
-                    ..Default::default()
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(kind == Kind::Prepass),
-                    depth_compare: Some(if kind == Kind::Opaque {
-                        wgpu::CompareFunction::Equal
-                    } else {
-                        wgpu::CompareFunction::Greater
-                    }),
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some(match kind {
-                        Kind::Prepass => "fs_prepass",
-                        Kind::Opaque if surface => "fs_with_surface",
-                        _ => "fs",
-                    }),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    // The prepass draws in the colour pass, so it has its target, and
-                    // writes none of it.
-                    targets: if surface { &targets[..] } else { &targets[..1] },
-                }),
-                multiview_mask: None,
-                cache: None,
-            };
-            gpu.built.render(device, SOURCE, &(), &desc)
-        };
-        let prepass = pipeline(Kind::Prepass, false);
-        let opaque = pipeline(Kind::Opaque, false);
-        let blended = pipeline(Kind::Blended, false);
+        let first = layer_pipelines(gpu, (&shader, &layout), 1);
         let with_surface = WithSurface {
-            prepass: pipeline(Kind::Prepass, true),
-            opaque: pipeline(Kind::Opaque, true),
-            blended: pipeline(Kind::Blended, true),
             merge: merge_pipeline(gpu),
         };
         let largest = wgpu::BlendComponent {
@@ -1035,9 +935,12 @@ impl ModelRuntime {
             pose_layout,
             rest_pose,
             shadow_bind: None,
-            prepass,
-            opaque,
-            blended,
+            layer: vec![(1, first)],
+            shader,
+            layout,
+            samples: 1,
+            msaa: msaa::Targets::default(),
+            surface_resolve: msaa::SurfaceResolve::new(gpu),
             depth_only,
             surface,
             with_surface,
@@ -1891,7 +1794,17 @@ impl ModelRuntime {
             }
             _ => None,
         };
-        let depth = self.depth_view(gpu, width, height);
+        // A lit card's quad covers its whole target, with no edge to smooth (ADR-0242).
+        let samples = if in_texture { 1 } else { self.samples };
+        let multi = (samples > 1).then(|| {
+            let resolve = beside.as_ref().map(|_| &self.surface_resolve);
+            self.msaa.get(gpu, ((width, height), samples), resolve)
+        });
+        let depth = match &multi {
+            Some(multi) => multi.depth.clone(),
+            None => self.depth_view(gpu, width, height),
+        };
+        let at = self.pipelines_at(gpu, samples);
         // Blended primitives far to near by their centres.
         self.order.clear();
         for (index, p) in model.primitives.iter().enumerate() {
@@ -1966,27 +1879,49 @@ impl ModelRuntime {
                     },
                 })
             };
-            let attachments = match &beside {
-                Some((_, views)) => [
-                    cleared(view),
+            // Multisampled (ADR-0242), the colour's samples resolve into the layer as
+            // the pass ends and are not kept; the surface's are kept for its resolve.
+            let colour = match &multi {
+                Some(multi) => Some(wgpu::RenderPassColorAttachment {
+                    view: &multi.colour,
+                    depth_slice: None,
+                    resolve_target: Some(view),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Discard,
+                    },
+                }),
+                None => cleared(view),
+            };
+            let surface_views = match (&multi, &beside) {
+                (
+                    Some(Drawn {
+                        surface: Some((views, _)),
+                        ..
+                    }),
+                    Some(_),
+                ) => Some([&views[0], &views[1], &views[2]]),
+                (_, Some((_, views))) => Some(*views),
+                _ => None,
+            };
+            let attachments = match surface_views {
+                Some(views) => [
+                    colour,
                     cleared(views[0]),
                     cleared(views[1]),
                     cleared(views[2]),
                 ],
-                None => [cleared(view), None, None, None],
+                None => [colour, None, None, None],
             };
             let attachments = if beside.is_some() {
                 &attachments[..]
             } else {
                 &attachments[..1]
             };
-            let (prepass, opaque, blended) = match beside {
-                Some(_) => (
-                    &self.with_surface.prepass,
-                    &self.with_surface.opaque,
-                    &self.with_surface.blended,
-                ),
-                None => (&self.prepass, &self.opaque, &self.blended),
+            let pipelines = &self.layer[at].1;
+            let [prepass, opaque, blended] = match beside {
+                Some(_) => &pipelines.surface,
+                None => &pipelines.plain,
             };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("jstream-render-model"),
@@ -2045,6 +1980,16 @@ impl ModelRuntime {
                     draw_one(&mut pass, &model.primitives[index]);
                 }
             }
+        }
+        if let (
+            Some(Drawn {
+                surface: Some((_, bind)),
+                ..
+            }),
+            Some((_, views)),
+        ) = (&multi, &beside)
+        {
+            self.surface_resolve.record(&mut encoder, bind, *views);
         }
         gpu.submit_work(encoder.finish());
         target.mark_changed();
@@ -2340,6 +2285,30 @@ impl ModelRuntime {
         view
     }
 
+    /// Sets the samples a model's layer is drawn with from now on (ADR-0242): the most
+    /// no more than `samples` this device takes, 1 drawing it without anti-aliasing.
+    /// Returns the count it draws with.
+    pub(crate) fn set_samples(&mut self, gpu: &Gpu, samples: u32) -> u32 {
+        self.samples = msaa::supported(gpu, samples);
+        self.samples
+    }
+
+    /// The samples a model's layer is drawn with, as [`Self::set_samples`] last set it.
+    pub(crate) fn samples(&self) -> u32 {
+        self.samples
+    }
+
+    /// Where [`Self::layer`] holds the pipelines drawn with `samples`, made first if
+    /// they aren't yet.
+    fn pipelines_at(&mut self, gpu: &Gpu, samples: u32) -> usize {
+        if let Some(at) = self.layer.iter().position(|(n, _)| *n == samples) {
+            return at;
+        }
+        let made = layer_pipelines(gpu, (&self.shader, &self.layout), samples);
+        self.layer.push((samples, made));
+        self.layer.len() - 1
+    }
+
     fn depth_view(&mut self, gpu: &Gpu, width: u32, height: u32) -> wgpu::TextureView {
         if let Some(at) = self
             .depth
@@ -2412,10 +2381,147 @@ pub(crate) fn canvas_of(target: &Image) -> Canvas {
 /// The model pipelines that draw a layer and its surface at once, and the merge of that
 /// surface into its scene's surface buffer (ADR-0170 decision 4).
 struct WithSurface {
-    prepass: wgpu::RenderPipeline,
-    opaque: wgpu::RenderPipeline,
-    blended: wgpu::RenderPipeline,
     merge: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
+}
+
+/// The layer's pipelines at one sample count: the opaque primitives' depth, drawn
+/// before their shading, their shading where the prepass left their depth, and the
+/// blended ones; on their own, and with a surface buffer beside the layer.
+struct LayerPipelines {
+    plain: [wgpu::RenderPipeline; 3],
+    surface: [wgpu::RenderPipeline; 3],
+}
+
+/// The layer's pipelines drawn with `samples` (ADR-0242), of the model shader and its
+/// pipeline layout.
+fn layer_pipelines(
+    gpu: &Gpu,
+    (shader, layout): (&wgpu::ShaderModule, &wgpu::PipelineLayout),
+    samples: u32,
+) -> LayerPipelines {
+    let device = &gpu.device;
+    // The opaque primitives draw twice: their depth first (`fs_prepass`), then their
+    // shading where it is equal, which writes no depth; blended ones test it.
+    #[derive(Clone, Copy, PartialEq)]
+    enum Kind {
+        Prepass,
+        Opaque,
+        Blended,
+    }
+    // With `surface`, the pass also has a surface buffer's three targets, which only
+    // the opaque shading writes (`fs_with_surface`, ADR-0170 decision 4).
+    let pipeline = |kind: Kind, surface: bool| {
+        let unwritten = Some(wgpu::ColorTargetState {
+            format: LAYER_FORMAT,
+            blend: None,
+            write_mask: wgpu::ColorWrites::empty(),
+        });
+        let written = Some(wgpu::ColorTargetState {
+            format: LAYER_FORMAT,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        });
+        let beside = if kind == Kind::Opaque {
+            written
+        } else {
+            unwritten
+        };
+        let targets = [
+            Some(wgpu::ColorTargetState {
+                format: LAYER_FORMAT,
+                blend: (kind != Kind::Prepass)
+                    .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: if kind == Kind::Prepass {
+                    wgpu::ColorWrites::empty()
+                } else {
+                    wgpu::ColorWrites::ALL
+                },
+            }),
+            beside.clone(),
+            beside.clone(),
+            beside,
+        ];
+        let desc = wgpu::RenderPipelineDescriptor {
+            label: Some(match (kind, surface) {
+                (Kind::Prepass, false) => "jstream-render-model-prepass",
+                (Kind::Opaque, false) => "jstream-render-model-opaque",
+                (Kind::Blended, false) => "jstream-render-model-blended",
+                (Kind::Prepass, true) => "jstream-render-model-prepass-surface",
+                (Kind::Opaque, true) => "jstream-render-model-opaque-surface",
+                (Kind::Blended, true) => "jstream-render-model-blended-surface",
+            }),
+            layout: Some(layout),
+            vertex: wgpu::VertexState {
+                module: shader,
+                entry_point: Some("vs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: VERTEX_STRIDE,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x3,
+                        1 => Float32x3,
+                        2 => Float32x4,
+                        3 => Float32x2,
+                        4 => Float32x4,
+                        5 => Uint16x4,
+                        6 => Float32x4,
+                    ],
+                })],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                // A front face winds clockwise on the y-down canvas, which is
+                // clockwise in clip space too. The shader discards back faces, since
+                // a mirrored placement swaps them.
+                front_face: wgpu::FrontFace::Cw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(kind == Kind::Prepass),
+                depth_compare: Some(if kind == Kind::Opaque {
+                    wgpu::CompareFunction::Equal
+                } else {
+                    wgpu::CompareFunction::Greater
+                }),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: samples,
+                ..Default::default()
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: shader,
+                entry_point: Some(match kind {
+                    Kind::Prepass => "fs_prepass",
+                    Kind::Opaque if surface => "fs_with_surface",
+                    _ => "fs",
+                }),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                // The prepass draws in the colour pass, so it has its target, and
+                // writes none of it.
+                targets: if surface { &targets[..] } else { &targets[..1] },
+            }),
+            multiview_mask: None,
+            cache: None,
+        };
+        gpu.built.render(device, SOURCE, &(), &desc)
+    };
+    LayerPipelines {
+        plain: [
+            pipeline(Kind::Prepass, false),
+            pipeline(Kind::Opaque, false),
+            pipeline(Kind::Blended, false),
+        ],
+        surface: [
+            pipeline(Kind::Prepass, true),
+            pipeline(Kind::Opaque, true),
+            pipeline(Kind::Blended, true),
+        ],
+    }
 }
 
 /// The pipeline of `surface_merge.wgsl` and the layout of its three layers.
@@ -3056,6 +3162,7 @@ fn upload_texture(
 }
 
 pub(crate) mod focus;
+mod msaa;
 
 #[cfg(test)]
 mod tests;

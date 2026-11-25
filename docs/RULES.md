@@ -583,7 +583,9 @@ opt-in, speaks TLS only, and admits device tokens, never the control token
 ([ADR-0104](adr/0104-network-listener-over-tls.md)). The JTunnel and VISCA sockets are not control
 listeners: each is opt-in, LAN only and limited to accepted peers, and runs only
 bindings or camera actions, never the protocol
-([ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md)).
+([ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md)). Nor is the mDNS responder that
+announces the network listener: it answers queries for that one service and runs nothing
+([ADR-0233](adr/0233-announce-the-network-listener-on-mdns.md)).
 
 <a id="R-SEC-003"></a>
 ### R-SEC-003: WASM plugins are sandboxed by default

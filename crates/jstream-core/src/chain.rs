@@ -6,7 +6,7 @@
 //! mix an output draws, once per frame, and an output's own over what the master stage
 //! made of its mix (ADR-0080), both at the canvas size ([`GpuKey::Mixed`]).
 //!
-//! [`plan`](crate::snapshot::plan_with) copies each reached source's chain into the
+//! [`plan`](crate::snapshot::plan_program) copies each reached source's chain into the
 //! [`Shot`](crate::snapshot::Shot) as a [`Chain`]: its input (the source's frame upload,
 //! or the display capture) and the filters that run, each with its settings. A layer
 //! that places the source then shows the chain's output instead of the input.
@@ -80,6 +80,9 @@ pub(crate) enum ChainOwner {
     /// scene is planned under there: the scene, or a group's view through a keyframe
     /// (ADR-0049 §3). Each has a chain of its own, as each draws its own picture.
     Placed(SourceId, SceneId),
+    /// A model source's chain over the layer an item of a scene draws the model into
+    /// (ADR-0107 decision 6): one per item that shows it, before the item's effects.
+    Shown(SourceId, SceneId, ItemId),
 }
 
 impl std::fmt::Display for ChainOwner {
@@ -92,6 +95,9 @@ impl std::fmt::Display for ChainOwner {
             Self::Master(Some(mix)) => write!(f, "the master stage over mix {mix}"),
             Self::Output(id) => write!(f, "output {id}"),
             Self::Placed(id, scene) => write!(f, "source {id} over scene {scene}"),
+            Self::Shown(id, scene, item) => {
+                write!(f, "source {id} over item {item} in scene {scene}")
+            }
         }
     }
 }
@@ -674,11 +680,13 @@ struct Running {
     warned: bool,
 }
 
-/// A scene's sky backdrop from frame to frame (ADR-0167).
+/// The cache frames that last drew a scene's [`crate::snapshot::GpuKey::Sky`] layer and
+/// its [`crate::snapshot::GpuKey::SkyLeaving`] layer.
+pub(crate) type SkyDrawn = (Option<u64>, Option<u64>);
+
+/// A scene family's sky backdrop from frame to frame (ADR-0167, ADR-0238).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct SkyState {
-    /// The cache frame that last drew it.
-    pub(crate) drawn: Option<u64>,
     /// The cache frame its travel last advanced in, and the media time then.
     pub(crate) stepped: Option<(u64, f64)>,
     /// The warp it streams at now, moving toward its setting at its ramp's pace.
@@ -695,9 +703,6 @@ pub(crate) struct SkyState {
     /// The sky it cross-fades from since its warp last started aimed ahead, while it
     /// does.
     pub(crate) leaving: Option<LeavingSky>,
-    /// The cache frame that last drew the sky it cross-fades from, as a scene places
-    /// its [`crate::snapshot::GpuKey::SkyLeaving`] layer only in the frame that drew it.
-    pub(crate) left: Option<u64>,
     /// The arrival picture it shows (ADR-0188), if any.
     pub(crate) arrival: Option<Arrival>,
     /// How many arrival pictures it has picked, which seeds the next pick.
@@ -761,6 +766,35 @@ pub(crate) fn deep_shown(warp: f32, dropping: f32) -> f32 {
     let falling = 1.0 - smooth(0.15, 0.55, warp);
     let dropping = dropping.clamp(0.0, 1.0);
     rising + (falling - rising) * dropping
+}
+
+/// The warp at and above which an arrival picture is gone going into warp (ADR-0239):
+/// its first touch, as the stars start to move, well before the deep sky goes.
+const PICTURE_GONE_AT: f32 = 0.05;
+
+/// How much an arrival picture shows at `warp` while dropping by `dropping`, 0 to 1
+/// (ADR-0239): gone by [`PICTURE_GONE_AT`] going into warp, back as the deep sky comes
+/// back dropping out. Never more than [`deep_shown`].
+pub(crate) fn picture_shown(warp: f32, dropping: f32) -> f32 {
+    let smooth = |a: f32, b: f32, x: f32| {
+        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let rising = 1.0 - smooth(0.0, PICTURE_GONE_AT, warp);
+    let falling = 1.0 - smooth(0.15, 0.55, warp);
+    let dropping = dropping.clamp(0.0, 1.0);
+    rising + (falling - rising) * dropping
+}
+
+/// An arrival picture's own opacity, over the deep sky's fade the sky shader puts on it
+/// (`sky.wgsl`'s `deep`), so it shows at [`picture_shown`] in all.
+pub(crate) fn picture_opacity(warp: f32, dropping: f32) -> f32 {
+    let deep = deep_shown(warp, dropping);
+    if deep <= 0.0 {
+        0.0
+    } else {
+        (picture_shown(warp, dropping) / deep).clamp(0.0, 1.0)
+    }
 }
 
 /// The sky a backdrop cross-fades from as a warp aimed ahead starts (ADR-0187): as it
@@ -1035,10 +1069,14 @@ pub(crate) struct Chains {
     /// The scenes whose extra environment lights were logged, once each (ADR-0151
     /// decision 9).
     pub(crate) environments_warned: BTreeSet<jstream_protocol::SceneId>,
-    /// Each 3D scene's sky backdrop (ADR-0167): the frame it was last drawn in, as a
-    /// scene places its [`GpuKey::Sky`] layer only in the frame that drew it, and how
-    /// far its stars have travelled at warp.
+    /// Each 3D scene family's sky backdrop (ADR-0167): how far its stars have travelled
+    /// at warp, and the arrival it shows. One per family, so every view of a scene
+    /// shows the same sky (ADR-0238).
     pub(crate) skies: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, SkyState>>,
+    /// Each drawn scene's sky layers: the cache frame that last drew its
+    /// [`GpuKey::Sky`] layer and the one that last drew its
+    /// [`GpuKey::SkyLeaving`] layer, as a scene places each only in the frame that drew it.
+    pub(crate) skies_drawn: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, SkyDrawn>>,
     /// The average colour of each arrival picture a backdrop shows now (ADR-0188),
     /// straight sRGB, with the version of the frame it was taken from: the colour its
     /// light shines in. A picture no longer shown is let go.
@@ -1198,9 +1236,16 @@ impl Chains {
         let mut size = (input.width(), input.height());
         let mut placed = input.extent();
         for (index, filter) in running.iter_mut().enumerate() {
-            filter.filter.set_pad(chain.pad_of(index));
+            let pad = chain.pad_of(index);
+            filter.filter.set_pad(pad);
+            let input = size;
             size = filter.filter.output_size(size.0, size.1);
-            placed = filter.filter.output_size(placed.0, placed.1);
+            placed = placed_after(
+                filter.filter.output_size(placed.0, placed.1),
+                placed,
+                (input, size),
+                pad,
+            );
             let made = cache
                 .layer(compositor, &filter.key, size.0, size.1)
                 .map(|_| ());
@@ -1496,6 +1541,13 @@ impl Chains {
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.
     pub(crate) fn failed(&self, key: &GpuKey) -> bool {
         match key {
+            // A model's source's filters draw nothing over a layer that failed.
+            GpuKey::Filtered(owner @ ChainOwner::Shown(_, scene, item)) => {
+                self.failed.contains(owner)
+                    || self
+                        .failed
+                        .contains(&ChainOwner::Item(scene.clone(), item.clone()))
+            }
             GpuKey::Filtered(owner) => self.failed.contains(owner),
             // A model's layer, shown as drawn when it has no effects (ADR-0107).
             GpuKey::ItemBox(scene, item) => self
@@ -1897,6 +1949,30 @@ fn see(
     running.scene = Some(held);
     cache.retire_filter(std::mem::replace(&mut running.filter, fresh));
     true
+}
+
+/// The extent of a filter's output, from `grown`, its input's extent `placed` grown as
+/// its texels are: the pad counts in texels (ADR-0219), so over an input with fewer
+/// texels than its extent (an item's layer scaled down to fit, #1720) it grows the
+/// extent by as many of its own pixels as it stands for, keeping the texels per extent
+/// pixel the filters after it scale by. A filter that sizes its output otherwise keeps
+/// `grown`.
+fn placed_after(
+    grown: (u32, u32),
+    placed: (u32, u32),
+    (input, output): ((u32, u32), (u32, u32)),
+    pad: u32,
+) -> (u32, u32) {
+    let twice = pad.saturating_mul(2);
+    let padded = (input.0.saturating_add(twice), input.1.saturating_add(twice));
+    if pad == 0 || output != padded || placed == input {
+        return grown;
+    }
+    let side = |placed: u32, texels: u32| {
+        let pad = (f64::from(pad) * f64::from(placed) / f64::from(texels.max(1))).round();
+        placed.saturating_add((pad as u32).saturating_mul(2))
+    };
+    (side(placed.0, input.0), side(placed.1, input.1))
 }
 
 #[cfg(test)]
@@ -4601,6 +4677,8 @@ mod tests {
             by_item: true,
             from_camera: crate::transition::camera_of(&graph, &main),
             via: Vec::new(),
+            in_place: false,
+            carried: Default::default(),
         };
         let switching = draw(&graph, sky(true), Some(&running)).expect("an adapter");
         assert_eq!(
@@ -4693,6 +4771,34 @@ mod tests {
     /// with no ramp of its own, so it is never above its setting, picks the next
     /// picture as the deep sky starts to show again, not only once the warp is still,
     /// so it fades in with the deep sky rather than popping in at rest.
+    #[test]
+    fn an_arrival_picture_is_gone_as_the_stars_start_to_move() {
+        use crate::chain::{deep_shown, picture_opacity, picture_shown};
+        // Going in (ADR-0239): full at rest, gone by the first touch of warp, while the
+        // deep sky still shows.
+        assert!((picture_shown(0.0, 0.0) - 1.0).abs() < 1e-6);
+        assert!(picture_shown(0.03, 0.0) < 0.5);
+        assert_eq!(picture_shown(0.05, 0.0), 0.0);
+        assert_eq!(picture_shown(0.33, 0.0), 0.0);
+        assert!(deep_shown(0.05, 0.0) > 0.85);
+        // Dropping out, it comes back with the deep sky (ADR-0188 decision 5).
+        for warp in [0.1_f32, 0.2, 0.3, 0.4, 0.5] {
+            assert!((picture_shown(warp, 1.0) - deep_shown(warp, 1.0)).abs() < 1e-6);
+        }
+        // Never more than the deep sky, and its opacity over the deep sky's fade gives
+        // it in all.
+        for i in 0..=100_u8 {
+            let warp = f32::from(i) / 100.0;
+            for dropping in [0.0_f32, 0.3, 1.0] {
+                let (picture, deep) = (picture_shown(warp, dropping), deep_shown(warp, dropping));
+                assert!(picture <= deep + 1e-6, "{warp} {dropping}");
+                let opacity = picture_opacity(warp, dropping);
+                assert!((0.0..=1.0).contains(&opacity));
+                assert!((opacity * deep - picture).abs() < 1e-5, "{warp} {dropping}");
+            }
+        }
+    }
+
     #[test]
     fn a_warp_followed_down_picks_its_arrival_as_the_sky_shows() {
         let mut sky = crate::chain::SkyState::default();
@@ -4949,6 +5055,28 @@ mod tests {
             &[(CANVAS.0 / 2, CANVAS.1 / 2)],
         );
         assert_eq!(chains.picture_means.len(), 1, "only the shown one");
+        // A draw of a mix that shows no arrival (another scene) keeps it: dropped, the
+        // program's next draw asked the let-go still for its pixels again and decoded
+        // it on every frame, its light white meanwhile.
+        let other = snapshot::plan_with(
+            &graph,
+            Some(&arrivals),
+            None,
+            &mut |_| Some(Look::frame(white.clone(), None)),
+            &FilterAssets::default(),
+        )
+        .shot;
+        draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&other, &LiveParams::default()),
+            &[(CANVAS.0 / 2, CANVAS.1 / 2)],
+        );
+        assert_eq!(
+            chains.picture_means.len(),
+            1,
+            "kept while another mix draws"
+        );
         let light = snapshot::arrival_light(
             (&shot, &cache, &chains),
             &main,
@@ -4975,6 +5103,64 @@ mod tests {
             // It shines from ahead, back toward the viewer.
             assert!(light.aim[2] > 0.9, "{:?}", light.aim);
         }
+        // ADR-0238: a keyframe of the scene, another view of it, shows the same sky:
+        // one sky state for the family, the arrival it picked unchanged, and the
+        // picture lighting the view too.
+        let arrived = chains.skies.borrow().get(&main).and_then(|sky| sky.arrival);
+        assert!(arrived.is_some(), "the scene's sky picked an arrival");
+        let view = SceneId::new("view");
+        apply(
+            &mut graph,
+            vec![Edit::SceneCreateVariant {
+                scene_id: view.clone(),
+                variant_of: main.clone(),
+                name: "View".into(),
+            }],
+        );
+        let viewed = snapshot::plan_with(
+            &graph,
+            Some(&view),
+            None,
+            &mut |id| {
+                Some(Look::frame(
+                    match id.as_str() {
+                        "cam" => white.clone(),
+                        "planet" => red.clone(),
+                        "sun" => green.clone(),
+                        _ => lamp.clone(),
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&viewed, &LiveParams::default()),
+            &[(CANVAS.0 / 2, CANVAS.1 / 2)],
+        );
+        assert_eq!(
+            chains.skies.borrow().keys().cloned().collect::<Vec<_>>(),
+            vec![main.clone()],
+            "one sky for the scene and its view"
+        );
+        assert_eq!(
+            chains.skies.borrow().get(&main).and_then(|sky| sky.arrival),
+            arrived,
+            "the view shows the arrival the scene picked"
+        );
+        assert!(
+            snapshot::arrival_light(
+                (&viewed, &cache, &chains),
+                &view,
+                MediaTime::zero(Timebase::MILLIS),
+                &LiveParams::default(),
+            )
+            .is_some(),
+            "and it lights the view"
+        );
     }
 
     /// ADR-0187: as a warp aimed ahead starts, the backdrop cross-fades from the sky its
@@ -5244,6 +5430,7 @@ mod tests {
             item_id: ItemId::new(item),
             scene_id: None,
             motion: vec![jstream_protocol::MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "drive".into(),
                 property: jstream_protocol::MotionProperty::Source,
                 effect: None,
@@ -6635,6 +6822,8 @@ mod tests {
             by_item: true,
             from_camera: crate::transition::camera_of(&graph, &main),
             via: Vec::new(),
+            in_place: false,
+            carried: Default::default(),
         };
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
         let Some(landed) = lit_centre(&graph, light.clone()) else {
@@ -6689,8 +6878,10 @@ mod tests {
             .....WWWW.......
             .....WWWW.......
             .....WWWW.......
-            .....WWW........
+            .....WWW?.......
             ";
+        // The last row's `?` is the plane's slanted near corner, which the model's
+        // 4x multisampling (ADR-0242, the default) blends with the black around it.
         assert_golden(
             &model_shot(&graph, "plane"),
             expected,
@@ -6758,6 +6949,100 @@ mod tests {
                 "a flat item in the same pose covers the same cells\nflat:\n{flat}"
             );
         }
+    }
+
+    /// ADR-0107 decision 6: a model's source's video filters run over the layer each
+    /// item draws the model into, before the item's effects, so a filtered model is
+    /// drawn and filtered where it used to draw nothing (#1661). Each item that shows
+    /// it has a chain of its own.
+    #[test]
+    fn golden_a_models_source_filters_run_over_its_layer() {
+        let blue = Edit::FilterAdd {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("cam"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("blue"),
+            kind: "color_correction".into(),
+            settings: [("multiply", serde_json::json!("#0000ff"))]
+                .into_iter()
+                .collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo"), blue]);
+        let filtered = "
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            ";
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            filtered,
+            "the source's filter colours the model",
+        );
+        // The item's effects read what the source's filters drew. The same filter ID
+        // on both is two filters.
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Item {
+                    item_id: ItemId::new("cam"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("blue"),
+                kind: "color_correction".into(),
+                settings: [("multiply", serde_json::json!("#ffffff"))]
+                    .into_iter()
+                    .collect(),
+                enabled: Some(true),
+                index: None,
+            }],
+        );
+        let shot = model_shot(&graph, "plane");
+        assert_golden(&shot, filtered, "then the item's effects run over that");
+        // A second item of the model is filtered by a chain of its own.
+        let mut right = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(56.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(16.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        right.fit_mode = jstream_protocol::FitMode::Stretch;
+        apply(
+            &mut graph,
+            vec![Edit::ItemAdd {
+                scene_id: SceneId::new("main"),
+                item_id: ItemId::new("again"),
+                source_id: SourceId::new("cam"),
+                transform: None,
+                geometry: Some(right),
+                opacity: None,
+                blend: None,
+            }],
+        );
+        let shot = model_shot(&graph, "plane");
+        assert_golden(
+            &shot,
+            "
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            ",
+            "each item of the model is filtered",
+        );
     }
 
     /// `cam`, cropped to the middle half of its frame and stretched over the canvas.
@@ -6999,6 +7284,94 @@ mod tests {
             ",
             "the shadow falls past the box, below and to the right",
         );
+    }
+
+    /// A pad grows a filter's output extent by as many extent pixels as its texels stand
+    /// for, so the texels per extent pixel the next filter scales by hold (#1720); over
+    /// an input at its own size it grows both alike, as before.
+    #[test]
+    fn a_pad_grows_the_extent_in_its_own_pixels() {
+        // Half as many texels as its extent: 8 texels of pad are 16 extent pixels.
+        assert_eq!(
+            super::placed_after((16_400, 28), (16_384, 12), ((8192, 6), (8208, 22)), 8),
+            (16_416, 44)
+        );
+        // At its own size, as `output_size` grows it.
+        assert_eq!(
+            super::placed_after((80, 52), (64, 36), ((64, 36), (80, 52)), 8),
+            (80, 52)
+        );
+        // No pad: whatever the filter sizes it to.
+        assert_eq!(
+            super::placed_after((10, 10), (16_384, 12), ((8192, 6), (10, 10)), 0),
+            (10, 10)
+        );
+    }
+
+    /// An item wider than the largest layer side is drawn into a layer scaled down to
+    /// fit, placed at the box's size in canvas pixels (ADR-0219, #1720): its drop
+    /// shadow falls as far across the canvas as a small item's, and isn't cut by the
+    /// pad. Before, the layer was placed at its own size, so the shadow's 8 px counted
+    /// in layer pixels and fell 16 canvas px away; and the box and pad, each rounded up,
+    /// made the padded layer one pixel too wide for one texture, so nothing was drawn.
+    #[test]
+    fn golden_a_big_items_shadow_reaches_as_far_as_a_small_items() {
+        let shadow = || {
+            effect(
+                "cam",
+                "drop_shadow",
+                serde_json::json!({
+                    "color": "#0000ff", "offset_x": 8.0, "offset_y": 8.0, "blur": 0.0
+                }),
+            )
+        };
+        // Both boxes end at x 44 and span rows 12 to 24.
+        let mut small = placed(&[("cam", (26.0, 18.0), (36.0, 12.0), 0.0)]);
+        apply(&mut small, vec![hide("logo"), shadow()]);
+        assert_golden(
+            &shot(&small),
+            "
+            ................
+            ................
+            ................
+            ..WWWWWWWWW.....
+            ..WWWWWWWWW.....
+            ..WWWWWWWWWBB...
+            ....BBBBBBBBB...
+            ....BBBBBBBBB...
+            ................
+            ",
+            "a small item's shadow, 8 px right and down",
+        );
+        let mut big = placed(&[("cam", (44.0 - 8192.0, 18.0), (16_384.0, 12.0), 0.0)]);
+        apply(&mut big, vec![hide("logo"), shadow()]);
+        let shot = shot(&big);
+        let Some((grid, layer)) = golden_at(&shot, 100) else {
+            return;
+        };
+        let expected: String = "
+            ................
+            ................
+            ................
+            WWWWWWWWWWW.....
+            WWWWWWWWWWW.....
+            WWWWWWWWWWWBB...
+            BBBBBBBBBBBBB...
+            BBBBBBBBBBBBB...
+            ................
+            "
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .flat_map(|line| line.chars().chain(['\n']))
+        .collect();
+        assert_eq!(
+            grid, expected,
+            "the shadow falls 8 px right and down, as the small item's, uncut\n{grid}"
+        );
+        let [texels, extent] = layer.expect("cam's layer");
+        assert!(texels.0 <= 8192, "scaled down to fit: {texels:?}");
+        assert_eq!(extent, (16_384, 12), "placed at the box's size");
     }
 
     /// An item's layer grows by what its effects draw at their settings, not the most

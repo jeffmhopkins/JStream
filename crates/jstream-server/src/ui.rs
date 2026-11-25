@@ -244,7 +244,7 @@ pub(crate) async fn handle(
     let credential = match app.gate.admit(&headers, accepted.peer, accepted.on()) {
         Ok(credential) => credential,
         Err(refusal) if refusal.is_credential() => {
-            return challenge(app.tls(&accepted) && app.pairing);
+            return challenge(app.tls(&accepted) && app.pairs());
         }
         Err(refusal) => return refusal.into_response(),
     };

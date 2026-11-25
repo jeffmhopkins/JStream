@@ -44,6 +44,20 @@ The one exception is a series: the Sequence panel's lanes take `--accent`, `--ok
 apart. A sequence's own mark is teal, `--code-type`: its icon in the Scenes panel and the
 edge of an event chip, as a keyframe's is its purple diamond.
 
+A source's kind has a mark too, a dot on its chip in the Mappings panel: MIDI
+`--code-keyword`, JTunnel and other live data `--code-type`, a channel `--accent` and a key
+`--warn`, only to tell the kinds apart.
+
+The Show panel's timeline is the other: its `--show-*` tokens tell its elements apart,
+each with one job. Bookmarks are yellow (`--show-bookmark`), loops and
+keyframes violet (`--show-loop`, `--show-keyframe`), the armed spot light blue
+(`--show-armed`) and the play head white (`--show-head`); program clips take five dark
+colours in turn (`--show-clip-c0` to `c4`, and the Run view's strip `--show-seg-0` to
+`4`), and overlay, sequence and audio clips have their own (`--show-overlay`,
+`--show-seq`, `--show-audio`). A stack of keyframes or cues counts the rest of it on a
+tint of its own colour (`--show-keyframe-count`, `--show-event-count`). A pausing bookmark's line is dashed and one that plays
+through is solid, so the difference isn't colour alone.
+
 <a id="buttons"></a>
 ## Buttons
 <!-- @section
@@ -81,6 +95,9 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/menu.rs"]
 
 The header's menus and the right-click menus are one family:
 
+- A header menu drops straight from its button's foot, with no gap, and the open button
+  takes the menu's colour, square at the foot, so button and menu read as one shape, as a
+  desktop menu bar's do. A right-click menu opens at the pointer.
 - 28 px lines. A 20 px leading slot is always kept, so labels line up in every menu.
   The slot holds a check for a shown panel, a checked option or the current layout.
   Toggle state is never shown as words.
@@ -96,7 +113,8 @@ The header's menus and the right-click menus are one family:
 - Menus hold commands. Information belongs in dialogs and status UI: the File menu's
   connection details are a dialog of their own, and the open project's name is the
   menu's head.
-- A long menu is in groups, as OBS's source menu is: open it (Properties, filters);
+- A long menu is in groups, as OBS's source menu is: open it (Properties, then Edit
+  filters, which opens Properties on its Filters segment, first in the menu);
   its state (Visible, Lock, Labels); the clipboard (Copy, Paste, Duplicate); its
   arrangement (an Order submenu for the layer order, Transform, Blending, Crop);
   other views (Pop out, Screenshot); then removal. A command that adds something new
@@ -213,9 +231,19 @@ The property grid, as OBS's Properties lay a source's settings out:
 - A setting a controller can drive (live, a number with both ends or a switch) has a
   learn button (`button.learn`, the MIDI icon) after its reset, in a third column that
   takes only its width: `--muted` and borderless at rest, `--accent` with a border when
-  bound (with its control's short name, `CC 7`) or while it is learning. A click opens
-  its one menu (learn, make or follow a channel, remove). A setting that follows a
-  channel shows the channel's name as a `--selected` chip in `--link` instead.
+  bound (with its control's short name, `CC 7` or `Mod 20`) or while it is learning. A
+  click on it, or a right-click anywhere on the setting's row, opens its one menu (Map
+  control…, Learn, and for a mapped setting what drives it, Edit and Remove). A setting
+  that follows a channel shows the channel's name as a `--selected` chip in `--link`
+  instead. In mapping mode the button shows the armed source's amount on that setting
+  (`+15 %`) in `--accent`, and a bar under the header in `--selected` with an `--accent`
+  edge names the armed source. An Inspector number that takes mappings has no button:
+  its mappings' offset is a 10 px `--accent` tag on a `--selected` pill over the
+  field's top right corner, its border turns `--accent`, and a right-click on the number
+  opens its menu. A mapping is an Offset or an Override, chosen on a segmented control
+  beside the chosen source. A bypassed mapping stays where it is, dimmed and struck
+  through, in its row and on the control button; the row's Bypass is a small pill,
+  outlined in `--warn` while it is on.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for

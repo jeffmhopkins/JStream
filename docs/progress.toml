@@ -168,9 +168,10 @@ note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer
 [[target]]
 release = "beta.1"
 title = "Looping media files play without a gap at the wrap"
-status = "planned"
+status = "done"
 issues = [445]
-note = "a bug fix for beta.1: the 25-40 ms gap at each wrap"
+prs = [448, 452, 875]
+note = "the Windows run on alpha.11 found no gap across two wraps of an AAC loop, and its picture steps 1.000 s through each wrap (#445); the audio drifts about 0.3% long within a pass and resyncs at the wrap, which #445 left for a new issue if it matters; MP3's priming and padding cut (#875) was not in that run"
 
 [[target]]
 release = "beta.1"
@@ -225,7 +226,7 @@ release = "beta.1"
 title = "PTZ cameras over VISCA-over-IP, with their presets in keyframes"
 status = "hardware"
 issues = [1182, 1181]
-prs = [1423, 1486, 1496, 1499]
+prs = [1423, 1486, 1496, 1499, 1709]
 note = "Shipped in alpha.5, whose Windows hardware run checks it"
 
 [[target]]
@@ -1377,19 +1378,18 @@ needs = ["build"]
 id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
-status = "planned"
-prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639, 646, 1093, 1135]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); spike S6, IOSurface and Metal interop and its synchronisation, for ADR-0063 decision 8 (#646, its Mac run in #648); a one-command install that builds JStream on a tester's Mac and runs it from Terminal (#1093); per-thread CPU for the performance profile (#1135); the rest of the crate to build"
-needs = ["build"]
+status = "done"
+prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639, 646, 1093, 1135, 1761, 1765, 1767, 1769, 1780]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); spike S6, IOSurface and Metal interop and its synchronisation, for ADR-0063 decision 8 (#646, its Mac run in #648); a one-command install that builds JStream on a tester's Mac and runs it from Terminal (#1093); per-thread CPU for the performance profile (#1135); two-plane NV12 encode targets (GpuFrame::planar) for Metal, which has no NV12 texture format (#1767); the GPU interop on Metal with ScreenCaptureKit frames as IOSurface textures (#1761), webcams on the same path (#1765), and VideoToolbox encoding the IOSurface encode targets (#1769); all built; spike S6 ran clean on a CI virtual Mac (#1780). There is no Mac hardware, so CI macOS runners are the test bed; untested on real hardware: Apple Silicon timings, webcam buffer-pool starvation, VideoToolbox reading a rewritten target"
 
 [[item]]
 id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
-status = "planned"
-prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612, 603, 617, 610, 685, 689, 634, 694, 830, 835, 682, 1016, 1103]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); the engine's capture per source, which starts each source with its own restore token, forgets it when the source is deleted and honours `show_cursor` (#682, protocol 0.36); with wave/m3-4 (#827): PipeWire processing on the real-time data loop (#612); V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36, #682) has the OS draw the pointer when it's on and leave it out when it's off (WGC leaves it out too, with #682, and ScreenCaptureKit with #685), and the engine doesn't draw the pointer; webcams paired with their microphones and the Linux backend set choosing PipeWire or ALSA (#689); stream keys and OAuth tokens in the Secret Service, else a 0600 file, ADR-0071, not yet used by an app (#634); capture copies and NV12 submits ordered on the context's queue (#694); with wave/m3-5 (#854): VA-API HEVC encode (#830) and its hardening (#835), still to run on Intel or AMD hardware; the daemon goes live on the Linux backends, with stream keys in LinuxSecrets and OpenH264 taking the compositor's RGBA frames (#1016); a one-command install that builds JStream on a tester's Linux machine, with browser sources and an app-menu entry (#1103); the rest of the codec path to build"
-needs = ["build", "hardware"]
+status = "hardware"
+prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612, 603, 617, 610, 685, 689, 634, 694, 830, 835, 682, 1016, 1103, 1762]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); the engine's capture per source, which starts each source with its own restore token, forgets it when the source is deleted and honours `show_cursor` (#682, protocol 0.36); with wave/m3-4 (#827): PipeWire processing on the real-time data loop (#612); V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36, #682) has the OS draw the pointer when it's on and leave it out when it's off (WGC leaves it out too, with #682, and ScreenCaptureKit with #685), and the engine doesn't draw the pointer; webcams paired with their microphones and the Linux backend set choosing PipeWire or ALSA (#689); stream keys and OAuth tokens in the Secret Service, else a 0600 file, ADR-0071, not yet used by an app (#634); capture copies and NV12 submits ordered on the context's queue (#694); with wave/m3-5 (#854): VA-API HEVC encode (#830) and its hardening (#835), still to run on Intel or AMD hardware; the daemon goes live on the Linux backends, with stream keys in LinuxSecrets and OpenH264 taking the compositor's RGBA frames (#1016); a one-command install that builds JStream on a tester's Linux machine, with browser sources and an app-menu entry (#1103); media files decode on VA-API (H.264, VP8, VP9, AV1) and symphonia (ADR-0072); AV1 encode through VA-API, profile 0 with one tile per frame, with the sequence and frame header OBUs written as packed headers for the driver's rate controller, and display capture reporting the pointer's position from the portal's cursor metadata when the pointer is left out of the picture (#1762); the VA-API encodes and portal capture still to run on Intel and AMD hardware (#1357)"
+needs = ["hardware"]
 
 [[item]]
 id = "LNX2"
@@ -1413,19 +1413,19 @@ note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), 
 id = "F6b"
 milestone = "M3"
 title = "Choose HEVC or AV1 from a client"
-status = "planned"
-prs = [807, 814]
-note = "F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877)"
+status = "review"
+prs = [807, 814, 1760]
+note = "F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877); #1760 records HEVC (hvc1) and AV1 (av01) to MP4, the last codec gap, into the alpha.13 train"
 needs = ["build"]
 
 [[item]]
 id = "F7"
 milestone = "M3"
 title = "Direct NVENC and AMF encoders, if measurements justify them"
-status = "planned"
-prs = []
-note = "ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so"
-needs = ["build"]
+status = "review"
+prs = [1764]
+note = "ADR-0217: the maintainer chose to build them for alpha.13 and measure alongside: NVENC and AMF first on the Windows GPU path, the MFT as fallback, off by default per vendor until its hw-tests run passes (JSTREAM_DIRECT_ENCODERS=on to try one); AMF passed on a Radeon 780M and is on by default (0.52 ms vs the MFT's 0.98 ms per frame at 1080p30); NVENC still needs its NVIDIA run"
+needs = ["hardware"]
 
 [[item]]
 id = "CL2"
@@ -1677,3 +1677,12 @@ release = "alpha.4"
 gate = true
 prs = [1179]
 note = "Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build"
+
+[[item]]
+id = "SHW1"
+milestone = "M3"
+title = "Shows: a saved run order of scenes, with overlays, keyframes, sequences, audio, bookmarks and loops, run from the Show panel, keys, MIDI or an agent (ADR-0210)"
+status = "review"
+prs = [1716, 1750, 1757, 1763, 1773]
+note = "on the alpha.13 train (#1745): the protocol and ADR-0210 (#1716), the Show panel (#1750), the engine's show runner (#1757), audio clips that bring a source up with fades (#1763), and the show actions in the Keys & MIDI picker with the agent guidance (#1773)"
+needs = ["wave"]

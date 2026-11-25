@@ -47,8 +47,8 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
   otherwise a CPU one; `path()` returns the `VideoPath` it took.
   `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `request_keyframe()`,
   `info()`, `stats()` and `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
-  `VideoSession::stats_handle()` gives a `StatsHandle` that reads `stats()` from
-  anywhere without keeping the session alive.
+  `VideoSession::stats_handle()` gives a `StatsHandle` that reads `stats()` and
+  `codec()` from anywhere without keeping the session alive.
   `VideoSession::codec()` is the codec encoding now: `info()`'s, or the one the encoder
   fell back to after it opened (a hardware encoder refusing its first frame, #443),
   which the encode thread records once.
@@ -83,8 +83,9 @@ more keyframes than packets (#709). `src/gpu_tests.rs` covers `open_on` on every
 platform, with GPU frames that are textures on a software adapter: CPU frames without a
 context, the CPU fallback (opened as configured, with its reason) for a backend with no
 GPU path, one that refuses the context and one whose GPU encoder fails to open, and a
-GPU session that is opened in NV12, encodes a ring of two targets and leaves the
-producer holding the only clone of each, and fails on a CPU frame. A machine with no
+GPU session that is opened in NV12, encodes a ring of two targets (native ones, and
+two-plane ones as on Metal) and leaves the producer holding the only clone of each, and
+fails on a CPU frame. A machine with no
 wgpu adapter skips the ones that need a context, except on CI. Those tests take one slot
 in turn, so only one has a device open at a time: WARP access-violates when several
 tests create and drop Dx12 devices at once (#1531).

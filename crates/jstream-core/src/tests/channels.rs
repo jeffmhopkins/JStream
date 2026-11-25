@@ -60,6 +60,35 @@ fn level(control: &dyn Control) -> Option<(f32, bool, Option<Driver>)> {
         .map(|c| (c.value.get(), c.on, c.driver))
 }
 
+/// A collection file that holds a channel has it followed as soon as the engine loads
+/// it, before any action or edit, so what follows the channel reads its default rather
+/// than 0 from the start.
+#[test]
+fn a_loaded_collections_channels_are_followed_at_once() {
+    let dir = std::env::temp_dir().join(format!(
+        "jstream-core-channels-{}-loaded",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let path = dir.join("scenes.json");
+    {
+        let engine = Engine::new().with_collection_file(&path).expect("created");
+        let control = connected(&engine);
+        let mut lit = ChannelInfo::new("power");
+        lit.default = Finite32::ONE;
+        batch(&control, edits(vec![Edit::ChannelSet { channel: lit }])).expect("sets");
+    }
+    let engine = Engine::new().with_collection_file(&path).expect("loads");
+    let control = connected(&engine);
+    assert!(
+        until(|| level(&control) == Some((1.0, true, None))),
+        "its default with nothing done since the load: {:?}",
+        level(&control)
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A held note drives the channel to 1 and its release back to 0; an action takes over
 /// until the input moves again, and switching off holds the off value.
 #[test]
@@ -73,6 +102,8 @@ fn a_note_and_the_actions_drive_a_channel() {
         level(&control)
     );
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Pads"].map(String::from));
     let note = |on: bool| {
         jstream_midi::Message::parse(&[if on { 0x90 } else { 0x80 }, 36, 100]).expect("a note")
     };
@@ -130,6 +161,8 @@ fn an_amount_scales_a_binding_by_its_channel() {
     let control = connected(&engine);
     let binding = Edit::BindingSetValue {
         binding: ValueBinding {
+            enabled: true,
+            mode: jstream_protocol::MappingMode::Replace,
             binding_id: "master".into(),
             input: MotionKind::Midi {
                 control: MotionMidiControl::Cc,
@@ -166,6 +199,8 @@ fn an_amount_scales_a_binding_by_its_channel() {
         level(&control)
     );
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Bitwig"].map(String::from));
     let cc = |v: u8| jstream_midi::Message::parse(&[0xB0, 7, v]).expect("a CC");
     midi.push("Bitwig", 0, &cc(0));
     midi.push("Bitwig", 1, &cc(127));

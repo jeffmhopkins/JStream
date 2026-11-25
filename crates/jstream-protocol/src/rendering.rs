@@ -51,11 +51,29 @@ pub struct RenderFeatures {
     #[serde(default = "screen_space_steps")]
     pub screen_space_steps: u32,
     /// How many pixels 3D models are drawn with, as a percentage of their canvas's width
-    /// and of its height (ADR-0197, since 0.178): one of [`MODEL_RESOLUTIONS`]. 0, the
-    /// default, lets the engine choose, lowering it while the GPU is short of time; 100
-    /// always draws them whole; a smaller one always draws them at that size.
+    /// and of its height (ADR-0197, since 0.178): 0, the default, lets the engine choose,
+    /// lowering it through [`MODEL_RESOLUTIONS`] while the GPU is short of time; 100
+    /// always draws them whole; a smaller one always draws them at that size. Until
+    /// 0.194 a fixed size was one of [`MODEL_RESOLUTIONS`]; since, it is any whole
+    /// percentage in [`MODEL_RESOLUTION_RANGE`].
     #[serde(default)]
     pub model_resolution: u32,
+    /// The smallest size the engine may lower 3D models to while it chooses
+    /// (`model_resolution` 0), as a percentage of their canvas's width and of its height
+    /// (since 0.194): any whole percentage in [`MODEL_RESOLUTION_RANGE`]. 50, the
+    /// default, lets it use every size it has; 100 keeps them whole. A size between two
+    /// of [`MODEL_RESOLUTIONS`] is the last one it steps down to. A fixed
+    /// `model_resolution` is drawn as set, whatever this is.
+    #[serde(default = "min_model")]
+    pub min_model_resolution: u32,
+    /// The samples each pixel of a 3D model's layer is drawn with (ADR-0242, since
+    /// 0.196): multisampled anti-aliasing, one of [`MODEL_ANTIALIASING`]. 1 draws models
+    /// without it, their slanted edges stepped; more smooths their edges, thin ones
+    /// included, before any filter (a bloom among them) runs over the layer, at more GPU
+    /// time and memory. 4, the default, is what a file or client that leaves it out
+    /// reads as. A count the GPU can't draw draws with the most it can below it.
+    #[serde(default = "model_antialiasing")]
+    pub model_antialiasing: u32,
 }
 
 /// The sizes a reflection probe's faces may be, in pixels a side (ADR-0170 decision 3).
@@ -65,9 +83,27 @@ pub const PROBE_RESOLUTIONS: [u32; 3] = [128, 256, 512];
 /// medium and high quality.
 pub const SCREEN_SPACE_STEPS: [u32; 3] = [16, 32, 64];
 
-/// What [`RenderFeatures::model_resolution`] may be (ADR-0197): 0 for the engine to
-/// choose among the rest, or a percentage of the canvas's width and of its height.
+/// 0, for the engine to choose, then the sizes it steps 3D models through while it
+/// does (ADR-0197), each a percentage of the canvas's width and of its height.
 pub const MODEL_RESOLUTIONS: [u32; 6] = [0, 100, 85, 75, 67, 50];
+
+/// The percentages a fixed [`RenderFeatures::model_resolution`] and
+/// [`RenderFeatures::min_model_resolution`] may be (since 0.194): any whole one from
+/// the smallest of [`MODEL_RESOLUTIONS`] to 100.
+pub const MODEL_RESOLUTION_RANGE: std::ops::RangeInclusive<u32> = 50..=100;
+
+/// The samples a pixel of a 3D model's layer may be drawn with
+/// ([`RenderFeatures::model_antialiasing`], ADR-0242): off, then 2x, 4x and 8x
+/// multisampling.
+pub const MODEL_ANTIALIASING: [u32; 4] = [1, 2, 4, 8];
+
+fn model_antialiasing() -> u32 {
+    MODEL_ANTIALIASING[2]
+}
+
+fn min_model() -> u32 {
+    *MODEL_RESOLUTION_RANGE.start()
+}
 
 fn on() -> bool {
     true
@@ -107,6 +143,8 @@ impl RenderFeatures {
         screen_space_reflections: true,
         screen_space_steps: 16,
         model_resolution: 0,
+        min_model_resolution: 50,
+        model_antialiasing: 4,
     };
 
     /// Whether a scene filter of `kind_id` is drawn: `false` only for a filter kind a
@@ -138,6 +176,10 @@ impl RenderFeatures {
                 .unwrap_or(self.screen_space_reflections),
             screen_space_steps: change.screen_space_steps.unwrap_or(self.screen_space_steps),
             model_resolution: change.model_resolution.unwrap_or(self.model_resolution),
+            min_model_resolution: change
+                .min_model_resolution
+                .unwrap_or(self.min_model_resolution),
+            model_antialiasing: change.model_antialiasing.unwrap_or(self.model_antialiasing),
         }
     }
 
@@ -185,11 +227,22 @@ pub struct RenderFeaturesChange {
     /// `studio.set_rendering` refuses any other count.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub screen_space_steps: Option<u32>,
-    /// How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets
-    /// the engine choose), or left out to keep it (since 0.178). `studio.set_rendering`
-    /// refuses any other value.
+    /// How many pixels 3D models are drawn with, 0 to let the engine choose or a whole
+    /// percentage in [`MODEL_RESOLUTION_RANGE`] (one of [`MODEL_RESOLUTIONS`] until
+    /// 0.194), or left out to keep it (since 0.178). `studio.set_rendering` refuses any
+    /// other value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_resolution: Option<u32>,
+    /// The smallest size the engine may lower 3D models to while it chooses, a whole
+    /// percentage in [`MODEL_RESOLUTION_RANGE`], or left out to keep it (since
+    /// 0.194). `studio.set_rendering` refuses any other value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_model_resolution: Option<u32>,
+    /// The samples a pixel of a 3D model's layer is drawn with, one of
+    /// [`MODEL_ANTIALIASING`], or left out to keep it (since 0.196).
+    /// `studio.set_rendering` refuses any other count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_antialiasing: Option<u32>,
 }
 
 #[cfg(test)]
@@ -237,6 +290,7 @@ mod tests {
         assert!(read.reflection_probes && read.max_probe_resolution == 512);
         assert!(!read.screen_space_reflections && read.screen_space_steps == 16);
         assert_eq!(read.model_resolution, 0, "the engine chooses");
+        assert_eq!(read.min_model_resolution, 50, "every size it has");
         assert_eq!(RenderFeatures::default(), RenderFeatures::DEFAULT);
     }
 }

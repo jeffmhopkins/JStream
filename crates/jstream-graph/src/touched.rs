@@ -35,6 +35,8 @@ enum Object {
     ValueBinding(String),
     /// A channel (ADR-0183), by ID.
     Channel(String),
+    /// A show (ADR-0210), by ID: `show.set` writes all of it.
+    Show(jstream_protocol::ShowId),
     Folder(FolderId),
     Label(LabelId),
     /// A timeline, whole: `timeline.set` writes all of it (ADR-0115).
@@ -336,11 +338,17 @@ impl Touched {
                 }
             }
             Edit::FolderCreate {
-                folder_id, parent, ..
+                folder_id,
+                parent,
+                scene_id,
+                ..
             } => {
                 self.exists.insert(Object::Folder(folder_id.clone()));
                 if let Some(parent) = parent {
                     self.uses.insert(Object::Folder(parent.clone()));
+                }
+                if let Some(scene_id) = scene_id {
+                    self.uses.insert(Object::Scene(scene_id.clone()));
                 }
             }
             Edit::FolderDelete { folder_id } => {
@@ -546,7 +554,7 @@ impl Touched {
                 self.exists.insert(Object::Hotkey(chord.clone()));
                 self.uses_named(action);
             }
-            Edit::HotkeyClear { chord } => {
+            Edit::HotkeyClear { chord, .. } => {
                 self.exists.insert(Object::Hotkey(chord.clone()));
             }
             // A binding's labels are its metadata (ADR-0133), and use each label.
@@ -560,7 +568,7 @@ impl Touched {
                 self.exists.insert(Object::Binding(trigger.clone()));
                 self.uses_named(action);
             }
-            Edit::BindingClear { trigger } => {
+            Edit::BindingClear { trigger, .. } => {
                 self.exists.insert(Object::Binding(trigger.clone()));
             }
             // A value binding is left in place when what it names goes, so it uses
@@ -581,6 +589,14 @@ impl Touched {
             Edit::ChannelDelete { channel_id } => {
                 self.exists.insert(Object::Channel(channel_id.clone()));
             }
+            // A show is left in place when what it names goes, so it uses nothing
+            // (ADR-0210), and it is written whole, so any two writes of it conflict.
+            Edit::ShowSet { show } => {
+                self.exists.insert(Object::Show(show.show_id.clone()));
+            }
+            Edit::ShowDelete { show_id } => {
+                self.exists.insert(Object::Show(show_id.clone()));
+            }
             // A timeline is written whole, so any two writes of it conflict, and a write
             // conflicts with deleting its scene.
             Edit::TimelineSet { scene_id, timeline } => {
@@ -589,6 +605,9 @@ impl Touched {
                 self.uses.insert(Object::Scene(scene_id.clone()));
                 for label in &timeline.labels {
                     self.uses.insert(Object::Label(label.clone()));
+                }
+                if let Some(folder) = &timeline.folder {
+                    self.uses.insert(Object::Folder(folder.clone()));
                 }
             }
             Edit::TimelineDelete { timeline_id } => {
@@ -623,6 +642,7 @@ impl Touched {
                 EntityKind::Output => Object::Output(OutputId::new(id)),
                 EntityKind::Transition => Object::Transition(TransitionPresetId::new(id)),
                 EntityKind::Timeline => Object::Timeline(TimelineId::new(id)),
+                EntityKind::Show => Object::Show(jstream_protocol::ShowId::new(id)),
                 _ => {
                     self.unknown = true;
                     continue;

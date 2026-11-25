@@ -53,7 +53,7 @@ use crate::motion::{self, TrackMotion};
 use crate::preview::PreviewCapture;
 use crate::profile::{DrawMeter, Phase};
 use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
-use crate::transition::{self, From, Planned, Running, Seen, Visual};
+use crate::transition::{self, From, Planned, Running, Seen, ShowFade, Visual};
 
 mod groups;
 mod probes;
@@ -341,6 +341,11 @@ impl Frame {
         Self { probe, ..self }
     }
 
+    /// Which frame it is: two with the same version are the same bytes.
+    pub(crate) fn version(&self) -> u64 {
+        self.version
+    }
+
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
     pub(crate) fn with_version(self, version: u64) -> Self {
         Self { version, ..self }
@@ -467,6 +472,9 @@ struct Placed {
     /// (ADR-0049 §3): its track and the transition's start, which replace the fields
     /// above (`placement` holds its end) and its live values.
     moving: Option<Moving>,
+    /// An item of the show scene fading in or out on its own ([`ShowFade`]), sampled
+    /// over its pose as each frame is drawn.
+    fading: Option<ShowFade>,
     /// Its motion modifiers (ADR-0099), evaluated as each frame is drawn: both sides'
     /// for a moving child, its own on both sides otherwise.
     motion: TrackMotion,
@@ -479,9 +487,21 @@ struct Placed {
 /// A layer's track inside a group a transition moves, and when the transition started.
 type Moving = (MediaTime, Track);
 
+/// The show scene's items fading in or out on their own, by item.
+pub(crate) type ShowFades = BTreeMap<ItemId, ShowFade>;
+
 /// The longest side of an item's effects layer, in pixels: a larger box plus outset is
 /// drawn into it scaled down uniformly (ADR-0065 §5).
 const MAX_LAYER_SIDE: u32 = 8192;
+
+/// Layer pixels per canvas pixel for a box whose longest side with its outset on both
+/// sides is `padded`: 1, or less to fit [`MAX_LAYER_SIDE`]. With an outset, the box's
+/// side and the pad are each rounded up, which can add up to 3 pixels, so it leaves
+/// 2 pixels of room: the padded layer never passes the largest side (ADR-0219 decision 3).
+fn fit_scale(padded: f32, outset: f32) -> f32 {
+    let room = if outset > 0.0 { 2.0 } else { 0.0 };
+    ((MAX_LAYER_SIDE as f32 - room) / padded).min(1.0)
+}
 
 /// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned, in
 /// canvas pixels, scaled down to fit [`MAX_LAYER_SIDE`] with the effects' outset on
@@ -525,7 +545,7 @@ impl Boxed {
         if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
             return None;
         }
-        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let scale = fit_scale(padded[0].max(padded[1]), outset);
         let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
         Some(Self {
             size,
@@ -548,7 +568,7 @@ impl Boxed {
         if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
             return None;
         }
-        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let scale = fit_scale(padded[0].max(padded[1]), outset);
         let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
         Some(Self {
             outset,
@@ -593,9 +613,17 @@ impl Boxed {
     }
 
     /// The size the layer is placed at, which its pixels are sampled across
-    /// ([`jstream_render::Image::set_extent`]).
+    /// ([`jstream_render::Image::set_extent`]): its pixels at [`Self::scale`] 1, and the
+    /// box's size in canvas pixels for a layer scaled down to fit [`MAX_LAYER_SIDE`], so
+    /// that layer's effects count their pixel settings in canvas pixels, as the pad does
+    /// (ADR-0219, #1720). A model's is its layer's, which stands for the canvas however
+    /// many pixels it is drawn with (ADR-0197).
     fn extent(&self) -> Option<FrameSize> {
-        FrameSize::new(self.layer[0], self.layer[1]).ok()
+        if self.model || self.scale >= 1.0 {
+            return FrameSize::new(self.layer[0], self.layer[1]).ok();
+        }
+        let side = |px: f32| (px.round() as u32).max(1);
+        FrameSize::new(side(self.size[0]), side(self.size[1])).ok()
     }
 
     /// The box `placement` puts an item cropped by `crop` in: its geometry, or a legacy
@@ -1169,6 +1197,12 @@ impl Shot {
     pub(crate) fn model_resolution(&self) -> u32 {
         self.features.model_resolution
     }
+
+    /// The smallest size the render thread may lower 3D models to while it chooses
+    /// (`RenderFeatures::min_model_resolution`).
+    pub(crate) fn min_model_resolution(&self) -> u32 {
+        self.features.min_model_resolution
+    }
 }
 
 impl Shot {
@@ -1291,17 +1325,41 @@ impl Shot {
         self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty() || self.moves
     }
 
+    /// What the model item whose layer (or effects' output) is `image` shows this frame:
+    /// its model, as posed now. `None` for another layer, or a model with no frame yet.
+    fn shown_model(&self, image: &GpuKey) -> Option<&ShownModel> {
+        let (scene, item) = image.boxed_item()?;
+        let boxed = self
+            .boxes
+            .get(&ChainOwner::Item(scene.clone(), item.clone()))?;
+        let SourceRef::Frame(source) = &boxed.source else {
+            return None;
+        };
+        self.frames.get(source)?.model.as_ref()
+    }
+
     /// Whether `image` is the layer of an item that shows a 3D model (ADR-0107): drawn
     /// in the canvas's pixels, so placed flat as [`Placement::Layer`].
     fn is_model_box(&self, image: &GpuKey) -> bool {
-        let owner = match image {
-            GpuKey::Filtered(owner @ ChainOwner::Item(..)) => owner.clone(),
-            GpuKey::ItemBox(scene, item) => ChainOwner::Item(scene.clone(), item.clone()),
-            _ => return false,
+        let Some((scene, item)) = image.boxed_item() else {
+            return false;
         };
         self.boxes
-            .get(&owner)
+            .get(&ChainOwner::Item(scene.clone(), item.clone()))
             .is_some_and(|boxed| boxed.boxed.model)
+    }
+
+    /// The chain of its source's video filters over the layer of the model item
+    /// `owner` (ADR-0107 decision 6), when the shot runs one.
+    fn shown_chain(&self, owner: &ChainOwner) -> Option<ChainOwner> {
+        let ChainOwner::Item(scene, item) = owner else {
+            return None;
+        };
+        let SourceRef::Frame(source) = &self.boxes.get(owner)?.source else {
+            return None;
+        };
+        let shown = ChainOwner::Shown(source.clone(), scene.clone(), item.clone());
+        self.chains.contains_key(&shown).then_some(shown)
     }
 
     /// Whether `image` is the layer of an item whose effects run over the canvas
@@ -1348,10 +1406,13 @@ impl Shot {
     }
 
     /// Whether a camera it draws through moves on its own (ADR-0113): a follow camera,
-    /// or camera motion.
+    /// camera motion, or a glide through a Move (ADR-0226).
     fn cameras_move(&self) -> bool {
         let moves = |moves: &Option<Arc<CameraMoves>>| moves.as_ref().is_some_and(|m| m.moves());
-        self.cameras.values().any(|camera| moves(&camera.moves))
+        // A camera gliding through a Move moves too (ADR-0226).
+        self.cameras
+            .values()
+            .any(|camera| moves(&camera.moves) || camera.glide.is_some())
             || self
                 .transition
                 .as_ref()
@@ -1451,10 +1512,26 @@ impl Shot {
         )
     }
 
-    /// The value `item`'s modifier `modifier` adds at `at`, alone, as a source setting's
-    /// drive reads it (ADR-0171 decision 4).
-    fn source_value(&self, item: &ItemId, modifier: &jstream_anim::Modifier, at: MediaTime) -> f64 {
-        f64::from(self.motion_at(item, std::slice::from_ref(modifier), at).x)
+    /// What `item`'s modifier `modifier` makes of a setting's `own` value at `at`, alone,
+    /// as an effect's or a source setting's drive reads it (ADR-0138, ADR-0171 decision
+    /// 4): `own` plus its value, or for a `replace` modifier the value it sets, pulled
+    /// toward `own` by its amount (ADR-0203).
+    fn source_value(
+        &self,
+        item: &ItemId,
+        modifier: &jstream_anim::Modifier,
+        at: MediaTime,
+        own: f64,
+    ) -> f64 {
+        let by = self.motion_at(item, std::slice::from_ref(modifier), at);
+        let x = jstream_anim::Property::X;
+        if modifier.replace {
+            let own32 = own as f32;
+            let set = by.base(x, own32);
+            if set == own32 { own } else { f64::from(set) }
+        } else {
+            own + f64::from(by.x)
+        }
     }
 
     /// Whether `item`'s modifier `modifier` paints a colour setting, with the colour it
@@ -1485,11 +1562,8 @@ impl Shot {
             let Some(chain) = self.chains.get(owner) else {
                 continue;
             };
-            let value = |modifier: &jstream_anim::Modifier| {
-                f64::from(
-                    self.motion_at(&driven.item, std::slice::from_ref(modifier), at)
-                        .x,
-                )
+            let value = |modifier: &jstream_anim::Modifier, own: f64| {
+                self.source_value(&driven.item, modifier, at, own)
             };
             let tint = |modifier: &jstream_anim::Modifier| self.tint(&driven.item, modifier);
             match blended.iter_mut().find(|(o, _)| *o == owner) {
@@ -1641,6 +1715,24 @@ impl Shot {
                     t.camera(&t.cameras, (key, track, *seen), elapsed_ms)
                 })
                 .collect()
+        })
+    }
+
+    /// The camera scene `scene` glides through `elapsed_ms` into the Move it glides with
+    /// (ADR-0226), before its camera motion, or `None` when it doesn't glide, for tests.
+    #[cfg(test)]
+    pub(crate) fn gliding_camera(&self, scene: &SceneId, elapsed_ms: f32) -> Option<SceneCamera> {
+        let glide = self.cameras.get(scene)?.glide.as_ref()?;
+        glide.cameras.sky_camera(false, elapsed_ms)
+    }
+
+    /// Whether the running transition moves its held screen's camera as its shown
+    /// scene's motion moves that scene's, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn held_camera_moves(&self) -> Option<bool> {
+        self.transition.as_ref().map(|t| match &t.moves {
+            (Some(from), Some(to)) => Arc::ptr_eq(from, to),
+            _ => false,
         })
     }
 
@@ -1878,7 +1970,7 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
     .shot
 }
 
-/// What [`plan_with`] returns.
+/// What [`plan_program`] returns.
 pub(crate) struct Planning {
     pub(crate) shot: Shot,
     /// When the shot should be planned again: the earliest time a frame it shows is
@@ -1901,6 +1993,23 @@ pub(crate) struct Planning {
 /// the shot draws the transition instead of the program scene: its tracks, planned from
 /// what it starts from and the program scene as the collection holds them now, and the
 /// nested scenes they show. A video mix that shows the program shows the transition too.
+///
+/// With `fades`, the internal show scene's items fading in or out on their own, apart
+/// from `running` ([`ShowFade`]): each such item of the show scene carries its fade on
+/// its layer, drawn on its way in or out over its pose, one going is planned until its
+/// fade ends, and the plan wakes when each ends.
+pub(crate) fn plan_program(
+    graph: &Graph,
+    program: Option<&SceneId>,
+    (running, fades): (Option<(&Running, MediaTime)>, &ShowFades),
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+) -> Planning {
+    plan_inner(graph, program, (running, fades), look, assets, true)
+}
+
+/// [`plan_program`] with no show scene item fading, for the tests.
+#[cfg(test)]
 pub(crate) fn plan_with(
     graph: &Graph,
     program: Option<&SceneId>,
@@ -1908,7 +2017,7 @@ pub(crate) fn plan_with(
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Planning {
-    plan_inner(graph, program, running, look, assets, true)
+    plan_program(graph, program, (running, &ShowFades::new()), look, assets)
 }
 
 /// Copies the scene `scene_id` and the scenes it nests out of `graph` as the program
@@ -1921,7 +2030,14 @@ pub(crate) fn plan_scene(
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Planning {
-    plan_inner(graph, Some(scene_id), None, look, assets, false)
+    plan_inner(
+        graph,
+        Some(scene_id),
+        (None, &ShowFades::new()),
+        look,
+        assets,
+        false,
+    )
 }
 
 /// The scene and item a source's preview stream draws it through, in a copy of the
@@ -2008,7 +2124,14 @@ pub(crate) fn plan_source(
     assets: &FilterAssets,
 ) -> Option<Planning> {
     let (own, scene_id) = copies.copy(graph, source_id)?;
-    Some(plan_inner(own, Some(scene_id), None, look, assets, false))
+    Some(plan_inner(
+        own,
+        Some(scene_id),
+        (None, &ShowFades::new()),
+        look,
+        assets,
+        false,
+    ))
 }
 
 /// A copy of `graph` with one scene added whose one item places `source_id` over the
@@ -2050,11 +2173,11 @@ fn source_copy(graph: &Graph, source_id: &SourceId) -> Option<(Graph, SceneId)> 
     Some((own, scene_id))
 }
 
-/// [`plan_with`], drawing the scene each `scene` video mix shows when `mixes`.
+/// [`plan_program`], drawing the scene each `scene` video mix shows when `mixes`.
 fn plan_inner(
     graph: &Graph,
     program: Option<&SceneId>,
-    running: Option<(&Running, MediaTime)>,
+    (running, fades): (Option<(&Running, MediaTime)>, &ShowFades),
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
     mixes: bool,
@@ -2075,6 +2198,9 @@ fn plan_inner(
         assets,
         wake: None,
         quiet: false,
+        fades: None,
+        glide: None,
+        appearing: None,
     };
     let mut finished = running.is_some();
     let mut end_ms = None;
@@ -2083,7 +2209,35 @@ fn plan_inner(
     {
         let (planned, pairs) = planner.transition(running, &mut shot);
         let end = end_time(running.start, planned.end_ms);
-        if end.is_some_and(|end| now < end) {
+        let glides = end
+            .is_some_and(|end| now < end)
+            .then(|| planner.moves_only_the_camera(running, &planned, &shot))
+            .flatten();
+        if let Some(fades) = glides {
+            // Only the camera moves (ADR-0226), and items only appear or go where they
+            // are (ADR-0237): the program scene is drawn as it is, with its chain,
+            // through a camera that follows the Move's, those items fading in its pass.
+            finished = false;
+            end_ms = Some(planned.end_ms);
+            let glide = CameraGlide {
+                start: running.start,
+                cameras: planner.track_cameras(running, pairs),
+            };
+            let family = planner.family(&running.to);
+            // Planned again from nothing: the transition's plan left frames, chains,
+            // boxes and arrival pictures that the scene at rest plans its own way.
+            shot = Shot {
+                canvas: state.canvas(),
+                blending: state.blending(),
+                program: program.clone(),
+                tempo: assets.tempo().cloned(),
+                features: assets.features(),
+                ..Shot::default()
+            };
+            planner.wake = end;
+            planner.glide = family.map(|family| (family, Arc::new(glide)));
+            planner.appearing = Some((running.to.clone(), fades));
+        } else if end.is_some_and(|end| now < end) {
             finished = false;
             end_ms = Some(planned.end_ms);
             planner.wake = earliest(planner.wake, end);
@@ -2120,19 +2274,28 @@ fn plan_inner(
                 transition::From::Scene(from) => planner.background(from),
                 transition::From::OnScreen(_) => Some(to),
             };
+            // What was on screen is held through its camera before its motion: within
+            // one family (an item shown or hidden, or a keyframe placed, on program) the
+            // family's motion moved it there, so it moves it here too, and the Move
+            // starts from the camera the screen showed rather than gliding in from the
+            // camera without it.
+            let to_moves = planner.camera_moves(&running.to, &mut shot);
+            let to_family = planner.family(&running.to);
             let moves = (
                 match &running.from {
                     transition::From::Scene(from) => planner.camera_moves(from, &mut shot),
+                    transition::From::OnScreen(_) if running.by_item => to_moves.clone(),
                     transition::From::OnScreen(_) => None,
                 },
-                planner.camera_moves(&running.to, &mut shot),
+                to_moves,
             );
             let families = (
                 match &running.from {
                     transition::From::Scene(from) => planner.family(from),
+                    transition::From::OnScreen(_) if running.by_item => to_family.clone(),
                     transition::From::OnScreen(_) => None,
                 },
-                planner.family(&running.to),
+                to_family,
             );
             shot.transition = Some(Transitioning {
                 start: running.start,
@@ -2198,7 +2361,9 @@ fn plan_inner(
         && program.as_ref() != Some(show)
     {
         let mut path = BTreeSet::new();
+        planner.fades = Some((show, fades));
         planner.collect(show, &mut shot, &mut path);
+        planner.fades = None;
         let passes = schedule(&shot, show);
         if passes.last().is_some_and(|root| !root.layers.is_empty()) {
             shot.show = passes;
@@ -2336,6 +2501,41 @@ pub(crate) fn still_on_screen(
     on_screen_until_end(graph, running, now, look, assets, true)
 }
 
+/// The fades still running at `now` of `running`, an in-place Move that draws the
+/// program scene as it is (ADR-0237): what another item's show or hide that cuts it short
+/// carries on. Empty when it has ended; `None` when it is drawn track by track, so the
+/// next one must be too, to go on from where its items are.
+pub(crate) fn glide_fades(
+    graph: &Graph,
+    running: &Running,
+    now: MediaTime,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+) -> Option<ShowFades> {
+    let state = graph.state();
+    let mut shot = Shot {
+        canvas: state.canvas(),
+        ..Shot::default()
+    };
+    let mut planner = Planner {
+        state,
+        look,
+        assets,
+        wake: None,
+        quiet: false,
+        fades: None,
+        glide: None,
+        appearing: None,
+    };
+    let (planned, _) = planner.transition(running, &mut shot);
+    if end_time(running.start, planned.end_ms).is_none_or(|end| now >= end) {
+        return Some(ShowFades::new());
+    }
+    let mut fades = planner.moves_only_the_camera(running, &planned, &shot)?;
+    fades.retain(|_, fade| !fade.ended(now));
+    Some(fades)
+}
+
 fn on_screen_until_end(
     graph: &Graph,
     running: &Running,
@@ -2355,9 +2555,12 @@ fn on_screen_until_end(
         assets,
         wake: None,
         quiet: false,
+        fades: None,
+        glide: None,
+        appearing: None,
     };
     let (planned, pairs) = planner.transition(running, &mut shot);
-    // Ended as [`plan_with`] finds it.
+    // Ended as [`plan_program`] finds it.
     if until_end && end_time(running.start, planned.end_ms).is_none_or(|end| now >= end) {
         return None;
     }
@@ -2455,9 +2658,12 @@ fn key(image: &SourceRef, shot: &Shot) -> GpuKey {
         }
         SourceRef::Boxed(scene, item) => {
             let owner = ChainOwner::Item(scene.clone(), item.clone());
-            // A model's layer with no effects is shown as drawn (ADR-0107).
+            // A model's layer with no effects is shown as drawn (ADR-0107), or as its
+            // source's filters drew over it.
             if shot.chains.contains_key(&owner) {
                 GpuKey::Filtered(owner)
+            } else if let Some(shown) = shot.shown_chain(&owner) {
+                GpuKey::Filtered(shown)
             } else {
                 GpuKey::ItemBox(scene.clone(), item.clone())
             }
@@ -2501,7 +2707,7 @@ fn placed_captures<'a>(
         })
 }
 
-/// What a source shows, as [`plan_with`] asks for it.
+/// What a source shows, as [`plan_program`] asks for it.
 pub(crate) enum Look {
     /// Its frame now, and when that frame is next replaced.
     Frame(Box<Frame>, Option<MediaTime>),
@@ -2516,7 +2722,7 @@ impl Look {
     }
 }
 
-/// What [`plan_with`] asks for each source it reaches; `None` shows nothing.
+/// What [`plan_program`] asks for each source it reaches; `None` shows nothing.
 pub(crate) type LookUp<'a> = dyn FnMut(&SourceId) -> Option<Look> + 'a;
 
 struct Planner<'a, 'f> {
@@ -2530,9 +2736,34 @@ struct Planner<'a, 'f> {
     /// `via` stops are planned, which are read only for their values, so a source only
     /// a stop shows isn't shown, heard or woken by `look`.
     quiet: bool,
+    /// The show scene and its items fading on their own, set while it is planned.
+    fades: Option<(&'a SceneId, &'a ShowFades)>,
+    /// The family whose camera glides, and along what, while a Move moves only its
+    /// camera (ADR-0226): every camera of that family planned meanwhile carries it.
+    glide: Option<(SceneId, Arc<CameraGlide>)>,
+    /// The program scene and its items that appear or go where they are, while a Move
+    /// that draws it as it is runs (ADR-0237): each fades in the scene's own pass as
+    /// its track would draw it.
+    appearing: Option<(SceneId, ShowFades)>,
 }
 
 impl<'a> Planner<'a, '_> {
+    /// The fade of `item_id` when it is an item of the show scene's own pass, or of the
+    /// program scene's while a Move draws it as it is (ADR-0237), placed from the scene
+    /// itself (never through a 3D group), and fading on its own; its end wakes the
+    /// plan, which then plans the item at rest.
+    fn fading(&mut self, scene: &SceneId, from: &SceneId, item_id: &ItemId) -> Option<ShowFade> {
+        let show = self.fades;
+        let appearing = self.appearing.as_ref().map(|(scene, fades)| (scene, fades));
+        let fade = [show, appearing]
+            .into_iter()
+            .flatten()
+            .find(|(owner, _)| scene == *owner && from == *owner)
+            .and_then(|(_, fades)| fades.get(item_id).copied())?;
+        self.wake = earliest(self.wake, end_time(fade.start, fade.end_ms()));
+        Some(fade)
+    }
+
     /// The scene a planned ID draws, and the keyframe scene whose overrides its items
     /// show: a scene of the collection, a keyframe scene of its own, or a group's
     /// [`view_id`] through a keyframe scene.
@@ -2609,6 +2840,11 @@ impl<'a> Planner<'a, '_> {
             .scene(&family)
             .and_then(|family| family.camera_follow())
             .map(|_| SceneCamera::framing(self.state.canvas()));
+        let glide = self
+            .glide
+            .as_ref()
+            .filter(|(glides, _)| *glides == family)
+            .map(|(_, glide)| Arc::clone(glide));
         (own.is_some() || parent.is_some() || supplied.is_some()).then_some(PassCamera {
             own,
             parent,
@@ -2616,6 +2852,7 @@ impl<'a> Planner<'a, '_> {
             moves: None,
             family,
             anchor: groups::anchor_of(self.state, scene),
+            glide,
         })
     }
 
@@ -2803,6 +3040,159 @@ impl<'a> Planner<'a, '_> {
                 && g.depth_px.get() == 0.0
                 && !g.billboard
         })
+    }
+
+    /// Whether `running`, planned as `planned` into `out`, moves nothing but the camera
+    /// within a 3D scene's family whose scene has a video chain (ADR-0226): a Move
+    /// within the family ([`Self::moves_within_3d_family`]) whose every track is an item
+    /// staying where it is (or, for one that can't glide, going and coming back the
+    /// same), or one of the scene's own items appearing or going on its own where the
+    /// shown scene places it (ADR-0237), with no effect to blend, and whose camera rides
+    /// with no 3D group. Such a Move is drawn as the scene itself, chain and all,
+    /// through a gliding camera, rather than track by track with its chain paused
+    /// (ADR-0180). `Some` gives the items that appear or go, each with its fade, which
+    /// its layer in the scene's pass samples as its track would; `None` when the Move
+    /// is drawn track by track.
+    fn moves_only_the_camera(
+        &self,
+        running: &Running,
+        planned: &Planned,
+        out: &Shot,
+    ) -> Option<ShowFades> {
+        // An item that can't glide (one whose effects cover the canvas, such as a
+        // model's layer, ADR-0106) goes and comes back: still when it comes back as it
+        // went, with the same effects.
+        fn comes_back(tracks: &[(Visual, Track)], visual: &Visual, at: &Endpoint) -> bool {
+            tracks.iter().any(|(other, track)| {
+                matches!(track, Track::Appear { to, .. } if to == at)
+                    && other.item_id == visual.item_id
+                    && other.effects == visual.effects
+                    && other.inside.is_none()
+            })
+        }
+        // Whether another track of `tracks` draws the item `visual` draws.
+        fn partnered(tracks: &[(Visual, Track)], visual: &Visual, track: &Track) -> bool {
+            tracks
+                .iter()
+                .any(|(other, theirs)| other.item_id == visual.item_id && theirs != track)
+        }
+        // `in_place`: an item shown or hidden where the program scene was drawn, whose
+        // other items differ at their ends only by the live values that moved since it
+        // started; the scene drawn as it is shows them as they are now.
+        fn still(tracks: &[(Visual, Track)], in_place: bool) -> bool {
+            tracks.iter().all(|(visual, track)| match track {
+                Track::Pair { from, to, via, .. } => {
+                    (in_place || from == to)
+                        && via.iter().all(|stop| stop == to)
+                        && (in_place || visual.blend_from.is_none())
+                        && visual
+                            .inside
+                            .as_ref()
+                            .is_none_or(|inside| still(&inside.planned.tracks, in_place))
+                }
+                // In place, the two halves of an item that goes and comes back can
+                // differ by live values too, and a Move cut short leaves the half that
+                // was going on screen beside the one coming back. One whose effects
+                // cover the canvas can't glide, so it goes and comes back on any Move,
+                // which the scene draws as its other side: drawn track by track, it
+                // would only swap halves (ADR-0106).
+                Track::Disappear { from, .. } => {
+                    visual.inside.is_none()
+                        && if in_place || visual.covers_canvas {
+                            tracks.iter().any(|(other, track)| {
+                                matches!(track, Track::Appear { .. })
+                                    && other.item_id == visual.item_id
+                                    && other.inside.is_none()
+                            })
+                        } else {
+                            comes_back(tracks, visual, from)
+                        }
+                }
+                Track::Appear { to, .. } => {
+                    visual.inside.is_none()
+                        && tracks.iter().any(|(other, track)| {
+                            matches!(
+                                track,
+                                Track::Disappear { from, .. }
+                                    if in_place || visual.covers_canvas || from == to
+                            ) && other.item_id == visual.item_id
+                        })
+                }
+                Track::Through { .. } => false,
+            })
+        }
+        if !self.moves_within_3d_family(running) || self.scene_chain(&running.to).is_none() {
+            return None;
+        }
+        let camera = self.camera(&running.to)?;
+        let mut blends = Vec::new();
+        effect_blends(&planned.tracks, &out.chains, &mut blends);
+        if camera.anchor.is_some() || (!blends.is_empty() && !running.in_place) {
+            tracing::debug!(
+                scene = %running.to,
+                anchored = camera.anchor.is_some(),
+                blends = blends.len(),
+                in_place = running.in_place,
+                "a Move within a 3D family pauses its chain"
+            );
+            return None;
+        }
+        // An item of the scene itself that appears or goes on its own, where the shown
+        // scene places it, fades in the scene's pass (ADR-0237); every other track
+        // stays still.
+        let shown: BTreeSet<ItemId> = self
+            .items_of(&running.to)
+            .iter()
+            .map(|item| item.as_ref().id().clone())
+            .collect();
+        let mut fades = ShowFades::new();
+        let mut rest = Vec::with_capacity(planned.tracks.len());
+        for (visual, track) in &planned.tracks {
+            let alone = visual.inside.is_none()
+                && visual.groups.is_none()
+                && shown.contains(&visual.item_id)
+                && !partnered(&planned.tracks, visual, track);
+            let fade = match track {
+                Track::Appear { effect, timing, .. } if alone => Some((true, *effect, *timing)),
+                Track::Disappear { effect, timing, .. } if alone => Some((false, *effect, *timing)),
+                _ => None,
+            };
+            match fade {
+                Some((visible, effect, timing)) => {
+                    fades.insert(
+                        visual.item_id.clone(),
+                        ShowFade {
+                            start: running.start,
+                            visible,
+                            effect,
+                            timing,
+                        },
+                    );
+                }
+                None => rest.push((visual.clone(), track.clone())),
+            }
+        }
+        // The fades of the Move this one cut short go on from where they were: one going
+        // the same way keeps its course, and one turned back picks up where it is
+        // (ADR-0237 decision 2).
+        for (item, before) in &running.carried {
+            match fades.get_mut(item) {
+                Some(fade) if fade.visible == before.visible => *fade = *before,
+                Some(fade) => *fade = fade.after(Some(before), running.start),
+                None => {
+                    fades.insert(item.clone(), *before);
+                }
+            }
+        }
+        let kept = still(&rest, running.in_place);
+        if !kept {
+            tracing::debug!(
+                scene = %running.to,
+                in_place = running.in_place,
+                "a Move within a 3D family pauses its chain: an item moves or comes alone"
+            );
+        }
+        kept.then_some(fades)
     }
 
     /// Whether `running` is a Move within the family of a 3D scene (ADR-0180): from one
@@ -3077,6 +3467,7 @@ impl<'a> Planner<'a, '_> {
                 blend: child.at.blend,
                 effects: None,
                 moving: Some((start, track.clone())),
+                fading: None,
                 motion: child.motion.clone(),
                 groups: None,
             });
@@ -3150,6 +3541,7 @@ impl<'a> Planner<'a, '_> {
                 disappear: jstream_protocol::TransitionEffect::Fade,
                 ..ItemTransition::default()
             },
+            covers_canvas: false,
             effects: Vec::new(),
             blend_from: None,
             inside: None,
@@ -3277,15 +3669,33 @@ impl<'a> Planner<'a, '_> {
         if let Some(planned) = out.boxes.get(&owner) {
             return Some(planned.boxed);
         }
-        let mut chain = Chain::of_filters(
-            &owner,
-            item.effects(),
-            GpuKey::ItemBox(scene.clone(), item.id().clone()),
-            self.assets,
-        );
         // A model is drawn into a layer of its own, effects or not (ADR-0107).
         let model = matches!(source, SourceRef::Frame(id)
             if out.frames.get(id).is_some_and(|frame| frame.model.is_some()));
+        // Its source's video filters run over that layer first, once per item that
+        // shows it (decision 6), and the item's effects read what they draw.
+        let shown = match source {
+            SourceRef::Frame(id) if model => self.state.source(id).and_then(|source| {
+                let owner = ChainOwner::Shown(id.clone(), scene.clone(), item.id().clone());
+                let chain = Chain::of_filters(
+                    &owner,
+                    source.filters().chain(FilterChain::Video),
+                    GpuKey::ItemBox(scene.clone(), item.id().clone()),
+                    self.assets,
+                )?;
+                Some((owner, chain))
+            }),
+            _ => None,
+        };
+        let mut chain = Chain::of_filters(
+            &owner,
+            item.effects(),
+            match &shown {
+                Some((shown, _)) => GpuKey::Filtered(shown.clone()),
+                None => GpuKey::ItemBox(scene.clone(), item.id().clone()),
+            },
+            self.assets,
+        );
         // A card lit by its 3D scene is lit in a layer of its own (ADR-0151 decision 10),
         // when what it shows is a source's own frame, drawn before the passes are.
         let lit = !model
@@ -3392,6 +3802,9 @@ impl<'a> Planner<'a, '_> {
             self.assets.tempo().map(|tempo| tempo.0.as_ref()),
             self.assets.data(),
         );
+        if let Some((shown, chain)) = shown {
+            self.add_chain(shown, chain, out);
+        }
         if let Some(chain) = chain {
             self.add_chain(owner, chain, out);
         }
@@ -3571,7 +3984,8 @@ impl<'a> Planner<'a, '_> {
             // An item whose effects run over the canvas covers the canvas on both sides
             // of a switch, so it can't glide (ADR-0106): it disappears and appears.
             let mut settings = *item.transition();
-            if boxed.is_some_and(|boxed| boxed.canvas) {
+            let covers_canvas = boxed.is_some_and(|boxed| boxed.canvas);
+            if covers_canvas {
                 settings.glide = jstream_protocol::Glide::Never;
             }
             let (image, geometry, cut, size, effects) = match boxed {
@@ -3625,6 +4039,7 @@ impl<'a> Planner<'a, '_> {
                 },
                 size,
                 settings,
+                covers_canvas,
                 effects,
                 blend_from: None,
                 inside: None,
@@ -3694,7 +4109,10 @@ impl<'a> Planner<'a, '_> {
         let groups: Groups = (!links.is_empty()).then(|| Arc::from(links));
         for item in self.items_of(from) {
             let item = item.as_ref();
-            if !item.visible() {
+            // An item of the show scene fading on its own; one going still draws until
+            // its fade ends.
+            let fading = self.fading(scene, from, item.id());
+            if !item.visible() && !fading.is_some_and(|fade| !fade.visible) {
                 continue;
             }
             let Some(source) = state.source(item.source_id()) else {
@@ -3756,6 +4174,7 @@ impl<'a> Planner<'a, '_> {
                 blend: item.blend(),
                 effects,
                 moving: None,
+                fading,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
                 groups: groups.clone(),
             });
@@ -3983,6 +4402,15 @@ impl<'a> Planner<'a, '_> {
     fn shown(&mut self, source: &Source, out: &mut Shot) -> Option<SourceRef> {
         let id = source.id();
         let image = self.look(id, out)?;
+        // A model's filters run over each item's layer of it, not over its stand-in
+        // (ADR-0107 decision 6): `boxed` plans them where an item shows it.
+        if out
+            .frames
+            .get(id)
+            .is_some_and(|frame| frame.model.is_some())
+        {
+            return Some(image);
+        }
         let owner = ChainOwner::Source(id.clone());
         if out.chains.contains_key(&owner) {
             return Some(SourceRef::Filtered(id.clone()));
@@ -4165,6 +4593,19 @@ const REFERENCE_DEPTH: usize = 1;
 const COMPOSITE_DEPTH: usize = 0;
 
 impl GpuKey {
+    /// The item whose layer this is, or whose layer a chain drew this over: its box
+    /// ([`Self::ItemBox`]), its effects' output, or for a model the output of its
+    /// source's filters (ADR-0107 decision 6).
+    pub(crate) fn boxed_item(&self) -> Option<(&SceneId, &ItemId)> {
+        match self {
+            Self::ItemBox(scene, item)
+            | Self::Filtered(ChainOwner::Item(scene, item) | ChainOwner::Shown(_, scene, item)) => {
+                Some((scene, item))
+            }
+            _ => None,
+        }
+    }
+
     /// The layer `scene` is drawn into for the video filters that read it.
     pub(crate) fn reference(scene: &SceneId) -> Self {
         Self::Layer(scene.clone(), REFERENCE_DEPTH)
@@ -4296,6 +4737,30 @@ struct PassCamera {
     /// that group's space, placed through the group item as each frame is drawn.
     /// `None` for a camera in the scene's own space.
     anchor: Groups,
+    /// The Move its family's camera glides along while a Move between two of the
+    /// family's members moves only the camera (ADR-0226): drawn through instead of the
+    /// committed camera until the Move ends.
+    glide: Option<Arc<CameraGlide>>,
+}
+
+/// A Move between two members of a 3D scene's family that moves nothing but the camera
+/// (ADR-0226): the scene is drawn as it is, through its passes and its video chain, and
+/// only its camera follows the Move's camera path.
+#[derive(Debug, PartialEq)]
+struct CameraGlide {
+    /// When the Move started, on the media clock.
+    start: MediaTime,
+    /// The cameras it moves between and how, as the Move's tracks would be seen.
+    cameras: TrackCameras,
+}
+
+impl CameraGlide {
+    /// The camera at `at`, before the family's camera motion and live aim: the Move's
+    /// one moving camera, its end once the Move is over.
+    fn camera(&self, at: MediaTime) -> Option<SceneCamera> {
+        self.cameras
+            .sky_camera(false, transition::elapsed_ms(self.start, at))
+    }
 }
 
 impl PassCamera {
@@ -4363,6 +4828,8 @@ struct Layer {
     boxed: Option<Boxed>,
     /// Its track, for a group's child a transition moves inside the group's layer.
     moving: Option<Moving>,
+    /// Its fade, for an item of the show scene fading in or out on its own.
+    fading: Option<ShowFade>,
     /// Its motion modifiers (ADR-0099): the moving child's both sides, else its own.
     motion: TrackMotion,
     /// The 3D groups it is placed through (ADR-0164), as [`Placed::groups`].
@@ -4402,6 +4869,12 @@ impl Shot {
             }
             if let Some(planned) = self.boxes.get(&owner) {
                 stack.push(planned.source.clone());
+            }
+            if let Some(shown) = self.shown_chain(&owner) {
+                if let Some(chain) = self.chains.get(&shown) {
+                    stack.extend(chain.scenes().cloned().map(SourceRef::Scene));
+                }
+                owners.insert(shown);
             }
             if let Some(chain) = self.chains.get(&owner) {
                 stack.extend(chain.scenes().cloned().map(SourceRef::Scene));
@@ -4588,6 +5061,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
                 blend: BlendMode::Normal,
                 boxed: None,
                 moving: None,
+                fading: None,
                 motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
                 groups: None,
             })
@@ -4647,7 +5121,10 @@ fn schedule_chains(shot: &Shot) -> Vec<ChainStep> {
     // after the plain models, which a scene it reads may show.
     for mapped in [false, true] {
         for owner in shot.boxes.keys() {
-            if shot.chains.contains_key(owner) || order.maps_of(shot, owner).is_some() != mapped {
+            if shot.chains.contains_key(owner)
+                || shot.shown_chain(owner).is_some()
+                || order.maps_of(shot, owner).is_some() != mapped
+            {
                 continue;
             }
             order.maps(shot, owner, &mut done);
@@ -4782,9 +5259,19 @@ impl ChainOrder {
                     self,
                 );
             }
-            if shot.boxes.contains_key(owner) {
-                self.maps(shot, owner, done);
-                self.steps.push(ChainStep::Box(owner.clone()));
+            // The layer the chain reads is drawn first: an item's effects', unless its
+            // model's source's filters, which read it, drew it before them.
+            let drawn = match owner {
+                ChainOwner::Shown(_, scene, item) => {
+                    Some(ChainOwner::Item(scene.clone(), item.clone()))
+                }
+                _ if matches!(chain.input, GpuKey::ItemBox(..)) => Some(owner.clone()),
+                _ => None,
+            }
+            .filter(|drawn| shot.boxes.contains_key(drawn));
+            if let Some(drawn) = drawn {
+                self.maps(shot, &drawn, done);
+                self.steps.push(ChainStep::Box(drawn));
             }
         }
         self.open.remove(owner);
@@ -4814,6 +5301,10 @@ fn boxed_key(
     if shot.chains.contains_key(&owner) {
         passes.filtered(shot, &owner, done);
         GpuKey::Filtered(owner)
+    } else if let Some(shown) = shot.shown_chain(&owner) {
+        // A model without effects shows what its source's filters drew over it.
+        passes.filtered(shot, &shown, done);
+        GpuKey::Filtered(shown)
     } else {
         match owner {
             ChainOwner::Item(scene, item) => GpuKey::ItemBox(scene, item),
@@ -4915,6 +5406,7 @@ fn visit_into(
             blend: placed.blend,
             boxed: placed.effects,
             moving: placed.moving.clone(),
+            fading: placed.fading,
             motion: placed.motion.clone(),
             groups: placed.groups.clone(),
         });
@@ -5977,8 +6469,12 @@ impl Shot {
                     cost.scene_chains = cost.scene_chains.saturating_add(1);
                     (canvas, &mut cost.scene_layers, &mut cost.scene_passes)
                 }
-                ChainOwner::Item(..) => {
-                    let Some(boxed) = self.boxes.get(owner) else {
+                // A model's source's filters run over its item's layer, as effects do.
+                ChainOwner::Item(scene, item) | ChainOwner::Shown(_, scene, item) => {
+                    let Some(boxed) = self
+                        .boxes
+                        .get(&ChainOwner::Item(scene.clone(), item.clone()))
+                    else {
                         continue;
                     };
                     cost.item_effects = cost.item_effects.saturating_add(1);
@@ -6270,6 +6766,60 @@ fn upload_still(
     Ok(())
 }
 
+/// How many of the warm scenes' stills one tick of the program stage uploads at most
+/// ([`keep_warm_stills`]): a stage that opens with many to upload spreads them over
+/// its first ticks.
+const WARM_STILLS_PER_TICK: usize = 2;
+
+/// Gets the program stage's cache ready to draw each of the warm scenes' stills `warm`
+/// (ADR-0212): one it holds no texture of is uploaded whole from its pixels if they
+/// are held, and its pixels are asked for if they are not, so a later tick uploads
+/// it. So a switch to a warm scene finds its stills on the GPU and draws them on its
+/// first frame. Called on the program stage's render thread after the tick's draws, so
+/// a still a mix drew this tick is left as that draw left it; it reads only held
+/// pixels and never decodes ([`crate::still`]).
+///
+/// # Errors
+/// What the compositor reports for an upload.
+pub(crate) fn keep_warm_stills(
+    compositor: &Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    warm: &crate::runtime::WarmStills,
+) -> Result<(), RenderError> {
+    let mut uploads = 0;
+    for (key, frame) in warm {
+        let Pixels::Still(still) = &frame.pixels else {
+            continue;
+        };
+        if cache.get(key).is_some() {
+            continue;
+        }
+        let Some(pixels) = still.held() else {
+            still.want();
+            continue;
+        };
+        if uploads == WARM_STILLS_PER_TICK {
+            continue;
+        }
+        uploads += 1;
+        let size = (frame.width, frame.height);
+        let uploaded = cache
+            .upload_if_needed(compositor, key, frame.version, size, || {
+                Some(Packed(pixels))
+            })?
+            .is_some();
+        if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+            cache.set_extent(key, extent);
+        }
+        // Kept while its scene isn't drawn, as a drawn still's upload is.
+        cache.keep_while(key, still.alive());
+        if uploaded {
+            still.uploaded();
+        }
+    }
+    Ok(())
+}
+
 /// A still's packed pixels, as an upload reads them.
 struct Packed(Arc<VideoFrame>);
 
@@ -6303,6 +6853,9 @@ pub(crate) fn compose_metered(
     // Read once, so every chain of the frame is on the same beat (ADR-0148).
     let beat = shot.beat_at(at);
     compositor.set_blending(shot.blending);
+    // Every model of the frame is drawn with the samples the rendering switches ask
+    // for (ADR-0242).
+    compositor.set_model_antialiasing(shot.features.model_antialiasing);
     // A follow camera no frame has drawn for a while starts again at rest.
     chains.cameras().sweep(at);
     let uploads = Instant::now();
@@ -6310,9 +6863,15 @@ pub(crate) fn compose_metered(
     // The arrival pictures shown now (ADR-0188): only theirs light a scene, so only
     // theirs are averaged.
     let arriving = shown_arrivals(shot, chains);
-    chains
-        .picture_means
-        .retain(|source, _| arriving.contains(source));
+    // A mean is kept while another mix, or a monitored scene, draws without its
+    // picture: dropped there, the program's next draw would ask the still's let-go
+    // pixels for it again, and it would be decoded on every frame, its light white
+    // meanwhile. Only a stage that has gathered many lets go of those not shown here.
+    if chains.picture_means.len() > PICTURE_MEANS_KEPT {
+        chains
+            .picture_means
+            .retain(|source, _| arriving.contains(source));
+    }
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
             continue;
@@ -6626,6 +7185,7 @@ pub(crate) fn compose_metered(
                 (at, canvas),
                 (live, captures),
             );
+            meter.drew_camera(&pass.scene, camera);
             under_sky(&mut items, (cache, chains), pass, canvas, camera);
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
             let took = meter.phase_since(Phase::Passes, started);
@@ -6654,6 +7214,7 @@ pub(crate) fn compose_metered(
                     (at, canvas),
                     (live, captures),
                 );
+                meter.drew_camera(&root.scene, camera);
                 under_sky(&mut items, (cache, chains), root, canvas, camera);
                 root.background
             }
@@ -6676,6 +7237,7 @@ pub(crate) fn compose_metered(
                 (at, canvas),
                 (live, captures),
             );
+            meter.drew_camera(&show_root.scene, camera);
             under_sky(&mut over, (cache, chains), show_root, canvas, camera);
             items.clear();
             items.push(fitted(under, canvas, canvas));
@@ -6829,9 +7391,17 @@ fn run_chains(
         match step {
             ChainStep::Run(source) => {
                 if let Some(chain) = shot.chains.get(source) {
-                    meter.gpu_unit_chain(compositor, source);
+                    // A model source's filters over an item's layer count toward the
+                    // item, as its box does.
+                    let timed = match source {
+                        ChainOwner::Shown(_, scene, item) => {
+                            &ChainOwner::Item(scene.clone(), item.clone())
+                        }
+                        other => other,
+                    };
+                    meter.gpu_unit_chain(compositor, timed);
                     chains.run_one(compositor, cache, (source, chain), (at, beat));
-                    meter.chain(source, started);
+                    meter.chain(timed, started);
                 }
             }
             ChainStep::Box(owner) => {
@@ -6879,6 +7449,7 @@ fn run_chains(
                     (at, canvas),
                     (live, captures),
                 );
+                meter.drew_camera(&pass.scene, camera);
                 under_sky(&mut items, (&*cache, &*chains), pass, canvas, camera);
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;
@@ -7077,6 +7648,12 @@ fn draw_box(
     if boxed.boxed.lit {
         cache.layer(compositor, &unlit, width, height)?;
     }
+    // Placed at its box's size in canvas pixels, whatever its texels, so its effects'
+    // pixel settings count as the pad does (ADR-0219, #1720). Set each frame: a layer
+    // reused at the same size keeps the extent it was last given.
+    if let Some(extent) = boxed.boxed.extent() {
+        cache.set_extent(&key, extent);
+    }
     let flat = if boxed.boxed.lit { &unlit } else { &key };
     let (Some(image), Some(inside), Some(layer)) = (
         input.as_ref().and_then(|input| cache.get(input)),
@@ -7253,11 +7830,10 @@ fn track_camera(
     let ChainOwner::Item(scene, item) = owner else {
         return None;
     };
-    let (key, track, seen, ..) = transition.tracks.iter().find(|(key, ..)| match key {
-        GpuKey::Filtered(drawn) => drawn == owner,
-        GpuKey::ItemBox(s, i) => s == scene && i == item,
-        _ => false,
-    })?;
+    let (key, track, seen, ..) = transition
+        .tracks
+        .iter()
+        .find(|(key, ..)| key.boxed_item() == Some((scene, item)))?;
     let cameras = moving_cameras((shot, transition), chains, at, (live, captures));
     let elapsed = transition::elapsed_ms(transition.start, at);
     transition.camera(&cameras, (key, track, *seen), elapsed)
@@ -7393,7 +7969,7 @@ fn draw_model(
     // Its materials as its item's modifiers drive them (ADR-0171 decision 4).
     let (drives, driving) = crate::sourced::materials(
         shot.source_drives(&boxed.item),
-        |m| shot.source_value(&boxed.item, m, at),
+        |m, own| shot.source_value(&boxed.item, m, at, own),
         |m| shot.tint(&boxed.item, m),
     );
     let (texture, reflection) = model_maps(shot, &*cache, source, shown);
@@ -7598,9 +8174,7 @@ fn ready_casting_models(
             continue;
         }
         // A model's layer, or its effects' output over it: either is posed as the model.
-        let (GpuKey::ItemBox(scene, item) | GpuKey::Filtered(ChainOwner::Item(scene, item))) =
-            &layer.image
-        else {
+        let Some((scene, item)) = layer.image.boxed_item() else {
             continue;
         };
         let Some(boxed) = shot
@@ -7873,9 +8447,7 @@ fn pass_models<'s>(
         if !layer.boxed.is_some_and(|boxed| boxed.model) {
             continue;
         }
-        let (GpuKey::ItemBox(scene_id, item_id)
-        | GpuKey::Filtered(ChainOwner::Item(scene_id, item_id))) = &layer.image
-        else {
+        let Some((scene_id, item_id)) = layer.image.boxed_item() else {
             continue;
         };
         let Some(geometry) =
@@ -7954,7 +8526,7 @@ fn draw_reflection(
         pose(compositor, shown.model, shown.shown);
         let (drives, driving) = crate::sourced::materials(
             shot.source_drives(shown.item),
-            |m| shot.source_value(shown.item, m, at),
+            |m, own| shot.source_value(shown.item, m, at, own),
             |m| shot.tint(shown.item, m),
         );
         let reflected = GpuKey::ReflectedModel(shown.scene.clone(), shown.item.clone());
@@ -8175,6 +8747,7 @@ fn light_camera(
         focus_px: None,
         blur_px: jstream_protocol::Finite32::ZERO,
         autofocus: false,
+        fixed_aperture: false,
     };
     camera.validate().ok().map(|()| camera)
 }
@@ -8227,7 +8800,7 @@ fn scene_lights(
         let look = crate::sourced::light(
             light,
             shot.source_drives(&placed.item),
-            |m| shot.source_value(&placed.item, m, at),
+            |m, own| shot.source_value(&placed.item, m, at, own),
             |m| shot.tint(&placed.item, m),
         );
         let [r, g, b] = look.color;
@@ -8278,7 +8851,7 @@ fn scene_environment<'c>(
         let [turn_deg, tilt_deg, roll_deg] = chains
             .skies
             .borrow()
-            .get(id)
+            .get(&sky_family(shot, id))
             .filter(|_| sky.backdrop)
             .map_or(
                 [
@@ -8372,7 +8945,7 @@ fn environment_at<'c>(
         light.intensity,
         sky,
         shot.source_drives(&placed.item),
-        |m| shot.source_value(&placed.item, m, at),
+        |m, own| shot.source_value(&placed.item, m, at, own),
         |m| shot.tint(&placed.item, m),
     );
     let environment = jstream_render::Environment {
@@ -8457,7 +9030,7 @@ fn draw_sky_of(
         let (environment, look, _) =
             environment_at((shot, &*cache), (placed, light, sky), at, live);
         let mut skies = chains.skies.borrow_mut();
-        let state = skies.entry(scene.clone()).or_default();
+        let state = skies.entry(sky_family(shot, scene)).or_default();
         state.step(
             cache.frame(),
             at.as_secs_f64(),
@@ -8480,8 +9053,9 @@ fn draw_sky_of(
     let (environment, look, opacity) =
         environment_at((shot, cache), (placed, light, sky), at, live);
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
-    // Its arrival's pictures (ADR-0188, ADR-0198), where their frames were uploaded this frame.
-    let pinned = |arrival: Option<crate::chain::Arrival>| {
+    // Its arrival's pictures (ADR-0188, ADR-0198), where their frames were uploaded this
+    // frame, at `shown` over the deep sky's fade (ADR-0239).
+    let pinned = |arrival: Option<crate::chain::Arrival>, shown: f32| {
         let mut pictures = [None; jstream_render::MAX_SKY_PICTURES];
         let parts =
             arrival.and_then(|arrival| Some((arrival, arrival_parts(shot, placed, arrival)?)));
@@ -8492,38 +9066,39 @@ fn draw_sky_of(
                         image,
                         direction: arrival.part(part.offset_deg).map(|v| v as f32),
                         width_deg: (sky.sky_picture_deg * part.scale).clamp(1.0, 120.0),
-                        opacity: 1.0,
+                        opacity: shown,
                     }
                 });
             }
         }
         pictures
     };
-    let draw =
-        |[turn_deg, tilt_deg, roll_deg]: [f32; 3], (opacity, warp, travel, dropping), arrival| {
-            jstream_render::SkyDraw {
-                environment: jstream_render::Environment {
-                    turn_deg,
-                    tilt_deg,
-                    roll_deg,
-                    ..environment
-                },
-                camera,
-                stars: look.stars,
-                star_brightness: look.star_brightness,
-                opacity,
-                deep: jstream_render::DeepSky {
-                    nebula: look.nebula,
-                    nebula_colors: look.nebula_colors.map(colour),
-                    galaxy: look.galaxy,
-                    seed: sky.sky_seed,
-                },
-                warp,
-                travel,
-                dropping,
-                pictures: pinned(arrival),
-            }
-        };
+    let draw = |[turn_deg, tilt_deg, roll_deg]: [f32; 3],
+                (opacity, warp, travel, dropping),
+                (arrival, pictured)| {
+        jstream_render::SkyDraw {
+            environment: jstream_render::Environment {
+                turn_deg,
+                tilt_deg,
+                roll_deg,
+                ..environment
+            },
+            camera,
+            stars: look.stars,
+            star_brightness: look.star_brightness,
+            opacity,
+            deep: jstream_render::DeepSky {
+                nebula: look.nebula,
+                nebula_colors: look.nebula_colors.map(colour),
+                galaxy: look.galaxy,
+                seed: sky.sky_seed,
+            },
+            warp,
+            travel,
+            dropping,
+            pictures: pinned(arrival, pictured),
+        }
+    };
     // The new sky shows at `shown * faded`, over the leaving one; drawing the leaving one
     // at `shown * (1 - faded) / (1 - shown * faded)` makes them `shown * faded` of the new
     // and `shown * (1 - faded)` of the old, `shown` in all, whatever the backdrop's
@@ -8542,7 +9117,11 @@ fn draw_sky_of(
             &draw(
                 leaving.angles,
                 (under_opacity, 0.0, leaving.travel, 0.0),
-                leaving.arrival,
+                // Drawn still, its picture fades by the warp now (ADR-0239).
+                (
+                    leaving.arrival,
+                    crate::chain::picture_shown(state.warp, state.dropping),
+                ),
             ),
             under,
         )?;
@@ -8552,14 +9131,17 @@ fn draw_sky_of(
         &draw(
             state.angles(warp_aiming(&environment, sky)),
             (shown * faded, state.warp, state.travel, state.dropping),
-            state.arrival,
+            (
+                state.arrival,
+                crate::chain::picture_opacity(state.warp, state.dropping),
+            ),
         ),
         target,
     )?;
-    if let Some(state) = chains.skies.borrow_mut().get_mut(scene) {
-        state.drawn = Some(cache.frame());
-        state.left = left;
-    }
+    chains
+        .skies_drawn
+        .borrow_mut()
+        .insert(scene.clone(), (Some(cache.frame()), left));
     Ok(())
 }
 
@@ -8577,7 +9159,11 @@ pub(crate) fn arrival_light(
     if !sky.backdrop || sky.sky_picture_light <= 0.0 {
         return None;
     }
-    let state = chains.skies.borrow().get(scene_id).copied()?;
+    let state = chains
+        .skies
+        .borrow()
+        .get(&sky_family(shot, scene_id))
+        .copied()?;
     let arrival = state.arrival?;
     // The arrival lights the scene from its last picture: a sun over a planet
     // (ADR-0198).
@@ -8585,7 +9171,7 @@ pub(crate) fn arrival_light(
     let source = &part.source;
     let (environment, look, opacity) =
         environment_at((shot, cache), (placed, light, sky), at, live);
-    let shown = crate::chain::deep_shown(state.warp, state.dropping);
+    let shown = crate::chain::picture_shown(state.warp, state.dropping);
     let intensity = look.intensity * opacity * sky.sky_picture_light * shown;
     if intensity <= 0.0 {
         return None;
@@ -8644,6 +9230,18 @@ fn note_picture_mean(chains: &mut Chains, (source, frame): (&SourceId, &Frame), 
         .insert(source.clone(), (frame.version, mean.unwrap_or([1.0; 3])));
 }
 
+/// How many arrival pictures' means a drawer keeps before it lets go of those it
+/// doesn't draw now ([`note_picture_mean`]).
+const PICTURE_MEANS_KEPT: usize = 32;
+
+/// The scene family whose sky state scene `scene`'s backdrop shows (ADR-0238): its
+/// parent for a keyframe scene, so every view of a scene shows one sky, else itself.
+fn sky_family(shot: &Shot, scene: &SceneId) -> SceneId {
+    shot.cameras
+        .get(scene)
+        .map_or_else(|| scene.clone(), |camera| camera.family.clone())
+}
+
 /// The sources of the arrival pictures the scenes' backdrops show now (ADR-0188), as
 /// their sky state picked them.
 fn shown_arrivals(shot: &Shot, chains: &Chains) -> BTreeSet<SourceId> {
@@ -8651,9 +9249,10 @@ fn shown_arrivals(shot: &Shot, chains: &Chains) -> BTreeSet<SourceId> {
         return BTreeSet::new();
     }
     let skies = chains.skies.borrow();
-    skies
-        .iter()
-        .filter_map(|(scene, state)| {
+    shot.lights
+        .keys()
+        .filter_map(|scene| {
+            let state = skies.get(&sky_family(shot, scene))?;
             let (placed, _, _) = first_environment(shot, scene).0?;
             let part = arrival_parts(shot, placed, state.arrival?)?.last()?;
             Some(part.source.clone())
@@ -8936,11 +9535,11 @@ fn sky_layers<'a>(
     (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
     canvas: FrameSize,
 ) -> Vec<&'a jstream_render::Image> {
-    let Some(state) = chains.skies.borrow().get(scene).copied() else {
+    let Some((drawn, left)) = chains.skies_drawn.borrow().get(scene).copied() else {
         return Vec::new();
     };
     let frame = Some(cache.frame());
-    if state.drawn != frame {
+    if drawn != frame {
         return Vec::new();
     }
     let sized = |key: GpuKey| {
@@ -8948,7 +9547,7 @@ fn sky_layers<'a>(
             .get(&key)
             .filter(|image| (image.width(), image.height()) == (canvas.width(), canvas.height()))
     };
-    let leaving = (state.left == frame)
+    let leaving = (left == frame)
         .then(|| sized(GpuKey::SkyLeaving(scene.clone())))
         .flatten();
     leaving
@@ -9059,12 +9658,8 @@ fn layer_pose<'a>(
     let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
     // A model's own depth, in a 3D scene, when it is at least half opaque, as the
     // view depth takes it (ADR-0107 decision 7).
-    let depth = match (&layer.boxed, &layer.image, camera) {
-        (
-            Some(boxed),
-            GpuKey::ItemBox(scene, item) | GpuKey::Filtered(ChainOwner::Item(scene, item)),
-            Some(_),
-        ) if boxed.model && opacity >= 0.5 => {
+    let depth = match (&layer.boxed, layer.image.boxed_item(), camera) {
+        (Some(boxed), Some((scene, item)), Some(_)) if boxed.model && opacity >= 0.5 => {
             cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
         }
         _ => None,
@@ -9089,6 +9684,10 @@ fn layer_pose<'a>(
     };
     let (placement, opacity) =
         groups::place_placement(&layer.groups, (placement, opacity), shot, at, live)?;
+    let (placement, opacity) = match &layer.fading {
+        Some(fade) => faded(fade, (placement, crop, opacity, layer.blend), at, size)?,
+        None => (placement, opacity),
+    };
     Some(LayerPose {
         placement,
         crop,
@@ -9096,6 +9695,34 @@ fn layer_pose<'a>(
         blend: layer.blend,
         depth,
     })
+}
+
+/// A show scene item's pose at `at` on a canvas of `size`, on its way in or out by
+/// `fade` from where it is fully shown: an item with a box moves by the fade's effect
+/// as a transition's item would, any other only fades. `None` when it draws nothing.
+fn faded(
+    fade: &ShowFade,
+    (placement, crop, opacity, blend): (Placement, Crop, f32, BlendMode),
+    at: MediaTime,
+    size: [f32; 2],
+) -> Option<(Placement, f32)> {
+    let elapsed = transition::elapsed_ms(fade.start, at);
+    match placement {
+        Placement::Geometry(geometry) => {
+            let whole = Endpoint {
+                geometry,
+                crop,
+                opacity,
+                blend,
+            };
+            let sampled = fade.sample(whole, elapsed, size)?;
+            Some((Placement::Geometry(sampled.geometry), sampled.opacity))
+        }
+        other => {
+            let opacity = opacity * fade.shown(elapsed);
+            (opacity > 0.0).then_some((other, opacity))
+        }
+    }
 }
 
 /// Another camera a scene's view depth is drawn through, as a shadow map or the mirrored
@@ -9267,7 +9894,7 @@ fn draw_surface(
         let (drives, driving) = match shot.boxes.get(&owner) {
             Some(boxed) => crate::sourced::materials(
                 shot.source_drives(&boxed.item),
-                |m| shot.source_value(&boxed.item, m, at),
+                |m, own| shot.source_value(&boxed.item, m, at, own),
                 |m| shot.tint(&boxed.item, m),
             ),
             None => Default::default(),
@@ -9312,9 +9939,7 @@ fn depth_models<'a>(
             continue;
         }
         // A model's layer, or its effects' output over it: either is posed as the model.
-        let (GpuKey::ItemBox(scene_id, item_id)
-        | GpuKey::Filtered(ChainOwner::Item(scene_id, item_id))) = &layer.image
-        else {
+        let Some((scene_id, item_id)) = layer.image.boxed_item() else {
             continue;
         };
         // A model under half opaque leaves the depth to what is behind it, as a card
@@ -9394,7 +10019,11 @@ fn moved_camera(
     (live, captures): (&LiveParams, &dyn Captures),
     chains: &Chains,
 ) -> Option<SceneCamera> {
-    let base = base?;
+    // A family whose camera glides through a Move draws the Move's camera (ADR-0226).
+    let base = match planned.and_then(|camera| camera.glide.as_deref()) {
+        Some(glide) => glide.camera(at).or(base)?,
+        None => base?,
+    };
     let moved = match planned.and_then(|camera| camera.moves.as_deref()) {
         Some(moves) => moves.apply(
             base,
@@ -9428,10 +10057,18 @@ fn moved_camera(
     })
 }
 
+/// The opacity under which autofocus sees through an item: mostly faded, it shows more of
+/// what is behind it than of itself.
+const MIN_FOCUS_OPACITY: f32 = 0.5;
+
 /// How far along `camera`'s viewing axis the nearest item that the passes of scene family
-/// `family` draw meets it, at `at` with each item's motion: what autofocus focuses on
-/// (ADR-0176 decision 5). An item placed through a 3D group, or with no opacity left, is
-/// passed over; a model is met at its box. `None` when the axis meets none.
+/// `family` draw meets it (the program's, a mix's, the show scene's, or a chain phase's,
+/// which draws a scene with a video chain), at `at` with each item's motion: what autofocus focuses on
+/// (ADR-0176 decision 5). An item placed through a 3D group, one blended onto what is
+/// behind it (any blend mode but `normal`), or one under [`MIN_FOCUS_OPACITY`], is
+/// passed over, since none of them hides what is behind it; a model is met at the surface it draws (ADR-0218), and a model whose
+/// mesh this frame doesn't have, or whose search isn't built yet, isn't met. `None` when
+/// the axis meets none.
 fn centre_distance(
     shot: &Shot,
     family: &SceneId,
@@ -9441,7 +10078,12 @@ fn centre_distance(
     let view = camera.view(shot.canvas).ok()?;
     let (origin, forward) = (view.position(), view.axes()[2]);
     let mut nearest: Option<f64> = None;
-    for pass in &shot.passes {
+    // A scene with a video chain is drawn by a chain phase's pass, not the program's.
+    let chain_passes = shot.chain_steps.iter().filter_map(|step| match step {
+        ChainStep::Pass(pass) => Some(&**pass),
+        ChainStep::Run(_) | ChainStep::Box(_) => None,
+    });
+    for pass in shot.drawn_passes().chain(chain_passes) {
         if pass.camera.as_ref().is_none_or(|c| c.family != *family) {
             continue;
         }
@@ -9453,16 +10095,96 @@ fn centre_distance(
             let (Placement::Geometry(geometry) | Placement::Layer(geometry)) = placement else {
                 continue;
             };
-            if opacity <= 0.0 {
+            // Only what hides what is behind it is focused on: a see-through item, one
+            // blended onto what is behind (a glow or a hologram added on), or mostly
+            // faded, is passed over, so it can't pull the focus off the scene behind it.
+            if layer.blend != BlendMode::Normal || opacity < MIN_FOCUS_OPACITY {
                 continue;
             }
-            if let Some(t) = crate::follow::ray_meets(origin, forward, geometry.corners_in_scene())
-            {
+            let met = if layer.boxed.is_some_and(|boxed| boxed.model) {
+                shot.shown_model(&layer.image)
+                    .and_then(|shown| model_distance(shown, geometry, &view))
+            } else {
+                crate::follow::ray_meets(origin, forward, geometry.corners_in_scene())
+            };
+            if let Some(t) = met {
                 nearest = Some(nearest.map_or(t, |n| n.min(t)));
             }
         }
     }
     nearest
+}
+
+/// How far along `view`'s viewing axis the surface the model `shown` draws, placed by
+/// `geometry`, first meets it (ADR-0218): the axis carried into the model's own space
+/// through the inverse of the map that places it, met against its triangles as posed
+/// now. `None` when it meets none, or the placement can't be inverted (a model scaled
+/// flat).
+fn model_distance(shown: &ShownModel, geometry: ItemGeometry, view: &CameraView) -> Option<f64> {
+    let model = &shown.model;
+    let bounds = model.bounds();
+    let bounds = jstream_protocol::SolidBounds {
+        min: bounds.min,
+        max: bounds.max,
+    };
+    // Without a view, a solid maps a model point into the scene less the item's centre
+    // in x and y; a billboard is first turned to face the camera, as it draws.
+    let solid = geometry.facing(view).solid(bounds, None).ok()?;
+    let centre = [
+        f64::from(geometry.center.x.get()),
+        f64::from(geometry.center.y.get()),
+        0.0,
+    ];
+    let at = |p: [f32; 3]| {
+        let seen = solid.in_view(p);
+        [0, 1, 2].map(|i| seen[i] + centre[i])
+    };
+    let origin = at([0.0; 3]);
+    let unit = |axis: usize| {
+        let mut p = [0.0f32; 3];
+        p[axis] = 1.0;
+        let to = at(p);
+        [0, 1, 2].map(|i| to[i] - origin[i])
+    };
+    let columns = [unit(0), unit(1), unit(2)];
+    let inverse = invert(columns)?;
+    let camera = view.position();
+    let forward = view.axes()[2];
+    let from = [0, 1, 2].map(|i| camera[i] - origin[i]);
+    let into = |v: [f64; 3]| {
+        [0, 1, 2].map(|r| inverse[r][0] * v[0] + inverse[r][1] * v[1] + inverse[r][2] * v[2])
+    };
+    // The map takes the model-space direction back to the unit `forward`, so the hit's
+    // parameter is its distance along the viewing axis in scene pixels; as for a box
+    // (`follow::ray_meets`), a surface must be more than 1 px ahead to be met. Which side
+    // of a face is its front is decided in the model's own space, so a placement that
+    // mirrors the model (a flip) changes nothing: it still draws its outward faces.
+    let palette = shown.pose.as_deref();
+    model.ray_hit(into(from), into(forward), palette, 1.0)
+}
+
+/// The determinant of the matrix whose columns are `c`.
+fn determinant(c: [[f64; 3]; 3]) -> f64 {
+    c[0][0] * (c[1][1] * c[2][2] - c[2][1] * c[1][2])
+        - c[1][0] * (c[0][1] * c[2][2] - c[2][1] * c[0][2])
+        + c[2][0] * (c[0][1] * c[1][2] - c[1][1] * c[0][2])
+}
+
+/// The inverse, by rows, of the matrix whose columns are `c`; `None` when it is
+/// singular.
+fn invert(c: [[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
+    let det = determinant(c);
+    if !(det.is_finite() && det.abs() > 1e-12) {
+        return None;
+    }
+    // m[r][k] = c[k][r]; the inverse is the adjugate over the determinant.
+    let m = |r: usize, k: usize| c[k][r];
+    let cof = |r: usize, k: usize| {
+        let (r1, r2) = ((r + 1) % 3, (r + 2) % 3);
+        let (k1, k2) = ((k + 1) % 3, (k + 2) % 3);
+        m(r1, k1) * m(r2, k2) - m(r1, k2) * m(r2, k1)
+    };
+    Some([0, 1, 2].map(|r| [0, 1, 2].map(|k| cof(k, r) / det)))
 }
 
 /// Where a transition track of `image` is placed at `geometry`: a model's layer
@@ -9674,12 +10396,18 @@ fn moving_cameras(
             None => camera,
         })
     };
+    // A screen held within the family is moved as the scene it moves to is, from the
+    // same time, so the two ends agree where the screen and the scene do.
+    let held = match (&transition.moves.0, &transition.moves.1) {
+        (Some(from), Some(to)) if Arc::ptr_eq(from, to) => Some(transition.start),
+        _ => None,
+    };
     cameras.ends = (
         moved(
             &transition.moves.0,
             &transition.families.0,
             cameras.ends.0,
-            None,
+            held,
         ),
         moved(
             &transition.moves.1,
@@ -10168,6 +10896,7 @@ pub(crate) mod tests {
             blend: jstream_protocol::BlendMode::Normal,
             effects: None,
             moving: None,
+            fading: None,
             motion: crate::motion::TrackMotion::same(ItemId::new("itm"), std::sync::Arc::from([])),
             groups: None,
         }
@@ -11902,6 +12631,123 @@ pub(crate) mod tests {
         let mut snapshot = ResourceCache::new();
         assert_eq!(draw(&mut compositor, &mut snapshot, false), Some(GREEN));
         assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 2);
+    }
+
+    /// #1737 (ADR-0212): a warm scene's still is on the program stage's GPU before the
+    /// cut to it, so the first program frame after the cut draws it, never nothing: one
+    /// shown for the first time, and one whose pixels were let go of on another program
+    /// stage (as a stage opened again finds them), whose cache has no texture of it.
+    #[test]
+    fn a_warm_still_draws_on_the_first_program_frame_after_the_cut() {
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let size = FrameSize::new(64, 36).expect("invariant: non-zero");
+        let pixels = || {
+            let info = jstream_media::VideoFrameInfo {
+                size: FrameSize::new(512, 512).expect("invariant: non-zero"),
+                format: jstream_media::PixelFormat::Rgba8,
+                color: jstream_media::ColorInfo::default(),
+                pts: zero(),
+            };
+            let rgba = std::iter::repeat_n(GREEN, 512 * 512).flatten().collect();
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 512 * 4)])
+                .expect("invariant: a packed frame")
+        };
+        let stills = crate::still::Stills::default();
+        let key = GpuKey::Frame(SourceId::new("still"));
+        let on = |shown: &Arc<crate::still::ShownStill>| {
+            let mut planned = shot(vec![(
+                "program",
+                vec![
+                    fill("red"),
+                    placed(SourceRef::Frame(SourceId::new("still")), FULL),
+                ],
+            )]);
+            let frame = Frame::from_still(Arc::clone(shown), 3);
+            planned.frames.insert(SourceId::new("still"), frame.clone());
+            planned.uploads.push((key.clone(), SourceId::new("still")));
+            (planned, vec![(key.clone(), frame)])
+        };
+        let away = shot(vec![("program", vec![fill("red")])]);
+        // One tick of the program stage: the program, then the warm scenes' stills.
+        let tick = |compositor: &mut Compositor,
+                    cache: &mut ResourceCache<GpuKey>,
+                    shot: &Shot,
+                    warm: &crate::runtime::WarmStills| {
+            cache.begin_frame();
+            let output = compose(
+                compositor,
+                (cache, &mut Chains::default()),
+                (shot, zero()),
+                View {
+                    program: true,
+                    ..View::default()
+                },
+                &LiveParams::default(),
+                &Every(None),
+                super::DrawAt::read(size),
+            )
+            .expect("compose");
+            super::keep_warm_stills(compositor, cache, warm).expect("the warm stills");
+            drop(cache.end_frame(compositor));
+            output.pixels().expect("invariant: read back").pixel(32, 18)
+        };
+        let wait = |done: &dyn Fn() -> bool| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !done() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            done()
+        };
+
+        // Shown for the first time on a warm scene: uploaded while the program shows
+        // another scene, and its pixels let go of.
+        let first = stills.show(Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels()),
+            "first.png".into(),
+            move || Ok(pixels()),
+        )));
+        let (planned, warm) = on(&first);
+        let mut program = ResourceCache::new();
+        program.draw_uploads_small(true);
+        assert_eq!(tick(&mut compositor, &mut program, &away, &warm), Some(RED));
+        assert!(program.get(&key).is_some(), "uploaded while warm");
+        assert!(wait(&|| first.held().is_none()), "and let go of");
+        assert_eq!(
+            tick(&mut compositor, &mut program, &planned, &warm),
+            Some(GREEN),
+            "drawn on the first frame after the cut"
+        );
+
+        // Its pixels let go of on another program stage: a new stage's cache has no
+        // texture of it, so its pixels are asked for while it is warm.
+        let again = stills.show(Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels()),
+            "again.png".into(),
+            move || Ok(pixels()),
+        )));
+        let (planned, warm) = on(&again);
+        let mut before = ResourceCache::new();
+        before.draw_uploads_small(true);
+        assert_eq!(
+            tick(&mut compositor, &mut before, &planned, &Vec::new()),
+            Some(GREEN)
+        );
+        assert!(wait(&|| again.held().is_none()), "let go of");
+        let mut stage = ResourceCache::new();
+        stage.draw_uploads_small(true);
+        assert_eq!(tick(&mut compositor, &mut stage, &away, &warm), Some(RED));
+        assert!(stage.get(&key).is_none(), "no pixels to upload yet");
+        assert!(wait(&|| again.held().is_some()), "decoded again while warm");
+        assert_eq!(tick(&mut compositor, &mut stage, &away, &warm), Some(RED));
+        assert!(stage.get(&key).is_some(), "uploaded while warm");
+        assert_eq!(
+            tick(&mut compositor, &mut stage, &planned, &warm),
+            Some(GREEN),
+            "drawn on the first frame after the cut, never nothing"
+        );
     }
 
     /// A shot measures how much each frame it draws is enlarged, against the frame's

@@ -5,7 +5,8 @@
 //! open. Since 0.165 it also has the reflection probes' switch and the face size they
 //! capture at, at most (ADR-0170 decision 3), and since 0.172 the screen-space
 //! reflections' switch and the steps their rays take (decision 4), and since 0.178 how
-//! many pixels 3D models are drawn with (ADR-0197). An engine older than
+//! many pixels 3D models are drawn with (ADR-0197), and since 0.196 the samples their
+//! edges are anti-aliased with (ADR-0242). An engine older than
 //! the version that added one reports it as on (screen-space reflections as off,
 //! ADR-0185), at the largest size or the fewest steps (models as Automatic, where it
 //! draws them in full), and changing it does nothing there. An engine older than 0.147 reports no switches,
@@ -17,8 +18,8 @@ use crate::app::SessionContext;
 use crate::dialog::Info;
 use jstream_control::Control;
 use jstream_protocol::{
-    Action, Call, CallResult, MODEL_RESOLUTIONS, PROBE_RESOLUTIONS, Query, QueryResult,
-    RenderFeatures, RenderFeaturesChange, SCREEN_SPACE_STEPS,
+    Action, Call, CallResult, MODEL_ANTIALIASING, MODEL_RESOLUTION_RANGE, PROBE_RESOLUTIONS, Query,
+    QueryResult, RenderFeatures, RenderFeaturesChange, SCREEN_SPACE_STEPS,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -164,13 +165,40 @@ pub fn model_resolution(percent: u32) -> RenderFeaturesChange {
     }
 }
 
-/// What a model resolution's option reads.
-fn model_resolution_label(percent: u32) -> String {
-    match percent {
-        0 => "Automatic".into(),
-        100 => "Full".into(),
-        percent => format!("{percent}%"),
+/// The change that sets the smallest size the engine may lower 3D models to while it
+/// chooses, and leaves the switches.
+pub fn min_model_resolution(percent: u32) -> RenderFeaturesChange {
+    RenderFeaturesChange {
+        min_model_resolution: Some(percent),
+        ..RenderFeaturesChange::default()
     }
+}
+
+/// The change that sets the samples a pixel of a 3D model is drawn with and leaves the
+/// switches (ADR-0242).
+pub fn model_antialiasing(samples: u32) -> RenderFeaturesChange {
+    RenderFeaturesChange {
+        model_antialiasing: Some(samples),
+        ..RenderFeaturesChange::default()
+    }
+}
+
+/// What the anti-aliasing option reads for `samples`.
+fn antialiasing_label(samples: u32) -> String {
+    if samples <= 1 {
+        "Off".to_owned()
+    } else {
+        format!("{samples}x multisampling")
+    }
+}
+
+/// A percentage typed into one of the page's model resolution fields, held to
+/// [`MODEL_RESOLUTION_RANGE`], or `None` for text that is no whole number.
+fn typed_percent(text: &str) -> Option<u32> {
+    let typed = text.trim().parse::<f64>().ok().filter(|v| v.is_finite())?;
+    let low = f64::from(*MODEL_RESOLUTION_RANGE.start());
+    let high = f64::from(*MODEL_RESOLUTION_RANGE.end());
+    Some(typed.round().clamp(low, high) as u32)
 }
 
 /// What the steps option reads.
@@ -313,6 +341,42 @@ pub fn RenderingSettings() -> impl IntoView {
             }
         });
     };
+    let floor = move |chosen: u32| {
+        let Some(was) = features.get_untracked().map(|now| now.min_model_resolution) else {
+            return;
+        };
+        let change = min_model_resolution(chosen);
+        features.update(|now| *now = now.map(|now| now.with(&change)));
+        error.set(None);
+        let Some(control) = control.get_value() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(message) = set(&*control, change).await {
+                let back = min_model_resolution(was);
+                features.try_update(|now| *now = now.map(|now| now.with(&back)));
+                error.try_set(Some(message));
+            }
+        });
+    };
+    let smoothing = move |chosen: u32| {
+        let Some(was) = features.get_untracked().map(|now| now.model_antialiasing) else {
+            return;
+        };
+        let change = model_antialiasing(chosen);
+        features.update(|now| *now = now.map(|now| now.with(&change)));
+        error.set(None);
+        let Some(control) = control.get_value() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(message) = set(&*control, change).await {
+                let back = model_antialiasing(was);
+                features.try_update(|now| *now = now.map(|now| now.with(&back)));
+                error.try_set(Some(message));
+            }
+        });
+    };
     view! {
         <Show when=move || features.get().is_some()>
             <section class="prop-section">
@@ -381,27 +445,94 @@ pub fn RenderingSettings() -> impl IntoView {
                             <p class="help">"How closely a screen-space reflection looks."</p>
                         </div>
                     </div>
+                    <div class="prop-row rendering-model-antialiasing">
+                        <label class="prop-label" for="setting-rendering-model-antialiasing">
+                            "3D anti-aliasing"
+                            <Info text="How many samples each pixel of a 3D model is drawn with. More smooths its slanted and thin edges, before any glow is added, at more GPU time; Off draws them stepped. A GPU that can't draw the count set draws the most it can below it." />
+                        </label>
+                        <div class="prop-control">
+                            <select
+                                id="setting-rendering-model-antialiasing"
+                                aria-label="3D anti-aliasing"
+                                prop:value=move || features.get().map(|now| now.model_antialiasing.to_string()).unwrap_or_default()
+                                on:change=move |event| {
+                                    if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
+                                        smoothing(chosen);
+                                    }
+                                }
+                            >
+                                {MODEL_ANTIALIASING.into_iter().map(|samples| view! {
+                                    <option value=samples.to_string()>{antialiasing_label(samples)}</option>
+                                }).collect_view()}
+                            </select>
+                            <p class="help">"Smooths the edges of 3D models."</p>
+                        </div>
+                    </div>
                     <div class="prop-row rendering-model-resolution">
                         <label class="prop-label" for="setting-rendering-model-resolution">
                             "3D model resolution"
-                            <Info text="How many pixels 3D models are drawn with, across and down. Automatic draws them in full and with fewer only while the GPU can't keep up, so the outputs keep their frames; a size always draws them at that. Everything else keeps its pixels." />
+                            <Info text="How many pixels 3D models are drawn with, across and down. Automatic draws them in full and with fewer only while the GPU can't keep up, so the outputs keep their frames; Fixed always draws them at the percentage set, from 50 to 100. Everything else keeps its pixels." />
                         </label>
                         <div class="prop-control">
                             <select
                                 id="setting-rendering-model-resolution"
                                 aria-label="3D model resolution"
-                                prop:value=move || features.get().map(|now| now.model_resolution.to_string()).unwrap_or_default()
+                                prop:value=move || features.get().map(|now| if now.model_resolution == 0 { "auto" } else { "fixed" }).unwrap_or_default()
                                 on:change=move |event| {
-                                    if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
-                                        models(chosen);
-                                    }
+                                    // Fixed starts in full; the field beside it sets the size.
+                                    models(if event_target_value(&event) == "auto" { 0 } else { 100 });
                                 }
                             >
-                                {MODEL_RESOLUTIONS.into_iter().map(|percent| view! {
-                                    <option value=percent.to_string()>{model_resolution_label(percent)}</option>
-                                }).collect_view()}
+                                <option value="auto">"Automatic"</option>
+                                <option value="fixed">"Fixed"</option>
                             </select>
+                            <Show when=move || features.get().is_some_and(|now| now.model_resolution != 0)>
+                                <label class="action-amount">
+                                    <input
+                                        type="number"
+                                        id="setting-rendering-model-resolution-percent"
+                                        aria-label="Fixed 3D model resolution, in percent"
+                                        min=MODEL_RESOLUTION_RANGE.start().to_string()
+                                        max=MODEL_RESOLUTION_RANGE.end().to_string()
+                                        step="1"
+                                        prop:value=move || features.get().map(|now| now.model_resolution.to_string()).unwrap_or_default()
+                                        on:change=move |event| {
+                                            if let Some(chosen) = typed_percent(&event_target_value(&event)) {
+                                                models(chosen);
+                                            }
+                                        }
+                                    />
+                                    " %"
+                                </label>
+                            </Show>
                             <p class="help">"Fewer pixels draw faster and look softer."</p>
+                        </div>
+                    </div>
+                    <div class="prop-row rendering-min-model-resolution">
+                        <label class="prop-label" for="setting-rendering-min-model-resolution">
+                            "Lowest automatic resolution"
+                            <Info text="The smallest size Automatic may draw 3D models at while the GPU can't keep up, from 50 (no limit) to 100 (always whole). A percentage between two of Automatic's sizes is its last step down. A fixed resolution is drawn as set." />
+                        </label>
+                        <div class="prop-control">
+                            <label class="action-amount">
+                                <input
+                                    type="number"
+                                    id="setting-rendering-min-model-resolution"
+                                    aria-label="Lowest automatic resolution, in percent"
+                                    min=MODEL_RESOLUTION_RANGE.start().to_string()
+                                    max=MODEL_RESOLUTION_RANGE.end().to_string()
+                                    step="1"
+                                    prop:disabled=move || features.get().is_some_and(|now| now.model_resolution != 0)
+                                    prop:value=move || features.get().map(|now| now.min_model_resolution.to_string()).unwrap_or_default()
+                                    on:change=move |event| {
+                                        if let Some(chosen) = typed_percent(&event_target_value(&event)) {
+                                            floor(chosen);
+                                        }
+                                    }
+                                />
+                                " %"
+                            </label>
+                            <p class="help">"Automatic never goes below this."</p>
                         </div>
                     </div>
                 </div>
@@ -464,6 +595,28 @@ mod tests {
     }
 
     #[test]
+    fn the_model_antialiasing_is_one_of_the_counts() {
+        let control = MockEngine::new().connect();
+        now(control.hello(Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        }))
+        .expect("hello");
+        assert_eq!(
+            RenderFeatures::DEFAULT.model_antialiasing,
+            4,
+            "4x by default"
+        );
+        now(set(&control, super::model_antialiasing(1))).expect("set");
+        let read = now(read(&control)).expect("read").expect("reported");
+        assert_eq!(read.model_antialiasing, 1);
+        assert!(read.shadows, "the switches are kept");
+        assert!(now(set(&control, super::model_antialiasing(3))).is_err());
+        assert_eq!(super::antialiasing_label(1), "Off");
+        assert_eq!(super::antialiasing_label(4), "4x multisampling");
+    }
+
+    #[test]
     fn the_probe_cap_is_one_of_the_sizes() {
         let control = MockEngine::new().connect();
         now(control.hello(Hello {
@@ -499,7 +652,7 @@ mod tests {
     }
 
     #[test]
-    fn the_model_resolution_is_the_engines_choice_or_one_of_the_sizes() {
+    fn the_model_resolution_is_the_engines_choice_or_a_percentage() {
         let control = MockEngine::new().connect();
         now(control.hello(Hello {
             protocol: PROTOCOL_VERSION,
@@ -510,9 +663,33 @@ mod tests {
         assert_eq!(read_now().model_resolution, 0, "the engine chooses");
         now(set(&control, super::model_resolution(75))).expect("set");
         assert_eq!(read_now().model_resolution, 75);
-        assert!(now(set(&control, super::model_resolution(80))).is_err());
-        assert_eq!(super::model_resolution_label(0), "Automatic");
-        assert_eq!(super::model_resolution_label(100), "Full");
-        assert_eq!(super::model_resolution_label(67), "67%");
+        now(set(&control, super::model_resolution(92))).expect("any whole percentage");
+        assert_eq!(read_now().model_resolution, 92);
+        assert!(now(set(&control, super::model_resolution(40))).is_err());
+    }
+
+    #[test]
+    fn the_smallest_model_resolution_is_a_percentage() {
+        let control = MockEngine::new().connect();
+        now(control.hello(Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        }))
+        .expect("hello");
+        let read_now = || now(read(&control)).expect("read").expect("reported");
+        assert_eq!(read_now().min_model_resolution, 50, "no limit");
+        now(set(&control, super::min_model_resolution(90))).expect("set");
+        assert_eq!(read_now().min_model_resolution, 90);
+        assert!(now(set(&control, super::min_model_resolution(40))).is_err());
+    }
+
+    #[test]
+    fn a_typed_percentage_is_held_to_the_range() {
+        assert_eq!(super::typed_percent("90"), Some(90));
+        assert_eq!(super::typed_percent(" 87.6 "), Some(88));
+        assert_eq!(super::typed_percent("20"), Some(50));
+        assert_eq!(super::typed_percent("140"), Some(100));
+        assert_eq!(super::typed_percent("abc"), None);
+        assert_eq!(super::typed_percent(""), None);
     }
 }

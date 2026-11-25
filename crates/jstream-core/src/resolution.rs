@@ -7,8 +7,9 @@
 
 use std::time::Duration;
 
-/// The percentages of its canvas's width and height a 3D model may be drawn at, largest
-/// first: the protocol's `MODEL_RESOLUTIONS` without its 0.
+/// The percentages of its canvas's width and height the governor steps a 3D model
+/// through while it chooses, largest first: the protocol's `MODEL_RESOLUTIONS` without
+/// its 0.
 pub(crate) const STEPS: [u32; 5] = [100, 85, 75, 67, 50];
 
 /// A frame's GPU time above this share of its budget is too long: three timed frames
@@ -34,19 +35,40 @@ const MAX_WAIT_S: u32 = 80;
 /// A step up undone within this many seconds doubles the wait before the next.
 const UNDONE_S: u32 = 15;
 
-/// Seconds after the first tick during which nothing is decided: a program's first
-/// frames upload and compile, and take longer than the ones after them.
+/// Seconds after the first tick, and after an output's first frame, during which
+/// nothing is decided: a program's first frames, and an output's, upload and compile,
+/// and take longer than the ones after them.
 const START_S: u32 = 3;
 
-/// What a frame's GPU time at each of [`STEPS`] is taken to be of its time at the step
+/// The smallest size the governor may choose while no floor is set: the last of
+/// [`STEPS`].
+const NO_FLOOR: u32 = STEPS[STEPS.len() - 1];
+
+/// The sizes the governor chooses among while it may go no smaller than `floor`
+/// (`RenderFeatures::min_model_resolution`), largest first, and how many there are:
+/// each of [`STEPS`] above `floor`, then `floor` itself. A floor between two steps is
+/// the last step down; one at or below the smallest step leaves [`STEPS`] as they are.
+fn ladder(floor: u32) -> ([u32; STEPS.len()], usize) {
+    let floor = floor.clamp(NO_FLOOR, STEPS[0]);
+    let mut sizes = [0; STEPS.len()];
+    let mut rungs = 0;
+    for step in STEPS.iter().copied().filter(|step| *step > floor) {
+        sizes[rungs] = step;
+        rungs += 1;
+    }
+    sizes[rungs] = floor;
+    (sizes, rungs + 1)
+}
+
+/// What a frame's GPU time at each of `sizes` is taken to be of its time at the size
 /// before, until a step down has shown it: all of it growing with the model's pixels.
-fn worst(step: usize) -> f64 {
+fn worst(sizes: &[u32], step: usize) -> f64 {
     match step.checked_sub(1) {
-        Some(larger) => {
-            let side = f64::from(STEPS[step]) / f64::from(STEPS[larger]);
+        Some(larger) if step < sizes.len() && sizes[larger] > 0 => {
+            let side = f64::from(sizes[step]) / f64::from(sizes[larger]);
             side * side
         }
-        None => 1.0,
+        _ => 1.0,
     }
 }
 
@@ -79,26 +101,26 @@ impl Percent {
 pub(crate) enum Mode {
     /// Chosen each tick.
     Auto,
-    /// Always this step of [`STEPS`].
-    Fixed(usize),
+    /// Always this percentage, the smallest of [`STEPS`] to 100.
+    Fixed(u32),
 }
 
 impl Mode {
     /// What `setting` asks for, the rendering switches' `model_resolution`: 0 is
-    /// [`Mode::Auto`] and one of [`STEPS`] is that step. Any other value, which
-    /// `studio.set_rendering` refuses, is read as [`Mode::Auto`].
+    /// [`Mode::Auto`] and any other is that percentage, held to the smallest of
+    /// [`STEPS`] to 100 (`studio.set_rendering` refuses one outside them).
     pub(crate) fn of(setting: u32) -> Self {
-        STEPS
-            .iter()
-            .position(|step| *step == setting)
-            .map_or(Self::Auto, Self::Fixed)
+        match setting {
+            0 => Self::Auto,
+            percent => Self::Fixed(percent.clamp(NO_FLOOR, STEPS[0])),
+        }
     }
 }
 
 /// Chooses the size models are drawn at, one [`Self::tick`] per frame of the program.
 ///
 /// It steps down at once when the GPU has fallen behind (a frame was about to be kept
-/// from the outputs), and when [`OVER`] timed frames in a row took more than [`HIGH`] of
+/// from the outputs) while the last frame timed at this size was long too, and when [`OVER`] timed frames in a row took more than [`HIGH`] of
 /// the frame's budget. It steps back up once the GPU time the larger size is expected to
 /// take has stayed under [`LOW`] of the budget for the wait, which starts at [`WAIT_S`]
 /// seconds and doubles each time a step up is undone within [`UNDONE_S`] seconds, so a
@@ -106,17 +128,29 @@ impl Mode {
 /// The expectation comes from what the step down to this size saved, the frame's time
 /// after it over its time before; until a step down has been timed it is the worst
 /// case, all of the frame's GPU time growing with the model's pixels. It decides
-/// nothing for the first [`START_S`] seconds, whose frames upload and compile.
+/// nothing for the first [`START_S`] seconds, whose frames upload and compile, nor for
+/// the [`START_S`] seconds after an output starts ([`Self::output_started`],
+/// ADR-0236).
 ///
 /// It steps down only while the frames before drew a model: with none there is nothing
 /// to gain. On a device that can't time its frames it has only the first signal, and
 /// steps up after the wait without one.
 ///
 /// While the rendering switches fix a size ([`Mode::Fixed`]) it draws at that one, and
-/// goes on from it when they hand the choice back.
+/// goes on from it when they hand the choice back. While it chooses, it goes no smaller
+/// than the floor [`Self::set_floor`] last gave (`RenderFeatures::min_model_resolution`):
+/// it chooses among the [`STEPS`] above the floor and the floor itself ([`ladder`]).
 #[derive(Debug)]
 pub(crate) struct Governor {
+    /// Which of `sizes` models are drawn at.
     step: usize,
+    /// The sizes it chooses among, largest first ([`ladder`]); the first `rungs` count.
+    sizes: [u32; STEPS.len()],
+    rungs: usize,
+    /// The floor `sizes` were made for.
+    made_for: u32,
+    /// The floor it is to choose above, from [`Self::set_floor`].
+    floor: u32,
     budget: Duration,
     /// Ticks a second.
     fps: u32,
@@ -140,7 +174,7 @@ pub(crate) struct Governor {
     /// The size stepped down from and the GPU time of the last frame timed at it, until
     /// a frame at this size is timed.
     before: Option<(usize, f64)>,
-    /// What a frame's GPU time at each step is of its time at the step before
+    /// What a frame's GPU time at each of `sizes` is of its time at the size before
     /// ([`worst`], or what a step down showed).
     saved: [f64; STEPS.len()],
 }
@@ -153,8 +187,13 @@ impl Governor {
             period if period > 0.0 => (1.0 / period).round().clamp(1.0, 1000.0) as u32,
             _ => 30,
         };
+        let (sizes, rungs) = ladder(NO_FLOOR);
         Self {
             step: 0,
+            sizes,
+            rungs,
+            made_for: NO_FLOOR,
+            floor: NO_FLOOR,
             budget,
             fps,
             over: 0,
@@ -166,13 +205,60 @@ impl Governor {
             since_up: u32::MAX,
             last: None,
             before: None,
-            saved: std::array::from_fn(worst),
+            saved: std::array::from_fn(|step| worst(&sizes[..rungs], step)),
         }
+    }
+
+    /// The smallest size it may choose from the next tick on, a percentage held to the
+    /// smallest of [`STEPS`] to 100 (`RenderFeatures::min_model_resolution`). A fixed
+    /// size is drawn as set whatever this is.
+    pub(crate) fn set_floor(&mut self, floor: u32) {
+        self.floor = floor.clamp(NO_FLOOR, STEPS[0]);
+    }
+
+    /// Chooses among the sizes for `floor` from now on, at the size it draws at now if
+    /// that is one of them, else the next larger one, or the floor if it draws smaller.
+    /// What it knew of the old sizes says nothing of the new ones.
+    fn reladder(&mut self, floor: u32) {
+        let was = self.percent().get();
+        let (sizes, rungs) = ladder(floor);
+        self.sizes = sizes;
+        self.rungs = rungs;
+        self.made_for = floor;
+        self.step = sizes[..rungs]
+            .iter()
+            .rposition(|size| *size >= was)
+            .unwrap_or(rungs - 1);
+        self.saved = std::array::from_fn(|step| worst(&sizes[..rungs], step));
+        self.before = None;
+        if self.percent().get() != was {
+            self.over = 0;
+            self.calm = 0;
+            self.settle = SETTLE;
+            self.roomy = !self.timed;
+            self.last = None;
+            tracing::info!(
+                percent = self.percent().get(),
+                "3D models are drawn at a size the rendering switches set"
+            );
+        }
+    }
+
+    /// An output drew its first frame: its pipelines, layers and encode targets are
+    /// made then, so the GPU falls behind for a moment that fewer pixels would not
+    /// shorten. Nothing is decided for the next [`START_S`] seconds, and the frames
+    /// timed before them say nothing about the ones after.
+    pub(crate) fn output_started(&mut self) {
+        self.settle = self.settle.max(START_S.saturating_mul(self.fps));
+        self.over = 0;
+        self.calm = 0;
+        self.last = None;
+        self.before = None;
     }
 
     /// The size models are drawn at now.
     pub(crate) fn percent(&self) -> Percent {
-        Percent(STEPS[self.step])
+        Percent(self.sizes[self.step])
     }
 
     /// One frame of the program: `mode` is what the rendering switches ask for, `gpu`
@@ -187,10 +273,19 @@ impl Governor {
         behind: bool,
         models: bool,
     ) -> Percent {
-        if let Mode::Fixed(step) = mode {
+        if let Mode::Fixed(fixed) = mode {
+            // A fixed size between two steps, or below the floor, is on no rung of the
+            // sizes: they become the steps above it and it.
+            if !self.sizes[..self.rungs].contains(&fixed) {
+                self.reladder(fixed);
+            }
+            let step = self.sizes[..self.rungs]
+                .iter()
+                .position(|size| *size == fixed)
+                .unwrap_or(0);
             // The next choice starts from here, with nothing known about it.
             if self.step != step {
-                self.step = step.min(STEPS.len() - 1);
+                self.step = step;
                 self.over = 0;
                 self.calm = 0;
                 self.settle = SETTLE;
@@ -199,6 +294,9 @@ impl Governor {
                 self.before = None;
             }
             return self.percent();
+        }
+        if self.made_for != self.floor {
+            self.reladder(self.floor);
         }
         if self.budget.is_zero() {
             return self.percent();
@@ -218,7 +316,8 @@ impl Governor {
                 && from + 1 == self.step
                 && was > 0.0
             {
-                self.saved[self.step] = (took / was).clamp(worst(self.step), 1.0);
+                let worst = worst(&self.sizes[..self.rungs], self.step);
+                self.saved[self.step] = (took / was).clamp(worst, 1.0);
             }
             self.last = Some(took);
             if took > budget * HIGH {
@@ -233,7 +332,15 @@ impl Governor {
             // Nothing to gain from fewer pixels: long frames have another cause.
             self.over = 0;
         }
-        if models && (behind || self.over >= OVER) {
+        // Behind with frames that leave room is a hitch fewer pixels would not shorten
+        // (a scene's or view's first frames, an upload, another app's work): it steps
+        // down only where the last frame timed at this size was long too, or none can
+        // be timed (ADR-0236).
+        let long = !self.timed
+            || self
+                .last
+                .is_some_and(|took| took > self.budget.as_secs_f64() * HIGH);
+        if models && ((behind && long) || self.over >= OVER) {
             self.down(behind);
         } else if self.step > 0 && self.roomy {
             self.calm = self.calm.saturating_add(1);
@@ -249,7 +356,7 @@ impl Governor {
     fn down(&mut self, behind: bool) {
         self.over = 0;
         self.calm = 0;
-        if self.step + 1 >= STEPS.len() {
+        if self.step + 1 >= self.rungs {
             return;
         }
         self.before = self.last.take().map(|was| (self.step, was));
@@ -265,7 +372,7 @@ impl Governor {
             base
         };
         tracing::info!(
-            percent = STEPS[self.step],
+            percent = self.sizes[self.step],
             behind,
             "3D models are drawn with fewer pixels: the GPU is short of time"
         );
@@ -281,7 +388,7 @@ impl Governor {
         // Until a frame at the new size is timed, it isn't known to have room for more.
         self.roomy = !self.timed;
         tracing::info!(
-            percent = STEPS[self.step],
+            percent = self.sizes[self.step],
             "3D models are drawn with more pixels: the GPU has time to spare"
         );
     }
@@ -385,9 +492,11 @@ mod tests {
         let mut governor = governor();
         governor.tick(Auto, None, true, true);
         assert_eq!(run(&mut governor, 6 * FPS, 15.0), 100);
-        // At full size it is behind again at once.
+        // At full size its frames are long again at once.
         run(&mut governor, super::SETTLE, 15.0);
-        governor.tick(Auto, None, true, true);
+        for _ in 0..super::OVER {
+            governor.tick(Auto, ms(31.0), false, true);
+        }
         assert_eq!(governor.percent().get(), 85);
         assert_eq!(
             run(&mut governor, 9 * FPS, 15.0),
@@ -414,7 +523,7 @@ mod tests {
     #[test]
     fn a_fixed_size_holds_and_the_choice_goes_on_from_it() {
         let fixed = Mode::of(75);
-        assert_eq!(fixed, Mode::Fixed(2));
+        assert_eq!(fixed, Mode::Fixed(75));
         let mut governor = governor();
         for _ in 0..100 {
             governor.tick(fixed, ms(40.0), true, true);
@@ -441,6 +550,85 @@ mod tests {
     }
 
     #[test]
+    fn a_floor_between_two_steps_is_the_last_step_down() {
+        assert_eq!(super::ladder(90), ([100, 90, 0, 0, 0], 2));
+        assert_eq!(super::ladder(85), ([100, 85, 0, 0, 0], 2));
+        assert_eq!(super::ladder(50), (STEPS, STEPS.len()));
+        assert_eq!(
+            super::ladder(10),
+            (STEPS, STEPS.len()),
+            "held to the smallest"
+        );
+        assert_eq!(super::ladder(100), ([100, 0, 0, 0, 0], 1));
+        let mut governor = governor();
+        governor.set_floor(90);
+        for _ in 0..1000 {
+            governor.tick(Auto, None, true, true);
+        }
+        assert_eq!(governor.percent().get(), 90, "never below the floor");
+        // It steps back up from the floor as from any size.
+        assert_eq!(run(&mut governor, 6 * FPS, 15.0), 100);
+    }
+
+    #[test]
+    fn a_floor_of_100_keeps_models_whole() {
+        let mut governor = governor();
+        governor.set_floor(100);
+        for _ in 0..1000 {
+            governor.tick(Auto, ms(40.0), true, true);
+        }
+        assert_eq!(governor.percent().get(), 100);
+    }
+
+    #[test]
+    fn a_floor_raised_below_the_size_drawn_lifts_it_to_the_floor() {
+        let mut governor = governor();
+        for _ in 0..1000 {
+            governor.tick(Auto, None, true, true);
+        }
+        assert_eq!(governor.percent().get(), 50);
+        governor.set_floor(80);
+        governor.tick(Auto, None, false, true);
+        assert_eq!(governor.percent().get(), 80);
+        // Raised above a size it draws at that is one of the new sizes, it stays.
+        let mut other = self::governor();
+        other.tick(Auto, None, true, true);
+        assert_eq!(other.percent().get(), 85);
+        other.set_floor(75);
+        other.tick(Auto, None, false, true);
+        assert_eq!(other.percent().get(), 85);
+    }
+
+    #[test]
+    fn a_fixed_size_between_two_steps_is_drawn_and_the_choice_goes_on_above_it() {
+        let mut governor = governor();
+        for _ in 0..10 {
+            governor.tick(Mode::of(92), ms(40.0), true, true);
+        }
+        assert_eq!(governor.percent().get(), 92);
+        // Handed back, it starts at the next step up, and steps down through the steps.
+        governor.tick(Auto, None, false, true);
+        assert_eq!(governor.percent().get(), 100);
+        for _ in 0..1000 {
+            governor.tick(Auto, None, true, true);
+        }
+        assert_eq!(governor.percent().get(), 50);
+    }
+
+    #[test]
+    fn a_fixed_size_below_the_floor_is_drawn_as_set() {
+        let mut governor = governor();
+        governor.set_floor(90);
+        for _ in 0..10 {
+            governor.tick(Mode::of(67), None, true, true);
+        }
+        assert_eq!(governor.percent().get(), 67);
+        // Handed back, the choice starts at the floor.
+        governor.tick(Auto, None, false, true);
+        assert_eq!(governor.percent().get(), 90);
+    }
+
+    #[test]
     fn the_first_seconds_decide_nothing() {
         let mut governor = Governor::new(Duration::from_micros(33_333));
         for _ in 0..super::START_S * FPS {
@@ -448,6 +636,62 @@ mod tests {
         }
         assert_eq!(governor.percent().get(), 100, "start-up frames are long");
         governor.tick(Auto, None, true, true);
+        assert_eq!(governor.percent().get(), 85);
+    }
+
+    /// An output started 0.8 s into a show, as measured on a streaming PC: its first
+    /// frames keep the GPU behind for a moment, which used to step a scene that fits at
+    /// 100 down to 85 for good.
+    #[test]
+    fn an_output_starting_does_not_step_down() {
+        let mut governor = governor();
+        assert_eq!(run(&mut governor, 30, 24.0), 100);
+        governor.output_started();
+        for _ in 0..FPS {
+            governor.tick(Auto, ms(60.0), true, true);
+        }
+        assert_eq!(
+            governor.percent().get(),
+            100,
+            "the output's first frames are long"
+        );
+        assert_eq!(run(&mut governor, 3000, 24.0), 100);
+        // Once the start is over, falling behind with a long frame steps down as before.
+        governor.tick(Auto, ms(31.0), true, true);
+        assert_eq!(governor.percent().get(), 85);
+    }
+
+    /// A view switched to on a streaming PC: its first frames kept the GPU behind for
+    /// seconds while each frame timed left room, which stepped 85, 75, 67 and 50 in turn.
+    #[test]
+    fn falling_behind_with_frames_that_leave_room_does_not_step_down() {
+        let mut governor = governor();
+        assert_eq!(run(&mut governor, 30, 24.0), 100);
+        for tick in 0..10 * FPS {
+            governor.tick(
+                Auto,
+                (tick % 4 == 0).then(|| ms(24.0)).flatten(),
+                true,
+                true,
+            );
+        }
+        assert_eq!(
+            governor.percent().get(),
+            100,
+            "the hitch is not the models'"
+        );
+        // Long frames while behind step down once, and the smaller size's frames, which
+        // leave room, hold it there however long the GPU stays behind.
+        governor.tick(Auto, ms(31.0), true, true);
+        assert_eq!(governor.percent().get(), 85);
+        for tick in 0..10 * FPS {
+            governor.tick(
+                Auto,
+                (tick % 4 == 0).then(|| ms(22.0)).flatten(),
+                true,
+                true,
+            );
+        }
         assert_eq!(governor.percent().get(), 85);
     }
 
@@ -474,11 +718,12 @@ mod tests {
     }
 
     #[test]
-    fn the_setting_reads_zero_as_the_choice_and_the_steps_as_themselves() {
+    fn the_setting_reads_zero_as_the_choice_and_a_percentage_as_itself() {
         assert_eq!(Mode::of(0), Mode::Auto);
-        assert_eq!(Mode::of(100), Mode::Fixed(0));
-        assert_eq!(Mode::of(67), Mode::Fixed(3));
-        assert_eq!(Mode::of(80), Mode::Auto, "refused before it gets here");
+        assert_eq!(Mode::of(100), Mode::Fixed(100));
+        assert_eq!(Mode::of(67), Mode::Fixed(67));
+        assert_eq!(Mode::of(80), Mode::Fixed(80), "any whole percentage");
+        assert_eq!(Mode::of(20), Mode::Fixed(50), "refused before it gets here");
         assert_eq!(
             jstream_protocol::MODEL_RESOLUTIONS[1..],
             STEPS,

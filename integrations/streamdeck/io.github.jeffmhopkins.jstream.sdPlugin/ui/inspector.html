@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>JStream</title>
+		<link rel="stylesheet" href="inspector.css" />
+	</head>
+	<body>
+		<section id="target" hidden></section>
+
+		<details id="connection">
+			<summary><span id="dot" class="dot"></span><span id="summary">JStream</span></summary>
+
+			<div id="paired" hidden>
+				<div class="row"><label>Address</label><span id="paired-address" class="value"></span></div>
+				<div class="row"><label>Fingerprint</label><span id="paired-fingerprint" class="value mono small"></span></div>
+				<div class="row"><label></label><span class="buttons"><button id="retry">Reconnect</button><button id="forget" title="Clears the pairing on this Stream Deck only. To unpair it in JStream too, revoke it under Settings › Devices.">Forget</button></span></div>
+			</div>
+
+			<div id="unpaired" hidden>
+				<p class="hint">In JStream, turn on <b>Allow devices on my network</b> in <b>Settings › Devices</b>. Then find JStream here, or type its address.</p>
+				<div class="row"><label></label><span class="buttons"><button id="find">Find JStream</button></span></div>
+				<div id="found" class="found"></div>
+				<div class="row"><label for="host">Address</label><input id="host" type="text" placeholder="192.168.1.20 or studio.local" spellcheck="false" /></div>
+				<div class="row"><label for="port">Port</label><input id="port" type="number" min="1" max="65535" value="4456" /></div>
+				<div class="row"><label for="device-name">Name</label><input id="device-name" type="text" maxlength="64" /></div>
+				<div class="row"><label></label><span class="buttons"><button id="probe">Connect</button></span></div>
+
+				<div id="asking" hidden>
+					<p class="hint">Press <b>Allow</b> on JStream's screen. It asks there whether this Stream Deck may connect.</p>
+					<div class="row"><label></label><span class="buttons"><button id="use-code">Use a code instead</button></span></div>
+				</div>
+
+				<div id="confirm" hidden>
+					<p class="hint">In JStream, open <b>Settings › Devices</b> and press <b>Pair a device</b>. Check that the fingerprint JStream shows is this one:</p>
+					<p id="offered" class="mono small fingerprint"></p>
+					<div class="row"><label for="code">Code</label><input id="code" type="text" placeholder="XXXX-XXXX" maxlength="9" spellcheck="false" autocomplete="off" /></div>
+					<div class="row"><label></label><span class="buttons"><button id="pair">It matches: pair</button></span></div>
+				</div>
+			</div>
+			<p id="message" class="message" hidden></p>
+		</details>
+
+		<script src="inspector.js"></script>
+	</body>
+</html>

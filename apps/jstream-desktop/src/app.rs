@@ -10,6 +10,7 @@ use crate::jtunnel;
 use crate::logs::LogFile;
 use crate::network;
 use crate::ptz;
+use crate::ptz_cameras;
 use crate::ui::{self, Ui};
 use anyhow::Context;
 use jstream_crash::Secrets;
@@ -95,6 +96,9 @@ pub struct Startup {
     pub ptz_file: Option<PathBuf>,
     /// The PTZ controller endpoints the setting opened, kept until the app exits.
     pub ptz_controllers: Option<jstream_core::PtzControllers>,
+    /// The "Control PTZ cameras" setting's file, which `set_ptz_cameras` writes, when
+    /// the data folder is known.
+    pub ptz_cameras_file: Option<PathBuf>,
 }
 
 impl Startup {
@@ -108,6 +112,7 @@ impl Startup {
             jtunnel_file: None,
             ptz_file: None,
             ptz_controllers: None,
+            ptz_cameras_file: None,
         }
     }
 }
@@ -149,39 +154,21 @@ pub fn start(
         // media clock (ADR-0123 §1).
         jtunnel::start(&engine, &jtunnel::setting_file(data));
         let ptz_controllers = ptz::start(&engine, &ptz::setting_file(data));
+        ptz_cameras::start(&engine, &ptz_cameras::setting_file(data));
         let agents = options.mcp.then(|| host::Agents {
             port: options.port.unwrap_or(host::MCP_PORT),
             token_file: data.join(host::TOKEN_FILE),
         });
         let ui_settings = Some(data.join(jstream_platform::paths::UI_SETTINGS_FILE));
         let network = network_access(data);
-        match Host::start(
-            Arc::clone(&engine),
+        Host::start(
+            engine,
             ui::ORIGIN,
             secrets,
-            ui_settings.clone(),
+            ui_settings,
             agents.as_ref(),
-            network.as_ref(),
-        ) {
-            Err(error) if network.is_some() => {
-                // Most likely the network listener's port is in use (a daemon with
-                // `--lan`): the app still starts, for this machine only. Any other cause
-                // fails the retry the same way, with its own error.
-                tracing::error!(
-                    error = format!("{error:#}"),
-                    "could not start with network access; trying again without it"
-                );
-                Host::start(
-                    engine,
-                    ui::ORIGIN,
-                    secrets,
-                    ui_settings,
-                    agents.as_ref(),
-                    None,
-                )
-            }
-            started => started,
-        }
+            Some(&network),
+        )
         .map(|host| (host, ptz_controllers))
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
@@ -214,10 +201,12 @@ pub fn start(
             vcam: vcam.as_str(),
             collection: collection.as_ref(),
             network: network::allowed(&network::setting_file(data)),
+            announce: network::announced(&network::setting_file(data)),
             network_open: host.network().is_some(),
             wheel_focus_only: wheel_focus_only() || !host.global_wheel(),
             jtunnel: &jtunnel::read(&jtunnel::setting_file(data)),
             ptz: &ptz::read(&ptz::setting_file(data)),
+            ptz_cameras: &ptz_cameras::read(&ptz_cameras::setting_file(data)),
         },
     );
     Startup {
@@ -227,6 +216,7 @@ pub fn start(
         network_file: Some(network::setting_file(data)),
         jtunnel_file: Some(jtunnel::setting_file(data)),
         ptz_file: Some(ptz::setting_file(data)),
+        ptz_cameras_file: Some(ptz_cameras::setting_file(data)),
         ptz_controllers,
     }
 }
@@ -246,27 +236,28 @@ fn wheel_focus_only() -> bool {
     }
 }
 
-/// "Allow devices on my network", when the person turned it on: the network listener's
-/// configuration, and the paired devices' file, both beside the data folder's token
-/// file as the daemon keeps them. A certificate that can't be used is logged, and the
-/// app starts without network access.
-fn network_access(data: &Path) -> Option<host::Network> {
-    if !network::allowed(&network::setting_file(data)) {
-        return None;
-    }
+/// "Allow devices on my network": the paired devices' file beside the data folder's
+/// token file, as the daemon keeps it, and, when the person turned it on, the network
+/// listener's configuration to open at start. A certificate that can't be used is
+/// logged, and the app starts without network access.
+fn network_access(data: &Path) -> host::Network {
+    let file = network::setting_file(data);
     let token_file = data.join(host::TOKEN_FILE);
-    match network::config(&token_file) {
-        Ok(config) => Some(host::Network {
-            config,
-            device_file: jstream_server::token_file::device_file(&token_file),
-        }),
-        Err(error) => {
-            tracing::error!(
-                error = format!("{error:#}"),
-                "starting without network access"
-            );
-            None
-        }
+    let open = if network::allowed(&file) {
+        network::config(&token_file, network::announced(&file))
+            .map_err(|error| {
+                tracing::error!(
+                    error = format!("{error:#}"),
+                    "starting without network access"
+                );
+            })
+            .ok()
+    } else {
+        None
+    };
+    host::Network {
+        device_file: jstream_server::token_file::device_file(&token_file),
+        open,
     }
 }
 

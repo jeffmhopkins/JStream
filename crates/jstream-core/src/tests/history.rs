@@ -511,6 +511,7 @@ fn folders_and_labels_are_undoable_collection_state() {
         &control,
         edits(vec![
             Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new("shows"),
                 name: "Shows".into(),
                 parent: None,

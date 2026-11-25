@@ -451,14 +451,23 @@ pub(crate) fn edits() -> Vec<Edit> {
             mix_id: VideoMixId::new("mix_old"),
         },
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new("fld_shows"),
             name: "Shows".into(),
             parent: None,
         },
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new("fld_intro"),
             name: "Intros".into(),
             parent: Some(FolderId::new("fld_shows")),
+        },
+        // A folder under one scene for its keyframes and sequences (ADR-0222).
+        Edit::FolderCreate {
+            scene_id: Some(SceneId::new("scn_main")),
+            folder_id: FolderId::new("fld_looks"),
+            name: "Looks".into(),
+            parent: None,
         },
         Edit::FolderRename {
             folder_id: FolderId::new("fld_intro"),
@@ -643,8 +652,22 @@ pub(crate) fn edits() -> Vec<Edit> {
             chord: Chord::new("Ctrl+Digit1"),
             labels: vec![LabelId::new("lbl_sponsor")],
         },
+        // A second action on the same chord, then clearing just it, then the chord (ADR-0208).
+        Edit::HotkeySet {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: Action::OutputToggle {
+                output_id: OutputId::new("out_yt"),
+            },
+        },
         Edit::HotkeyClear {
             chord: Chord::new("Ctrl+Digit1"),
+            action: Some(Action::OutputToggle {
+                output_id: OutputId::new("out_yt"),
+            }),
+        },
+        Edit::HotkeyClear {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: None,
         },
         Edit::BindingSet {
             trigger: pad_trigger(),
@@ -656,6 +679,11 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::BindingClear {
             trigger: pad_trigger(),
+            action: Some(Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+                via: Vec::new(),
+            }),
         },
         // A value binding, then its removal (ADR-0178).
         Edit::BindingSetValue {
@@ -684,12 +712,79 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..value_bindings().remove(0)
             },
         },
+        // A value binding aiming a PTZ camera's zoom (ADR-0209).
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "wide_zoom".into(),
+                target: ValueTarget::PtzAxis {
+                    camera: "wide".into(),
+                    axis: crate::PtzAxis::Zoom,
+                },
+                ..value_bindings().remove(0)
+            },
+        },
         Edit::BindingSetValue {
             binding: ValueBinding {
                 binding_id: "mic_send".into(),
                 target: ValueTarget::SendGain {
                     source_id: SourceId::new("src_mic"),
                     bus_id: BusId::new("bus_music"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        // A show, then its delete (ADR-0210).
+        Edit::ShowSet { show: show() },
+        Edit::ShowDelete {
+            show_id: crate::ShowId::new("evening"),
+        },
+        // A bare show, then its other ends, loop leaves and Next monitors.
+        Edit::ShowSet {
+            show: crate::ShowInfo::new("blank"),
+        },
+        Edit::ShowSet {
+            show: crate::ShowInfo {
+                end: crate::ShowEnd::Loop,
+                next_monitor: crate::NextMonitor::Live,
+                ..show()
+            },
+        },
+        Edit::ShowSet {
+            show: crate::ShowInfo {
+                end: crate::ShowEnd::Stop,
+                next_monitor: crate::NextMonitor::Off,
+                loops: vec![crate::ShowLoop {
+                    leave: crate::LoopLeave::FinishPass,
+                    ..show().loops.remove(0)
+                }],
+                ..show()
+            },
+        },
+        // Switches a binding drives, on at one half (ADR-0207).
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "mic_mute".into(),
+                target: ValueTarget::SourceMute {
+                    source_id: SourceId::new("src_mic"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "music_mute".into(),
+                target: ValueTarget::BusMute {
+                    bus_id: BusId::new("bus_music"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "logo_shown".into(),
+                target: ValueTarget::ItemVisible {
+                    item_id: ItemId::new("itm_1"),
+                    scene_id: Some(SceneId::new("scn_1")),
                 },
                 ..value_bindings().remove(0)
             },
@@ -869,6 +964,7 @@ fn keyframe_edits() -> Vec<Edit> {
         .into_iter()
         .zip(MotionShape::ALL.into_iter().cycle())
         .map(|(property, shape)| MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: format!(
                 "every-{}",
                 serde_json::to_value(property)
@@ -904,6 +1000,7 @@ fn keyframe_edits() -> Vec<Edit> {
         item_id: ItemId::new("itm_3"),
         scene_id: None,
         motion: vec![MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "pulse-border".into(),
             property: MotionProperty::Effect,
             effect: Some(crate::MotionEffect {
@@ -927,6 +1024,7 @@ fn keyframe_edits() -> Vec<Edit> {
         item_id: ItemId::new("itm_3"),
         scene_id: None,
         motion: vec![MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "glow".into(),
             property: MotionProperty::Source,
             effect: None,
@@ -952,6 +1050,7 @@ fn keyframe_edits() -> Vec<Edit> {
         scene_id: None,
         motion: vec![
             MotionModifier {
+                mode: crate::MappingMode::Add,
                 modifier_id: "track-color".into(),
                 property: MotionProperty::Source,
                 effect: None,
@@ -977,6 +1076,7 @@ fn keyframe_edits() -> Vec<Edit> {
                 amount: None,
             },
             MotionModifier {
+                mode: crate::MappingMode::Add,
                 modifier_id: "clip-color".into(),
                 property: MotionProperty::Source,
                 effect: None,
@@ -1040,6 +1140,7 @@ fn camera_motion(properties: &[crate::CameraProperty]) -> Vec<crate::CameraMotio
         .iter()
         .enumerate()
         .map(|(n, property)| crate::CameraMotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: format!("cam-{n}"),
             property: *property,
             kind: MotionKind::Wiggle {
@@ -1091,6 +1192,7 @@ fn sway() -> Vec<MotionModifier> {
     let f = |v: f32| Finite32::new(v).expect("finite");
     vec![
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "sway-x".into(),
             property: MotionProperty::X,
             effect: None,
@@ -1106,6 +1208,7 @@ fn sway() -> Vec<MotionModifier> {
             amount: None,
         },
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "sway-roll".into(),
             property: MotionProperty::Rotation,
             effect: None,
@@ -1121,6 +1224,7 @@ fn sway() -> Vec<MotionModifier> {
             amount: None,
         },
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "scroll".into(),
             property: MotionProperty::CropLeft,
             effect: None,
@@ -1134,6 +1238,7 @@ fn sway() -> Vec<MotionModifier> {
             amount: None,
         },
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: "jolt".into(),
             property: MotionProperty::Y,
             effect: None,
@@ -1169,7 +1274,13 @@ fn reactive() -> Vec<MotionModifier> {
         from: f(-0.6),
         to: Finite32::ZERO,
     };
+    // The lever sets its tilt outright (ADR-0203).
     let modifier = |id: &str, property, kind| MotionModifier {
+        mode: if id == "lever" {
+            crate::MappingMode::Replace
+        } else {
+            crate::MappingMode::Add
+        },
         modifier_id: id.into(),
         property,
         effect: None,
@@ -1285,6 +1396,7 @@ fn reactive() -> Vec<MotionModifier> {
 /// The keyframe scene `scn_1_wide`'s own motion for `itm_2`: a pulse, defaults omitted.
 fn keyframe_motion() -> Vec<MotionModifier> {
     vec![MotionModifier {
+        mode: crate::MappingMode::Add,
         modifier_id: "pulse".into(),
         property: MotionProperty::Opacity,
         effect: None,
@@ -1613,6 +1725,8 @@ fn value_bindings() -> Vec<ValueBinding> {
     let f = |v: f32| Finite32::new(v).expect("finite");
     vec![
         ValueBinding {
+            enabled: true,
+            mode: crate::MappingMode::Replace,
             binding_id: "grade_fader".into(),
             input: MotionKind::Midi {
                 control: MotionMidiControl::Cc,
@@ -1633,7 +1747,10 @@ fn value_bindings() -> Vec<ValueBinding> {
             },
             amount: None,
         },
+        // A trim on the music bus, added to its fader and bypassed for now (ADR-0203).
         ValueBinding {
+            enabled: false,
+            mode: crate::MappingMode::Add,
             binding_id: "music_volume".into(),
             input: MotionKind::Data {
                 input: Some("Studio DAW".into()),
@@ -1643,7 +1760,7 @@ fn value_bindings() -> Vec<ValueBinding> {
                 states: Default::default(),
                 smoothing_ms: 50,
                 curve: MotionCurve::Linear,
-                from: f(-60.0),
+                from: f(-12.0),
                 to: Finite32::ZERO,
                 color_from: None,
                 palette: std::collections::BTreeMap::new(),
@@ -1673,6 +1790,58 @@ fn controller_bindings() -> Vec<Binding> {
                 controller: 64,
                 channel: None,
                 input: None,
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+        // Bitwig's scene 3 selected, any track's playing scene changing, and a Mod
+        // crossing up and down (ADR-0202).
+        Binding::new(
+            Trigger::Data {
+                input: Some("Bitwig".into()),
+                key: "grid".into(),
+                field: "selectedScene".into(),
+                on: crate::DataOn::Equals { value: "3".into() },
+            },
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+                via: Vec::new(),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "track/*".into(),
+                field: "playing".into(),
+                on: crate::DataOn::Changes,
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "params".into(),
+                field: "values.19".into(),
+                on: crate::DataOn::Rises {
+                    level: Finite32::new(0.5).expect("finite"),
+                },
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+        Binding::new(
+            Trigger::Data {
+                input: None,
+                key: "params".into(),
+                field: "values.20".into(),
+                on: crate::DataOn::Falls {
+                    level: Finite32::new(0.25).expect("finite"),
+                },
             },
             &Action::OutputStart {
                 output_id: OutputId::new("out_yt"),
@@ -1802,6 +1971,9 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputStop {
             output_id: OutputId::new("out_yt"),
         },
+        Action::OutputToggle {
+            output_id: OutputId::new("out_yt"),
+        },
         Action::OutputSetKey {
             output_id: OutputId::new("out_yt"),
             key: SecretString::new("fixture-key-0000"),
@@ -1857,6 +2029,15 @@ pub(crate) fn actions() -> Vec<Action> {
             source_id: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
+        Action::PreviewShow {
+            channel: 1,
+            scene_id: Some(SceneId::new("scn_2")),
+        },
+        Action::PreviewShow {
+            channel: 1,
+            scene_id: None,
+        },
+        Action::PreviewRequestKeyframe { channel: 1 },
         Action::PreviewReport {
             view: "projector:program".into(),
             counts: crate::ViewCounts {
@@ -1991,6 +2172,14 @@ pub(crate) fn actions() -> Vec<Action> {
             preset_id: None,
         },
         Action::PairingStart,
+        Action::PairingAnswer {
+            ask_id: "ask_1".into(),
+            allow: true,
+        },
+        Action::PairingAnswer {
+            ask_id: "ask_2".into(),
+            allow: false,
+        },
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
         },
@@ -2178,8 +2367,37 @@ pub(crate) fn actions() -> Vec<Action> {
             by: Finite32::new(-0.1).expect("finite"),
             fade_ms: None,
         },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::HoldOn,
+        },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::HoldOff,
+        },
         Action::SourceRestart {
             source_id: SourceId::new("src_1"),
+        },
+        // Mutes (ADR-0207): every way, on a source and on a bus.
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::Muted,
+        },
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::Unmuted,
+        },
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::PushToTalk,
+        },
+        Action::BusMute {
+            bus_id: BusId::new("bus_music"),
+            to: crate::MuteTo::Toggle,
+        },
+        Action::BusMute {
+            bus_id: BusId::master(),
+            to: crate::MuteTo::PushToMute,
         },
         Action::SourceSeek {
             source_id: SourceId::new("src_1"),
@@ -2189,7 +2407,154 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::ClockHold,
         Action::ClockStep { ms: 33 },
         Action::ClockRelease,
+        // Running a show (ADR-0210).
+        Action::ShowPlay {
+            show_id: crate::ShowId::new("evening"),
+            bookmark_id: None,
+            rehearse: false,
+        },
+        Action::ShowPlay {
+            show_id: crate::ShowId::new("evening"),
+            bookmark_id: Some("demo".into()),
+            rehearse: true,
+        },
+        Action::ShowContinue,
+        Action::ShowBack,
+        Action::ShowSkip,
+        Action::ShowGoTo {
+            show_id: crate::ShowId::new("evening"),
+            bookmark_id: "demo".into(),
+        },
+        Action::ShowGoToNumber { number: 2 },
+        Action::ShowSeek { at_ms: 95_000 },
+        Action::ShowArm {
+            at_ms: Some(120_000),
+        },
+        Action::ShowArm { at_ms: None },
+        Action::ShowPause,
+        Action::ShowStop,
+        // Overlays over program, with or without a show (ADR-0210).
+        Action::OverlayShow {
+            scene_id: SceneId::new("scn_panels"),
+        },
+        Action::OverlayHide {
+            scene_id: SceneId::new("scn_panels"),
+        },
+        Action::OverlayToggle {
+            scene_id: SceneId::new("scn_panels"),
+        },
     ]
+}
+
+/// A show with every track, two bookmarks, a loop, and an end that goes to a bookmark
+/// (ADR-0210).
+fn show() -> crate::ShowInfo {
+    crate::ShowInfo {
+        name: "Evening show".into(),
+        program: vec![
+            crate::ProgramClip {
+                clip_id: "intro".into(),
+                scene_id: SceneId::new("scn_1"),
+                length_ms: 30_000,
+                preset_id: None,
+            },
+            crate::ProgramClip {
+                clip_id: "main".into(),
+                scene_id: SceneId::new("scn_2"),
+                length_ms: 90_000,
+                preset_id: Some(crate::TransitionPresetId::new("fade")),
+            },
+        ],
+        overlays: vec![crate::OverlayTrack {
+            track_id: "v2".into(),
+            name: "Lower thirds".into(),
+            clips: vec![crate::OverlayClip {
+                clip_id: "logo".into(),
+                scene_id: SceneId::new("scn_panels"),
+                start_ms: 10_000,
+                length_ms: 60_000,
+                fade_in_ms: 500,
+                fade_out_ms: 0,
+            }],
+        }],
+        keyframes: vec![crate::KeyframeMarker {
+            marker_id: "wide".into(),
+            at_ms: 45_000,
+            keyframe_id: Some(SceneId::new("scn_panels_wide")),
+            preset_id: None,
+        }],
+        sequences: vec![crate::SequenceTrack {
+            track_id: "s1".into(),
+            name: String::new(),
+            cues: vec![
+                crate::ShowCue::new(
+                    "volley",
+                    30_000,
+                    &Action::TimelinePlay {
+                        timeline_id: TimelineId::new("tl_volley"),
+                        delay_ms: None,
+                    },
+                ),
+                crate::ShowCue::new(
+                    "lights_on",
+                    31_000,
+                    &Action::ChannelSwitch {
+                        channel_id: "power".into(),
+                        to: crate::ChannelSwitch::On,
+                    },
+                ),
+            ],
+        }],
+        audio: vec![crate::AudioTrack {
+            track_id: "a1".into(),
+            name: "Music".into(),
+            clips: vec![crate::AudioClip {
+                clip_id: "bed".into(),
+                source_id: SourceId::new("src_music"),
+                start_ms: 0,
+                length_ms: 30_000,
+                fade_in_ms: 2000,
+                fade_out_ms: 3000,
+                gain_db: Finite32::new(-6.0).expect("finite"),
+            }],
+        }],
+        bookmarks: vec![
+            crate::ShowBookmark {
+                bookmark_id: "start".into(),
+                name: "Start".into(),
+                at_ms: 30_000,
+                pausing: true,
+                preset_id: None,
+                continue_after_ms: Some(60_000),
+                note: "Wait for the host's cue".into(),
+            },
+            crate::ShowBookmark {
+                bookmark_id: "demo".into(),
+                name: "Demo".into(),
+                at_ms: 60_000,
+                pausing: false,
+                preset_id: Some(crate::TransitionPresetId::new("fade")),
+                continue_after_ms: None,
+                note: String::new(),
+            },
+        ],
+        loops: vec![crate::ShowLoop {
+            loop_id: "waiting_room".into(),
+            name: "Waiting room".into(),
+            start_ms: 0,
+            end_ms: 30_000,
+            preset_id: None,
+            leave: crate::LoopLeave::AtOnce,
+        }],
+        end: crate::ShowEnd::GoTo {
+            bookmark_id: "start".into(),
+        },
+        preset_id: Some(crate::TransitionPresetId::new("fade")),
+        image_ms: 8000,
+        next_monitor: crate::NextMonitor::Still,
+        planned_ms: Some(3_600_000),
+        ..crate::ShowInfo::new("evening")
+    }
 }
 
 /// A timeline that runs a sequence of cues and loops a range of it (ADR-0115).
@@ -2209,6 +2574,7 @@ fn volley() -> TimelineInfo {
         curve,
     };
     TimelineInfo {
+        folder: None,
         lanes: vec![
             crate::TimelineLane {
                 target: crate::LaneTarget {
@@ -2351,6 +2717,7 @@ fn volley() -> TimelineInfo {
 /// A short timeline that toggles an item, repeating as `looping` says.
 fn pulse(looping: TimelineLoop) -> TimelineInfo {
     TimelineInfo {
+        folder: None,
         lanes: Vec::new(),
         starts: Vec::new(),
         stops: Vec::new(),
@@ -2433,6 +2800,9 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::CaptureTargets,
         Query::PtzList,
         Query::SceneCameraAim {
+            scene_id: SceneId::new("scn_1"),
+        },
+        Query::SceneDrawnCamera {
             scene_id: SceneId::new("scn_1"),
         },
         Query::JtunnelSenders,
@@ -2554,6 +2924,7 @@ pub(crate) fn queries() -> Vec<Query> {
             key: "track/0".into(),
         },
         Query::MidiLastControls,
+        Query::MidiLastNotes,
         Query::ChannelValues,
     ]
 }
@@ -2714,6 +3085,8 @@ fn profile_info() -> ProfileInfo {
                 encode_ms: ms(4.5),
                 kbps: 6_210,
                 target_kbps: 6_160,
+                encoder: "H264 Encoder MFT (hardware)".into(),
+                hardware: true,
             },
             StreamProfile {
                 stream: ProfileStream::Preview {
@@ -2730,6 +3103,8 @@ fn profile_info() -> ProfileInfo {
                 encode_ms: ms(2.0),
                 kbps: 1_700,
                 target_kbps: 1_728,
+                encoder: "H264 Encoder MFT".into(),
+                hardware: false,
             },
         ],
         mixer: Some(MixerProfile {
@@ -2997,6 +3372,14 @@ fn color_kind() -> KindDescriptor {
                 ParamType::CaptureTarget {
                     kind: CaptureTargetKind::Device,
                     max_len: 1024,
+                },
+                json!(""),
+            ),
+            param(
+                "speakers",
+                ParamType::CaptureTarget {
+                    kind: CaptureTargetKind::AudioOutput,
+                    max_len: 512,
                 },
                 json!(""),
             ),
@@ -3362,14 +3745,22 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             video_mixes: mix_infos(),
             folders: vec![
                 FolderInfo {
+                    scene_id: None,
                     folder_id: FolderId::new("fld_shows"),
                     name: "Shows".into(),
                     parent: None,
                 },
                 FolderInfo {
+                    scene_id: None,
                     folder_id: FolderId::new("fld_intro"),
                     name: "Intros".into(),
                     parent: Some(FolderId::new("fld_shows")),
+                },
+                FolderInfo {
+                    scene_id: Some(SceneId::new("scn_main")),
+                    folder_id: FolderId::new("fld_looks"),
+                    name: "Looks".into(),
+                    parent: None,
                 },
             ],
             labels: vec![LabelInfo {
@@ -3393,8 +3784,9 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             hotkeys: hotkey_bindings(),
             bindings: controller_bindings(),
-            value_bindings: value_bindings(),
+            value_bindings: Box::new(value_bindings()),
             channels: Box::new(channels()),
+            shows: Box::new(vec![show()]),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -3465,6 +3857,65 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 shadows: false,
                 ..crate::RenderFeatures::ALL
             }),
+            show: Some(Box::new(crate::RunningShow {
+                show_id: crate::ShowId::new("evening"),
+                at_ms: 30_000,
+                state: crate::ShowState::Paused,
+                bookmark_id: Some("start".into()),
+                waited_ms: Some(4200),
+                off_script: None,
+                loop_id: None,
+                pass: None,
+                armed_ms: Some(60_000),
+                rehearse: false,
+            })),
+            overlays: vec![SceneId::new("scn_panels")],
+        },
+        QueryResult::StudioGet {
+            waiting: Vec::new(),
+            program_scene: Some(SceneId::new("scn_1")),
+            preview_scene: None,
+            timelines: Vec::new(),
+            keyframes: Vec::new(),
+            warm_scenes: None,
+            warm_gpu_mib: None,
+            rendering: None,
+            show: Some(Box::new(crate::RunningShow {
+                show_id: crate::ShowId::new("evening"),
+                at_ms: 12_000,
+                state: crate::ShowState::Playing,
+                bookmark_id: None,
+                waited_ms: None,
+                off_script: None,
+                loop_id: Some("waiting_room".into()),
+                pass: Some(2),
+                armed_ms: None,
+                rehearse: true,
+            })),
+        overlays: Vec::new(),
+        },
+        QueryResult::StudioGet {
+            waiting: Vec::new(),
+            program_scene: Some(SceneId::new("scn_2")),
+            preview_scene: None,
+            timelines: Vec::new(),
+            keyframes: Vec::new(),
+            warm_scenes: None,
+            warm_gpu_mib: None,
+            rendering: None,
+            show: Some(Box::new(crate::RunningShow {
+                show_id: crate::ShowId::new("evening"),
+                at_ms: 40_000,
+                state: crate::ShowState::OffScript,
+                bookmark_id: None,
+                waited_ms: None,
+                off_script: Some(SceneId::new("scn_2")),
+                loop_id: None,
+                pass: None,
+                armed_ms: None,
+                rehearse: false,
+            })),
+        overlays: Vec::new(),
         },
         QueryResult::StudioGet {
             waiting: Vec::new(),
@@ -3475,6 +3926,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             warm_scenes: None,
             warm_gpu_mib: None,
             rendering: None,
+            show: None,
+            overlays: Vec::new(),
         },
         QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {
@@ -3530,6 +3983,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 moving: false,
             },
         },
+        QueryResult::SceneDrawnCamera {
+            camera: Some(SceneCamera::framing(CameraCanvas::DEFAULT)),
+        },
+        QueryResult::SceneDrawnCamera { camera: None },
         QueryResult::JtunnelSenders {
             on: true,
             senders: vec![
@@ -3638,6 +4095,24 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         value: 4600,
                         auto: Some(true),
                     }],
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::AudioInput,
+                    target: "{0.0.1.00000000}.{8a3c1e2f-55b0-4d2a-9c61-0f2e7d1b9a44}".into(),
+                    name: "Microphone (USB Audio)".into(),
+                    size: None,
+                    primary: true,
+                    formats: Vec::new(),
+                    controls: Vec::new(),
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::AudioOutput,
+                    target: "{0.0.0.00000000}.{3f7d9b10-2c4e-4e8a-b1d5-6a9e0c2f8b73}".into(),
+                    name: "Speakers (Realtek Audio)".into(),
+                    size: None,
+                    primary: false,
+                    formats: Vec::new(),
+                    controls: Vec::new(),
                 },
             ],
         },
@@ -3967,6 +4442,15 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 count: 41,
             }],
         },
+        QueryResult::MidiLastNotes {
+            notes: vec![crate::MidiNoteInfo {
+                input: "Pads".into(),
+                channel: 10,
+                note: 36,
+                velocity: 112,
+                count: 18,
+            }],
+        },
         QueryResult::DataList {
             inputs: vec![crate::DataInputInfo {
                 input: "Bitwig".into(),
@@ -4100,6 +4584,37 @@ pub(crate) fn events() -> Vec<Event> {
             pass,
         });
     }
+    for (change, running, at_ms, bookmark, show_loop) in [
+        (crate::ShowChange::Started, true, 0, None, None),
+        (crate::ShowChange::Paused, true, 30_000, Some("start"), None),
+        (
+            crate::ShowChange::Continued,
+            true,
+            30_000,
+            Some("start"),
+            None,
+        ),
+        (crate::ShowChange::Jumped, true, 60_000, Some("demo"), None),
+        (
+            crate::ShowChange::Looped,
+            true,
+            0,
+            None,
+            Some("waiting_room"),
+        ),
+        (crate::ShowChange::OffScript, true, 40_000, None, None),
+        (crate::ShowChange::Ended, false, 120_000, None, None),
+        (crate::ShowChange::Stopped, false, 75_000, None, None),
+    ] {
+        events.push(Event::ShowChanged {
+            show_id: crate::ShowId::new("evening"),
+            change,
+            running,
+            at_ms,
+            bookmark_id: bookmark.map(Into::into),
+            loop_id: show_loop.map(Into::into),
+        });
+    }
     events.push(Event::TimelineCueFired {
         timeline_id: TimelineId::new("tl_volley"),
         cue: 1,
@@ -4147,6 +4662,20 @@ pub(crate) fn events() -> Vec<Event> {
     ] {
         events.push(Event::AgentApprovalResolved {
             approval_id: "apr_4".into(),
+            outcome,
+        });
+    }
+    events.push(Event::PairingAsked {
+        ask: crate::PairingAsk::new("ask_1", "Stream Deck (Studio PC)", "192.168.1.57"),
+    });
+    for outcome in [
+        crate::PairingAskOutcome::Allowed,
+        crate::PairingAskOutcome::Denied,
+        crate::PairingAskOutcome::TimedOut,
+        crate::PairingAskOutcome::Closed,
+    ] {
+        events.push(Event::PairingAskEnded {
+            ask_id: "ask_1".into(),
             outcome,
         });
     }
@@ -4473,6 +5002,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Pack,
         EntityKind::File,
         EntityKind::Approval,
+        EntityKind::PairingAsk,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
