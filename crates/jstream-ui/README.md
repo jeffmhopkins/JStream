@@ -208,7 +208,8 @@ Contents ([Design](#design) explains the choices):
   release, tested natively.
 - **Keys and MIDI triggers** (`bindings.rs`, `panels/triggers.rs`,
   [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)): `bindings.rs`
-  is pure and tested natively. `When` is a key chord or a MIDI `Trigger` with its label
+  is pure and tested natively. `When` is a key chord or a MIDI or live-data `Trigger`
+  with its label
   and the edits that bind or unbind an action on it; `rows` lists every chord and
   trigger with the actions it runs, in order (`Collection::bindings` beside the
   hotkeys), `filtered` finds rows by their words and `describe` names an action in
@@ -219,10 +220,15 @@ Contents ([Design](#design) explains the choices):
   is the show's and the bookmark's ids joined by a newline, or go to bookmark 1 to 8 by
   order (ADR-0210); the Overlays picks show, hide or toggle a scene over program.
   `add_edits` skips actions a row runs already and `in_use` says what a chord runs.
+  `DataPreset` and `data_trigger` turn the data trigger form into a `Trigger::Data`
+  (ADR-0202): a Bitwig scene selected or launched, a Mod rising to a level, or any key
+  and field, checked as the engine checks it.
   `panels/triggers.rs` holds the components: `KeysAndMidi`, Settings › Keys & MIDI;
   `TriggerList`, the rows with a chip per action; `ActionPicker`, which adds an action
-  to a `When`; and `MidiTriggerForm`, a typed trigger or one Learn fills from
-  `midi.last_controls`. Each is public so another panel can show the same list.
+  to a `When`; `MidiTriggerForm`, a typed trigger or one Learn fills from the next pad
+  played or control moved (`midi.last_notes`, `midi.last_controls`); and
+  `DataTriggerForm`, a live-data trigger from a preset. Each is public so another panel
+  can show the same list.
 - **Menus, dialogs and icons**: `chrome.rs` (the browser's own right-click menu and text
   selection, kept to text fields and readable text), `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
@@ -1101,10 +1107,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`PanelId::Mappings`, in the bottom dock from the View menu) shows everything that is
   mapped. `mapping_index::readers` lists every reader of a source wherever it is held
   (a channel's `inputs`, a value binding, an item's `motion` as each scene shows it, a
-  keyframe's only where it differs from its parent's, and a camera's `camera_motion`),
-  and `rows` groups them by what drives them: each channel with what sets it (its inputs,
-  the keys and `bindings` whose action switches, sets or nudges it, the sequences with a
-  lane on it) and everything that follows it or that it scales (`amount`), then each MIDI
+  keyframe's only where it overrides that item's motion, every row of the override even
+  one equal to its parent's, and a camera's `camera_motion`), and `rows` groups them by
+  what drives them: each channel with what sets it (its inputs, the keys and `bindings`
+  whose action switches, sets or nudges it, each once however many of its actions they
+  run, the sequences with a lane on it) and everything that follows it or that it scales (`amount`), then each MIDI
   control or data field read directly, all of its readers under it. A channel whose only
   input is one Mod (`named_mod`) is that Mod's name and is shown once, as "Camera roll
   (Mod 20)". The **Mappings** tab draws them as a table: the source, its live value

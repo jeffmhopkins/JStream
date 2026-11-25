@@ -1,8 +1,10 @@
-//! Keys and MIDI triggers in the GUI (ADR-0024 §5, ADR-0122, ADR-0208): the trigger list,
-//! the action picker and the MIDI trigger form, and Settings › Keys & MIDI, which shows
-//! them together.
+//! Keys, MIDI and data triggers in the GUI (ADR-0024 §5, ADR-0122, ADR-0202, ADR-0208):
+//! the trigger list, the action picker, the MIDI trigger form (whose Learn takes the
+//! next pad played or control moved) and the data trigger form (a Bitwig scene selected
+//! or launched, a Mod rising to a level, or any key and field), and Settings › Keys &
+//! MIDI, which shows them together.
 //!
-//! Each key or MIDI trigger runs every action listed beside it, in order. The list shows
+//! Each key or trigger runs every action listed beside it, in order. The list shows
 //! every trigger in the collection; "+ Action" on a row opens the picker, which names
 //! every action a person binds (go live, record, outputs, scenes, items, channels,
 //! sequences, sources) and adds it after what the trigger runs already. A chip's ✕
@@ -13,10 +15,10 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#keyboard
 
 use crate::app::SessionContext;
-use crate::bindings::{self, Needs, Pick, When};
-use crate::panels::learn::{KeyCapture, controls, moved};
+use crate::bindings::{self, DataForm, DataPreset, Needs, Pick, When};
+use crate::panels::learn::{KeyCapture, controls, moved, note_played, notes};
 use crate::store::Studio;
-use jstream_control::protocol::{Action, MidiControlInfo, Trigger};
+use jstream_control::protocol::{Action, MidiControlInfo, MidiNoteInfo, Trigger};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::time::Duration;
@@ -29,6 +31,10 @@ const TRIES: u32 = 100;
 /// The note under the MIDI form about JTunnel senders, whose MIDI runs triggers only
 /// where the person allowed it (ADR-0123 §3).
 pub const JTUNNEL_MIDI_NOTE: &str = "A JTunnel sender's MIDI runs triggers only when \"Use this sender's MIDI\" is on for it in Settings › Devices.";
+
+/// The note under the data trigger form: a sender's data fires triggers only where its
+/// state is used (ADR-0202 decision 3).
+pub const JTUNNEL_DATA_NOTE: &str = "A JTunnel sender's data fires triggers only when \"Use this sender's state\" is on for it in Settings › Devices. What a field holds when JStream starts listening fires nothing.";
 
 /// Settings › Keys & MIDI: every key and MIDI trigger in the project, with what each
 /// runs, a filter, and "+ Key" and "+ MIDI trigger" to add one.
@@ -53,6 +59,12 @@ pub fn KeysAndMidi() -> impl IntoView {
             />
         }
         .into_any(),
+        Some(Adding::Data) => view! {
+            <DataTriggerForm
+                done=move |trigger| adding.set(trigger.map(|t| Adding::Pick(When::Midi(t))))
+            />
+        }
+        .into_any(),
         Some(Adding::Pick(when)) => {
             view! { <NewTrigger when=when done=move || adding.set(None) /> }.into_any()
         }
@@ -60,7 +72,7 @@ pub fn KeysAndMidi() -> impl IntoView {
     view! {
         <section class="prop-section keys-and-midi">
             <p class="settings-check-note">
-                "Each key or MIDI trigger runs every action beside it, in order: one key can go live and switch the scene. Keys work while JStream has the focus, and in the desktop app anywhere when global hotkeys are on."
+                "Each key, MIDI or data trigger runs every action beside it, in order: one key can go live and switch the scene. Keys work while JStream has the focus, and in the desktop app anywhere when global hotkeys are on. A data trigger fires on a JTunnel sender's live data, such as a Bitwig scene launched."
             </p>
             <div class="trigger-toolbar">
                 <input
@@ -73,6 +85,7 @@ pub fn KeysAndMidi() -> impl IntoView {
                 />
                 <button type="button" on:click=move |_| adding.set(Some(Adding::Key))>"+ Key"</button>
                 <button type="button" on:click=move |_| adding.set(Some(Adding::Midi))>"+ MIDI trigger"</button>
+                <button type="button" on:click=move |_| adding.set(Some(Adding::Data))>"+ Data trigger"</button>
             </div>
             {fresh}
             <TriggerList filter=filter />
@@ -87,6 +100,8 @@ enum Adding {
     Key,
     /// Filling in, or learning, the MIDI trigger.
     Midi,
+    /// Filling in a live-data trigger.
+    Data,
     /// The trigger is chosen; its first action is being picked.
     Pick(When),
 }
@@ -384,11 +399,15 @@ pub fn MidiTriggerForm(
     let problem = RwSignal::new(None::<String>);
     let trigger =
         move || bindings::midi_trigger(&kind.get(), number.get(), channel.get(), &input.get());
-    let take = move |control: MidiControlInfo| {
-        kind.set("cc".into());
-        number.set(u32::from(control.controller));
-        channel.set(u32::from(control.channel));
-        input.set(control.input);
+    let take = move |heard: Heard| {
+        let (k, n, c, i) = match heard {
+            Heard::Control(control) => ("cc", control.controller, control.channel, control.input),
+            Heard::Note(note) => ("note", note.note, note.channel, note.input),
+        };
+        kind.set(k.into());
+        number.set(u32::from(n));
+        channel.set(u32::from(c));
+        input.set(i);
     };
     let learn = move || {
         let Some(s) = session.get() else {
@@ -398,7 +417,10 @@ pub fn MidiTriggerForm(
         learning.set(true);
         spawn_local(async move {
             match controls(&s).await {
-                Some(baseline) => watch(s, learning, problem, baseline, take, TRIES),
+                Some(baseline) => {
+                    let baseline = (baseline, notes(&s).await);
+                    watch(s, learning, problem, baseline, take, TRIES);
+                }
                 None => {
                     learning.try_set(false);
                     problem.try_set(Some("This engine reads no MIDI.".into()));
@@ -445,7 +467,7 @@ pub fn MidiTriggerForm(
                 type="button"
                 aria-pressed=move || learning.get().to_string()
                 on:click=move |_| if learning.get_untracked() { learning.set(false) } else { learn() }
-            >{move || if learning.get() { "Move a control…" } else { "Learn" }}</button>
+            >{move || if learning.get() { "Play a pad or move a control…" } else { "Learn" }}</button>
             <button
                 type="button"
                 class="primary"
@@ -459,7 +481,7 @@ pub fn MidiTriggerForm(
             >"Next"</button>
             <button type="button" on:click=move |_| { learning.set(false); done(None); }>"Cancel"</button>
             <p class="settings-check-note">
-                "A control change fires when it crosses the middle upward, so a button fires once per press. Learn hears a knob, fader or button that sends control changes; type a pad's note number. "
+                "A control change fires when it crosses the middle upward, so a button fires once per press. Learn takes the next pad played or knob, fader or button moved. "
                 {JTUNNEL_MIDI_NOTE}
             </p>
             {move || problem.get().map(|why| view! { <p class="problem" role="alert">{why}</p> })}
@@ -467,14 +489,133 @@ pub fn MidiTriggerForm(
     }
 }
 
-/// Reads the controls after [`POLL`] and hands `take` the first that moved since
-/// `baseline`, or reads again, `tries` more times, while `learning` holds.
+/// A live-data trigger (ADR-0202): a preset (a Bitwig scene selected or launched, a Mod
+/// rising to a level) or any key and field, the sender, and when it fires. `done` gets
+/// the trigger on Next, or `None` on Cancel.
+#[component]
+pub fn DataTriggerForm(
+    /// Gets the trigger on Next, or `None` on Cancel.
+    done: impl Fn(Option<Trigger>) + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    let preset = RwSignal::new(DataPreset::SceneLaunched);
+    let form = RwSignal::new(DataPreset::SceneLaunched.fill());
+    let input = RwSignal::new(String::new());
+    let trigger = move || form.with(|f| bindings::data_trigger(&input.get(), f));
+    let set = move |change: fn(&mut DataForm, String), event: leptos::ev::Event| {
+        let text = event_target_value(&event);
+        form.update(|f| change(f, text));
+    };
+    let pick = move |event: leptos::ev::Event| {
+        if let Some(p) = DataPreset::from_id(&event_target_value(&event)) {
+            preset.set(p);
+            form.set(p.fill());
+        }
+    };
+    let is_mod = move || preset.get() == DataPreset::ModAbove;
+    let typed = move || preset.get() == DataPreset::Custom;
+    view! {
+        <div class="trigger-new data-trigger-form" role="group" aria-label="New data trigger">
+            <select aria-label="Data trigger preset" on:change=pick>
+                {DataPreset::ALL.map(|p| view! {
+                    <option value=p.id() selected=move || preset.get() == p>{p.label()}</option>
+                })}
+            </select>
+            <input
+                type="text"
+                aria-label="Sender, blank for any"
+                placeholder="Any sender"
+                prop:value=move || input.get()
+                on:input=move |event| input.set(event_target_value(&event))
+            />
+            <Show when=is_mod>
+                <label>"Mod "
+                    <input
+                        type="number"
+                        aria-label="Mod, 1 to 32"
+                        min="1"
+                        max="32"
+                        step="1"
+                        prop:value=move || form.with(|f| bindings::data_mod(f).unwrap_or(1)).to_string()
+                        on:input=move |event| {
+                            if let Ok(n) = event_target_value(&event).parse::<u8>()
+                                && (1..=crate::panels::data_read::MOD_SLOTS).contains(&n)
+                            {
+                                form.update(|f| f.field = format!("values.{}", n - 1));
+                            }
+                        }
+                    />
+                </label>
+            </Show>
+            <Show when=typed>
+                <input
+                    type="text"
+                    aria-label="Key"
+                    placeholder="Key, such as track/*"
+                    prop:value=move || form.with(|f| f.key.clone())
+                    on:input=move |event| set(|f, v| f.key = v, event)
+                />
+                <input
+                    type="text"
+                    aria-label="Field, blank for the whole message"
+                    placeholder="Field, such as playing"
+                    prop:value=move || form.with(|f| f.field.clone())
+                    on:input=move |event| set(|f, v| f.field = v, event)
+                />
+            </Show>
+            <select aria-label="Fires when" on:change=move |event| set(|f, v| f.on = v, event)>
+                {[("equals", "Equals"), ("changes", "Changes"), ("rises", "Rises to"), ("falls", "Falls below")].map(|(id, label)| view! {
+                    <option value=id selected=move || form.with(|f| f.on == id)>{label}</option>
+                })}
+            </select>
+            <Show when=move || form.with(|f| f.on != "changes")>
+                <input
+                    type="text"
+                    aria-label=move || if form.with(|f| f.on == "equals") { "Value" } else { "Level" }
+                    prop:value=move || form.with(|f| f.value.clone())
+                    on:input=move |event| set(|f, v| f.value = v, event)
+                />
+            </Show>
+            <button
+                type="button"
+                class="primary"
+                prop:disabled=move || trigger().is_err()
+                on:click=move |_| {
+                    if let Ok(t) = trigger() {
+                        done(Some(t));
+                    }
+                }
+            >"Next"</button>
+            <button type="button" on:click=move |_| done(None)>"Cancel"</button>
+            <p class="settings-check-note">
+                {move || match trigger() {
+                    Ok(t) => format!("Fires on {t}. "),
+                    Err(why) => format!("{why} "),
+                }}
+                {move || preset.get().hint()}
+                " "
+                {JTUNNEL_DATA_NOTE}
+            </p>
+        </div>
+    }
+}
+
+/// What MIDI learn heard first: a control moved or a note played.
+enum Heard {
+    /// A control change.
+    Control(MidiControlInfo),
+    /// A note-on (`midi.last_notes`, ADR-0202 decision 6).
+    Note(MidiNoteInfo),
+}
+
+/// Reads the controls and notes after [`POLL`] and hands `take` the first note played or
+/// control moved since `baseline`, or reads again, `tries` more times, while `learning`
+/// holds.
 fn watch(
     session: crate::session::Session,
     learning: RwSignal<bool>,
     problem: RwSignal<Option<String>>,
-    baseline: Vec<MidiControlInfo>,
-    take: impl Fn(MidiControlInfo) + Copy + 'static,
+    baseline: (Vec<MidiControlInfo>, Vec<MidiNoteInfo>),
+    take: impl Fn(Heard) + Copy + 'static,
     tries: u32,
 ) {
     set_timeout(
@@ -484,15 +625,21 @@ fn watch(
                     return;
                 }
                 let now = controls(&session).await.unwrap_or_default();
+                let played = notes(&session).await;
                 if learning.try_get_untracked() != Some(true) {
                     return;
                 }
-                if let Some(control) = moved(&baseline, &now) {
-                    take(control);
+                let heard = note_played(&baseline.1, &played)
+                    .map(Heard::Note)
+                    .or_else(|| moved(&baseline.0, &now).map(Heard::Control));
+                if let Some(heard) = heard {
+                    take(heard);
                     learning.try_set(false);
                 } else if tries == 0 {
                     learning.try_set(false);
-                    problem.try_set(Some("No control moved. Type the trigger instead.".into()));
+                    problem.try_set(Some(
+                        "No pad played and no control moved. Type the trigger instead.".into(),
+                    ));
                 } else {
                     watch(session, learning, problem, baseline, take, tries - 1);
                 }
