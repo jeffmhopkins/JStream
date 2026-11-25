@@ -3092,10 +3092,13 @@ impl<'a> Planner<'a, '_> {
                 }
                 // In place, the two halves of an item that goes and comes back can
                 // differ by live values too, and a Move cut short leaves the half that
-                // was going on screen beside the one coming back.
+                // was going on screen beside the one coming back. One whose effects
+                // cover the canvas can't glide, so it goes and comes back on any Move,
+                // which the scene draws as its other side: drawn track by track, it
+                // would only swap halves (ADR-0106).
                 Track::Disappear { from, .. } => {
                     visual.inside.is_none()
-                        && if in_place {
+                        && if in_place || visual.covers_canvas {
                             tracks.iter().any(|(other, track)| {
                                 matches!(track, Track::Appear { .. })
                                     && other.item_id == visual.item_id
@@ -3108,8 +3111,11 @@ impl<'a> Planner<'a, '_> {
                 Track::Appear { to, .. } => {
                     visual.inside.is_none()
                         && tracks.iter().any(|(other, track)| {
-                            matches!(track, Track::Disappear { from, .. } if in_place || from == to)
-                                && other.item_id == visual.item_id
+                            matches!(
+                                track,
+                                Track::Disappear { from, .. }
+                                    if in_place || visual.covers_canvas || from == to
+                            ) && other.item_id == visual.item_id
                         })
                 }
                 Track::Through { .. } => false,
@@ -3535,6 +3541,7 @@ impl<'a> Planner<'a, '_> {
                 disappear: jstream_protocol::TransitionEffect::Fade,
                 ..ItemTransition::default()
             },
+            covers_canvas: false,
             effects: Vec::new(),
             blend_from: None,
             inside: None,
@@ -3977,7 +3984,8 @@ impl<'a> Planner<'a, '_> {
             // An item whose effects run over the canvas covers the canvas on both sides
             // of a switch, so it can't glide (ADR-0106): it disappears and appears.
             let mut settings = *item.transition();
-            if boxed.is_some_and(|boxed| boxed.canvas) {
+            let covers_canvas = boxed.is_some_and(|boxed| boxed.canvas);
+            if covers_canvas {
                 settings.glide = jstream_protocol::Glide::Never;
             }
             let (image, geometry, cut, size, effects) = match boxed {
@@ -4031,6 +4039,7 @@ impl<'a> Planner<'a, '_> {
                 },
                 size,
                 settings,
+                covers_canvas,
                 effects,
                 blend_from: None,
                 inside: None,

@@ -644,6 +644,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   `orbit` (decision 3). `ShowFade` is a show scene item's own appear or disappear,
   sampled over its pose as an unpaired track is (`ShowFade::sample`), and also an item
   that only appears or goes in a Move that draws a 3D scene as it is (ADR-0237).
+  Within a family, an item whose effects cover the canvas (`Visual::covers_canvas`)
+  goes and comes back as two halves that swap at once rather than crossfade (ADR-0240).
 
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
@@ -924,7 +926,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   in the keyframe's pass with the chain still running, two items hidden one after the
   other while another moves keeping it too, as do two shown one after the other beside
   an item that can't glide, a second show or hide carrying a half-done fade on with no
-  jump, and an
+  jump, no sequence of overlapping shows, hides and view switches showing through an
+  item that covers the canvas or, between views that move only the camera, dropping
+  the chain (ADR-0240), and an
   effect setting changed after the first frame reaching a 3D card, a legacy-transform
   child placed through its group; and, from the planned shot, a group's motion and a
   child's own moving it in the group's space during a Move, and a Move splitting the
@@ -1503,7 +1507,8 @@ audit entry and errors.
   even when it has its own effect. A `cut` that stores a duration still plays that
   effect over it. A transition in flight is
   continued from what is on screen, and one that draws a 3D scene as it is hands its
-  running fades on (`Running::carried`, ADR-0237); a press program doesn't see (another keyframe's
+  running fades on (`Running::carried`, ADR-0237), as it does to a switch or a
+  keyframe placed (ADR-0240); a press program doesn't see (another keyframe's
   placement) leaves it as it is. A source the next plan reaches again restarts as on a
   switch (`restart_on_show`). An item of the internal show scene's own (`scene_id`
   omitted) plays the same effect over program on its own instead
@@ -1840,9 +1845,10 @@ one from those items, so nothing jumps
 though no plan has let it go yet (the clock held, [ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)) isn't sampled:
 `snapshot::still_on_screen` finds it ended, and the switch, `set_keyframe` and
 `item.show` start from the program scene at rest, as after the plan that lets it go
-(#1598, #1632). An `item.show` or `item.hide` that starts from program at rest, or
-while another of them runs drawn as the scene, is marked `Running::in_place` and carries
-that one's running fades (`Running::carried`, found by `snapshot::glide_fades`) (ADR-0237). A switch to the scene already on program, even
+(#1598, #1632). Any of them that cuts short a Move drawn as the scene carries that
+Move's running fades (`Running::carried`, found by `Engine::running_fades` through
+`snapshot::glide_fades`, ADR-0237 and ADR-0240), and an `item.show` or `item.hide` that
+starts from program at rest or so is marked `Running::in_place`. A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
 Beside it the studio keeps the show scene's items fading in or out on their own
 (`Studio::fades`, one `ShowFade` per item: its start, direction, effect and timing),
@@ -2718,7 +2724,8 @@ items. A Move by item within a 3D scene's family is the exception
 it plans each side's items one by one (`Planner::moves_within_3d_family`,
 `Planner::end_of`), so the views glide, and the chain waits for it to end. When such a
 Move moves only the camera (every track a still pair, or an item that can't glide going
-and coming back the same, no effect blend, no camera riding
+and coming back the same, or one whose effects cover the canvas going and coming back
+at all, no effect blend, no camera riding
 a group: `Planner::moves_only_the_camera`,
 [ADR-0226](../../docs/adr/0226-a-camera-only-move-keeps-its-scenes-chain.md)), no
 transition is planned: the program scene is planned at rest, chain and all, and each
@@ -2742,7 +2749,12 @@ can't glide go and come back as two halves that differ
 fades of the Move it cut short (`Running::carried`) go on in its own: one going the same
 way keeps its course and one turned back picks up where it is (`ShowFade::after`), so a
 card half gone neither jumps nor starts again
-(`a_second_show_or_hide_carries_a_fade_on_from_where_it_is`). A 3D
+(`a_second_show_or_hide_carries_a_fade_on_from_where_it_is`). A switch to a view or a
+keyframe placed carries them on too, and an item whose effects cover the canvas
+(`Visual::covers_canvas`) swaps its halves at once in any Move within a family rather
+than crossfading with itself, so it never shows what is behind it, even drawn track by
+track ([ADR-0240](../../docs/adr/0240-no-cue-shows-through-an-item-that-covers-the-canvas.md),
+`no_overlap_of_cues_shows_through_what_covers_the_canvas`). A 3D
 scene's picture was drawn through its own camera, so its track is drawn flat, through
 no camera (`Visual::is_whole_scene`, `Transitioning::whole`): a Fade into or out of a
 filtered 3D scene shows it as it is
@@ -2797,7 +2809,8 @@ the plan is made again. An item whose `effects_space` is `canvas`
 ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)) has a canvas-sized
 layer instead, with no outset, scaled down the same way: the item is drawn into it
 where it is placed, turned, flipped and tilted as it is (a live resize redraws it
-there), and the layer covers the canvas flat. Its transition visual never glides.
+there), and the layer covers the canvas flat. Its transition visual never glides, and
+within a family it swaps at once rather than crossfading with itself (ADR-0240).
 An item that shows a 3D model ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 6;
 its source's frame carries the model, from `Source::model`, beside the transparent
 stand-in) always has a canvas-sized layer, effects or not. The layer is drawn with
