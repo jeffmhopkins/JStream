@@ -186,7 +186,7 @@ stamp = { hash = "b3:c06c302493ca4828", by = "agent:claude", note = "The retarge
 stamp = { hash = "b3:737259c9f9481f49", by = "agent:scene-folders", note = "Edited: Folder gains scene?, each owner (the scene list, or one scene's keyframes and timelines) with its own tree (ADR-0222). The scenes line already lists timelines and folder?; holds. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:fb79067c1bc874cb", by = "agent:claude", note = "Added that the render thread names parts inside a unit and profile.get reports them as gpu_parts inside gpu_ms; checked against spans.rs and the meter." }
+stamp = { hash = "b3:acea3a7c6f45eba3", by = "agent:claude", note = "Linked ADR-0243 where the section says CI's macOS runners are the test bed (#1783); the rest is unchanged and holds | merge: #1812 (3f757ea7) adds the gpu_parts sentences (a unit's parts timed inside its gpu_ms, 0.197); they sit beside this branch's ADR-0243 link and both hold | kept from the merged side: Added that the render thread names parts inside a unit and profile.get reports them as gpu_parts inside gpu_ms; checked against spans.rs and the meter." }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2190,7 +2190,7 @@ stamp = { hash = "b3:c0a1b5f469906d4c", by = "agent:release-alpha13", note = "B1
 stamp = { hash = "b3:63718a8c34101c1f", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): Re-read: the only live.rs change counts a browser page's new GPU frame as a paint in look_timed; no other sources-thread behaviour changed." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:ea9f2a919916fb66", by = "agent:claude", note = "snapshot.rs only names GPU parts around existing draws; re-read the meter/camera and chain_cost lines here, they still hold." }
+stamp = { hash = "b3:2a760a4b5931afd0", by = "agent:claude", note = "snapshot.rs: the camera-only glide is keyed to the scene the Move goes to (ADR-0244, #1801) and a test hook moved_end_cameras (#1797); re-read, the sources list names neither and holds | merge: #1812 (3f757ea7) adds GPU part marks (profile::gpu_part around view depth, shadow maps, surface and model draws) in snapshot.rs; re-read, this section names none of them and its text holds beside this branch's glide change | kept from the merged side: snapshot.rs only names GPU parts around existing draws; re-read the meter/camera and chain_cost lines here, they still hold." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:21fd4f392d245f9c", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
@@ -2616,7 +2616,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:ea9f2a919916fb66", by = "agent:claude", note = "chain.rs and snapshot.rs only call profile::gpu_part around run_one's filters, draw_model's draw and view depth, the shadow maps and the scene pass's view depth and surface buffer; re-read the parts on view depth, run_one, model source filters counted with the item, and shadow maps: no drawing changed." }
+stamp = { hash = "b3:2a760a4b5931afd0", by = "agent:claude", note = "Edited the camera-only Move paragraph: only the scene the Move goes to carries the CameraGlide, a mix of it shares it, a mix of another scene of the family keeps its camera (ADR-0244, #1801); matches Planner::glide and Planner::camera | merge: #1812 (3f757ea7) adds GPU part marks (profile::gpu_part around view depth, shadow maps, surface and model draws) in snapshot.rs; re-read, this section names none of them and its text holds beside this branch's glide change | kept from the merged side: chain.rs and snapshot.rs only call profile::gpu_part around run_one's filters, draw_model's draw and view depth, the shadow maps and the scene pass's view depth and surface buffer; re-read the parts on view depth, run_one, model source filters counted with the item, and shadow maps: no drawing changed." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:87769dc0a87ae618", by = "agent:aa-thread", note = "Edited the probe capture paragraph: a probe's models draw with one sample (ADR-0242 decision 4), matching probes.rs which sets 1 and restores the frame's count; re-read the blending paragraph, where snapshot.rs sets the model samples beside the blending space." }
@@ -3657,7 +3657,7 @@ stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "macOS para
 stamp = { hash = "b3:b19140a198327cfa", by = "agent:f7-builder", note = "Windows' video encoders still take encode targets through Codecs::on_context; that NVENC/AMF now answer before the MFT (ADR-0217) changes nothing this section says" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:fb79067c1bc874cb", by = "agent:claude", note = "Dep ARCH#gpu-pipeline only gained the GPU-part timing sentence; GPU frame import and interop described here are untouched." }
+stamp = { hash = "b3:acea3a7c6f45eba3", by = "agent:claude", note = "ARCH › GPU pipeline only gains a link to ADR-0243 beside 'CI's macOS runners are the test bed'; re-read, nothing here changes | merge: #1812 (3f757ea7) adds to ARCH › GPU pipeline that the render thread names a unit's GPU parts (gpu_parts, 0.197); re-read, nothing here describes profiling and it holds | kept from the merged side: Dep ARCH#gpu-pipeline only gained the GPU-part timing sentence; GPU frame import and interop described here are untouched." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map, against wave/m3, gains main's MediaDecoders and paths in the platform row, the jstream-browser row, platform-windows without the CEF backend, the outputs row, the ADR-0058 links and the apps row's desktop, daemon and browser-helper text, beside wave/m3's CLAP rows. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. The GPU-frame types and who may use unsafe with them still hold." }
@@ -6066,7 +6066,7 @@ stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "upstream G
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:fb79067c1bc874cb", by = "agent:claude", note = "compositor.rs gains Compositor::gpu_part, lib.rs re-exports gpu_unit_part, spans.rs records a part per span; grepped this section for timing, spans and exports: it describes none of them, and its 3D and filter text still holds." }
+stamp = { hash = "b3:acea3a7c6f45eba3", by = "agent:claude", note = "ARCH › GPU pipeline only gains a link to ADR-0243 (CI macOS runners as ADR-0063 §8's test bed); re-read, the purpose holds | merge: #1812 (3f757ea7) adds to ARCH › GPU pipeline that the render thread names a unit's GPU parts (gpu_parts, 0.197); re-read, nothing here describes profiling and it holds | kept from the merged side: compositor.rs gains Compositor::gpu_part, lib.rs re-exports gpu_unit_part, spans.rs records a part per span; grepped this section for timing, spans and exports: it describes none of them, and its 3D and filter text still holds." }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
