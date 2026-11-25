@@ -161,7 +161,7 @@ pub fn offers(
 
 /// Whether each of `scene`'s items shows, a switch each (ADR-0207): its placement in
 /// `scene`, a keyframe scene's own when `scene` is one. An item is named by its source,
-/// numbered when the scene places that source more than once.
+/// numbered when more than one of the scene's items would read the same.
 fn visibility(collection: &Collection, scene: &SceneId) -> Vec<Offer> {
     let Some(info) = collection.scene(scene) else {
         return Vec::new();
@@ -176,7 +176,7 @@ fn visibility(collection: &Collection, scene: &SceneId) -> Vec<Offer> {
             let placed = info
                 .items
                 .iter()
-                .filter(|other| other.source_id == item.source_id)
+                .filter(|other| collection.source_name(&other.source_id) == name)
                 .count();
             let label = if placed > 1 {
                 let n = seen.entry(name.clone()).or_default();
@@ -685,7 +685,7 @@ mod tests {
     }
 
     /// #1707: Switches offers an audio source's mute and whether each item shows, a
-    /// keyframe scene's own placement on a keyframe, numbering a source placed twice.
+    /// keyframe scene's own placement on a keyframe, numbering items whose labels match.
     #[test]
     fn mutes_and_item_visibility_are_switches() {
         let mut c = Collection::default();
@@ -746,7 +746,8 @@ mod tests {
                 ("Mic › Fader", false, found[2].at),
                 ("Mic (1) › Visible", true, 0.0),
                 ("Mic (2) › Visible", true, 1.0),
-                ("Mic › Visible", true, 1.0),
+                // Another source with the same name is numbered on (review N1).
+                ("Mic (3) › Visible", true, 1.0),
             ]
         );
         assert_eq!(
