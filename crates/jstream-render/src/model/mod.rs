@@ -631,6 +631,8 @@ pub(crate) struct ModelRuntime {
     surface_resolve: msaa::SurfaceResolve,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
     depth_only: wgpu::RenderPipeline,
+    /// The view depth read from a layer's own tested depth instead.
+    depth_resolve: depth_resolve::DepthResolve,
     /// What a screen-space reflection reads of each model (ADR-0170 decision 4), for a
     /// model whose layer was drawn without it.
     surface: wgpu::RenderPipeline,
@@ -942,6 +944,7 @@ impl ModelRuntime {
             msaa: msaa::Targets::default(),
             surface_resolve: msaa::SurfaceResolve::new(gpu),
             depth_only,
+            depth_resolve: depth_resolve::DepthResolve::new(gpu),
             surface,
             with_surface,
             surface_depth: None,
@@ -1258,10 +1261,17 @@ impl ModelRuntime {
         draw: &ModelDraw<'_>,
         target: &Image,
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
-        surface: Option<[&Image; 3]>,
+        (surface, view_depth): (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         let how = surface.map_or(DrawAs::Layer, DrawAs::LayerWithSurface);
-        self.draw_as(gpu, owner, draw, target, (live, panoramas), how)
+        self.draw_as(
+            gpu,
+            owner,
+            draw,
+            (target, view_depth),
+            (live, panoramas),
+            how,
+        )
     }
 
     /// Merges a model's surface, drawn with its layer into `layers`, into `targets`, its
@@ -1568,7 +1578,7 @@ impl ModelRuntime {
             gpu,
             owner,
             &draw,
-            target,
+            (target, None),
             (None, panoramas),
             DrawAs::InTexture,
         )
@@ -1638,7 +1648,7 @@ impl ModelRuntime {
         gpu: &Gpu,
         owner: &Owner,
         draw: &ModelDraw<'_>,
-        target: &Image,
+        (target, view_depth): (&Image, Option<&Image>),
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
         how: DrawAs<'_>,
     ) -> Result<(), RenderError> {
@@ -1657,6 +1667,26 @@ impl ModelRuntime {
             });
         };
         let (width, height) = (target.width(), target.height());
+        // Its view depth, read from the depth the layer's pass tests rather than drawn
+        // again: a depth layer this compositor made, of the layer's size.
+        let view_depth = match view_depth {
+            Some(depth) => Some(
+                depth
+                    .depth_target()
+                    .filter(|_| {
+                        depth.owner().is(owner)
+                            && (depth.width(), depth.height()) == (width, height)
+                    })
+                    .map(|view| (depth, view))
+                    .ok_or_else(|| RenderError::Invalid {
+                        what: "layer",
+                        detail: "the view depth is not a depth layer this compositor made \
+                                 of the model's layer's size"
+                            .into(),
+                    })?,
+            ),
+            None => None,
+        };
         // The canvas the model is placed on is the target's extent: a layer drawn with
         // fewer pixels than its canvas (ADR-0197) holds the same picture, less sharp.
         let canvas = canvas_of(target);
@@ -1930,7 +1960,12 @@ impl ModelRuntime {
                     view: &depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Discard,
+                        // Kept only for the view depth to be read from.
+                        store: if view_depth.is_some() && camera.is_some() {
+                            wgpu::StoreOp::Store
+                        } else {
+                            wgpu::StoreOp::Discard
+                        },
                     }),
                     stencil_ops: None,
                 }),
@@ -1991,6 +2026,15 @@ impl ModelRuntime {
         {
             self.surface_resolve.record(&mut encoder, bind, *views);
         }
+        if let Some((_, depth_view)) = view_depth {
+            self.record_view_depth(
+                gpu,
+                &mut encoder,
+                (model, camera.is_some()),
+                (&depth, samples),
+                depth_view,
+            );
+        }
         gpu.submit_work(encoder.finish());
         target.mark_changed();
         // Outside the model's box on the target the layer is transparent: what places
@@ -2005,8 +2049,86 @@ impl ModelRuntime {
                 layer.set_content(content);
             }
         }
+        // Its view depth holds the model where the layer does, and nothing elsewhere.
+        if let Some((depth, _)) = view_depth {
+            depth.mark_changed();
+            depth.set_content(content);
+        }
         drop(submitting);
         Ok(())
+    }
+
+    /// Records the view depth of the model whose layer's pass just tested `depth` into
+    /// `target` (ADR-0143 decision 4), as [`Self::draw_depth`] would draw it: the
+    /// opaque primitives' nearest depth read from the tested one, then the blended
+    /// primitives at least half opaque drawn over it, the nearest kept, since the layer's
+    /// pass tests them but writes no depth for them. Seen without a camera it holds
+    /// nothing, as `draw_depth` draws nothing.
+    fn record_view_depth(
+        &self,
+        gpu: &Gpu,
+        encoder: &mut wgpu::CommandEncoder,
+        (model, seen): (&Uploaded, bool),
+        (depth, samples): (&wgpu::TextureView, u32),
+        target: &wgpu::TextureView,
+    ) {
+        if !seen {
+            let _cleared = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-model-view-depth-clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            return;
+        }
+        self.depth_resolve
+            .record(gpu, encoder, (depth, samples), target);
+        if self.order.is_empty() {
+            return;
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("jstream-render-model-view-depth-blended"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.depth_only);
+        pass.set_bind_group(0, &self.frame_bind, &[]);
+        pass.set_bind_group(
+            2,
+            model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1),
+            &[],
+        );
+        for &(_, index) in &self.order {
+            let p = &model.primitives[index];
+            let Some(material) = model.materials.get(p.material) else {
+                continue;
+            };
+            pass.set_bind_group(1, &material.bind, &[]);
+            pass.set_vertex_buffer(0, p.vertices.slice(..));
+            pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..p.index_count, 0, 0..1);
+        }
     }
 
     /// Adds `draw`'s view depth to `target` (ADR-0143 decision 4), keeping what is there
@@ -2180,7 +2302,7 @@ impl ModelRuntime {
             gpu,
             owner,
             draw,
-            targets[0],
+            (targets[0], None),
             (live, panoramas),
             DrawAs::Surface(targets),
         )
@@ -2335,7 +2457,8 @@ impl ModelRuntime {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            // Read for the model's view depth ([`Self::record_view_depth`]).
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -3161,6 +3284,7 @@ fn upload_texture(
     Ok(uploaded.create_view(&wgpu::TextureViewDescriptor::default()))
 }
 
+mod depth_resolve;
 pub(crate) mod focus;
 mod msaa;
 

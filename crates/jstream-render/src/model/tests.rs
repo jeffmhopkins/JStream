@@ -3190,3 +3190,110 @@ fn a_multisampled_surface_matches_the_single_sampled_one_inside() {
         }
     }
 }
+
+/// A model's view depth read from its layer's own tested depth
+/// (`Compositor::draw_model_and_depth`) is the one `draw_model_depth` draws into an
+/// emptied depth layer: for a turned cube seen at a distance, and for a blended plane
+/// at least half opaque, which the layer's pass tests but writes no depth for; drawn
+/// single-sampled the same texel for texel, multisampled within a level inside (the
+/// mean of its samples) and differing more only along edges, where a texel the model
+/// covers under three quarters of holds none. Its box is the layer's.
+#[test]
+fn a_view_depth_read_from_the_layer_is_the_one_drawn_again() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let plane = Shape::Plane
+        .model(Material {
+            base_color: [1.0, 1.0, 1.0, 0.75],
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            ..Material::default()
+        })
+        .expect("the plane builds");
+    let camera = SceneCamera::framing(canvas());
+    let mut geometry = boxed(80.0, 50.0, 50.0);
+    geometry.depth_px = finite(-150.0);
+    geometry.turn_deg = finite(35.0);
+    geometry.tilt_deg = finite(20.0);
+    let empty = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &[],
+    };
+    let read = |compositor: &mut Compositor, depth: &crate::Image| {
+        let items = [crate::tests::item(
+            depth,
+            Placement::IDENTITY,
+            Crop::NONE,
+            1.0,
+        )];
+        render(compositor, &items)
+    };
+    for (name, model) in [("cube", coloured_cube()), ("blended plane", plane)] {
+        let uploaded = compositor.upload_model(&model).expect("the model uploads");
+        let draw = ModelDraw {
+            model: &uploaded,
+            geometry,
+            camera: Some(camera),
+            lighting: Lighting::Unlit,
+            lights: None,
+            shadows: &[],
+            environment: None,
+            floor: None,
+            materials: &[],
+            texture: None,
+            reflection: None,
+            probe: None,
+        };
+        for samples in [1, 4] {
+            let samples = compositor.set_model_antialiasing(samples);
+            let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+            let drawn_again = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+            compositor
+                .draw_model(&draw, &layer)
+                .expect("the model draws");
+            compositor
+                .render_view_depth(&empty, &drawn_again)
+                .expect("it clears");
+            compositor
+                .draw_model_depth(&draw, &drawn_again)
+                .expect("the depth draws");
+            let read_back = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+            compositor
+                .draw_model_and_depth(&draw, &layer, None, &read_back)
+                .expect("the model and its depth draw");
+            assert_eq!(read_back.content(), layer.content(), "{name}: its box");
+            let (want, got) = (read(compositor, &drawn_again), read(compositor, &read_back));
+            let centre = rgb(&want, 80, 50);
+            assert!(centre[0] > 40, "{name}: the depth is drawn: {centre:?}");
+            // Multisampled, a texel holds the mean of its samples, its centre's depth on
+            // a plane: a level apart at most.
+            let near = rgb(&got, 80, 50)[0].abs_diff(centre[0]);
+            assert!(
+                near <= u8::from(samples > 1),
+                "{name} at {samples}x: the centre, {centre:?} against {:?}",
+                rgb(&got, 80, 50)
+            );
+            let mut differing = 0;
+            for y in 0..HEIGHT {
+                for x in 0..WIDTH {
+                    let (a, b) = (rgb(&want, x, y)[0], rgb(&got, x, y)[0]);
+                    if a.abs_diff(b) > 1 {
+                        differing += 1;
+                    }
+                }
+            }
+            let allowed = if samples == 1 {
+                0
+            } else {
+                2 * (WIDTH + HEIGHT)
+            };
+            assert!(
+                differing <= allowed,
+                "{name} at {samples}x: {differing} texels differ"
+            );
+        }
+    }
+}

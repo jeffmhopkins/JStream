@@ -817,8 +817,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   and the times that come back a frame or two later go into the unit's `gpu_frames` and
   `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
   `gpu_timing` is on once any unit carries one. Inside a unit, the draw names the part of
-  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw and its view
-  depth (`draw_model`), a scene's shadow maps (around `draw_shadows`), its view depth and
+  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw, with its
+  view depth read from the depth its pass tested (`draw_model`), a scene's shadow maps (around `draw_shadows`), its view depth and
   its surface buffer (the scene pass), and each filter of a chain by its place
   (`Chains::run_one`, the first `GPU_PART_FILTERS`; a model source's filters, counted
   with its item's effects, are no part). A part's spans come back under the
@@ -2894,8 +2894,9 @@ map that reaches a scene showing the model as it refuses any reference cycle
 (`golden_a_model_shows_another_sources_picture_as_its_texture`,
 `a_models_texture_reaching_its_own_scene_is_a_cycle`).
 A model in a scene with a camera also gets a depth layer (`GpuKey::ModelDepth`, decision 7):
-`draw_model` clears it and draws the model's view depth into it with
-`Compositor::draw_model_depth`, and `layer_item` hands it to the scene pass as the
+`draw_model` draws the model's view depth into it with its layer
+(`Compositor::draw_model_and_depth`, which reads it from the depth the layer's pass
+tested, so the model's geometry is drawn once for both), and `layer_item` hands it to the scene pass as the
 model's `Item::depth` while the model is at least half opaque, so a card that stacks in
 front of the model but sits behind it is hidden where the model is nearer
 (`golden_a_card_behind_a_model_is_hidden_where_the_model_is_nearer`). A floor

@@ -8017,24 +8017,19 @@ fn draw_model(
                 Some([normal, brdf, reflected])
             });
             surfaced = surface.is_some();
+            // Its view depth comes from the depth its layer's pass tests, so the model is
+            // drawn once for both, and timed as the model's part.
+            let depth = depth_key.as_ref().and_then(|key| cache.get(key));
             profile::gpu_part(compositor, Some(profile::GpuPart::Model));
-            let layered = match surface {
-                Some(surface) => compositor.draw_model_with_surface(&draw, layer, surface),
-                None => compositor.draw_model(&draw, layer),
+            let drawn = match (surface, depth) {
+                (surface, Some(depth)) => {
+                    compositor.draw_model_and_depth(&draw, layer, surface, depth)
+                }
+                (Some(surface), None) => compositor.draw_model_with_surface(&draw, layer, surface),
+                (None, None) => compositor.draw_model(&draw, layer),
             };
-            profile::gpu_part(compositor, Some(profile::GpuPart::ViewDepth));
-            let depth =
-                layered.and_then(
-                    |()| match depth_key.as_ref().and_then(|key| cache.get(key)) {
-                        Some(depth) => {
-                            clear(compositor, depth)?;
-                            compositor.draw_model_depth(&draw, depth)
-                        }
-                        None => Ok(()),
-                    },
-                );
             profile::gpu_part(compositor, None);
-            Some(depth)
+            Some(drawn)
         }
         _ => None,
     };
@@ -8050,24 +8045,6 @@ fn draw_model(
             chains.fail(owner);
             Ok(())
         }
-    }
-}
-
-/// Makes `layer` transparent all over; a depth layer holds nothing (infinitely far).
-///
-/// # Errors
-/// What the compositor reports for the pass.
-fn clear(compositor: &mut Compositor, layer: &jstream_render::Image) -> Result<(), RenderError> {
-    let (width, height) = (layer.width(), layer.height());
-    let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
-        what: "layer",
-        detail: format!("a layer of {width}x{height}"),
-    })?;
-    let empty = scene(size, Color::TRANSPARENT, &[]);
-    if layer.is_depth_layer() {
-        compositor.render_view_depth(&empty, layer)
-    } else {
-        compositor.render_into(&empty, layer)
     }
 }
 

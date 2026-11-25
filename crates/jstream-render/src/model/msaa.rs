@@ -148,11 +148,8 @@ fn target(
         sample_count: samples,
         dimension: wgpu::TextureDimension::D2,
         format,
-        usage: if format == DEPTH_FORMAT {
-            wgpu::TextureUsages::RENDER_ATTACHMENT
-        } else {
-            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING
-        },
+        // The depth too is read, for a model's view depth (`ModelRuntime::record_view_depth`).
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
     texture.create_view(&wgpu::TextureViewDescriptor::default())

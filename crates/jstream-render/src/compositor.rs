@@ -1169,7 +1169,30 @@ impl Compositor {
     /// of their own, made the same way, so a rough surface blurs them smoothly
     /// (ADR-0170 decision 3).
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
-        self.draw_model_beside(draw, target, None)
+        self.draw_model_beside(draw, target, (None, None))
+    }
+
+    /// Draws `draw` into `target` as [`Self::draw_model`] does, with what a
+    /// screen-space reflection reads of it into `surface` as
+    /// [`Self::draw_model_with_surface`] does when given, and its view depth into
+    /// `depth`, a [`Self::depth_layer`] of `target`'s size, replacing what it held: what
+    /// [`Self::draw_model_depth`] would add to it once emptied, read from the depth the
+    /// layer's own pass tested instead of drawing the model a second time. The
+    /// differences: a back face of a surface drawn one-sided, which shows nothing in the
+    /// layer, holds no depth either, and multisampled, a texel at the model's edge that
+    /// it covers under three quarters of holds none.
+    ///
+    /// # Errors
+    /// As for [`Self::draw_model`] and [`Self::draw_model_with_surface`], and when
+    /// `depth` isn't a depth layer this compositor made of `target`'s size.
+    pub fn draw_model_and_depth(
+        &mut self,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+        surface: Option<[&Image; 3]>,
+        depth: &Image,
+    ) -> Result<(), RenderError> {
+        self.draw_model_beside(draw, target, (surface, Some(depth)))
     }
 
     /// Draws `draw` into `target` as [`Self::draw_model`] does, and what a screen-space
@@ -1191,7 +1214,7 @@ impl Compositor {
         target: &Image,
         surface: [&Image; 3],
     ) -> Result<(), RenderError> {
-        self.draw_model_beside(draw, target, Some(surface))
+        self.draw_model_beside(draw, target, (Some(surface), None))
     }
 
     /// Merges a model's surface that [`Self::draw_model_with_surface`] drew into
@@ -1220,7 +1243,7 @@ impl Compositor {
         &mut self,
         draw: &ModelDraw<'_>,
         target: &Image,
-        surface: Option<[&Image; 3]>,
+        beside: (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         let errors = self.errors();
         let chain = draw
@@ -1244,7 +1267,7 @@ impl Compositor {
             sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
             probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
         };
-        let drawn = self.draw_model_focused(draw, target, (live, panoramas), surface);
+        let drawn = self.draw_model_focused(draw, target, (live, panoramas), beside);
         errors.close(drawn)
     }
 
@@ -1286,7 +1309,7 @@ impl Compositor {
         draw: &ModelDraw<'_>,
         target: &Image,
         live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
-        surface: Option<[&Image; 3]>,
+        (surface, view_depth): (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         // The canvas the model is placed on, which the target may hold with fewer
         // pixels (ADR-0197): the layers the passes read are the target's size, and stand
@@ -1297,9 +1320,14 @@ impl Compositor {
             .and_then(|camera| camera.view(canvas).ok())
             .filter(|view| view.focus().is_some());
         let Some(view) = view else {
-            return self
-                .models
-                .draw(&self.gpu, &self.owner, draw, target, live, surface);
+            return self.models.draw(
+                &self.gpu,
+                &self.owner,
+                draw,
+                target,
+                live,
+                (surface, view_depth),
+            );
         };
         let (width, height) = (target.width(), target.height());
         let (mut colour, mut depth) = self.model_focus_layers(width, height)?;
@@ -1307,21 +1335,17 @@ impl Compositor {
             colour.set_extent(extent);
             depth.set_extent(extent);
         }
-        self.models
-            .draw(&self.gpu, &self.owner, draw, &colour, live, surface)?;
-        let empty = Scene {
-            canvas: jstream_media::FrameSize::new(width, height).map_err(|_| {
-                RenderError::Invalid {
-                    what: "layer",
-                    detail: "the target has no pixels".into(),
-                }
-            })?,
-            background: crate::scene::Color::rgb(0.0, 0.0, 0.0),
-            items: &[],
-        };
-        self.draw_view_depth(&empty, &depth)?;
-        self.models
-            .draw_depth(&self.gpu, &self.owner, draw, &depth)?;
+        // The depth the focus reads is the caller's view depth when it asked for one,
+        // so neither is drawn apart from the layer.
+        let depth = view_depth.cloned().unwrap_or(depth);
+        self.models.draw(
+            &self.gpu,
+            &self.owner,
+            draw,
+            &colour,
+            live,
+            (surface, Some(&depth)),
+        )?;
         let slot = self
             .model_focus
             .filter

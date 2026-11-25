@@ -6496,8 +6496,9 @@ mod tests {
     }
 
     /// `profile.get`'s GPU parts: a model that receives shadows, under an effect, comes
-    /// back with its shadow maps, its draw, its view depth and its effect timed apart,
-    /// each inside its item's GPU time, on a device that times the GPU.
+    /// back with its shadow maps, its draw and its effect timed apart, each inside its
+    /// item's GPU time, on a device that times the GPU. Its view depth is read from its
+    /// draw's tested depth, so it is in the draw's part, and no part of its own.
     #[test]
     fn a_models_gpu_time_comes_back_in_parts() {
         use crate::profile::{InputTotals, Profiler, SourceMeters};
@@ -6562,11 +6563,14 @@ mod tests {
         for part in [
             GpuPart::ShadowMaps,
             GpuPart::Model,
-            GpuPart::ViewDepth,
             GpuPart::Filter { index: 0 },
         ] {
             assert!(parts.contains(&&part), "{part:?} is timed: {unit:?}");
         }
+        assert!(
+            !parts.contains(&&GpuPart::ViewDepth),
+            "the view depth is the draw's: {unit:?}"
+        );
         let whole = unit.gpu_ms.expect("timed").get();
         let sum: f32 = unit.gpu_parts.iter().map(|part| part.gpu_ms.get()).sum();
         assert!(

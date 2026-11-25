@@ -133,8 +133,8 @@ and calls this crate.
   nearest thing and 0 where nothing is. A **depth layer** (`Compositor::depth_layer`,
   `ResourceCache::depth_layer`) is a layer of one channel (`R16Float`, the half float a
   colour layer's red held, at a quarter of its memory): a view depth, a model's own depth
-  and a shadow map are each one. Only `render_view_depth` and `draw_model_depth` draw
-  into one, and they draw into nothing else: a depth draw given a colour layer, or any
+  and a shadow map are each one. Only `render_view_depth`, `draw_model_depth` and the depth
+  `draw_model_and_depth` replaces draw into one, and they draw into nothing else: a depth draw given a colour layer, or any
   other draw given a depth layer, is `RenderError::Invalid`. It is read as any image
   (green and blue read 0 and alpha 1, which no reader uses). A depth layer whose content
   is known is emptied only there before the scene's cards are drawn, as a colour layer is
@@ -149,7 +149,17 @@ and calls this crate.
   again; one without writes nothing, and so does one under half opacity (a model its
   group has faded), as a card that faded adds no depth. `draw_model_depth(draw, target)` adds a model's
   own per-fragment `1 / w` the same way (`model.wgsl`'s `fs_depth`: both faces, masked
-  and blended materials under half alpha discarded), and nothing without a camera. A
+  and blended materials under half alpha discarded), and nothing without a camera.
+  `draw_model_and_depth(draw, target, surface, depth)` draws the model's layer and
+  replaces `depth` with the same view depth without drawing the model again
+  (`model/depth_resolve.rs`): the layer's pass keeps the depth it tested, whose clip
+  depth with a camera is `NEAR_W / w`, and a full-screen pass in the same encoder writes
+  it over `NEAR_W` (multisampled, the mean of the samples the model covers, its centre's
+  depth on a plane as the shading sees it, and none where it covers under three quarters
+  of them, so its soft edge doesn't hide what is behind), then only the blended
+  primitives are drawn with `fs_depth` over it, since the layer's pass writes no depth for
+  them. A back face of a one-sided surface, which the layer doesn't show, holds no depth
+  there (`a_view_depth_read_from_the_layer_is_the_one_drawn_again`). A
   scene with no camera leaves the target all 0. Depth-aware filters read it
   (**Filters › Depth-aware kinds**).
 - Each item places one image with one of
@@ -647,7 +657,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    write of each layer it drew into, then sets that layer's bounds: for its output, a
    bounded filter's reach past its input's, or unknown ([Filters](#filters)).
    `draw_model` sets its layer's too: the box, on the layer, of the eight corners of
-   the model's bounds (`drawn_box`, a texel of margin), and `draw_model_depth` adds
+   the model's bounds (`drawn_box`, a texel of margin), `draw_model_and_depth` sets the
+   same box on the depth it replaces, and `draw_model_depth` adds
    that box to what its target held, which `render_view_depth` set to its cards' reach
    (nothing, for the empty scene that clears a model's depth). So a small model's layer, its depth and its
    effects cost the model's box, not the canvas. A rigged model, whose pose can leave
@@ -749,7 +760,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Surface pipelines (a model drawn into a surface buffer, the layer pipelines with a surface beside the layer, and the merge) and the buffer's depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another; a bind group per merge |
-| Model depth targets (`Depth32Float`) | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
+| Model depth targets (`Depth32Float`, sampled too, for a view depth read from them), and the view-depth resolve pipelines (single and multisampled) with a bind group per draw that reads one | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
 | Multisampled model targets (ADR-0242): colour (`Rgba16Float`) and depth (`Depth32Float`) at the count `set_model_antialiasing` set, and a surface buffer's three with their resolve bind group once a model is drawn with one; the surface resolve pipeline | The size and count of the last two multisampled draws (`model/msaa.rs`), made again for another; none while models draw with one sample; the pipeline with the compositor |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
@@ -895,8 +906,8 @@ its layer is drawn instead.
 
 **Depth of field on models** ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
 When a `ModelDraw`'s camera has a focus, `draw_model` draws the model and its view depth
-(`1 / w`, as `draw_model_depth` draws it over a cleared depth layer) into a layer and a
-depth layer the compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
+(`1 / w`, read from the layer's tested depth as `draw_model_and_depth` does) into a layer
+and a depth layer the compositor keeps, or the caller's own view depth when it gave one, then runs `model::focus::ModelFocus` from them into the target through
 the filter runtime, as an internal filter no chain can hold. Its six passes, the first
 five sharing `focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl`
 takes the largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose

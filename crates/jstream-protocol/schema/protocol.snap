@@ -9549,7 +9549,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "A part of a unit's GPU time.",
       "oneOf": [
         {
-          "description": "Drawing a 3D model into its layer: shaded, with its depth prepass and its\nmultisampled resolve.",
+          "description": "Drawing a 3D model into its layer: shaded, with its depth prepass and its\nmultisampled resolve, and its view depth, read from the depth that pass tested.",
           "properties": {
             "type": {
               "const": "model",
@@ -9562,7 +9562,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Drawing a 3D model's view depth, or a 3D scene's, for the items after it and the\ndepth-aware filters to read.",
+          "description": "Drawing a 3D scene's view depth, for the items after it and the depth-aware\nfilters to read, with the models it draws there on their own.",
           "properties": {
             "type": {
               "const": "view_depth",
