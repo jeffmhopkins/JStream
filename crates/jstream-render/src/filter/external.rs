@@ -153,7 +153,8 @@ mod tests {
     }
 
     /// #349: an effect pack's filter is timed on the GPU, under its kind, where the
-    /// device has timestamp queries; a built-in filter is not.
+    /// device has timestamp queries; a built-in filter is not, but for the 3D extras,
+    /// timed under their own kind (ADR-0245).
     #[test]
     fn an_external_filter_s_gpu_time_comes_back_under_its_kind() {
         let Some(mut opened) = open() else {
@@ -179,6 +180,8 @@ mod tests {
             &Settings::default(),
         );
         let mut builtin = crate::filter::testing::filter("sharpen", serde_json::json!({}));
+        // A built-in 3D extra is timed under its kind (ADR-0245).
+        let mut extra = crate::filter::testing::filter("volumetric_fog", serde_json::json!({}));
         let clock = FilterClock::default();
         opened
             .compositor
@@ -188,9 +191,13 @@ mod tests {
             .compositor
             .apply_filter(&mut builtin, &input, clock)
             .expect("drawn");
+        opened
+            .compositor
+            .apply_filter(&mut extra, &input, clock)
+            .expect("drawn");
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let mut times = Vec::new();
-        while times.is_empty() && std::time::Instant::now() < deadline {
+        while times.len() < 2 && std::time::Instant::now() < deadline {
             let _ = opened
                 .compositor
                 .device()
@@ -199,9 +206,11 @@ mod tests {
                 .compositor
                 .gpu_times(|kind, took| times.push((kind.to_owned(), took)));
         }
-        assert_eq!(times.len(), 1, "{times:?}");
+        times.sort();
+        assert_eq!(times.len(), 2, "{times:?}");
         assert_eq!(times[0].0, "test/fake");
         assert!(times[0].1 > std::time::Duration::ZERO, "{times:?}");
+        assert_eq!(times[1].0, "volumetric_fog");
         // Each time comes back once.
         opened
             .compositor

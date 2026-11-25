@@ -1691,7 +1691,11 @@ turns an effect off before Windows' TDR fires: where the GPU has timestamp queri
 (`timer.rs`, read back a frame or two later without waiting), and the program stage's
 render thread quarantines a kind whose pass runs over half the frame budget for 30
 frames running, as a blamed kind is, reported in `gpu.effect_slow` (protocol 0.102)
-([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The preview's
+([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The built-in 3D
+extras (ambient occlusion, volumetric fog, screen-space reflections) are timed too; one
+that runs too long is not quarantined, but holds the 3D extras at their cheapest for
+the rest of the stage's run
+([ADR-0245](adr/0245-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md)). The preview's
 drawing isn't guarded; a shader that hangs the GPU there is caught by the program
 stage's guard or a device loss once it goes to program. A GPU without timestamp
 queries has only the device-loss guard. Not checked yet: a forced TDR on Windows

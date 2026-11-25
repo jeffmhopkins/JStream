@@ -170,6 +170,9 @@ pub(crate) struct Governor {
     economy: bool,
     /// Whether the rendering switches fixed the size on the last tick: no economy then.
     fixed: bool,
+    /// Whether economy is held for good, whatever the size, since a 3D extra's pass ran
+    /// too long ([`Self::hold_economy`], ADR-0245).
+    held: bool,
     /// The floor `sizes` were made for.
     made_for: u32,
     /// The floor it is to choose above, from [`Self::set_floor`].
@@ -217,6 +220,7 @@ impl Governor {
             rungs,
             economy: false,
             fixed: false,
+            held: false,
             made_for: NO_FLOOR,
             floor: NO_FLOOR,
             budget,
@@ -243,9 +247,25 @@ impl Governor {
 
     /// Whether this frame's 3D extras are drawn cheaper: models with one sample a pixel,
     /// ambient occlusion and volumetric fog at their lowest quality. Never while the
-    /// rendering switches fix the size.
+    /// rendering switches fix the size, unless it is held.
     pub(crate) fn economy(&self) -> bool {
-        self.economy && !self.fixed && self.step > 0
+        self.held || (self.economy && !self.fixed && self.step > 0)
+    }
+
+    /// Holds economy from now on, whatever the size and the GPU's load, even at a size
+    /// the rendering switches fix: a built-in 3D extra's pass ran over half the frame
+    /// budget for many frames running, which a slower GPU could take for a hang and
+    /// reset (ADR-0245). Logged once.
+    pub(crate) fn hold_economy(&mut self, kind: &str) {
+        if !self.held {
+            tracing::warn!(
+                kind,
+                "a 3D effect's pass ran too long on the GPU: 3D extras are drawn at their \
+                 cheapest (one sample a pixel, the lowest ambient occlusion and volumetric \
+                 fog) until the program stage restarts"
+            );
+        }
+        self.held = true;
     }
 
     /// The smallest size it may choose from the next tick on, a percentage held to the
@@ -822,6 +842,21 @@ mod tests {
             governor.tick(Mode::of(85), ms(40.0), true, true);
         }
         assert_eq!((governor.percent().get(), governor.economy()), (85, false));
+    }
+
+    /// ADR-0245: economy held after a 3D extra ran too long stays, with room to spare,
+    /// at full size and at a size the rendering switches fix.
+    #[test]
+    fn a_held_economy_stays_whatever_the_load_and_size() {
+        let mut governor = Governor::new(Duration::from_micros(33_333)).with_economy();
+        assert!(!governor.economy());
+        governor.hold_economy("volumetric_fog");
+        for _ in 0..1000 {
+            governor.tick(Auto, ms(5.0), false, true);
+        }
+        assert_eq!((governor.percent().get(), governor.economy()), (100, true));
+        governor.tick(Mode::of(85), ms(5.0), false, true);
+        assert_eq!((governor.percent().get(), governor.economy()), (85, true));
     }
 
     /// What the step into economy saved is learned as a step down in size is: a frame

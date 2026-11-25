@@ -185,6 +185,12 @@ impl AmbientOcclusion {
 }
 
 impl Pass for AmbientOcclusion {
+    /// Timed as packs are: the guard draws the 3D extras cheaper when it runs too long
+    /// (ADR-0245).
+    fn timed(&self) -> Option<&str> {
+        Some(KIND)
+    }
+
     fn update(&mut self, settings: &Settings) {
         self.values = values(settings);
     }

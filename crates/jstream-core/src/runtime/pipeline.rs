@@ -2173,7 +2173,9 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                     return Err(DrawError::Lost(why));
                 }
                 // The pack passes' GPU times that came back since the last tick, a tick or
-                // two late, go to the guard (#349).
+                // two late, go to the guard (#349), and the built-in 3D extras' too: one
+                // of those that ran too long holds them at their cheapest (ADR-0245).
+                let mut slow_3d = None;
                 if let Some(guard) = meter.pass_guard() {
                     if !timing {
                         timing = true;
@@ -2181,6 +2183,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                     }
                     compositor.gpu_times(|kind, took| guard.measured(kind, took));
                     guard.end_tick();
+                    slow_3d = guard.take_built_in();
                 }
                 // The units' GPU times that came back, and this tick's timing when it is
                 // one of the timed ones (`profile.get`'s `gpu_ms`).
@@ -2210,6 +2213,9 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                     crate::resolution::Governor::new(meter.budget()).with_economy()
                 });
                 governor.set_floor(program.min_model_resolution());
+                if let Some(slow) = slow_3d {
+                    governor.hold_economy(&slow.kind_id);
+                }
                 // An output's first frames are long whatever size models are drawn at.
                 if frames.iter().any(|frame| frame.priming && !frame.local) {
                     governor.output_started();

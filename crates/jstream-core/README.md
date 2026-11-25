@@ -686,7 +686,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
   (`runtime/vcam.rs`). The render thread's GPU-time guard quarantines an effect-pack
-  kind whose pass runs too long (`runtime/pass_guard.rs`, #349; see *Runtime*).
+  kind whose pass runs too long (`runtime/pass_guard.rs`, #349; see *Runtime*), and
+  holds the 3D extras at their cheapest when one of theirs does (ADR-0245).
 - **Camera controls** (`camera_controls.rs`, #1196): each `webcam` source's
   `camera_controls` setting set on its device. After each change the control side
   compares what the drawn collection asks, live values included, with what it last
@@ -5327,7 +5328,7 @@ a rung of the same ladder, full size again, every smaller size staying in it, st
 into and out of by the same rules, economy last on the way up; what it saved is learned
 from the frame timed after it, taken until then to be at most half
 (`ECONOMY_WORST`). A floor of 100 still lets it take that step, and a fixed size is
-never in economy. While it lasts `Chains::economy` is set: the frame's models are drawn
+never in economy, unless the GPU-time guard holds it (*Runtime*, ADR-0245). While it lasts `Chains::economy` is set: the frame's models are drawn
 with one sample a pixel, and each scene's view depth carries it to its depth-aware
 filters (`ViewDepth::economy`), where `ambient_occlusion` takes Low's samples and
 `volumetric_fog` marches as Low does (`economy_comes_before_the_first_step_down_and_goes_last`,
@@ -5521,8 +5522,15 @@ the guard the times that came back, a tick or two late and without waiting
 budget in 30 ticks running (a tick within the limit starts the count again, one with
 no time back for it leaves it) goes to `jstream-device-losses` as `GpuEvent::Slow`,
 beside the losses (`GpuEvent::Lost`). The engine quarantines it there, as above, and
-sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. A GPU
-without timestamp queries times nothing, and only a device loss guards it.
+sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. The
+built-in 3D extras (`ambient_occlusion`, `volumetric_fog`, `screen_space_reflections`)
+are timed and counted the same way, under their own kinds; one reported (a kind ID with
+no `/`, `PassGuard::take_built_in`) is not sent to the engine but makes the governor
+hold economy for the rest of the stage's run, whatever the load or a fixed size
+(`Governor::hold_economy`,
+[ADR-0245](../../docs/adr/0245-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md),
+`a_built_in_kind_is_taken_apart_from_a_packs`, `a_held_economy_stays_whatever_the_load_and_size`).
+A GPU without timestamp queries times nothing, and only a device loss guards it.
 Each tick then takes the units' GPU times that came back and, one tick in four, times
 its own (`DrawMeter::begin_gpu`, closed with `end_gpu` once the tick has drawn), for
 `profile.get`'s `gpu_ms` (the Profile paragraph in [Contents](#contents-media)).

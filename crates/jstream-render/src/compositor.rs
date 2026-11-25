@@ -1756,7 +1756,9 @@ impl Compositor {
     }
 
     /// Hands `measured` the GPU time of each effect-pack filter or shader source applied
-    /// since the last call whose time has come back, with its kind ID (#349). A time
+    /// since the last call whose time has come back, with its kind ID (#349), and of each
+    /// built-in 3D extra (ambient occlusion, volumetric fog, screen-space reflections),
+    /// with its kind (ADR-0245). A time
     /// comes back a frame or two after its draw, read without waiting, and allocates
     /// nothing. Nothing before [`Self::time_passes`], or on a device without timestamp
     /// queries.

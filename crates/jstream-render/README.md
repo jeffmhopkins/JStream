@@ -1480,15 +1480,20 @@ bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GP
 before the OS resets the device. `Compositor::time_passes` turns the timing on (it
 reports `false` on a device without `TIMESTAMP_QUERY`, which times nothing; a
 compositor nobody asked times nothing either). Then each external filter or shader
-source application (`Pass::timed`, which returns the kind ID; the built-in kinds
-return `None`) is bracketed by two empty compute passes that write a timestamp each,
+source application (`Pass::timed`, which returns the kind ID), and each of the
+built-in 3D extras `ambient_occlusion`, `volumetric_fog` and `screen_space_reflections`
+(timed under their own kind, which has no `/`, for `jstream-core` to draw them cheaper
+when one runs too long,
+[ADR-0245](../../docs/adr/0245-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md);
+the other built-in kinds return `None`), is bracketed by two empty compute passes that write a timestamp each,
 resolved and copied to a small mappable buffer in the same submit, one of 32 slots.
 `Compositor::gpu_times` polls without waiting and hands back each time whose map has
 finished, with its kind, a frame or two after its draw; an application with every slot
 on its way isn't timed. It allocates nothing: a slot's label string is reused. A
 device opened by this crate, or by the platform crates' contexts, asks for
 `TIMESTAMP_QUERY` when the adapter has it. A test times a pack filter on the test
-adapter (lavapipe has the feature) and checks a built-in one isn't timed.
+adapter (lavapipe has the feature) and checks a built-in one isn't timed, while a 3D
+extra is, under its kind.
 
 **The kinds.** Each group documents its kinds here as it lands.
 
