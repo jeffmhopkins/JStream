@@ -428,6 +428,50 @@ fn text_too_large_for_the_limits_is_an_error() {
     ));
 }
 
+/// #1790: a font whose glyphs each span the whole frame would rasterise every one of
+/// them over all of it, which took the fuzzer's `font_load` past its time limit. It is
+/// refused as too large to draw, as a frame past the limits is. The font is the
+/// fuzzer's input, a damaged copy of the bundled Roboto subset.
+#[test]
+fn glyphs_too_large_to_draw_are_an_error() {
+    let dir = folder("huge-glyphs");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/huge-glyphs.ttf");
+    std::fs::copy(&fixture, dir.join("huge.ttf")).expect("a font copy");
+    let ctx = Context {
+        assets: AssetRoots {
+            collection: Some(dir.clone()),
+            app: None,
+        },
+        limits: Limits {
+            max_side: 4096,
+            max_decoded_bytes: 256 << 20,
+            ..Limits::default()
+        },
+        ..Context::default()
+    };
+    let font = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "huge.ttf".into(),
+    }
+    .to_value();
+    let drawn = draw_with(
+        &[
+            (
+                "text",
+                json!("Hello, World! 0123456789\nÅçéñ ß — “quotes” ﬁ 漢字 🙂"),
+            ),
+            ("size", json!(32.0)),
+            ("font", font),
+        ],
+        &ctx,
+    );
+    assert!(
+        matches!(&drawn, Err(SourceError::Setting { param, reason }) if param == "text" && reason.contains("glyphs draw")),
+        "{:?}",
+        drawn.err()
+    );
+}
+
 /// Drawn at a density, the text keeps its layout and its own size, which the frame is
 /// placed at, and draws that many pixels each way (ADR-0073).
 #[test]

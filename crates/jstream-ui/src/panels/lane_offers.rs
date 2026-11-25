@@ -1,7 +1,8 @@
 //! What the Sequence panel's Add lane search offers beside the channels (A13, SQ-01):
 //! "Settings (makes a channel)", every live number setting of the scene's sources and
 //! their filters and each audio source's fader, and "Switches", every on/off setting of
-//! the same. Picking one makes a channel the setting follows ([ADR-0183] decision 5),
+//! the same, each audio source's mute and whether each of the scene's items shows
+//! (ADR-0207, #1707). Picking one makes a channel the setting follows ([ADR-0183] decision 5),
 //! or reuses the channel it follows already, and gives that channel a lane.
 //!
 //! A switch lane is an ordinary lane whose points all use the `hold` curve at 0 or 1
@@ -73,8 +74,9 @@ fn sources_of<'a>(
 }
 
 /// Every setting of `scene`'s sources Add lane can give a lane, from the descriptors
-/// read so far: each live number or on/off setting of a source and of its filters, and
-/// each audio source's fader. A kind not yet described offers nothing yet.
+/// read so far: each live number or on/off setting of a source and of its filters, each
+/// audio source's fader and mute, and whether each item of the scene shows. A kind not
+/// yet described offers only the fader, the mute and the items.
 pub fn offers(
     collection: &Collection,
     scene: &SceneId,
@@ -128,6 +130,8 @@ pub fn offers(
             }
         }
         if let Some(audio) = source.audio.as_ref().filter(|a| a.enabled) {
+            let scene_source =
+                matches!(&source.kind, SourceKind::Builtin { kind } if kind == "scene");
             out.push(Offer {
                 label: format!("{name} › Fader"),
                 target: ValueTarget::SourceGain {
@@ -137,9 +141,62 @@ pub fn offers(
                 switch: false,
                 at: fraction(f64::from(audio.gain_db.get()), FADER_THROW),
             });
+            // A `scene` source has no mute of its own.
+            if !scene_source {
+                out.push(Offer {
+                    label: format!("{name} › Mute"),
+                    target: ValueTarget::SourceMute {
+                        source_id: source.source_id.clone(),
+                    },
+                    range: (0.0, 1.0),
+                    switch: true,
+                    at: f32::from(u8::from(audio.muted)),
+                });
+            }
         }
     }
+    out.extend(visibility(collection, scene));
     out
+}
+
+/// Whether each of `scene`'s items shows, a switch each (ADR-0207): its placement in
+/// `scene`, a keyframe scene's own when `scene` is one. An item is named by its source,
+/// numbered when the scene places that source more than once.
+fn visibility(collection: &Collection, scene: &SceneId) -> Vec<Offer> {
+    let Some(info) = collection.scene(scene) else {
+        return Vec::new();
+    };
+    let scene_id = info.variant_of.is_some().then(|| scene.clone());
+    let name = |item: &jstream_control::protocol::ItemInfo| collection.source_name(&item.source_id);
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    info.items
+        .iter()
+        .map(|item| {
+            let name = name(item);
+            let placed = info
+                .items
+                .iter()
+                .filter(|other| other.source_id == item.source_id)
+                .count();
+            let label = if placed > 1 {
+                let n = seen.entry(name.clone()).or_default();
+                *n += 1;
+                format!("{name} ({n}) › Visible")
+            } else {
+                format!("{name} › Visible")
+            };
+            Offer {
+                label,
+                target: ValueTarget::ItemVisible {
+                    item_id: item.item_id.clone(),
+                    scene_id: scene_id.clone(),
+                },
+                range: (0.0, 1.0),
+                switch: true,
+                at: f32::from(u8::from(item.visible)),
+            }
+        })
+        .collect()
 }
 
 /// A setting's value as a fraction of `range`: a number, or a bool as 0 or 1.
@@ -587,8 +644,20 @@ mod tests {
         let labels: Vec<_> = found.iter().map(|o| (o.label.as_str(), o.switch)).collect();
         assert_eq!(
             labels,
-            vec![("Title › size", false), ("Title › bold", true)]
+            vec![
+                ("Title › size", false),
+                ("Title › bold", true),
+                ("Title › Visible", true)
+            ]
         );
+        assert_eq!(
+            found[2].target,
+            ValueTarget::ItemVisible {
+                item_id: ItemId::new("i"),
+                scene_id: None
+            }
+        );
+        assert_eq!(found[2].at, 1.0, "the item shows now");
         assert_eq!(found[0].at, 0.5, "where the size is now");
         assert!(matches(&found[0], "TITLE"));
         assert!(!matches(&found[0], "blur"));
@@ -612,6 +681,86 @@ mod tests {
         assert_eq!(
             followed_channel(&c, &found[0].target).as_deref(),
             Some("glow")
+        );
+    }
+
+    /// #1707: Switches offers an audio source's mute and whether each item shows, a
+    /// keyframe scene's own placement on a keyframe, numbering a source placed twice.
+    #[test]
+    fn mutes_and_item_visibility_are_switches() {
+        let mut c = Collection::default();
+        let mut scene: SceneInfo = serde_json::from_value(
+            json!({"scene_id": "k", "name": "K", "variant_of": "s", "items": []}),
+        )
+        .unwrap_or_else(|e| panic!("a keyframe scene: {e}"));
+        let item = |id: &str, visible: bool| ItemInfo {
+            motion: Default::default(),
+            item_id: ItemId::new(id),
+            source_id: SourceId::new("mic"),
+            placement: PlacementForm::Legacy,
+            transform: ItemTransform::IDENTITY,
+            geometry: None,
+            crop: Crop::NONE,
+            visible,
+            effects: Vec::new(),
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: Default::default(),
+            locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
+        };
+        scene.items.extend([item("a", false), item("b", true)]);
+        c.scenes.push(scene);
+        let audio = jstream_control::protocol::SourceAudio {
+            muted: true,
+            ..jstream_control::protocol::SourceAudio::new(Default::default())
+        };
+        let source = |id: &str, kind: &str| SourceInfo {
+            source_id: SourceId::new(id),
+            name: "Mic".into(),
+            kind: SourceKind::Builtin { kind: kind.into() },
+            settings: Default::default(),
+            duplicated_from: None,
+            audio: Some(audio),
+            filters: Default::default(),
+            meta: Default::default(),
+        };
+        c.sources.push(source("mic", "audio_input"));
+        // A scene source has no mute of its own.
+        c.sources.push(source("nested", "scene"));
+        let mut nested = item("n", true);
+        nested.source_id = SourceId::new("nested");
+        if let Some(k) = c.scenes.last_mut() {
+            k.items.push(nested);
+        }
+        let found = offers(&c, &SceneId::new("k"), &HashMap::new());
+        let labels: Vec<_> = found
+            .iter()
+            .map(|o| (o.label.as_str(), o.switch, o.at))
+            .collect();
+        assert_eq!(
+            labels,
+            vec![
+                ("Mic › Fader", false, found[0].at),
+                ("Mic › Mute", true, 1.0),
+                ("Mic › Fader", false, found[2].at),
+                ("Mic (1) › Visible", true, 0.0),
+                ("Mic (2) › Visible", true, 1.0),
+                ("Mic › Visible", true, 1.0),
+            ]
+        );
+        assert_eq!(
+            found[1].target,
+            ValueTarget::SourceMute {
+                source_id: SourceId::new("mic")
+            }
+        );
+        assert_eq!(
+            found[3].target,
+            ValueTarget::ItemVisible {
+                item_id: ItemId::new("a"),
+                scene_id: Some(SceneId::new("k"))
+            }
         );
     }
 }

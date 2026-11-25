@@ -246,4 +246,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0240](0240-no-cue-shows-through-an-item-that-covers-the-canvas.md) | No cue shows through an item that covers the canvas | accepted | agent |  |
 | [ADR-0241](0241-a-floor-for-the-model-size-and-any-whole-percentage.md) | The engine's choice of model size has a floor, and a fixed size is any whole percentage | accepted | agent |  |
 | [ADR-0242](0242-3d-models-are-drawn-multisampled.md) | 3D models are drawn multisampled | accepted | agent |  |
+| [ADR-0243](0243-the-macos-gpu-spike-runs-on-ci-macos-runners.md) | The macOS GPU interop spike runs on CI's macOS runners | accepted | agent |  |
+| [ADR-0244](0244-a-camera-only-glide-moves-only-the-scene-it-goes-to.md) | A camera-only glide moves only the scene the Move goes to | accepted | agent |  |
 <!-- @generated end adr-index -->
