@@ -1166,7 +1166,7 @@ pub struct CaptureTargetInfo {
     pub size: Option<PixelSize>,
     /// Whether it is the primary display, which a `display` source with an empty
     /// `target` captures, or, for an audio device, the system's default device of its
-    /// direction, which an empty `device` records (since 0.194). Omitted when `false`,
+    /// direction, which an empty `device` records (since 0.195). Omitted when `false`,
     /// and always `false` for a window.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub primary: bool,
@@ -1236,10 +1236,10 @@ pub enum CaptureTargetKind {
     /// source. Since 0.90.
     Device,
     /// An audio input device, such as a microphone or an interface's inputs, recorded by
-    /// an `audio_input` source. Since 0.194.
+    /// an `audio_input` source. Since 0.195.
     AudioInput,
     /// An audio output device, such as speakers or headphones, whose sound a
-    /// `desktop_audio` source records. Since 0.194.
+    /// `desktop_audio` source records. Since 0.195.
     AudioOutput,
     /// A kind this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a target, or a `capture_target` parameter, from a newer server, so adding

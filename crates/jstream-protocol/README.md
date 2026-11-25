@@ -81,7 +81,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
   cap since 0.165, with `PROBE_RESOLUTIONS`, and its screen-space reflection switch and
   steps since 0.172, with `SCREEN_SPACE_STEPS`, and its `model_resolution` since 0.178,
-  with `MODEL_RESOLUTIONS`),
+  with `MODEL_RESOLUTIONS`, and `min_model_resolution` since 0.194, with
+  `MODEL_RESOLUTION_RANGE`, which a fixed `model_resolution` may be since then too),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -408,12 +409,16 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.194 because `capture.targets` lists the audio input and output
+`PROTOCOL_VERSION` is 0.195 because `capture.targets` lists the audio input and output
 devices (`CaptureTargetKind::AudioInput` and `AudioOutput`, `primary` for the system's
 default of each direction), an `audio_input` source's `device` is a `capture_target` of
 kind `audio_input`, and a `desktop_audio` source gains a `device` of kind `audio_output`,
-so a UI can offer the devices to pick from ([Queries](#queries), [Kinds](#kinds)); 0.193
-because a device may ask to pair instead of typing a code:
+so a UI can offer the devices to pick from ([Queries](#queries), [Kinds](#kinds)); 0.194
+because the rendering switches gain
+`min_model_resolution`, the smallest size the engine may lower 3D models to while it
+chooses their size, and a fixed `model_resolution` may be any whole percentage from 50
+to 100 rather than one of `MODEL_RESOLUTIONS` (`MODEL_RESOLUTION_RANGE`,
+[ADR-0241](../../docs/adr/0241-a-floor-for-the-model-size-and-any-whole-percentage.md)); 0.193 because a device may ask to pair instead of typing a code:
 every client hears `pairing.asked` and `pairing.ask_ended`, and any answers with
 `pairing.answer` (`not_found` with the entity kind `pairing_ask`,
 [Queries › pairing](#queries),
@@ -1212,7 +1217,7 @@ never a type per kind.
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
   `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24;
   `capture_target` with a `kind`, `display`, `window`, since 0.90 `device` or, since
-  0.194, `audio_input` or `audio_output` (an
+  0.195, `audio_input` or `audio_output` (an
   unknown one parses as `CaptureTargetKind::Unknown`, so adding a kind is a minor
   change), and `max_len`, since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
@@ -1978,9 +1983,10 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
   floor_reflections?, reflection_probes?, max_probe_resolution?,
-  screen_space_reflections?, screen_space_steps?, model_resolution?}` (0.147,
+  screen_space_reflections?, screen_space_steps?, model_resolution?,
+  min_model_resolution?}` (0.147,
   `reflection_probes` and `max_probe_resolution` since 0.165, the two screen-space ones
-  since 0.172, `model_resolution` since 0.178,
+  since 0.172, `model_resolution` since 0.178, `min_model_resolution` since 0.194,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
@@ -1998,15 +2004,24 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   canvas's width and of its height: 0, the default, lets the engine choose, lowering it
   while the GPU is short of time
   ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md),
-  [ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)), and 100, 85, 75, 67 or 50 always draws them at that (`MODEL_RESOLUTIONS`); any
-  other value is `invalid_argument` on `model_resolution`. All are on
+  [ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)),
+  stepping through 100, 85, 75, 67 and 50 (`MODEL_RESOLUTIONS`), and a percentage always
+  draws them at that: one of those steps until 0.194, any whole one from 50 to 100 since
+  (`MODEL_RESOLUTION_RANGE`); any other value is `invalid_argument` on
+  `model_resolution`. `min_model_resolution` is the smallest size the engine lowers them
+  to while it chooses: any whole percentage in `MODEL_RESOLUTION_RANGE` (the default 50,
+  every size it has), and any other is `invalid_argument` on `min_model_resolution`
+  ([ADR-0241](../../docs/adr/0241-a-floor-for-the-model-size-and-any-whole-percentage.md)). A floor between two of its sizes is
+  the last step down (90 steps from 100 to 90 and no further), 100 keeps models whole,
+  and a fixed `model_resolution` is drawn as set whatever the floor. All are on
   until set but `screen_space_reflections`, which is off (`RenderFeatures::DEFAULT`,
   [ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)). An application setting, like
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
   reads as on (`screen_space_reflections` as off), a cap it leaves out as 512, steps it
-  leaves out as 16, and a `model_resolution` it leaves out as 0.
+  leaves out as 16, a `model_resolution` it leaves out as 0, and a
+  `min_model_resolution` it leaves out as 50.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -2131,14 +2146,15 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
   sets, since 0.165 the probe switch and face-size cap, since 0.172 the screen-space
-  reflection switch and steps, and since 0.178 `model_resolution`. Since 0.180 `show` is the running show (`RunningShow`:
+  reflection switch and steps, since 0.178 `model_resolution`, and since 0.194
+  `min_model_resolution`. Since 0.180 `show` is the running show (`RunningShow`:
   its play head `at_ms`, its `state` `playing`, `paused` or `off_script`, the bookmark it
   waits at and `waited_ms`, the scene that took it `off_script`, its `loop_id` and
   `pass`, the `armed_ms` spot and whether it rehearses), omitted while none runs, and
   `overlays` the scenes up over program as overlays, bottom first, omitted while none is
   ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)).
 - `capture.targets`: the displays, windows, (since 0.90) video capture devices and
-  (since 0.194) audio devices the engine can capture now, displays first, then windows,
+  (since 0.195) audio devices the engine can capture now, displays first, then windows,
   then video devices, then audio inputs, then audio outputs, each with its `kind`
   (`display`, `window`, `device`, `audio_input` or `audio_output`, the source kind that
   captures it: `display`, `window`, `webcam`, `audio_input` or `desktop_audio`), its

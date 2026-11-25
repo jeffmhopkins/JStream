@@ -1533,7 +1533,7 @@ audit entry and errors.
   reads of it (uncompressed RGBA, BGRA, NV12 or YUY2, and MJPEG), with no engine lock
   held, since listing windows and devices calls the OS, and the camera controls it can
   set (`VideoDevices::controls`, since 0.105), then the audio backend's input devices,
-  then its output devices (`AudioIo::devices`, since 0.194), each marked `primary` when
+  then its output devices (`AudioIo::devices`, since 0.195), each marked `primary` when
   it is the system's default of its direction. A device whose formats or controls can't
   be read is listed without them. With no backends it answers `action_failed`, and so it
   does when the OS refuses all three lists; when one fails, it answers with the others
@@ -1815,7 +1815,8 @@ The **3D rendering switches** (`studio.set_rendering`,
 decision 1) are an application setting too, answered before the collection lock
 (`Engine::rendering_call`): a `screen_space_steps` that isn't one of
 `SCREEN_SPACE_STEPS`, a `max_probe_resolution` that isn't one of
-`PROBE_RESOLUTIONS`, or a `model_resolution` that isn't one of `MODEL_RESOLUTIONS`, is `invalid_argument` and changes nothing; otherwise each switch the
+`PROBE_RESOLUTIONS`, a `model_resolution` that is neither 0 nor in
+`MODEL_RESOLUTION_RANGE` (50 to 100), or a `min_model_resolution` outside it, is `invalid_argument` and changes nothing; otherwise each switch the
 call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
@@ -5289,8 +5290,16 @@ time its frames steps on the first signal alone. It steps down only while a mode
 drawn, since fewer pixels gain nothing without one, and each change logs one line
 ([ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
 The rendering switches' `model_resolution` (`Shot::model_resolution`, read each tick)
-decides who chooses: 0 leaves it to the governor, and a size holds that size, from which
-the governor goes on when the choice is handed back. A drawer whose meter has no budget
+decides who chooses: 0 leaves it to the governor, and a percentage holds that size
+(any whole one from 50 to 100 since 0.194; one between two steps makes the steps above it
+and it the governor's sizes), from which the governor goes on, at the next step up, when
+the choice is handed back. While it chooses it goes no
+smaller than `min_model_resolution` (`Shot::min_model_resolution`, given each tick with
+`Governor::set_floor`): it chooses among the steps above the floor and the floor itself,
+so a floor between two steps (90) is the last step down and 100 keeps models whole
+([ADR-0241](../../docs/adr/0241-a-floor-for-the-model-size-and-any-whole-percentage.md)). A
+floor raised past the size drawn lifts it to the floor at once, and a fixed size below
+the floor is drawn as set. A drawer whose meter has no budget
 (not the program's) never lowers it itself. The size goes to the meter each tick
 (`DrawMeter::model_percent`), and `profile.get` reports it as the drawer's
 `model_resolution`, with the frames of the window drawn below 100 as

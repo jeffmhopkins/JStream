@@ -12407,8 +12407,17 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "min_model_resolution": {
+                    "description": "The smallest size the engine may lower 3D models to while it chooses, a whole\npercentage in [`MODEL_RESOLUTION_RANGE`], or left out to keep it (since\n0.194). `studio.set_rendering` refuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "model_resolution": {
-                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "description": "How many pixels 3D models are drawn with, 0 to let the engine choose or a whole\npercentage in [`MODEL_RESOLUTION_RANGE`] (one of [`MODEL_RESOLUTIONS`] until\n0.194), or left out to keep it (since 0.178). `studio.set_rendering` refuses any\nother value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [

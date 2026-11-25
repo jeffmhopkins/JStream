@@ -863,7 +863,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   on app-wide, caps the
   probes' face size, sets the screen-space steps, and since 0.178 says how many pixels
   3D models are drawn with or leaves that to the engine
-  ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
+  ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)), and
+  since 0.194 the smallest size the engine may lower them to.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1108,7 +1109,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name, and (0.90) the video devices a `webcam`'s `device` can
   name, with their formats and (0.105) the camera controls a `webcam`'s
-  `camera_controls` setting sets on them, and (0.194) the audio input and output devices
+  `camera_controls` setting sets on them, and (0.195) the audio input and output devices
   an `audio_input`'s or `desktop_audio`'s `device` can name, the system's defaults
   marked `primary`; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
