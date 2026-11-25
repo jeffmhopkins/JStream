@@ -2898,7 +2898,10 @@ map that reaches a scene showing the model as it refuses any reference cycle
 A model in a scene with a camera also gets a depth layer (`GpuKey::ModelDepth`, decision 7):
 `draw_model` draws the model's view depth into it with its layer
 (`Compositor::draw_model_and_depth`, which reads it from the depth the layer's pass
-tested, so the model's geometry is drawn once for both), and `layer_item` hands it to the scene pass as the
+tested, so the model's geometry is drawn once for both; with its surface too, when its
+scene reads one, and a model drawn so is drawn through the scene's camera once a frame,
+`Chains::scene_model_draws` counting it in tests, `a_metal_floor_reflects_a_card_on_screen`),
+and `layer_item` hands it to the scene pass as the
 model's `Item::depth` while the model is at least half opaque, so a card that stacks in
 front of the model but sits behind it is hidden where the model is nearer
 (`golden_a_card_behind_a_model_is_hidden_where_the_model_is_nearer`). A floor

@@ -1101,6 +1101,10 @@ pub(crate) struct Chains {
     /// How many shadow maps were drawn, for tests.
     #[cfg(test)]
     pub(crate) shadow_draws: std::cell::Cell<u64>,
+    /// How many times a model was drawn through its scene's own camera, into its layer,
+    /// its view depth or its surface, for tests.
+    #[cfg(test)]
+    pub(crate) scene_model_draws: std::cell::Cell<u64>,
     /// The shadowed lights of the scene a model is drawn in this frame, by index into
     /// [`Self::lights`] with their softness, kept to reuse its allocation.
     pub(crate) shadowed: Vec<(usize, f32)>,
@@ -6156,6 +6160,13 @@ mod tests {
                 (&shot, &LiveParams::default()),
                 &[(32, 35)],
             )[0];
+            // One model, drawn once through the scene's camera: its layer, view depth
+            // and surface come from that one draw, whatever reads them.
+            assert_eq!(
+                chains.scene_model_draws.get(),
+                1,
+                "the model is drawn once at {percent}%"
+            );
             Some((point, !chains.surfaced.is_empty()))
         };
         let under = |graph: &Graph, features| under_at(graph, features, 100);

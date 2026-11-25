@@ -8024,6 +8024,10 @@ fn draw_model(
             // Its view depth comes from the depth its layer's pass tests, so the model is
             // drawn once for both, and timed as the model's part.
             let depth = depth_key.as_ref().and_then(|key| cache.get(key));
+            #[cfg(test)]
+            chains
+                .scene_model_draws
+                .set(chains.scene_model_draws.get() + 1);
             profile::gpu_part(compositor, Some(profile::GpuPart::Model));
             let drawn = match (surface, depth) {
                 (surface, Some(depth)) => {
@@ -9767,6 +9771,12 @@ fn draw_view_depth(
             continue;
         }
         pose(compositor, model, shown);
+        #[cfg(test)]
+        if from.is_none() {
+            chains
+                .scene_model_draws
+                .set(chains.scene_model_draws.get() + 1);
+        }
         compositor.draw_model_depth(
             &jstream_render::ModelDraw {
                 model,
@@ -9893,6 +9903,10 @@ fn draw_surface(
             ),
             None => Default::default(),
         };
+        #[cfg(test)]
+        chains
+            .scene_model_draws
+            .set(chains.scene_model_draws.get() + 1);
         compositor.draw_model_surface(
             &jstream_render::ModelDraw {
                 model: drawn.model,
