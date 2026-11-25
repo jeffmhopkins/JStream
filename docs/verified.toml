@@ -8595,7 +8595,7 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "ADR-0156 is now maintainer tier and proposed; the Linux steps are unchanged and still match vcam.rs's MODPROBE and PERSIST_HINT" }
 
 ["INTEGRATION-streamdeck#build"."body"]
-stamp = { hash = "b3:d0d850f641419760", by = "agent:claude", note = "plugin test now checks program lands on the keyframe scene, and the Go to keyframe key's switch and placed paths | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:d18c2a70d09dbb0e", by = "agent:claude", note = "Added scripts/set-version.ts and test/version.test.ts: README names the version test, describes the release build and the alpha/beta/rc/final to fourth-number mapping, and that the committed manifest stays 0.1.0.0" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/package.json"]
 stamp = { hash = "b3:d67843ed82f78f37", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8605,6 +8605,9 @@ stamp = { hash = "b3:71c171caa84ac726", by = "agent:streamdeck-thread", note = "
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/scripts/icons.ts"]
 stamp = { hash = "b3:91d8b1042b9fc2de", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/scripts/set-version.ts"]
+stamp = { hash = "b3:857b213a38104412", by = "agent:claude", note = "Added scripts/set-version.ts and test/version.test.ts: README names the version test, describes the release build and the alpha/beta/rc/final to fourth-number mapping, and that the committed manifest stays 0.1.0.0" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.test.ts"]
 stamp = { hash = "b3:a8b6e42e72f1dd6b", by = "agent:claude", note = "daemon test adds the abandoned ask ending closed; commands unchanged | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -8617,6 +8620,9 @@ stamp = { hash = "b3:9008954806426a51", by = "agent:claude", note = "plugin test
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/unit.test.ts"]
 stamp = { hash = "b3:4a9bcd854ebb2994", by = "agent:claude", note = "daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+
+["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/version.test.ts"]
+stamp = { hash = "b3:e68fe324cb870388", by = "agent:claude", note = "Added scripts/set-version.ts and test/version.test.ts: README names the version test, describes the release build and the alpha/beta/rc/final to fourth-number mapping, and that the committed manifest stays 0.1.0.0" }
 
 ["INTEGRATION-streamdeck#design"."body"]
 stamp = { hash = "b3:217f1c8b0818879f", by = "agent:claude", note = "Pairing bullet: no ask while paired, a code pairing aborts the ask (hub.ts AbortController), 503 message in tls.ts | kept from the merged side: client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -8661,7 +8667,7 @@ stamp = { hash = "b3:202a0b83abd0d76b", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:deafc942594334d1", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#install"."body"]
-stamp = { hash = "b3:bb8e3cfa88df5664", by = "agent:claude", note = "step 4 is now Allow it in JStream, with Use a code instead as the fallback the panel offers on deny/timeout/old JStream | kept from the merged side: Forget says the device stays paired in JStream until revoked; a changed certificate stops retries; Find JStream names the announcement setting and --lan-quiet; Go to keyframe name (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:e03385297c2912d3", by = "agent:claude", note = "Install step now points at the release's jstream-v<version>-streamdeck.streamDeckPlugin, says a newer one installs over the old (version stamp orders releases), and keeps the build-it-yourself pointer" }
 
 ["INTEGRATION-streamdeck#install"."file:integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/manifest.json"]
 stamp = { hash = "b3:ee8d23c06c0e67ce", by = "agent:claude", note = "Forget says the device stays paired in JStream until revoked; a changed certificate stops retries; Find JStream names the announcement setting and --lan-quiet; Go to keyframe name (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -8973,7 +8979,7 @@ stamp = { hash = "b3:dd692a456ed83dfe", by = "agent:mac-browser", note = "The te
 stamp = { hash = "b3:201fec83217818e7", by = "agent:claude-ci-load", note = "mac-testing#script only gained when mac-install CI runs; the tester's install command and steps are unaffected" }
 
 ["RUNBOOK-RELEASE#cut"."body"]
-stamp = { hash = "b3:9ba0fa495084c964", by = "agent:dxc-packaging", note = 'The zip step now downloads DXC and checks its SHA-256, and the Windows notes name the DXC release from dxc\DXC-VERSION.txt, matching release.yml' }
+stamp = { hash = "b3:84740c747a268889", by = "agent:claude", note = "Re-read against the new streamdeck job: Node pinned by hash, npm ci/typecheck/build/unit tests, set-version.ts mapping, pack name, notes order and publish now waiting on four jobs and attaching *.streamDeckPlugin; step 5 asks to check the plugin installs" }
 
 ["RUNBOOK-RELEASE#cut"."dep:docs/ARCHITECTURE.md#packaging"]
 stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = 'The zip step now downloads DXC and checks its SHA-256, and the Windows notes name the DXC release from dxc\DXC-VERSION.txt, matching release.yml' }
@@ -8982,7 +8988,7 @@ stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = 'The 
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New section, checked against the new release.yml: ui checks out with fetch-depth 0 and fails unless the tagged commit is on main (git merge-base --is-ancestor HEAD origin/main) and the tag is v plus the single version of the five shipped apps, then builds the UI with after-review dist-ui's pins; zip runs cargo xtask dist --revision <tag> on windows-latest without a cache, writes the .sha256 and the notes (guide link, unsigned SmartScreen note, CEF build from browser/CEF-VERSION.txt, checksum); publish alone has contents: write and runs gh release create --verify-tag, --prerelease for a hyphenated version, --notes-file with --generate-notes; signing deferred per ADR-0066 and the helper exe/DLL share a certificate per ADR-0048; the deps ARCH Packaging (browser folder, dist) and ADR-0066 match" }
 
 ["RUNBOOK-RELEASE#cut"."file:.github/workflows/release.yml"]
-stamp = { hash = "b3:b3c1af2c942651ae", by = "agent:dxc-packaging", note = 'The zip step now downloads DXC and checks its SHA-256, and the Windows notes name the DXC release from dxc\DXC-VERSION.txt, matching release.yml' }
+stamp = { hash = "b3:fc6ed464fafa12c0", by = "agent:claude", note = "Re-read against the new streamdeck job: Node pinned by hash, npm ci/typecheck/build/unit tests, set-version.ts mapping, pack name, notes order and publish now waiting on four jobs and attaching *.streamDeckPlugin; step 5 asks to check the plugin installs" }
 
 ["RUNBOOK-RELEASE#version"."body"]
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }

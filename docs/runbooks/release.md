@@ -80,16 +80,26 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
      through the bundled helper, renames the image `jstream-v<version>-macos-arm64.dmg`,
      and writes its SHA-256 and macOS's part of the notes, which say how to open an
      unsigned app and name the CEF build;
-   - `publish`, the only job allowed to write to the repository, waits for all three and
+   - `streamdeck` builds the [Stream Deck plugin](../../integrations/streamdeck/README.md)
+     on `ubuntu-latest` with the Node.js release it runs on, downloaded and checked
+     against its pinned hash: `npm ci`, typecheck, build and unit tests, then
+     `scripts/set-version.ts` stamps the release's version on the manifest (Stream Deck
+     wants four numbers: `alpha.N` ends in `N`, `beta.N` in `100 + N`, `rc.N`
+     in `200 + N` and a final release in `1000`, so a later release always installs over an
+     earlier one), and Elgato's CLI validates and packs it as
+     `jstream-v<version>-streamdeck.streamDeckPlugin`, with its SHA-256 and the plugin's
+     part of the notes;
+   - `publish`, the only job allowed to write to the repository, waits for all four and
      creates the GitHub release for the tag with every package and its `.sha256`, the
-     notes (a line on the release, then Windows, macOS and Linux) and GitHub's generated
+     notes (a line on the release, then Windows, macOS, Linux and the Stream Deck plugin) and GitHub's generated
      list of merged PRs. A version with a pre-release part is marked as a pre-release. On
      a run started by hand it first creates the tag, and fails if the tag appeared since
      `ui` checked, so a release never lands on another commit's tag. If any platform's
-     job fails, nothing is published.
+     job or the plugin's fails, nothing is published.
 5. **Check the release page**: each package downloads and its checksum matches; the zip
    starts on a clean Windows machine, the `.dmg` on a Mac once allowed in Privacy &
-   Security, and the `.deb` and AppImage on a Linux desktop
+   Security, the `.deb` and AppImage on a Linux desktop, and the Stream Deck plugin
+   installs by double-click and pairs
    ([ROADMAP › Beta](../../ROADMAP.md#beta) has each platform's pass).
 
 **Signing.** Windows builds are unsigned until a code-signing certificate is available
