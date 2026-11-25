@@ -7776,7 +7776,7 @@ stamp = { hash = "b3:e97684fe742d6756" }
 stamp = { hash = "b3:64209a8bce0f7a49", by = "agent:claude", note = "The mock daemon's repeatable --ptz-camera is described, matching mock-daemon/src/main.rs." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/package.json"]
-stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "Dependabot bump only moves @playwright/test 1.64.1 -> 1.65.0 in package.json; the section names no Playwright version and its fixtures, mock daemon and scripts are unchanged, so it holds" }
+stamp = { hash = "b3:27ab7a66446cf07e", by = "agent:dependabot-lander", note = "package.json bumps @playwright/test 1.65.0 to 1.65.1 (patch); the section names no version, and the scripts, pinning and run commands it describes are unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/playwright.config.js"]
 stamp = { hash = "b3:063a37f95f399bff" }
@@ -7938,7 +7938,7 @@ stamp = { hash = "b3:53962362d2f19631", by = "agent:claude", note = "Re-read: ef
 stamp = { hash = "b3:cc33975e5ce1cf00", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 
 ["CRATE-jstream-ui-e2e#running"."file:crates/jstream-ui/tests/e2e/package.json"]
-stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "Dependabot bump only moves @playwright/test 1.64.1 -> 1.65.0 in package.json; the section names no Playwright version and its npm ci / npx playwright test commands and browser setup are unchanged, so it holds" }
+stamp = { hash = "b3:27ab7a66446cf07e", by = "agent:dependabot-lander", note = "package.json bumps @playwright/test 1.65.0 to 1.65.1 (patch); the section names no version, and the scripts, pinning and run commands it describes are unchanged" }
 
 ["CRATE-jstream-ui-e2e#running"."file:crates/jstream-ui/tests/e2e/playwright.config.js"]
 stamp = { hash = "b3:063a37f95f399bff" }
