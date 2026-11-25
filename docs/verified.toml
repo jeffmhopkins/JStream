@@ -1134,7 +1134,7 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:556c11754d691766", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); server-side only, no wire change; section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/switch.rs"]
-stamp = { hash = "b3:244b82e1e6fe68b4", by = "agent:claude", note = "Re-read the pairing and network listener paragraphs: pairing over the TLS listener and the five-attempt sharing are unchanged by the runtime switch; nothing says it applies at start." }
+stamp = { hash = "b3:5f87a0e875b31b74", by = "agent:claude", note = "switch.rs internal change only; protocol bullet unaffected" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
 stamp = { hash = "b3:cc0136d878a1ce4d", by = "agent:claude", note = "Re-read the pairing and network listener paragraphs: pairing over the TLS listener and the five-attempt sharing are unchanged by the runtime switch; nothing says it applies at start." }
@@ -6591,7 +6591,7 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:556c11754d691766", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); re-read the design section, nothing it states changes" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/switch.rs"]
-stamp = { hash = "b3:244b82e1e6fe68b4", by = "agent:claude", note = "Added 'Opened and closed while it runs' (NetworkSwitch open/close/set_announce, per-request NetworkState, sessions ending with 1001, router dropped at end), pairing while the listener is open, NetworkInfo, and announce through the served listener." }
+stamp = { hash = "b3:5f87a0e875b31b74", by = "agent:claude", note = "switch behaviour as described still holds; info() no longer reads None spuriously (CI flake in tests::network on #1803)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
 stamp = { hash = "b3:cc0136d878a1ce4d", by = "agent:claude", note = "Added 'Opened and closed while it runs' (NetworkSwitch open/close/set_announce, per-request NetworkState, sessions ending with 1001, router dropped at end), pairing while the listener is open, NetworkInfo, and announce through the served listener." }
@@ -6675,7 +6675,7 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:556c11754d691766", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); the Agent approval and Session bullets now say so; matches admitted.rs, session.rs and approvals.rs" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/switch.rs"]
-stamp = { hash = "b3:244b82e1e6fe68b4", by = "agent:claude", note = "Added the network switch module (switch.rs, network_state.rs, ADR-0234); announce.rs now stops on a future, the rest holds." }
+stamp = { hash = "b3:5f87a0e875b31b74", by = "agent:claude", note = "switch.rs: NetworkSwitch::info now reads a separately kept snapshot instead of try_lock on the open mutex, so it never reports closed while a switch or serving's start holds the lock; contents unchanged" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
 stamp = { hash = "b3:cc0136d878a1ce4d", by = "agent:claude", note = "Added the network switch module (switch.rs, network_state.rs, ADR-0234); announce.rs now stops on a future, the rest holds." }
