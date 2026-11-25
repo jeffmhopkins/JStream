@@ -59,6 +59,9 @@ struct Switch {
     /// The open listener, if any. Opening and closing hold it across their awaits, so
     /// two switches never interleave.
     open: tokio::sync::Mutex<Option<Running>>,
+    /// Where it is open, kept apart from `open` so [`NetworkSwitch::info`] never reads
+    /// `None` just because a switch, or serving's start, holds `open` at that moment.
+    info: Mutex<Option<NetworkInfo>>,
 }
 
 /// What a listener is served with.
@@ -91,13 +94,21 @@ impl NetworkSwitch {
             state,
             serving: Mutex::new(None),
             open: tokio::sync::Mutex::new(None),
+            info: Mutex::new(None),
         }))
     }
 
     /// Where the listener is open, or `None` while it is closed.
     pub fn info(&self) -> Option<NetworkInfo> {
-        let open = self.0.open.try_lock().ok()?;
-        open.as_ref().map(Running::info)
+        self.0
+            .info
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn set_info(&self, info: Option<NetworkInfo>) {
+        *self.0.info.lock().unwrap_or_else(PoisonError::into_inner) = info;
     }
 
     /// Opens the listener with `config`, closing one already open first. Answers where
@@ -148,6 +159,7 @@ impl NetworkSwitch {
             running.serve(&serving);
         }
         *open = Some(running);
+        self.set_info(Some(info.clone()));
         Ok(info)
     }
 
@@ -178,6 +190,7 @@ impl NetworkSwitch {
     }
 
     async fn stop(&self, mut running: Running) {
+        self.set_info(None);
         self.0.state.close();
         running.stop.send_replace(true);
         running.stop_announcing().await;
