@@ -4,7 +4,8 @@
 //! ([`PropertiesAndFilters`]), picked by a segmented control as OBS's dialog puts its
 //! preview above the settings. The settings form is the one filters use (`properties.rs`),
 //! here editing a draft: each setting the kind marks `live` shows on output as it is
-//! edited, as a live value of the dialog's gesture (ADR-0091). OK sends what the user
+//! edited, as a live value of the dialog's gesture (ADR-0091); a number dragged or slid
+//! follows into the draft once per frame as it goes (#1734). OK sends what the user
 //! changed since it opened as one batch, ending the gesture, so one undo step; Cancel,
 //! Escape and the backdrop drop the draft and cancel the gesture, leaving nothing. Defaults
 //! empties the draft, so OK resets each value the dialog opened with. Filter changes
@@ -57,20 +58,32 @@ pub fn live_patch(
     patch
 }
 
-/// The dialog's state as context: the source it shows while open, and whether a shader
-/// source's editor opens over it as it opens.
+/// The dialog's state as context: the source it shows while open, whether a shader
+/// source's editor opens over it as it opens, and whether it opens on its Filters segment.
 #[derive(Clone, Copy)]
-pub struct PropertiesDialog(RwSignal<Option<SourceId>>, RwSignal<bool>);
+pub struct PropertiesDialog(RwSignal<Option<SourceId>>, RwSignal<bool>, RwSignal<bool>);
 
 impl PropertiesDialog {
     /// A closed dialog.
     pub fn new() -> PropertiesDialog {
-        PropertiesDialog(RwSignal::new(None), RwSignal::new(false))
+        PropertiesDialog(
+            RwSignal::new(None),
+            RwSignal::new(false),
+            RwSignal::new(false),
+        )
     }
 
     /// Opens the dialog on `source_id`.
     pub fn open(&self, source_id: SourceId) {
         self.1.set(false);
+        self.2.set(false);
+        self.0.set(Some(source_id));
+    }
+
+    /// Opens the dialog on `source_id`, on its Filters segment (a menu's Edit filters…).
+    pub fn open_filters(&self, source_id: SourceId) {
+        self.1.set(false);
+        self.2.set(true);
         self.0.set(Some(source_id));
     }
 
@@ -78,6 +91,7 @@ impl PropertiesDialog {
     /// new Shader from Add source does (ADR-0135).
     pub fn open_shader(&self, source_id: SourceId) {
         self.1.set(true);
+        self.2.set(false);
         self.0.set(Some(source_id));
     }
 }
@@ -119,8 +133,14 @@ pub fn SourceProperties() -> impl IntoView {
                 if present.get() {
                     seen.set_value(true);
                     let shader = dialog.1.get_untracked();
+                    let filters = dialog.2.get_untracked();
                     Some(view! {
-                        <PropertiesBody source_id=source_id.clone() shader=shader close=close />
+                        <PropertiesBody
+                            source_id=source_id.clone()
+                            shader=shader
+                            filters=filters
+                            close=close
+                        />
                     })
                 } else {
                     if seen.get_value() {
@@ -138,6 +158,8 @@ fn PropertiesBody(
     source_id: SourceId,
     /// Whether a shader source's editor opens over the dialog at once (ADR-0135).
     shader: bool,
+    /// Whether it opens on the Filters segment rather than Settings.
+    filters: bool,
     close: impl Fn() + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -170,7 +192,7 @@ fn PropertiesBody(
     };
     let undo = FilterUndo::begin(std::slice::from_ref(&owner));
     let selected = RwSignal::new(None::<FilterId>);
-    let on_filters = RwSignal::new(false);
+    let on_filters = RwSignal::new(filters);
 
     // What the dialog opened on: OK sends only what the user changed from it, so an
     // edit another client made meanwhile stays (ADR-0032, last writer wins per field).
@@ -395,6 +417,25 @@ fn PropertiesBody(
             view! { <SourcePreview kind_id=kind_id.clone() source_id=source_id.clone() draft=draft /> }
         })
     });
+    // Reload page or Play from start, for a kind with something to restart (A16).
+    let restart_button = crate::item_menu::restart_label(&source.kind).map(|label| {
+        let source_id = source_id.clone();
+        let restart = move |_| {
+            if let Some(s) = session.get() {
+                studio.act(
+                    &s,
+                    Action::SourceRestart {
+                        source_id: source_id.clone(),
+                    },
+                );
+            }
+        };
+        view! {
+            <button type="button" class="secondary props-restart" on:click=restart>
+                {label}
+            </button>
+        }
+    });
     let title = source.name.clone();
     let subtitle = format!("{type_name} source");
     let form = {
@@ -417,6 +458,7 @@ fn PropertiesBody(
                         errors=errors
                         commit=commit
                         learn=learn
+                        follows_drags=true
                     />
                 }
                 .into_any()
@@ -462,6 +504,7 @@ fn PropertiesBody(
                     <input type="text" bind:value=name />
                 </label>
                 {shader_button}
+                {restart_button}
                 {form}
                 {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
             </PropertiesAndFilters>

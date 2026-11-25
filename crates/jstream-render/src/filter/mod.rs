@@ -20,6 +20,7 @@ mod pass;
 mod program;
 #[cfg(test)]
 pub(crate) mod testing;
+mod units;
 
 pub use assets::{Lut, LutError, lut_image};
 pub use depth::{
@@ -63,7 +64,7 @@ pub fn descriptors() -> Vec<KindDescriptor> {
 }
 
 /// How far a built-in filter of `kind_id` draws past each edge of its input at
-/// `settings`, px, never more than its kind's `max_outset_px` ([ADR-0136]):
+/// `settings`, in the pixels its settings count in (the input's extent, ADR-0211), never more than its kind's `max_outset_px` ([ADR-0136]):
 /// a drop shadow its offset plus its blur, a glow or a bloom its radius, an outline
 /// outside its width, a border its outer stroke after its gap. `None` for a kind that declares no outset, or one this crate
 /// doesn't draw; a caller then takes the declared `max_outset_px`.
@@ -91,8 +92,15 @@ pub struct VideoFilter {
     kind: String,
     pass: Box<dyn Pass>,
     scratch: Scratch,
-    /// Transparent pixels the input is grown by on every side before the pass draws.
+    /// Transparent texels the input is grown by on every side before the pass draws.
     pad: u32,
+    /// Its settings as the graph stores them, for a kind with pixel-unit settings
+    /// (`units`): the pass has them scaled to its input's texels.
+    settings: Option<Settings>,
+    /// Its kind's pixel-unit settings ([`units::of`]).
+    units: &'static [units::Scaled],
+    /// The texels per extent pixel the pass's settings are scaled by, across and down.
+    scale: [f32; 2],
 }
 
 impl VideoFilter {
@@ -100,7 +108,13 @@ impl VideoFilter {
     /// missing or mistyped setting reads as its default. `None` when `kind_id` is not a
     /// built-in video filter kind.
     pub fn new(kind_id: &str, settings: &Settings) -> Option<Self> {
-        build(kind_id, settings).map(|pass| Self::of(kind_id, pass))
+        let pass = build(kind_id, settings)?;
+        let units = units::of(kind_id);
+        Some(Self {
+            settings: (!units.is_empty()).then(|| settings.clone()),
+            units,
+            ..Self::of(kind_id, pass)
+        })
     }
 
     /// A filter of `kind` drawn by `pass`, with no layers kept yet.
@@ -110,6 +124,9 @@ impl VideoFilter {
             pass,
             scratch: Scratch::default(),
             pad: 0,
+            settings: None,
+            units: &[],
+            scale: [1.0, 1.0],
         }
     }
 
@@ -157,9 +174,32 @@ impl VideoFilter {
         &self.kind
     }
 
-    /// Applies new settings in place, keeping the filter's state.
+    /// Applies new settings in place, keeping the filter's state. A built-in kind's
+    /// pixel-unit settings count in its input's extent (`units`).
     pub fn set_settings(&mut self, settings: &Settings) {
-        self.pass.update(settings);
+        match &mut self.settings {
+            Some(kept) => {
+                kept.clone_from(settings);
+                self.pass
+                    .update(&units::apply(settings, self.units, self.scale));
+            }
+            None => self.pass.update(settings),
+        }
+    }
+
+    /// Scales its pixel-unit settings to `input`'s texels per extent pixel, before it
+    /// draws over `input` (#1680): a blur reaches as far across the picture whatever
+    /// texels the image holds. Nothing changes while the scale holds, so a steady input
+    /// costs a comparison; a kind with no such settings ignores it.
+    pub(crate) fn fit(&mut self, input: &crate::Image) {
+        let Some(settings) = &self.settings else {
+            return;
+        };
+        let scale = units::scale_of(input);
+        if scale != self.scale {
+            self.scale = scale;
+            self.pass.update(&units::apply(settings, self.units, scale));
+        }
     }
 
     /// The size this filter draws for an input of `width` by `height`. Most filters keep
@@ -172,8 +212,12 @@ impl VideoFilter {
         self.pass.output_size(grow(width), grow(height))
     }
 
-    /// Grows the input by `pad` transparent pixels on every side before the filter
-    /// draws, so it sees and keeps that room: 0 (the default) for none. An item's
+    /// Grows the input by `pad` transparent texels on every side before the filter
+    /// draws, so it sees and keeps that room: 0 (the default) for none. The padding
+    /// counts in texels, as the pass's reach does once its settings are scaled
+    /// ([`Self::set_settings`]); only an item's effects pad, over a layer placed at
+    /// its box's size, whose texels per extent pixel are the scale its pad is worked
+    /// out at (ADR-0219, #1720). An item's
     /// effects pad their layer at the first effect that draws past its input, so the
     /// ones before it frame the item's box itself (ADR-0065 §5).
     pub fn set_pad(&mut self, pad: u32) {

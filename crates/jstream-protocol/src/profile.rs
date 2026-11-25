@@ -254,7 +254,8 @@ pub struct ViewProfile {
 /// An output's frames are its program feed's, from the video encoder to the muxer or
 /// publish target; a preview stream's go from its encoder to the client's socket. An
 /// encoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and
-/// `encode_ms` repeat; what each sends and loses after it is its own.
+/// `encode_ms` repeat; what each sends and loses after it is its own. So does one
+/// that preview streams of the same picture share.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct StreamProfile {
     /// Which stream.
@@ -291,6 +292,14 @@ pub struct StreamProfile {
     /// The bit rate its encoders are set to, in kilobits a second, the same way.
     #[serde(default)]
     pub target_kbps: u32,
+    /// The name of the video encoder encoding it now, as the platform names it: the one
+    /// it fell back to when the one it opened refused its first frame. Empty from an
+    /// engine that does not report it.
+    #[serde(default)]
+    pub encoder: String,
+    /// Whether that encoder runs on dedicated hardware.
+    #[serde(default)]
+    pub hardware: bool,
 }
 
 /// An encoded stream, by what it feeds ([`StreamProfile::stream`]).
@@ -361,6 +370,10 @@ pub enum Drawer {
     Unknown,
 }
 
+fn whole() -> u32 {
+    100
+}
+
 /// One drawing thread's frames in the window.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DrawerProfile {
@@ -387,12 +400,26 @@ pub struct DrawerProfile {
     /// (R-RT-004). Always 0 for the preview, which draws when it can.
     #[serde(default)]
     pub skipped: u64,
+    /// The percentage of their canvas's width and of its height the drawer drew 3D
+    /// models with at the end of the window (ADR-0197, since 0.178): 100 unless the
+    /// program's render thread lowered it, or `RenderFeatures::model_resolution` set it.
+    #[serde(default = "whole")]
+    pub model_resolution: u32,
+    /// The frames of the window drawn with 3D models at less than 100 (since 0.178).
+    #[serde(default)]
+    pub model_frames_reduced: u64,
     /// The program's pictures that only preview streams take (a monitored scene, or the
     /// program at a size only they take) skipped because the GPU or the readback was
     /// behind (0.176, #1690). No output missed them, so `stats.tick`'s drops leave them
     /// out. Always 0 for the preview.
     #[serde(default)]
     pub preview_skipped: u64,
+    /// The average number of GPU submits the thread made per frame. Each submit costs
+    /// the thread a fixed time in the driver however little work it carries, so a high
+    /// count with a low `gpu_ms` is CPU time that batching would save. The compositor's
+    /// own submits only: a platform's or a browser's on the same queue are not counted.
+    #[serde(default)]
+    pub submits: Finite32,
     /// The average time per frame in each phase.
     #[serde(default)]
     pub phases: PhaseProfile,
@@ -518,8 +545,9 @@ pub enum ProfileUnit {
 pub struct SourceProfile {
     /// The source.
     pub source_id: SourceId,
-    /// How many times the `jstream-sources` thread painted it: a source that draws its
-    /// own frames as they come due (`waveform`, `spectrum`, `timer`).
+    /// How many times it painted: the `jstream-sources` thread's paints of a source that
+    /// draws its own frames as they come due (`waveform`, `spectrum`, `timer`), and each
+    /// new frame a `browser` page painted on the GPU that a plan took (#1556).
     #[serde(default)]
     pub paints: u64,
     /// The average time a paint took, in milliseconds.

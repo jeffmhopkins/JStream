@@ -7,6 +7,7 @@
 //! A front face's vertices `a`, `b`, `c` wind so that `(b − a) × (c − a)` points out of
 //! it, which is clockwise on the y-down canvas when it faces the viewer.
 
+mod pick;
 pub mod rig;
 pub mod shapes;
 
@@ -438,6 +439,7 @@ pub struct Model {
     bounds: Bounds,
     rig: Option<Arc<rig::Rig>>,
     version: u64,
+    picker: pick::Picker,
 }
 
 impl Model {
@@ -565,6 +567,7 @@ impl Model {
             bounds: Bounds { min, max },
             rig,
             version: NEXT_VERSION.fetch_add(1, Ordering::Relaxed),
+            picker: pick::Picker::default(),
         })
     }
 

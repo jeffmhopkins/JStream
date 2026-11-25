@@ -40,7 +40,7 @@ pub(crate) async fn handle(
     method: Method,
     headers: HeaderMap,
 ) -> Response {
-    if !app.tls(&accepted) || !app.pairing {
+    if !app.tls(&accepted) || !app.pairs() {
         return (StatusCode::NOT_FOUND, "not found\n").into_response();
     }
     if let Err(refusal) = app

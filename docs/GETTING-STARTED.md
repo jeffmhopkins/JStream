@@ -113,7 +113,9 @@ adds, which makes soft glows and veils brighter.
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or choose **Existing** and pick a source to reuse it); its properties open, so you can choose the
-   display or window from the list of those open now, the device (and, for a webcam,
+   display or window from the list of those open now, the device (an audio input's
+   microphone or interface, desktop audio's speakers or headphones, or, for a webcam,
+   the camera and
    its resolution, frame rate and video format, or Auto, and under **Camera** its
    brightness, exposure, white balance and the other controls the camera offers, each
    a slider with **Auto** where the camera can set it itself) or the file. In the
@@ -128,7 +130,13 @@ adds, which makes soft glows and veils brighter.
    tool bar's **Depth** (D) pushes it away or brings it closer, and **Turn** (R) turns
    and tilts it. Press K, or the camera button, for camera mode: a left drag orbits
    (or looks around, or moves, as its buttons pick), a right drag moves, the wheel zooms,
-   and **◆ Save view** keeps the shot as a new keyframe scene. Esc leaves it.
+   and **◆ Save view** keeps the shot as a new keyframe scene. Beside it, the arrow and
+   **−** **+** buttons pan, tilt and zoom the camera live while you hold them (or hold Space or Enter on
+   one), as a camera operator would, and **⌂ Home** brings it back; nothing of that is saved.
+   To look around as in a game, press F (or **Fly**): W A S D move, Space goes up and
+   Shift down, Q and E roll the camera and R levels it again, a click lets the mouse
+   turn the camera, the wheel zooms, and Shift+wheel sets the speed, which starts from
+   the size of the scene. Enter saves the view. Esc leaves fly mode, then camera mode.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.
 5. To show a scene, click its row in **Scenes**: it goes on program, and the red
@@ -210,6 +218,27 @@ browser page keeps the path as text. Then press **Record** at the top. **Stop
 recording** finishes the file. A recording runs on its own, whether or not you are live.
 It never overwrites a file, so for another take, open its settings (double-click its
 row) and give it a new file name. Browse… is there too.
+
+<a id="show"></a>
+## Run a show (optional)
+<!-- @section
+depends_on = ["docs/UI-FEATURES.md#show", "docs/UI-FEATURES.md#keyboard", "docs/adr/0210-shows-a-run-order-with-bookmarks.md"]
+-->
+
+A show is a running order you build once and step through live. Pick the **Show** layout
+from the **Layout** menu, then press **+ New show** in the **Show** panel. In its Edit
+view, drag scenes from **Scenes** onto the V1 track, end to end, and drop video, image or
+audio files onto the tracks to make scenes of them. Overlay tracks put a scene over
+program, the audio tracks bring a source up for a clip's span (a webcam's microphone for
+the whole show, say), and the Bookmark tool (B) marks the points where the show waits for
+you.
+
+At show time switch to **Run**, press **▶ Play show**, and press **Continue** at each
+bookmark. The run of show lists the bookmarks, and a click on one goes there at once.
+To run it from keys or a pad controller, open **File › Settings… › Keys & MIDI**, add a
+key or MIDI trigger, and give it **Continue the show**, or **Go to bookmark 1 to 8** with
+a number for each of a row of pads. An agent can build and run a show too; ask it to
+rehearse first, since playing a show switches program.
 
 <a id="vcam"></a>
 ## The virtual camera (optional)

@@ -2,8 +2,11 @@
 //! `binding.clear_value` edits, what number a binding's target takes
 //! ([`ValueRange`]), and the setter edit that gives it a value ([`value_edit`]).
 //!
-//! A value binding names a source setting, a filter setting on any chain, a fader or a
-//! send. `binding.set_value` checks the target exists and takes a number: a setting its
+//! A value binding names a source setting, a filter setting on any chain, a fader, a
+//! send, since 0.187 a switch: a source's or bus's mute, or whether a placement shows
+//! its item (ADR-0207), which take a `bool`, or (ADR-0209) one axis of a PTZ camera's
+//! position, which the engine turns into aims rather than edits ([`value_edit`] gives
+//! none). `binding.set_value` checks the target exists and takes a number: a setting its
 //! kind marks `live` of type `int`, `float` or `bool`, an audio source's fader (not a
 //! `scene` source's), a bus's, or a send that exists. Unlike an action binding, a value
 //! binding is not removed with the object it names: it is left driving nothing, as a
@@ -102,6 +105,23 @@ pub fn value_edit(target: &ValueTarget, range: ValueRange, value: f64) -> Option
             bus_id: bus_id.clone(),
             gain_db: gain()?,
         },
+        ValueTarget::SourceMute { source_id } => Edit::SourceSetAudio {
+            source_id: source_id.clone(),
+            enabled: None,
+            follow: None,
+            gain_db: None,
+            muted: Some(range.json(value).as_bool()?),
+        },
+        ValueTarget::BusMute { bus_id } => Edit::BusSetFader {
+            bus_id: bus_id.clone(),
+            gain_db: None,
+            muted: Some(range.json(value).as_bool()?),
+        },
+        ValueTarget::ItemVisible { item_id, scene_id } => Edit::ItemSetVisible {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            visible: range.json(value).as_bool()?,
+        },
         _ => return None,
     })
 }
@@ -116,6 +136,56 @@ impl Graph {
     /// takes none.
     pub fn value_range(&self, target: &ValueTarget) -> Option<ValueRange> {
         range(&self.state, &self.kinds, target, 0).ok()
+    }
+
+    /// The number `target` holds in the collection, as stored: a setting's own value or
+    /// its kind's default, a fader's or a send's gain in dB, a switch as 0 or 1. `None`
+    /// while what it names is missing or holds no number. An `add` binding
+    /// ([ADR-0203](../../../docs/adr/0203-mappings-add-or-replace.md)) adds to it.
+    pub fn stored_value(&self, target: &ValueTarget) -> Option<f64> {
+        let number = |v: &Value| match v {
+            Value::Bool(on) => Some(if *on { 1.0 } else { 0.0 }),
+            v => v.as_f64(),
+        };
+        let setting = |settings: &Settings, kind: &str, param: &str| {
+            settings.get(param).and_then(number).or_else(|| {
+                self.kinds
+                    .get(kind)
+                    .and_then(|d| d.param(param))
+                    .and_then(|p| number(&p.default))
+            })
+        };
+        let state = &self.state;
+        match target {
+            ValueTarget::SourceSetting { source_id, param } => {
+                let source = state.source(source_id)?;
+                match &source.kind {
+                    SourceKind::Builtin { kind } => setting(&source.settings, kind, param),
+                    _ => None,
+                }
+            }
+            ValueTarget::FilterSetting {
+                owner,
+                filter_id,
+                param,
+            } => {
+                let chains = crate::filter::owner_chains(state, owner).ok()?;
+                let (_, _, filter) = chains.find(filter_id)?;
+                setting(&filter.settings, &filter.kind, param)
+            }
+            ValueTarget::SourceGain { source_id } => state
+                .source(source_id)?
+                .audio
+                .as_ref()
+                .map(|a| f64::from(a.gain_db.get())),
+            ValueTarget::BusGain { bus_id } => {
+                state.bus(bus_id).map(|b| f64::from(b.gain_db.get()))
+            }
+            ValueTarget::SendGain { source_id, bus_id } => {
+                state.send(source_id, bus_id).map(|g| f64::from(g.get()))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -152,6 +222,17 @@ fn set(
         ));
     }
     let range = range(state, kinds, &binding.target, at)?;
+    // A PTZ axis (ADR-0209) is no setting of the collection: the engine aims the head, so
+    // there is no setter to probe. Its camera belongs to the machine and isn't looked up.
+    if matches!(binding.target, ValueTarget::PtzAxis { .. }) {
+        let old = state.value_bindings.insert(id.clone(), binding.clone());
+        return Ok(vec![match old {
+            Some(binding) => Edit::BindingSetValue { binding },
+            None => Edit::BindingClearValue {
+                binding_id: id.clone(),
+            },
+        }]);
+    }
     // The engine gives the target its value through the setter, so a target the setter
     // refuses (a `scene` source's fader, a send that doesn't exist) is refused here.
     let mut work = state.clone();
@@ -272,6 +353,41 @@ fn range(
                 .bus(bus_id)
                 .ok_or_else(|| not_found(EntityKind::Bus, bus_id.as_str()))?;
             return Ok(fader);
+        }
+        // Switches (ADR-0207): the setter checks the rest (a source without audio, a
+        // `scene` source's mute, a placement its scene can't change).
+        ValueTarget::SourceMute { source_id } => {
+            state
+                .source(source_id)
+                .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+            return Ok(ValueRange::Switch);
+        }
+        ValueTarget::BusMute { bus_id } => {
+            state
+                .bus(bus_id)
+                .ok_or_else(|| not_found(EntityKind::Bus, bus_id.as_str()))?;
+            return Ok(ValueRange::Switch);
+        }
+        ValueTarget::ItemVisible { item_id, scene_id } => {
+            state
+                .item(item_id)
+                .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))?;
+            if let Some(scene_id) = scene_id {
+                state
+                    .scene(scene_id)
+                    .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
+            }
+            return Ok(ValueRange::Switch);
+        }
+        // The head's own counts (ADR-0146 §5, ADR-0209): whole numbers over the range
+        // the protocol carries.
+        ValueTarget::PtzAxis { axis, .. } => {
+            let (min, max) = axis.range();
+            return Ok(ValueRange::Number {
+                min: f64::from(min),
+                max: f64::from(max),
+                whole: true,
+            });
         }
         _ => {
             return Err(invalid(

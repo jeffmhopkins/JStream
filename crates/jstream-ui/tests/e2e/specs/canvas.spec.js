@@ -338,3 +338,36 @@ test('a locked item is selected but not moved, as OBS\'s lock does', async ({ pa
   await expect(lock).toHaveAttribute('aria-pressed', 'false');
   await expect(readout(page)).toHaveText('640 × 360');
 });
+
+test('a hidden item shows no box and takes no click until it is selected', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  const row = page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' });
+  const eye = row.getByRole('button', { name: 'Show or hide Backdrop' });
+  await row.hover();
+  const at = await rev(page);
+  await eye.click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  // Clicking the eye may have selected the row; start from no selection.
+  const corner = await onScreen(page, 40, 40);
+  await page.mouse.click(corner.x, corner.y);
+  await expect(row).not.toHaveClass(/selected/);
+
+  // Hidden and not selected: no box, no name, and a click where it was selects nothing (#1732).
+  await expect(outline(page)).toHaveCount(0);
+  const centre = await onScreen(page, 960, 540);
+  await page.mouse.click(centre.x, centre.y);
+  await expect(row).not.toHaveClass(/selected/);
+  await expect(outline(page)).toHaveCount(0);
+
+  // Selected in the list, it shows its dashed outline.
+  await row.locator('.row-main').click();
+  await expect(row).toHaveClass(/selected/);
+  await expect(outline(page)).toHaveAttribute('stroke-dasharray', '6 4');
+  await expectCorners(page, [[640, 360], [1280, 360], [1280, 720], [640, 720]]);
+
+  // Shown again, it is outlined as before.
+  await eye.click();
+  await expect.poll(() => rev(page)).toBe(at + 2);
+  await expect(outline(page)).toHaveAttribute('stroke-dasharray', 'none');
+});

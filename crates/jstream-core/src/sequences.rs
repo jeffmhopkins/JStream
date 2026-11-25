@@ -307,6 +307,7 @@ mod tests {
             Edit::TimelineSet {
                 scene_id: SceneId::new("s"),
                 timeline: TimelineInfo {
+                    folder: None,
                     timeline_id: TimelineId::new("up"),
                     name: String::new(),
                     duration_ms: 1000,

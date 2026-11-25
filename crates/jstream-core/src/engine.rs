@@ -7,6 +7,9 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+mod show_audio;
+mod shows;
+
 use crate::activity_log::{self, Activity};
 use crate::audio::{AudioRouting, MixerHandles};
 use crate::audio_sources::AudioSources;
@@ -66,7 +69,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
 use std::task::Waker;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -117,6 +120,9 @@ struct Shared {
     /// Whether the `jstream-tempo` thread has started: once per engine, however often
     /// JTunnel starts again (ADR-0147 §1).
     tempo: AtomicBool,
+    /// Wakes the live ticker early, on the collection lock, when a call moves its next
+    /// due time earlier than the one it is waiting for ([`State::start_ticker`]).
+    ticker: Condvar,
     /// Every JTunnel sender's live data (ADR-0171 decision 2), which the receiver puts
     /// state messages in and `data.list` and `data.get` read. Its lock is its own, a
     /// leaf: never taken under the collection lock by its writer, the receive thread.
@@ -239,6 +245,7 @@ impl Default for Engine {
                     sheets: AtomicUsize::new(0),
                     hearing: Mutex::new(SceneHearing::default()),
                     tempo: AtomicBool::new(false),
+                    ticker: Condvar::new(),
                     data,
                     keys: Mutex::new(None),
                     audit: Audit::default(),
@@ -308,6 +315,44 @@ impl Engine {
         drop(state);
         wake_all(wake);
         Ok(())
+    }
+
+    /// Makes `scene_id` the internal show scene, or clears it with `None`: the scene
+    /// every output, recording, virtual camera and the program monitor draw over
+    /// program, with program (its transitions included) as its bottom layer and its
+    /// items above. Its items are ordinary items: what they show, where, and whether
+    /// they are shown is edited as any scene's. Clients never see it in the scene lists,
+    /// and nothing may show it: no `scene` source, settings reference, video mix,
+    /// program or preview. The marker is saved in the collection file (ADR-0210), so
+    /// this writes the file at once, though it is not a revision; it emits no event of
+    /// its own, but if program or preview was on it, they move to the first other scene
+    /// and `studio.changed` says so.
+    ///
+    /// Returns `false`, and changes nothing, for a scene the collection doesn't have or
+    /// that something already shows ([`Graph::set_show_scene`]).
+    pub fn set_show_scene(&self, scene_id: Option<SceneId>) -> bool {
+        let mut guard = lock(&self.shared.state);
+        if !guard.graph.set_show_scene(scene_id) {
+            return false;
+        }
+        let state = &mut *guard;
+        let moved = state.studio.reconcile(state.graph.state());
+        state.publish_warm();
+        state.redraw();
+        let mut wake = Vec::new();
+        if moved {
+            state.emit_studio(
+                &ClientId::new("engine"),
+                &RequestId::new("show"),
+                None,
+                &mut wake,
+            );
+        }
+        drop(guard);
+        wake_all(wake);
+        // Not a revision, so a save that waits for `rev` to move would miss it (#1748).
+        self.shared.save_marker();
+        true
     }
 
     /// Adds an output in the `stopped` state, so `output.start`, `output.stop` and
@@ -395,6 +440,40 @@ impl Engine {
                 format!(
                     "a screen-space reflection takes {:?} steps, not {steps}",
                     jstream_protocol::SCREEN_SPACE_STEPS
+                ),
+            )));
+        }
+        if let Some(percent) = change.model_resolution
+            && percent != 0
+            && !jstream_protocol::MODEL_RESOLUTION_RANGE.contains(&percent)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "model_resolution",
+                format!(
+                    "3D models are drawn at 0 (the engine chooses) or {:?} percent, not {percent}",
+                    jstream_protocol::MODEL_RESOLUTION_RANGE
+                ),
+            )));
+        }
+        if let Some(percent) = change.min_model_resolution
+            && !jstream_protocol::MODEL_RESOLUTION_RANGE.contains(&percent)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "min_model_resolution",
+                format!(
+                    "the engine lowers 3D models to no less than {:?} percent, not {percent}",
+                    jstream_protocol::MODEL_RESOLUTION_RANGE
+                ),
+            )));
+        }
+        if let Some(samples) = change.model_antialiasing
+            && !jstream_protocol::MODEL_ANTIALIASING.contains(&samples)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "model_antialiasing",
+                format!(
+                    "a 3D model's pixel is drawn with {:?} samples, not {samples}",
+                    jstream_protocol::MODEL_ANTIALIASING
                 ),
             )));
         }
@@ -951,6 +1030,9 @@ impl Engine {
             // No client is connected yet, so nobody is woken.
             state.sync_sizes(&mut Vec::new());
             state.feed_pages();
+            // Its channels, bindings and triggers are followed from the start, not from
+            // the first action or edit: until then a channel reads 0 to what follows it.
+            state.wake_values();
             *lock(&self.shared.key_scope) = Some(crate::projects::key_scope(opened.path()));
             *file = Some(opened);
         }
@@ -1573,6 +1655,17 @@ impl Engine {
             Some(changed),
         )?);
         spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
+        // Only a sender with "Use this sender's MIDI" on runs action bindings
+        // (ADR-0123 §3, ADR-0207); every sender's MIDI is drawn.
+        if let Some(midi) = &midi {
+            midi.set_bindable(
+                setup
+                    .accepted
+                    .iter()
+                    .filter(|sender| sender.uses_midi())
+                    .map(|sender| sender.name().to_owned()),
+            );
+        }
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
         // What the collection names its senders' params (ADR-0181), given to the new
@@ -1604,6 +1697,9 @@ impl Engine {
             return;
         }
         wanted.set_jtunnel(None);
+        if let Some(midi) = lock(&self.shared.state).live.midi() {
+            midi.set_bindable(Vec::new());
+        }
         self.jtunnel_turned();
     }
 
@@ -1657,6 +1753,22 @@ impl Engine {
             }),
             Query::ChannelValues => Some(QueryResult::ChannelValues {
                 channels: lock(&self.shared.state).channels.values(),
+            }),
+            Query::MidiLastNotes => Some(QueryResult::MidiLastNotes {
+                notes: lock(&self.shared.state)
+                    .live
+                    .midi()
+                    .map(|midi| midi.last_notes())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(input, (count, note))| jstream_protocol::MidiNoteInfo {
+                        input,
+                        channel: note.channel + 1,
+                        note: note.key,
+                        velocity: note.velocity,
+                        count,
+                    })
+                    .collect(),
             }),
             Query::MidiLastControls => Some(QueryResult::MidiLastControls {
                 controls: lock(&self.shared.state)
@@ -1760,6 +1872,28 @@ impl Engine {
         self.media
             .as_ref()
             .is_some_and(|host| lock(&host.gate).program().is_some())
+    }
+
+    /// How many encoder sessions the stage's preview streams hold between them, for
+    /// tests of what they share.
+    #[cfg(test)]
+    pub(crate) fn preview_encodes_open(&self) -> usize {
+        self.media.as_ref().map_or(0, |host| {
+            lock(&host.gate)
+                .program()
+                .map_or(0, |program| program.preview_encodes().open())
+        })
+    }
+
+    /// Each encoder session the stage's preview streams hold, by identity, and the scene
+    /// it shows, for tests of `preview.show`.
+    #[cfg(test)]
+    pub(crate) fn preview_encodes_shown(&self) -> Vec<(u64, Option<SceneId>)> {
+        self.media.as_ref().map_or_else(Vec::new, |host| {
+            lock(&host.gate)
+                .program()
+                .map_or_else(Vec::new, |program| program.preview_encodes().shown())
+        })
     }
 
     /// Encoder and subscriber counters for `output_id`, if it is running.
@@ -2179,6 +2313,15 @@ impl Engine {
             .cloned()
     }
 
+    /// `read` of the collection as the engine draws and hears it, with open gestures'
+    /// drawn values applied (ADR-0091, ADR-0213).
+    #[cfg(test)]
+    pub(crate) fn drawn<R>(&self, read: impl FnOnce(&jstream_graph::State) -> R) -> R {
+        let state = lock(&self.shared.state);
+        let graph = state.shown.as_ref().unwrap_or(&state.graph);
+        read(graph.state())
+    }
+
     /// Sets how many undo steps each client keeps (100 by default). The oldest steps
     /// are dropped first, and 0 keeps none.
     #[must_use]
@@ -2322,6 +2465,25 @@ impl Engine {
             request_id = %request_id,
         );
         let _entered = span.enter();
+        // `output.toggle` runs as the `output.start` or `output.stop` it resolves to,
+        // with that action's events, audit entry and errors (ADR-0208).
+        if let Call::Action {
+            action: Action::OutputToggle { output_id },
+        } = &call
+        {
+            let running = lock(&self.shared.state)
+                .outputs
+                .running()
+                .contains(output_id);
+            let output_id = output_id.clone();
+            let action = if running {
+                Action::OutputStop { output_id }
+            } else {
+                Action::OutputStart { output_id }
+            };
+            drop(_entered);
+            return self.execute(client_id, request_id, Call::Action { action }, previews);
+        }
         if matches!(
             call,
             Call::Query {
@@ -2482,8 +2644,36 @@ impl Engine {
                     profile: Box::new(profile),
                 },
             })
+        } else if let Call::Query {
+            query: Query::SceneDrawnCamera { scene_id },
+        } = &call
+        {
+            // Read from the drawers' slots, never from the render thread itself; the
+            // collection lock is held only to check that the scene exists.
+            let known = lock(&self.shared.state)
+                .graph
+                .state()
+                .scene(scene_id)
+                .is_some();
+            if known {
+                let now = std::time::Instant::now();
+                Ok(CallResult::Query {
+                    result: QueryResult::SceneDrawnCamera {
+                        camera: self.shared.profile.drawn_camera(scene_id, now),
+                    },
+                })
+            } else {
+                Err(ProtocolError::NotFound {
+                    entity: EntityKind::Scene,
+                    id: scene_id.as_str().to_owned(),
+                })
+            }
         } else if let Call::Action {
-            action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
+            action:
+                action @ (Action::PreviewSubscribe { .. }
+                | Action::PreviewUnsubscribe { .. }
+                | Action::PreviewShow { .. }
+                | Action::PreviewRequestKeyframe { .. }),
         } = call
         {
             self.preview_action(previews, action)
@@ -2503,7 +2693,7 @@ impl Engine {
             self.run_media_action(call)
         } else {
             let mut wake = Vec::new();
-            let (result, stale, ended, rev, client_name) = {
+            let (result, stale, ended, rev, client_name, save) = {
                 let mut state = lock(&self.shared.state);
                 let (result, stale) =
                     state.execute_and_unbind_keys(client_id, request_id, call, &mut wake);
@@ -2517,13 +2707,17 @@ impl Engine {
                         .cloned()
                         .unwrap_or_default()
                 };
-                (result, stale, ended, state.graph.rev(), name)
+                let save = std::mem::take(&mut state.save_pending);
+                (result, stale, ended, state.graph.rev(), name, save)
             };
             for waker in wake {
                 waker.wake();
             }
             self.remove_stale_keys(stale);
             self.audit_gestures(ended, rev, &client_name);
+            if save {
+                self.save_collection();
+            }
             self.with_key_set(result)
         };
         // Before the save, so a client that reads `activity.list` after the call's events
@@ -2786,6 +2980,30 @@ impl Engine {
                 }
                 Ok(CallResult::Action { result: None })
             }
+            Action::PreviewShow { channel, scene_id } => {
+                if let Some(scene_id) = &scene_id
+                    && lock(&self.shared.state)
+                        .graph
+                        .state()
+                        .scene(scene_id)
+                        .is_none()
+                {
+                    return Err(ProtocolError::NotFound {
+                        entity: EntityKind::Scene,
+                        id: scene_id.as_str().to_owned(),
+                    });
+                }
+                if previews.show(&self.shared.previews, channel, scene_id)? {
+                    // Plans the new scene, which the stream waits for, and stops planning
+                    // the old one unless another stream shows it.
+                    self.shared.replan_and_sync();
+                }
+                Ok(CallResult::Action { result: None })
+            }
+            Action::PreviewRequestKeyframe { channel } => {
+                previews.keyframe(&self.shared.previews, channel);
+                Ok(CallResult::Action { result: None })
+            }
             other => Err(not_implemented(other.name())),
         }
     }
@@ -2941,7 +3159,12 @@ impl Engine {
             }
         }
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        let hardware = count(sessions.iter().filter(|e| e.hardware()).count());
+        // The preview streams' hardware sessions count too (#1691): they are among the
+        // sessions a capped encoder has given out.
+        let preview = gate
+            .program()
+            .map_or(0, |program| program.preview_hardware().taken());
+        let hardware = count(sessions.iter().filter(|e| e.hardware()).count() + preview);
         let encoder = gate
             .running
             .get(output_id)
@@ -2959,7 +3182,7 @@ impl Engine {
                 hardware: own.hardware(),
                 dedicated: own.dedicated(),
             });
-        (encoder, count(sessions.len()), hardware)
+        (encoder, count(sessions.len() + preview), hardware)
     }
 
     fn host(&mut self) -> Arc<MediaHost> {
@@ -3005,19 +3228,21 @@ impl Engine {
     }
 
     /// `capture.targets`: what the platform's capture backend can capture now, then the
-    /// video devices with the formats the engine reads of each, listed with no engine
-    /// lock held, since listing windows and devices calls the OS. A list that fails is
-    /// left out, and logged; the query fails only when both do.
+    /// video devices with the formats the engine reads of each, then the audio input and
+    /// output devices, listed with no engine lock held, since listing windows and
+    /// devices calls the OS. A list that fails is left out, and logged; the query fails
+    /// only when all three do.
     fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
         let backends = self.media.as_ref().and_then(|host| {
             lock(&host.backends).as_ref().map(|backends| {
                 (
                     Arc::clone(&backends.capture),
                     Arc::clone(&backends.video_devices),
+                    Arc::clone(&backends.audio),
                 )
             })
         });
-        let Some((capture, devices)) = backends else {
+        let Some((capture, devices, audio)) = backends else {
             return Err(ProtocolError::ActionFailed {
                 reason: "the engine has no capture backend".into(),
             });
@@ -3028,28 +3253,22 @@ impl Engine {
         let listed = devices
             .devices()
             .map_err(|err| format!("listing video devices: {err}"));
-        let (mut targets, devices_listed) = match (captured, listed) {
-            (Err(capture), Err(devices)) => {
-                return Err(ProtocolError::ActionFailed {
-                    reason: format!("{capture}; {devices}"),
-                });
-            }
-            (captured, listed) => {
-                let targets: Vec<_> = match captured {
-                    Ok(targets) => targets
-                        .into_iter()
-                        .filter_map(capture_target_info)
-                        .collect(),
-                    Err(err) => {
-                        tracing::warn!(error = %err, "capture.targets lists the video devices only");
-                        Vec::new()
-                    }
-                };
-                let listed = listed.unwrap_or_else(|err| {
-                    tracing::warn!(error = %err, "capture.targets lists no video devices");
-                    Vec::new()
-                });
-                (targets, listed)
+        let heard = audio
+            .devices()
+            .map_err(|err| format!("listing audio devices: {err}"));
+        if let (Err(capture), Err(devices), Err(audio)) = (&captured, &listed, &heard) {
+            return Err(ProtocolError::ActionFailed {
+                reason: format!("{capture}; {devices}; {audio}"),
+            });
+        }
+        let mut targets: Vec<_> = match captured {
+            Ok(targets) => targets
+                .into_iter()
+                .filter_map(capture_target_info)
+                .collect(),
+            Err(err) => {
+                tracing::warn!(error = %err, "capture.targets lists no displays or windows");
+                Vec::new()
             }
         };
         let rank = |kind: CaptureTargetKind| match kind {
@@ -3058,11 +3277,18 @@ impl Engine {
             _ => 2,
         };
         targets.sort_by_key(|info| rank(info.kind));
-        targets.extend(
-            devices_listed
-                .into_iter()
-                .map(|device| device_target_info(devices.as_ref(), device)),
-        );
+        match listed {
+            Ok(listed) => targets.extend(
+                listed
+                    .into_iter()
+                    .map(|device| device_target_info(devices.as_ref(), device)),
+            ),
+            Err(err) => tracing::warn!(error = %err, "capture.targets lists no video devices"),
+        }
+        match heard {
+            Ok(heard) => targets.extend(audio_target_infos(heard)),
+            Err(err) => tracing::warn!(error = %err, "capture.targets lists no audio devices"),
+        }
         Ok(CallResult::Query {
             result: QueryResult::CaptureTargets { targets },
         })
@@ -3772,6 +3998,22 @@ impl Engine {
         Arc::clone(&lock(&self.shared.state).render)
     }
 
+    /// Shows or hides an item of the show scene as the show runner does, for tests
+    /// (`State::set_show_scene_item_shown`).
+    #[cfg(test)]
+    pub(crate) fn set_show_scene_item_shown(
+        &self,
+        item_id: &jstream_protocol::ItemId,
+        visible: bool,
+        fade_ms: Option<u32>,
+    ) -> Result<(), ProtocolError> {
+        let mut wake = Vec::new();
+        let result = lock(&self.shared.state)
+            .set_show_scene_item_shown(item_id, visible, fade_ms, &mut wake);
+        wake_all(wake);
+        result
+    }
+
     /// What the preview hub reads for its next picture, for tests: it follows the
     /// program's motion controls as a picture drawn with no output running does.
     #[cfg(test)]
@@ -3863,6 +4105,22 @@ impl Engine {
     pub(crate) fn settle_sources(&self) -> bool {
         let worker = lock(&self.shared.state).live.worker();
         worker.settled(Duration::from_secs(10))
+    }
+
+    /// The scene a show runs to next ([`State::set_upcoming`]), for tests.
+    #[cfg(test)]
+    pub(crate) fn upcoming(&self) -> Option<String> {
+        lock(&self.shared.state)
+            .studio
+            .upcoming()
+            .map(|id| id.as_str().to_owned())
+    }
+
+    /// [`State::set_upcoming`], for tests that name it without a show.
+    #[cfg(test)]
+    pub(crate) fn set_upcoming(&self, scene_id: Option<&str>) -> Result<(), ProtocolError> {
+        let scene_id = scene_id.map(SceneId::new);
+        lock(&self.shared.state).set_upcoming(scene_id.as_ref())
     }
 
     /// How many plans of the program mix ran (ADR-0103's meters), for tests.
@@ -4606,6 +4864,8 @@ struct WarmLimit<'a> {
     bytes: Option<u64>,
     /// The Preview scene, which no limit leaves cold.
     preview: Option<&'a SceneId>,
+    /// The scene a show runs to next, which no limit leaves cold either.
+    upcoming: Option<&'a SceneId>,
     /// The frames stored with `set_source_frame`.
     frames: &'a BTreeMap<SourceId, Frame>,
 }
@@ -4818,7 +5078,7 @@ impl WarmCaptures {
                     bytes = bytes.saturating_add(capture);
                 }
             }
-            let preview = limit.preview == Some(&scene.id);
+            let preview = limit.preview == Some(&scene.id) || limit.upcoming == Some(&scene.id);
             if !preview
                 && limit
                     .bytes
@@ -4924,6 +5184,16 @@ struct State {
     fired: crate::motion::Fired,
     /// The timelines playing (ADR-0115): studio state, like the program scene.
     timelines: crate::timelines::Timelines,
+    /// The show running (ADR-0210): studio state, like the program scene.
+    show: Option<shows::Run>,
+    /// The faders the show's audio tracks drive (ADR-0210 decision 3).
+    show_audio: show_audio::ShowAudio,
+    /// Whether the running show is switching scenes, so the switch isn't taken as a
+    /// hand switch that sends it off script.
+    show_switching: bool,
+    /// Whether the engine changed the collection itself outside a batch (the show
+    /// scene and its overlay items), so the call or tick that did it saves it.
+    save_pending: bool,
     /// While a timeline's cue runs, its exact time on the animation clock, which a
     /// transition, a fire or a `source.restart` it starts takes as its start
     /// (ADR-0099 decision 4).
@@ -4961,10 +5231,18 @@ struct State {
     /// Whether the live ticker thread is running: it sends coalesced `live.changed`
     /// events and releases committed live values ([`live_ticker`]).
     ticking: bool,
+    /// Counts the calls that may have moved the live ticker's next due time while it
+    /// runs: it waits only while this is the count it planned with ([`live_ticker`]).
+    ticker_rev: u64,
     /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
     driver: crate::value_bindings::ValueDriver,
-    /// Whether the `jstream-values` thread is running: it ticks [`State::channels`] and
-    /// [`State::driver`] while the collection holds a channel or a value binding.
+    /// How far the action bindings have read each MIDI input (ADR-0122, ADR-0207).
+    action_bindings: crate::action_bindings::ActionBindings,
+    /// What each data trigger's field last read, and its held press (ADR-0202).
+    data_triggers: crate::data_triggers::DataTriggers,
+    /// Whether the `jstream-values` thread is running: it ticks [`State::channels`],
+    /// [`State::action_bindings`] and [`State::driver`] while the collection holds a
+    /// channel, an action binding or a value binding.
     values_ticking: bool,
     /// The channels' live values (ADR-0183): never stored.
     channels: crate::channels::ChannelDriver,
@@ -4999,6 +5277,9 @@ struct State {
     /// size has no entry. Beside it, the depth of a source with depth (a 3D model,
     /// ADR-0107 decision 8).
     sizes: BTreeMap<SourceId, (FrameSize, Option<u32>)>,
+    /// Each source's length in milliseconds as `source.size_changed` last announced it,
+    /// for a source with a known length (a `media` file): runtime state like `sizes`.
+    durations: BTreeMap<SourceId, u64>,
     /// The size of each capture the program stage runs, as its render thread reports
     /// it: what a `display`, `window` or `webcam` source's size comes from.
     capture_sizes: BTreeMap<CaptureKey, FrameSize>,
@@ -5095,6 +5376,21 @@ impl State {
                 "ends_gesture",
                 format!("the client has no open gesture `{gesture_id}`"),
             ));
+        }
+        // The show scene is the engine's own (ADR-0210 decision 12): a client can't
+        // delete it, so no undo ever brings it back unmarked.
+        if let Some(show) = self.graph.state().show_scene() {
+            // Clients never see it, so it is answered as a scene that isn't there.
+            if batch
+                .edits
+                .iter()
+                .any(|edit| matches!(edit, Edit::SceneDelete { scene_id } if scene_id == show))
+            {
+                return Err(ProtocolError::NotFound {
+                    entity: EntityKind::Scene,
+                    id: show.to_string(),
+                });
+            }
         }
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
@@ -5255,8 +5551,11 @@ impl State {
         cause: Option<HistoryDirection>,
         wake: &mut Vec<Waker>,
     ) {
+        // Before the events below: none names the show scene as the change left it.
+        self.subscribers.follow(&self.graph);
         self.outputs.sync(self.graph.state());
         self.reconcile_timelines(wake);
+        self.reconcile_show(wake);
         self.reconcile_keyframes(client_id, request_id, wake);
         self.refresh_shown();
         self.name_jtunnel_params();
@@ -5286,13 +5585,10 @@ impl State {
         self.route_audio();
         self.publish_render();
         let state = self.graph.state();
-        if self.gestures.drop_missing(
-            |item_id, keyframe| {
-                state.item(item_id).is_some() && keyframe.is_none_or(|id| is_keyframe(state, id))
-            },
-            |source_id| state.source(source_id).is_some(),
-            |scene_id| state.scene(scene_id).is_some(),
-        ) {
+        if self
+            .gestures
+            .drop_missing(state, |id| is_keyframe(state, id))
+        {
             self.publish_live();
             if self.refresh_shown() {
                 self.redraw();
@@ -5343,6 +5639,7 @@ impl State {
             );
         }
         self.sequences.restart();
+        self.show_stop(jstream_protocol::ShowChange::Stopped, wake);
         for timeline_id in self.timelines.ids() {
             if let Some(playing) = self.timelines.stop(&timeline_id) {
                 self.subscribers.emit(
@@ -5508,8 +5805,12 @@ impl State {
         {
             // A channel the collection has just gained is followed before a lane takes it.
             let midi = self.live.midi();
-            self.channels
-                .keep(&self.graph, midi.as_deref(), &engine.data);
+            self.channels.keep(
+                &self.graph,
+                midi.as_deref(),
+                &engine.data,
+                self.live.filter_assets().motion_heard(),
+            );
         }
         self.channels
             .lanes_start(timeline_id, &info, start, from_ms.is_some());
@@ -5561,6 +5862,9 @@ impl State {
     fn clock_moved(&mut self, wake: &mut Vec<Waker>) {
         self.live.clock_moved();
         if self.cue_at.is_none() {
+            // The show first: a sequence it starts is then ticked with the others.
+            self.show_tick(wake);
+            self.show_audio_tick(wake);
             self.timeline_tick(wake);
             self.start_ticker();
         }
@@ -5856,10 +6160,11 @@ impl State {
         Ok(())
     }
 
-    /// Whether the `jstream-values` thread has work: a value binding, a channel, a
-    /// timeline trigger or a wait.
+    /// Whether the `jstream-values` thread has work: a value binding, an action binding,
+    /// a channel, a timeline trigger or a wait.
     fn needs_values(&self) -> bool {
         self.graph.value_bindings().len() > 0
+            || self.graph.state().bindings().next().is_some()
             || self.graph.channels().len() > 0
             || self.sequences.is_waiting()
             || crate::sequences::Sequences::has_triggers(&self.graph)
@@ -5872,10 +6177,17 @@ impl State {
         }
     }
 
-    /// Starts the live ticker if a timeline plays and it isn't running, so the timeline's
-    /// cues fire when they fall due.
+    /// Starts the live ticker if a timeline plays or a show runs and it isn't running, so
+    /// their cues fire when they fall due. If it is running, wakes it, so it plans again
+    /// from what this call changed: a timeline started or a show jumped while it waits
+    /// for a later cue is not left late.
     fn start_ticker(&mut self) {
-        if !self.timelines.is_empty() && !self.ticking {
+        if self.ticking {
+            self.ticker_rev = self.ticker_rev.wrapping_add(1);
+            if let Some(shared) = self.shared.upgrade() {
+                shared.ticker.notify_all();
+            }
+        } else if !self.timelines.is_empty() || self.show_ticking() || !self.show_audio.is_empty() {
             self.ticking = spawn_live_ticker(self.shared.clone());
         }
     }
@@ -6024,6 +6336,7 @@ impl State {
             }
             _ => None,
         };
+        let carried = self.running_fades(now).unwrap_or_default();
         self.graph
             .place_keyframe(scene_id.clone(), keyframe_id.clone());
         self.refresh_shown();
@@ -6042,6 +6355,8 @@ impl State {
                     by_item: true,
                     from_camera,
                     via: Vec::new(),
+                    in_place: false,
+                    carried,
                 }),
             );
         }
@@ -6071,6 +6386,10 @@ impl State {
         }
         if let Some((field, reason)) = action.play_problem() {
             return Err(ProtocolError::invalid_argument(field, reason));
+        }
+        if let Some(done) = self.show_action(client_id, request_id, &action, wake) {
+            done?;
+            return Ok(CallResult::action());
         }
         if jstream_protocol::camera_aim_scene(&action).is_some() {
             self.aim_camera(client_id, &action)?;
@@ -6139,6 +6458,14 @@ impl State {
             }
             Action::ItemToggle { item_id, scene_id } => {
                 self.set_shown(client_id, request_id, item_id, scene_id, None, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::SourceMute { source_id, to } => {
+                self.set_muted(client_id, request_id, Muting::Source(source_id), to, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::BusMute { bus_id, to } => {
+                self.set_muted(client_id, request_id, Muting::Bus(bus_id), to, wake)?;
                 return Ok(CallResult::action());
             }
             Action::ValuesSet { name, value } => {
@@ -6257,7 +6584,22 @@ impl State {
                 self.live.restart(&source_id, self.action_now());
                 return Ok(CallResult::action());
             }
+            Action::SourceSeek { source_id, at_ms } => {
+                if self.graph.state().source(&source_id).is_none() {
+                    return Err(ProtocolError::NotFound {
+                        entity: EntityKind::Source,
+                        id: source_id.to_string(),
+                    });
+                }
+                let to = jstream_media::MediaTime::new(
+                    i64::try_from(at_ms).unwrap_or(i64::MAX),
+                    jstream_media::Timebase::MILLIS,
+                );
+                self.live.seek(&source_id, self.action_now(), to);
+                return Ok(CallResult::action());
+            }
             other @ (Action::PairingStart
+            | Action::PairingAnswer { .. }
             | Action::DeviceRevoke { .. }
             | Action::AgentApprove { .. }
             | Action::AgentForget { .. }
@@ -6385,6 +6727,8 @@ impl State {
                     }
                 }
                 Query::StudioGet => QueryResult::StudioGet {
+                    show: self.show_report(),
+                    overlays: self.overlay_report(),
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
                     warm_scenes: Some(
@@ -6437,6 +6781,7 @@ impl State {
                                 source_id: source.id().clone(),
                                 size: known.map(|(size, _)| pixel_size(size)),
                                 depth: known.and_then(|(_, depth)| depth),
+                                duration_ms: self.durations.get(source.id()).copied(),
                             }
                         })
                         .collect(),
@@ -6471,6 +6816,8 @@ impl State {
         }
         let now = self.action_now();
         self.switched_at = Some(now);
+        // The fades of a Move this one cuts short, which go on (ADR-0237 decision 2).
+        let carried = self.running_fades(now).unwrap_or_default();
         let running = match (run, from_scene) {
             (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
@@ -6522,12 +6869,15 @@ impl State {
                     from_camera,
                     // Only a Move within the family follows a path (ADR-0166 decision 2).
                     via: if by_item { via } else { Vec::new() },
+                    in_place: false,
+                    carried,
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
             _ => None,
         };
         self.studio.switch(scene_id, running);
+        self.show_hand_switch(wake);
         let end_ms = self.publish_render();
         // The new scene's `when_shown` audio follows at the switch, ramping over one
         // mixer block; it doesn't follow the transition's timing yet (D29).
@@ -6544,6 +6894,76 @@ impl State {
         Ok(())
     }
 
+    /// Runs `source.mute` or `bus.mute` (ADR-0207): the `source.set_audio` or
+    /// `bus.set_fader` edit that sets the mute `to` asks for, applied as `item.show`'s is,
+    /// never a step of the sender's undo history. Setting the mute it already has changes
+    /// nothing, but what the edit would refuse is refused. The mixer reads the new mute
+    /// on its next block and ramps to it over that block, so nothing clicks or reopens.
+    fn set_muted(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        target: Muting,
+        to: jstream_protocol::MuteTo,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let (now, edit) = match target {
+            Muting::Source(source_id) => {
+                let source = state
+                    .source(&source_id)
+                    .ok_or_else(|| ProtocolError::NotFound {
+                        entity: EntityKind::Source,
+                        id: source_id.to_string(),
+                    })?;
+                let now = source.audio().is_some_and(|audio| audio.muted);
+                (
+                    now,
+                    Edit::SourceSetAudio {
+                        source_id,
+                        enabled: None,
+                        follow: None,
+                        gain_db: None,
+                        muted: Some(to.muted(now)),
+                    },
+                )
+            }
+            Muting::Bus(bus_id) => {
+                let bus = state.bus(&bus_id).ok_or_else(|| ProtocolError::NotFound {
+                    entity: EntityKind::Bus,
+                    id: bus_id.to_string(),
+                })?;
+                let now = bus.muted();
+                (
+                    now,
+                    Edit::BusSetFader {
+                        bus_id,
+                        gain_db: None,
+                        muted: Some(to.muted(now)),
+                    },
+                )
+            }
+        };
+        let edits = vec![edit];
+        let running = self.outputs.running();
+        if to.muted(now) == now {
+            // Nothing to change, but a source the edit would refuse is refused here too.
+            self.graph
+                .clone()
+                .apply_with_running(&edits, None, &running)
+                .map_err(action_field)?;
+            return Ok(());
+        }
+        let applied = self
+            .graph
+            .apply_with_running(&edits, None, &running)
+            .map_err(action_field)?;
+        self.history
+            .record_batch(client_id, applied.rev, applied.touched, Vec::new());
+        self.changed(client_id, request_id, &edits, applied.rev, None, wake);
+        Ok(())
+    }
+
     /// `item.show`, `item.hide` and `item.toggle` (ADR-0101): sets the placement's
     /// visibility to `visible`, or to the opposite of what it is for `None`, as
     /// `item.set_visible` would. The change moves `rev` on and is logged for undo
@@ -6551,8 +6971,10 @@ impl State {
     /// the program scene's tree holds the item, the change plays as a Move from what is
     /// on screen to the program scene, pairing every item with itself, so only this
     /// item moves: it appears or disappears with its own effect, over the default
-    /// preset's duration and easing ([`item_run`]). Showing a shown item, or hiding a
-    /// hidden one, changes nothing.
+    /// preset's duration and easing ([`item_run`]). An item of the internal show scene
+    /// plays the same effect on its own, over program, apart from any transition program
+    /// runs ([`Self::show_scene_shown`]). Showing a shown item, or hiding a hidden one,
+    /// changes nothing.
     fn set_shown(
         &mut self,
         client_id: &ClientId,
@@ -6570,6 +6992,9 @@ impl State {
                 id: item_id.to_string(),
             })?;
         let visible = visible.unwrap_or(!current);
+        if scene_id.is_none() && self.in_show_scene(&item_id) {
+            return self.show_scene_shown((client_id, request_id), item_id, visible, None, wake);
+        }
         let edits = vec![Edit::ItemSetVisible {
             item_id: item_id.clone(),
             scene_id,
@@ -6620,6 +7045,12 @@ impl State {
             let shown = self.graph.state().visible_in(&item_id, Some(program));
             (self.screen_now(program, run, now), shown)
         });
+        // From the program scene as it was drawn: at rest, or partway through a Move
+        // drawn as the scene with its fades, which go on (ADR-0237); never one drawn
+        // track by track.
+        let carried = self.running_fades(now);
+        let in_place = carried.is_some();
+        let carried = carried.unwrap_or_default();
         let applied = self
             .graph
             .apply_with_running(&edits, None, &running)
@@ -6648,9 +7079,144 @@ impl State {
                     by_item: true,
                     from_camera,
                     via: Vec::new(),
+                    in_place,
+                    carried,
                 }),
             );
         }
+        self.changed(client_id, request_id, &edits, applied.rev, None, wake);
+        Ok(())
+    }
+
+    /// The fades still running at `now` of the Move on program, which a cue cutting it
+    /// short carries on (ADR-0237 decision 2): none when nothing runs, and `None` when it
+    /// is drawn track by track.
+    fn running_fades(&mut self, now: MediaTime) -> Option<snapshot::ShowFades> {
+        let Some(running) = self.studio.running() else {
+            return Some(snapshot::ShowFades::new());
+        };
+        let Self {
+            graph,
+            shown,
+            frames,
+            frame_versions,
+            live,
+            ..
+        } = self;
+        let graph: &Graph = shown.as_ref().unwrap_or(graph);
+        let assets = live.filter_assets();
+        snapshot::glide_fades(
+            graph,
+            running,
+            now,
+            &mut |id| match frames.get(id) {
+                Some(frame) => Some(Look::frame(frame.clone(), None)),
+                None => live.look_quiet(id, now, frame_versions),
+            },
+            &assets,
+        )
+    }
+
+    /// Whether `item_id` is an item of the internal show scene's own.
+    fn in_show_scene(&self, item_id: &jstream_protocol::ItemId) -> bool {
+        let state = self.graph.state();
+        state.show_scene().is_some_and(|show| {
+            state
+                .item(item_id)
+                .is_some_and(|(scene, _)| scene.id() == show)
+        })
+    }
+
+    /// Shows (`visible`) or hides `item_id`, an item of the internal show scene, for the
+    /// show runner: as `item.show` or `item.hide` would, by the engine, so it is no
+    /// client's undo step. With `fade_ms`, it fades over that many milliseconds (0
+    /// cuts) in place of its own effect. Showing a shown item, or hiding a hidden one,
+    /// changes nothing.
+    ///
+    /// # Errors
+    /// `not_found` for an item the collection doesn't have, and `invalid_argument` for
+    /// one that is not the show scene's.
+    pub(crate) fn set_show_scene_item_shown(
+        &mut self,
+        item_id: &jstream_protocol::ItemId,
+        visible: bool,
+        fade_ms: Option<u32>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        if self.graph.state().item(item_id).is_none() {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: item_id.to_string(),
+            });
+        }
+        if !self.in_show_scene(item_id) {
+            return Err(ProtocolError::invalid_argument(
+                "item_id",
+                "not an item of the show scene",
+            ));
+        }
+        let client_id = ClientId::new(crate::history::ENGINE_CLIENT);
+        self.show_scene_shown(
+            (&client_id, &RequestId::new("show")),
+            item_id.clone(),
+            visible,
+            fade_ms,
+            wake,
+        )
+    }
+
+    /// Sets the visibility of `item_id`, an item of the internal show scene, to
+    /// `visible`, and fades it in or out over program on its own: by its own effect, over
+    /// the default preset's duration and easing as `item.show` runs it on program
+    /// ([ADR-0101](../../../docs/adr/0101-item-show-hide-actions.md) decision 4), or a
+    /// plain fade of `fade_ms` (0 cuts). The fade is studio state beside program's
+    /// transition, which it leaves running, so the two overlap. A change made for the
+    /// engine itself ([`crate::history::ENGINE_CLIENT`]) is logged for undo conflicts as
+    /// the engine's; any other as its client's, as `item.show`'s is.
+    fn show_scene_shown(
+        &mut self,
+        (client_id, request_id): (&ClientId, &RequestId),
+        item_id: jstream_protocol::ItemId,
+        visible: bool,
+        fade_ms: Option<u32>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let Some((_, item)) = state.item(&item_id) else {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: item_id.to_string(),
+            });
+        };
+        if item.visible() == visible {
+            return Ok(());
+        }
+        let settings = *item.transition();
+        let now = self.action_now();
+        let fade = transition::ShowFade::of(
+            settings,
+            visible,
+            item_run(&self.graph).as_ref(),
+            fade_ms,
+            now,
+        );
+        let edits = vec![Edit::ItemSetVisible {
+            item_id: item_id.clone(),
+            scene_id: None,
+            visible,
+        }];
+        let running = self.outputs.running();
+        let applied = self
+            .graph
+            .apply_with_running(&edits, None, &running)
+            .map_err(action_field)?;
+        if client_id.as_str() == crate::history::ENGINE_CLIENT {
+            self.history.record_engine(applied.rev, applied.touched);
+        } else {
+            self.history
+                .record_batch(client_id, applied.rev, applied.touched, Vec::new());
+        }
+        self.studio.fade(item_id, fade, now);
         self.changed(client_id, request_id, &edits, applied.rev, None, wake);
         Ok(())
     }
@@ -6680,6 +7246,8 @@ impl State {
             by_item: true,
             from_camera: transition::camera_of(&self.graph, program),
             via: Vec::new(),
+            in_place: false,
+            carried: Default::default(),
         };
         let Self {
             graph,
@@ -6747,28 +7315,36 @@ impl State {
             frames,
             live,
             sizes,
+            durations,
             capture_sizes,
             subscribers,
             ..
         } = self;
         let state = graph.state();
-        let mut emit = |source_id: &SourceId, known: Option<(FrameSize, Option<u32>)>| {
+        let mut emit = |source_id: &SourceId,
+                        known: Option<(FrameSize, Option<u32>)>,
+                        duration_ms: Option<u64>| {
             subscribers.emit(
                 &Event::SourceSizeChanged {
                     source_id: source_id.clone(),
                     size: known.map(|(size, _)| pixel_size(size)),
                     depth: known.and_then(|(_, depth)| depth),
+                    duration_ms,
                 },
                 wake,
             );
         };
-        sizes.retain(|source_id, _| {
-            let kept = state.source(source_id).is_some();
-            if !kept {
-                emit(source_id, None);
-            }
-            kept
-        });
+        let gone: BTreeSet<SourceId> = sizes
+            .keys()
+            .chain(durations.keys())
+            .filter(|id| state.source(id).is_none())
+            .cloned()
+            .collect();
+        for source_id in &gone {
+            sizes.remove(source_id);
+            durations.remove(source_id);
+            emit(source_id, None, None);
+        }
         for source in state.sources() {
             let source_id = source.id();
             let now = match frames.get(source_id) {
@@ -6781,14 +7357,21 @@ impl State {
                         .map(|size| (*size, None)),
                 },
             };
-            if sizes.get(source_id) == now.as_ref() {
+            let duration_ms = live.duration_ms(source_id);
+            if sizes.get(source_id) == now.as_ref()
+                && durations.get(source_id).copied() == duration_ms
+            {
                 continue;
             }
             match now {
                 Some(size) => sizes.insert(source_id.clone(), size),
                 None => sizes.remove(source_id),
             };
-            emit(source_id, now);
+            match duration_ms {
+                Some(ms) => durations.insert(source_id.clone(), ms),
+                None => durations.remove(source_id),
+            };
+            emit(source_id, now, duration_ms);
         }
     }
 
@@ -6854,6 +7437,8 @@ impl State {
     /// still program asks for none, and the switch back would then be the next plan:
     /// no `restart_on_show` reload, and a page that never rests (#1185).
     fn publish_render(&mut self) -> Option<f32> {
+        // Every change to the show scene is planned through here, so events follow it.
+        self.subscribers.follow(&self.graph);
         let transitioning = self.studio.running().is_some();
         let end_ms = self.publish_render_once();
         if transitioning && self.studio.running().is_none() {
@@ -6864,12 +7449,25 @@ impl State {
 
     /// Publishes the warm scenes' captures and sources (ADR-0117 §7) after the warm scenes changed
     /// with no plan of the program mix, as a new Preview scene does.
+    /// Names the scene a show runs to next, or `None` when no show runs (alpha.13
+    /// ST6): it is kept warm past the budget and the GPU limit, beside Preview, so a
+    /// media file on it is held at its first frame and the cut to it starts nothing.
+    /// The warm scenes are published again when it changed. A scene the collection
+    /// doesn't hold is `not_found`.
+    pub(crate) fn set_upcoming(&mut self, scene_id: Option<&SceneId>) -> Result<(), ProtocolError> {
+        if self.studio.set_upcoming(self.graph.state(), scene_id)? {
+            self.publish_warm();
+        }
+        Ok(())
+    }
+
     fn publish_warm(&mut self) {
         let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
         let assets = self.live.filter_assets();
         let limit = WarmLimit {
             bytes: self.studio.gpu_limit(),
             preview: self.studio.preview(),
+            upcoming: self.studio.upcoming(),
             frames: &self.frames,
         };
         let warm = self.warm.update(
@@ -6882,6 +7480,11 @@ impl State {
         self.render.publish_warm(warm);
         self.render.publish_warm_models(self.warm.models());
         self.live.set_warm(self.warm.sources());
+        // Their stills too, so a switch to one draws them at once (ADR-0212).
+        let stills = self
+            .live
+            .warm_stills(&self.frames, &mut self.frame_versions);
+        self.render.publish_warm_stills(stills);
         // A source that left the warm scenes rests now if nothing drew it in the
         // latest plans, as it would after one.
         self.live.rest_undrawn();
@@ -6912,12 +7515,17 @@ impl State {
         // collection's.
         let graph: &Graph = shown.as_ref().unwrap_or(graph);
         let now = live.now();
+        // The show scene's fades that have ended: their items are planned at rest.
+        studio.end_fades(graph.state(), now);
         live.begin_plan();
         let assets = live.filter_assets();
-        let mut planning = snapshot::plan_with(
+        let mut planning = snapshot::plan_program(
             graph,
             studio.program(),
-            studio.running().map(|running| (running, now)),
+            (
+                studio.running().map(|running| (running, now)),
+                studio.fades(),
+            ),
             &mut |id| match frames.get(id) {
                 Some(frame) => Some(Look::frame(frame.clone(), None)),
                 None => live.look(id, now, frame_versions),
@@ -6978,11 +7586,13 @@ impl State {
         let limit = WarmLimit {
             bytes: studio.gpu_limit(),
             preview: studio.preview(),
+            upcoming: studio.upcoming(),
             frames,
         };
         render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets, &limit));
         render.publish_warm_models(warm.models());
         live.set_warm(warm.sources());
+        render.publish_warm_stills(live.warm_stills(frames, frame_versions));
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
         let previewed: BTreeSet<SourceId> = previews
@@ -7049,16 +7659,24 @@ impl State {
             .clone()
             .apply(&values, None)
             .map_err(values_error)?;
-        let settings = values
-            .iter()
-            .any(|v| matches!(v, Edit::SourceSetSettings { .. }));
+        // A value the collection is drawn with (a setting, an opacity, a gain), rather
+        // than one the render parameter channel carries (ADR-0213).
+        let drawn = values.iter().any(|v| {
+            !matches!(
+                v,
+                Edit::ItemSetTransform { .. }
+                    | Edit::ItemSetGeometry { .. }
+                    | Edit::ItemSetCrop { .. }
+                    | Edit::SceneSetCamera { .. }
+            )
+        });
         // A value addressed to a keyframe scene is a parameter of that keyframe's: it
         // shows only where the keyframe draws the item (#846).
         let state = self.graph.state();
         self.gestures
             .set(client_id, gesture_id, values, |id| is_keyframe(state, id));
         self.publish_live();
-        if settings && self.refresh_shown() {
+        if drawn && self.refresh_shown() {
             self.redraw();
         }
         self.live_tick(Instant::now(), wake);
@@ -7141,12 +7759,16 @@ impl State {
         self.jtunnel_names = names;
     }
 
-    /// Rebuilds [`shown`](Self::shown) from the open gestures' source settings. Returns
+    /// Rebuilds [`shown`](Self::shown) from the open gestures' drawn values: source and
+    /// filter settings, opacities and gains (ADR-0091, ADR-0213). Returns
     /// whether what is drawn may have changed: it had or has settings applied. A placed
     /// keyframe does not build a copy: it lives on [`graph`](Self::graph), which a
     /// settings copy carries because it clones the graph (ADR-0118).
     fn refresh_shown(&mut self) -> bool {
-        let mut settings = self.gestures.settings();
+        // The levels a show's audio tracks set first, so a drag of the fader and a value
+        // binding on it win while they move it.
+        let mut settings = self.show_audio.edits.clone();
+        settings.extend(self.gestures.drawn());
         // The value bindings' settings, after the gestures': a moved control wins
         // (ADR-0178).
         settings.extend(self.driver.edits().iter().cloned());
@@ -7353,12 +7975,24 @@ impl State {
         for event in self.gestures.due(now) {
             self.subscribers.emit(&event, wake);
         }
-        let cues = self.timeline_tick(wake).map(|due| {
+        // The show first: a sequence it starts is then ticked with the others.
+        let cues = [self.show_tick(wake), self.timeline_tick(wake)]
+            .into_iter()
+            .flatten()
+            .min();
+        let cues = cues.map(|due| {
             let wait = crate::timelines::ns(due)
                 .saturating_sub(crate::timelines::ns(self.live.now()))
                 .max(0);
             Instant::now() + Duration::from_nanos(u64::try_from(wait).unwrap_or(0))
         });
+        // The show's faders, after the show moved: a fade wants the next frame.
+        let fades = if self.show.is_some() || !self.show_audio.is_empty() {
+            self.show_audio_tick(wake)
+        } else {
+            None
+        };
+        let cues = [cues, fades].into_iter().flatten().min();
         let render = &self.render;
         if self
             .gestures
@@ -7388,8 +8022,12 @@ impl State {
         // A channel the collection has just gained is followed before it is set.
         if let Some(engine) = self.shared.upgrade() {
             let midi = self.live.midi();
-            self.channels
-                .keep(&self.graph, midi.as_deref(), &engine.data);
+            self.channels.keep(
+                &self.graph,
+                midi.as_deref(),
+                &engine.data,
+                self.live.filter_assets().motion_heard(),
+            );
         }
         let missing = |channel_id: &str| ProtocolError::NotFound {
             entity: EntityKind::Channel,
@@ -7460,11 +8098,32 @@ impl State {
                 self.channels.scene_live(program);
             }
         }
-        let settling = self.channels.tick(&self.graph, midi.as_deref(), data, now);
-        let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
+        // The scopes the collection's audio inputs hear (ADR-0206).
+        let assets = self.live.filter_assets();
+        let heard = assets.motion_heard();
+        let settling = self
+            .channels
+            .tick(&self.graph, midi.as_deref(), data, heard, now);
+        // The action bindings a MIDI input fired since the last tick (ADR-0122, ADR-0207),
+        // each run as its call would be, credited to the engine.
+        let mut fired = self.action_bindings.tick(&self.graph, midi.as_deref());
+        // Then the data triggers (ADR-0202), from senders whose state is used.
+        fired.extend(self.data_triggers.tick(&self.graph, data, now));
+        let binding = ClientId::new(crate::history::ENGINE_CLIENT);
+        for action in fired {
+            let name = action.name();
+            if let Err(error) = self.action(&binding, &RequestId::new("binding"), action, wake) {
+                tracing::debug!(%error, action = name, "a bound action failed");
+            }
+        }
+        let changed = self
+            .driver
+            .tick(&self.graph, midi.as_deref(), data, heard, now);
         if changed && self.refresh_shown() {
             self.redraw();
         }
+        // The PTZ axes the bindings drive (ADR-0209): aims, never edits.
+        self.ptz.follow_axes(self.driver.aims());
         // The triggers last, so a channel trigger sees this tick's value.
         let program = self.studio.program().cloned();
         let orders = self.sequences.check(
@@ -7641,6 +8300,22 @@ impl Shared {
             return;
         };
         if let Err(err) = self.save_to(file) {
+            tracing::error!(path = %file.path().display(), error = %err, "collection not saved");
+        }
+    }
+
+    /// Saves the collection to its file even though `rev` hasn't moved: for the show
+    /// scene marker, which the file keeps but which is no revision (ADR-0210, #1748).
+    fn save_marker(&self) {
+        let mut file = lock(&self.collection_file);
+        let Some(file) = file.as_mut() else {
+            return;
+        };
+        let (rev, json) = {
+            let state = lock(&self.state);
+            (state.graph.rev(), state.graph.to_collection_json())
+        };
+        if let Err(err) = file.save(rev, &json) {
             tracing::error!(path = %file.path().display(), error = %err, "collection not saved");
         }
     }
@@ -8021,36 +8696,104 @@ fn live_ticker(shared: &Weak<Shared>) {
             return;
         };
         let mut wake = Vec::new();
-        let next = {
+        let (next, save, rev) = {
             let mut state = lock(&engine.state);
             let next = state.live_tick(Instant::now(), &mut wake);
             if next.is_none() {
                 state.ticking = false;
             }
-            next
+            (
+                next,
+                std::mem::take(&mut state.save_pending),
+                state.ticker_rev,
+            )
         };
+        if save {
+            engine.save_collection();
+        }
         drop(engine);
         wake_all(wake);
-        match next {
-            Some(at) => thread::sleep(at.saturating_duration_since(Instant::now())),
-            None => return,
+        let Some(at) = next else {
+            return;
+        };
+        if !wait_for_tick(shared, at, rev) {
+            return;
         }
     }
 }
 
-/// Refuses a `source.set_settings` value that names a setting its kind doesn't mark
-/// `live` (ADR-0091), as `values.<n>.patch.<param>`. A source or setting that doesn't
-/// exist is left to the collection's own check.
+/// The longest the live ticker waits holding the engine alive: past it, it lets go and
+/// takes it again, so an engine being dropped is not kept for a far cue.
+const TICKER_HOLD: Duration = Duration::from_millis(250);
+
+/// Waits until `at`, or until a call moves the ticker's plan ([`State::start_ticker`]
+/// counts it in `ticker_rev`, which was `rev` when the plan was made). False once the
+/// engine is gone.
+fn wait_for_tick(shared: &Weak<Shared>, at: Instant, rev: u64) -> bool {
+    loop {
+        let Some(engine) = shared.upgrade() else {
+            return false;
+        };
+        let now = Instant::now();
+        let state = lock(&engine.state);
+        if state.ticker_rev != rev || now >= at {
+            return true;
+        }
+        let wait = at.saturating_duration_since(now).min(TICKER_HOLD);
+        let (state, _) = engine
+            .ticker
+            .wait_timeout(state, wait)
+            .unwrap_or_else(PoisonError::into_inner);
+        if state.ticker_rev != rev {
+            return true;
+        }
+    }
+}
+
+/// Why a live `send.set` to a send that doesn't exist is refused.
+const NO_SEND: &str = "names no send from this source to this bus; a live value only \
+                       changes an existing send's gain, so add the send in a batch";
+
+/// Refuses a `source.set_settings` or `filter.set_settings` value that names a setting
+/// its kind doesn't mark `live` (ADR-0091, ADR-0213), as `values.<n>.patch.<param>`, and
+/// a `send.set` to a send that doesn't exist, as `values.<n>.bus_id`, since a live value
+/// would otherwise route the source into a new bus with no undo step. A source, filter
+/// or setting that doesn't exist is left to the collection's own check.
 fn check_live_settings(graph: &Graph, values: &[Edit]) -> Result<(), ProtocolError> {
     for (at, value) in values.iter().enumerate() {
-        let Edit::SourceSetSettings { source_id, patch } = value else {
-            continue;
-        };
-        let Some(source) = graph.state().source(source_id) else {
-            continue;
-        };
-        let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
-            continue;
+        let (kind, patch) = match value {
+            Edit::SourceSetSettings { source_id, patch } => {
+                let Some(source) = graph.state().source(source_id) else {
+                    continue;
+                };
+                let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
+                    continue;
+                };
+                (kind.as_str(), patch)
+            }
+            Edit::FilterSetSettings {
+                owner,
+                filter_id,
+                patch,
+            } => {
+                let Some(filter) = graph.state().filter(owner, filter_id) else {
+                    continue;
+                };
+                (filter.kind(), patch)
+            }
+            Edit::SendSet {
+                source_id, bus_id, ..
+            } => {
+                // A live value changes a send's gain; it never adds a send (ADR-0213).
+                if graph.state().send(source_id, bus_id).is_none() {
+                    return Err(ProtocolError::invalid_argument(
+                        format!("values.{at}.bus_id"),
+                        NO_SEND,
+                    ));
+                }
+                continue;
+            }
+            _ => continue,
         };
         let Some(descriptor) = graph.kind(kind) else {
             continue;
@@ -8134,6 +8877,33 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
         formats: Vec::new(),
         controls: Vec::new(),
     })
+}
+
+/// The audio devices as `capture.targets` reports them: the inputs, then the outputs,
+/// each in the order the platform lists them, with `primary` marking the system's
+/// default of each direction.
+fn audio_target_infos(
+    devices: Vec<jstream_platform::AudioDeviceInfo>,
+) -> impl Iterator<Item = jstream_protocol::CaptureTargetInfo> {
+    let (inputs, outputs): (Vec<_>, Vec<_>) = devices
+        .into_iter()
+        .partition(|d| d.direction == jstream_platform::AudioDirection::Input);
+    let info = |kind| {
+        move |device: jstream_platform::AudioDeviceInfo| jstream_protocol::CaptureTargetInfo {
+            kind,
+            target: device.id.as_str().to_owned(),
+            name: device.name,
+            size: None,
+            primary: device.is_default,
+            formats: Vec::new(),
+            controls: Vec::new(),
+        }
+    };
+    let inputs = inputs.into_iter().map(info(CaptureTargetKind::AudioInput));
+    let outputs = outputs
+        .into_iter()
+        .map(info(CaptureTargetKind::AudioOutput));
+    inputs.chain(outputs)
 }
 
 /// A video device as `capture.targets` reports it, with the formats the engine reads
@@ -8229,6 +8999,12 @@ fn preset_run(
 
 /// An error from the `item.set_visible` an item action applies, with its field named
 /// as the action's (`scene_id`, not `edits.0.scene_id`).
+/// What `source.mute` or `bus.mute` mutes.
+enum Muting {
+    Source(jstream_protocol::SourceId),
+    Bus(jstream_protocol::BusId),
+}
+
 fn action_field(error: ProtocolError) -> ProtocolError {
     match error {
         ProtocolError::InvalidArgument {

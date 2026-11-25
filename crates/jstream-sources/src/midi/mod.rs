@@ -24,8 +24,8 @@ use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_midi::Message;
 use jstream_platform::MediaClock;
 use jstream_protocol::{KindDescriptor, Settings};
-use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicI16, AtomicU8, AtomicU64, Ordering, fence};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicBool, AtomicI16, AtomicU8, AtomicU64, Ordering, fence};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// MIDI's channels.
@@ -78,6 +78,64 @@ impl NoteEvent {
     }
 }
 
+/// One control or program change as the control log keeps it (ADR-0207), so a binding
+/// hears a button pressed and let go between two looks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ControlEvent {
+    /// When it happened, in milliseconds on the media clock.
+    pub at_ms: u64,
+    /// The channel, 0 to 15.
+    pub channel: u8,
+    /// What it was.
+    pub kind: ControlKind,
+}
+
+/// What a [`ControlEvent`] was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlKind {
+    /// A control change: the controller and its new value, 0 to 127.
+    Change {
+        /// The controller, 0 to 127.
+        controller: u8,
+        /// Its new value, 0 to 127.
+        value: u8,
+    },
+    /// A program change: the program, 0 to 127, as sent.
+    Program(u8),
+}
+
+impl ControlEvent {
+    /// Packs the event into one word: 40 bits of milliseconds, a program flag, the
+    /// channel, the controller or program, and the value.
+    fn pack(self) -> u64 {
+        let (program, number, value) = match self.kind {
+            ControlKind::Change { controller, value } => (0, controller, value),
+            ControlKind::Program(program) => (1, program, 0),
+        };
+        (self.at_ms & ((1 << 40) - 1)) << 24
+            | program << 23
+            | u64::from(self.channel & 0x0F) << 16
+            | u64::from(number & 0x7F) << 8
+            | u64::from(value & 0x7F)
+    }
+
+    fn unpack(word: u64) -> Self {
+        let number = (word >> 8) as u8 & 0x7F;
+        Self {
+            at_ms: word >> 24,
+            channel: (word >> 16) as u8 & 0x0F,
+            kind: if word >> 23 & 1 == 1 {
+                ControlKind::Program(number)
+            } else {
+                ControlKind::Change {
+                    controller: number,
+                    value: word as u8 & 0x7F,
+                }
+            },
+        }
+    }
+}
+
 /// One slot of the note log: the event, and which push wrote it.
 struct Slot {
     /// One more than the push's index, so 0 is a slot never written; 0 again while a
@@ -111,15 +169,25 @@ pub struct MidiState {
     pushed: AtomicU64,
     /// When the last message arrived, in milliseconds, plus one; 0 before any.
     last_ms: AtomicU64,
+    /// When a sender that keeps its link alive was last heard from, in milliseconds,
+    /// plus one; 0 for an input that keeps none, such as a MIDI port (ADR-0207).
+    alive_ms: AtomicU64,
     /// Messages pushed, of every kind: what a settled source compares to see whether
     /// anything changed.
     changes: AtomicU64,
     /// The tempo the input's clock gives, which its [`MidiFeed`] publishes.
     tempo: tempo::TempoCell,
+    /// A log of the latest control and program changes (ADR-0207), as `log` is of notes.
+    control_log: Box<[Slot]>,
+    /// Control and program changes pushed: change `n` is in slot `n % LOG`.
+    controls_pushed: AtomicU64,
     /// The latest control change, for a client that learns a controller (ADR-0178):
     /// how many there have been in its top 48 bits, then its channel (0 to 15) and
     /// controller.
     last_cc: AtomicU64,
+    /// Whether this input's MIDI may move anything (ADR-0123 §3): what
+    /// [`MidiInputs::set_bindable`] last said of it.
+    bindable: AtomicBool,
 }
 
 impl std::fmt::Debug for MidiState {
@@ -155,11 +223,28 @@ impl MidiState {
                 })
                 .collect(),
             pushed: AtomicU64::new(0),
+            control_log: (0..LOG)
+                .map(|_| Slot {
+                    seq: AtomicU64::new(0),
+                    event: AtomicU64::new(0),
+                })
+                .collect(),
+            controls_pushed: AtomicU64::new(0),
             last_ms: AtomicU64::new(0),
+            alive_ms: AtomicU64::new(0),
             changes: AtomicU64::new(0),
             tempo: tempo::TempoCell::new(),
             last_cc: AtomicU64::new(0),
+            bindable: AtomicBool::new(false),
         }
+    }
+
+    /// Whether this input's MIDI may move bindings, channels and `midi` modifiers
+    /// (ADR-0123 §3): set by [`MidiInputs::set_bindable`] for a named input, always so
+    /// for [`MidiInputs::bound`], never for [`MidiInputs::any`] or a state made on its
+    /// own. Reads one atomic.
+    pub fn bindable(&self) -> bool {
+        self.bindable.load(Ordering::Relaxed)
     }
 
     /// Records `message`, which arrived at `at_ms` on the media clock. Messages that
@@ -180,6 +265,11 @@ impl MidiState {
                 value,
             } => {
                 let channel = channel.wire();
+                self.log_control(ControlEvent {
+                    at_ms,
+                    channel,
+                    kind: ControlKind::Change { controller, value },
+                });
                 self.controllers[index(channel, controller)].store(value, Ordering::Relaxed);
                 self.any_controllers[usize::from(controller & 0x7F)]
                     .store(value, Ordering::Relaxed);
@@ -200,6 +290,11 @@ impl MidiState {
                     }
                 }
             }
+            Message::ProgramChange { channel, program } => self.log_control(ControlEvent {
+                at_ms,
+                channel: channel.wire(),
+                kind: ControlKind::Program(program),
+            }),
             Message::PitchBend { channel, value } => {
                 self.bend[usize::from(channel.wire())].store(value, Ordering::Relaxed);
                 self.any_bend.store(value, Ordering::Relaxed);
@@ -214,23 +309,73 @@ impl MidiState {
         self.changes.fetch_add(1, Ordering::Release);
     }
 
+    /// Sets what is held and where each controller, bend and pressure is to what
+    /// `inputs` hold now: a key held in any of them, each value the largest (a bend the
+    /// furthest from centre), and nothing for none. The logs and the tempo are kept.
+    /// [`MidiInputs::set_bindable`] rebuilds the bound state this way when it drops an
+    /// input, so nothing the input held while it was let in stays held there.
+    fn rebuild_from(&self, inputs: &[Arc<MidiState>]) {
+        let largest = |of: &dyn Fn(&MidiState) -> u8| inputs.iter().map(|s| of(s)).max();
+        let furthest = |of: &dyn Fn(&MidiState) -> i16| {
+            inputs
+                .iter()
+                .map(|s| of(s))
+                .max_by_key(|v| v.unsigned_abs())
+                .unwrap_or(0)
+        };
+        for (i, key) in self.keys.iter().enumerate() {
+            key.store(
+                largest(&|s| s.keys[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for (i, value) in self.controllers.iter().enumerate() {
+            value.store(
+                largest(&|s| s.controllers[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for (i, value) in self.any_controllers.iter().enumerate() {
+            value.store(
+                largest(&|s| s.any_controllers[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for channel in 0..CHANNELS {
+            self.bend[channel].store(
+                furthest(&|s| s.bend[channel].load(Ordering::Relaxed)),
+                Ordering::Relaxed,
+            );
+            self.pressure[channel].store(
+                largest(&|s| s.pressure[channel].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        self.any_bend.store(
+            furthest(&|s| s.any_bend.load(Ordering::Relaxed)),
+            Ordering::Relaxed,
+        );
+        self.any_pressure.store(
+            largest(&|s| s.any_pressure.load(Ordering::Relaxed)).unwrap_or(0),
+            Ordering::Relaxed,
+        );
+        self.changes.fetch_add(1, Ordering::Release);
+    }
+
     fn note(&self, at_ms: u64, channel: u8, key: u8, velocity: u8) {
         let key = key & 0x7F;
         self.keys[index(channel, key)].store(velocity, Ordering::Relaxed);
-        let n = self.pushed.fetch_add(1, Ordering::Relaxed);
-        let slot = &self.log[(n % LOG as u64) as usize];
-        slot.seq.store(0, Ordering::Relaxed);
-        // Keeps the event store below from being seen before the slot is marked as
-        // being written.
-        fence(Ordering::Release);
         let event = NoteEvent {
             at_ms,
             channel,
             key,
             velocity,
         };
-        slot.event.store(event.pack(), Ordering::Relaxed);
-        slot.seq.store(n + 1, Ordering::Release);
+        write_log(&self.log, &self.pushed, event.pack());
+    }
+
+    fn log_control(&self, event: ControlEvent) {
+        write_log(&self.control_log, &self.controls_pushed, event.pack());
     }
 
     /// The tempo the input's MIDI clock gave last, from its [`MidiFeed`]; `None` before
@@ -297,6 +442,20 @@ impl MidiState {
         self.last_ms.load(Ordering::Relaxed).checked_sub(1)
     }
 
+    /// Records that the input's sender was heard from at `at_ms` on the media clock,
+    /// with or without MIDI: a JTunnel stream does this for each frame it plays, so a
+    /// held press can be let go once its sender falls silent (ADR-0207).
+    pub fn alive(&self, at_ms: u64) {
+        self.alive_ms
+            .fetch_max(at_ms.saturating_add(1), Ordering::Relaxed);
+    }
+
+    /// When the input's sender was last heard from, in milliseconds, or `None` for an
+    /// input that keeps no link alive, or before it was first heard from.
+    pub fn alive_ms(&self) -> Option<u64> {
+        self.alive_ms.load(Ordering::Relaxed).checked_sub(1)
+    }
+
     /// Messages pushed so far, of every kind, whether or not they changed anything.
     pub fn changes(&self) -> u64 {
         self.changes.load(Ordering::Acquire)
@@ -314,18 +473,74 @@ impl MidiState {
         out.clear();
         let end = self.pushed();
         let start = end.saturating_sub(most.min(LOG) as u64);
-        for n in start..end {
-            let slot = &self.log[(n % LOG as u64) as usize];
-            if slot.seq.load(Ordering::Acquire) != n + 1 {
-                continue;
-            }
-            let word = slot.event.load(Ordering::Relaxed);
-            // Keeps the second `seq` load from being seen before the event load.
-            fence(Ordering::Acquire);
-            // Overwritten while it was read: skip it rather than show a mix.
-            if slot.seq.load(Ordering::Relaxed) == n + 1 {
+        read_log(&self.log, start, end, |word| {
+            out.push(NoteEvent::unpack(word))
+        });
+    }
+
+    /// Appends to `out` the note events pushed since `from` (a count [`Self::pushed`] or
+    /// an earlier call returned), oldest first, and returns the count to pass next time.
+    /// Events the log has already overwritten (more than its 1024 since `from`) and any a
+    /// push is writing at that moment are skipped (ADR-0207).
+    pub fn notes_since(&self, from: u64, out: &mut Vec<NoteEvent>) -> u64 {
+        let end = self.pushed();
+        read_log(
+            &self.log,
+            from.max(end.saturating_sub(LOG as u64)),
+            end,
+            |word| {
                 out.push(NoteEvent::unpack(word));
-            }
+            },
+        );
+        end
+    }
+
+    /// Control and program changes pushed so far.
+    pub fn controls_pushed(&self) -> u64 {
+        self.controls_pushed.load(Ordering::Acquire)
+    }
+
+    /// Appends to `out` the control and program changes pushed since `from`, as
+    /// [`Self::notes_since`] does for notes, and returns the count to pass next time.
+    pub fn controls_since(&self, from: u64, out: &mut Vec<ControlEvent>) -> u64 {
+        let end = self.controls_pushed();
+        read_log(
+            &self.control_log,
+            from.max(end.saturating_sub(LOG as u64)),
+            end,
+            |word| out.push(ControlEvent::unpack(word)),
+        );
+        end
+    }
+}
+
+/// Writes `word` as the next entry of `log`, whose writes `pushed` counts: entry `n` is
+/// in slot `n % LOG`.
+fn write_log(log: &[Slot], pushed: &AtomicU64, word: u64) {
+    let n = pushed.fetch_add(1, Ordering::Relaxed);
+    let slot = &log[(n % LOG as u64) as usize];
+    slot.seq.store(0, Ordering::Relaxed);
+    // Keeps the event store below from being seen before the slot is marked as being
+    // written.
+    fence(Ordering::Release);
+    slot.event.store(word, Ordering::Relaxed);
+    slot.seq.store(n + 1, Ordering::Release);
+}
+
+/// Reads entries `start..end` of `log` into `each`, oldest first, skipping any a push
+/// is writing or has overwritten.
+fn read_log(log: &[Slot], start: u64, end: u64, mut each: impl FnMut(u64)) {
+    for n in start..end {
+        let slot = &log[(n % LOG as u64) as usize];
+        if slot.seq.load(Ordering::Acquire) != n + 1 {
+            continue;
+        }
+        let word = slot.event.load(Ordering::Relaxed);
+        // Keeps the second `seq` load from being seen before the event load.
+        fence(Ordering::Acquire);
+        // Overwritten while it was read: skip it rather than show a mix.
+        if slot.seq.load(Ordering::Relaxed) == n + 1 {
+            each(word);
         }
     }
 }
@@ -335,12 +550,18 @@ fn index(channel: u8, key: u8) -> usize {
     usize::from(channel & 0x0F) * KEYS + usize::from(key & 0x7F)
 }
 
-/// Every MIDI input's state by name, and one for all of them together: what a MIDI
-/// source's `input` setting names. Cloning it shares it.
-#[derive(Clone, Default)]
+/// Every MIDI input's state by name, one for all of them together (what a MIDI
+/// source's `input` setting names), and one for the bindable ones together (what a
+/// binding, channel or `midi` modifier with no input reads). Cloning it shares it.
+#[derive(Clone)]
 pub struct MidiInputs {
     any: Arc<MidiState>,
+    /// What every bindable input sent while it was bindable (ADR-0123 §3).
+    bound: Arc<MidiState>,
     named: Arc<Mutex<BTreeMap<String, Arc<MidiState>>>>,
+    /// The inputs whose MIDI may run action bindings: a JTunnel sender only once the
+    /// person turned on "Use this sender's MIDI" (ADR-0123 §3, ADR-0207).
+    bindable: Arc<Mutex<BTreeSet<String>>>,
     /// The media clock messages are stamped on, which the sources draw against: set
     /// once, when the host has one, and shared by every clone and every source.
     clock: Arc<OnceLock<Arc<dyn MediaClock>>>,
@@ -351,6 +572,20 @@ impl std::fmt::Debug for MidiInputs {
         f.debug_struct("MidiInputs")
             .field("inputs", &lock(&self.named).keys().collect::<Vec<_>>())
             .finish_non_exhaustive()
+    }
+}
+
+impl Default for MidiInputs {
+    fn default() -> Self {
+        let bound = MidiState::new();
+        bound.bindable.store(true, Ordering::Relaxed);
+        Self {
+            any: Arc::default(),
+            bound: Arc::new(bound),
+            named: Arc::default(),
+            bindable: Arc::default(),
+            clock: Arc::default(),
+        }
     }
 }
 
@@ -374,9 +609,16 @@ impl MidiInputs {
         self.clock.get().map(|clock| clock_ms(clock.as_ref()))
     }
 
-    /// The state every input feeds.
+    /// The state every input feeds, which the `midi_*` sources draw.
     pub fn any(&self) -> Arc<MidiState> {
         Arc::clone(&self.any)
+    }
+
+    /// The state every bindable input feeds while it is bindable: what a binding,
+    /// channel or `midi` modifier that names no input reads (ADR-0123 §3). An input
+    /// left out never reaches it.
+    pub fn bound(&self) -> Arc<MidiState> {
+        Arc::clone(&self.bound)
     }
 
     /// The state of the input `name`, made empty the first time it is asked for, or
@@ -392,9 +634,47 @@ impl MidiInputs {
         if named.len() >= MAX_INPUTS {
             return None;
         }
-        let state = Arc::new(MidiState::new());
+        let state = MidiState::new();
+        state
+            .bindable
+            .store(lock(&self.bindable).contains(name), Ordering::Relaxed);
+        let state = Arc::new(state);
         named.insert(name.to_owned(), Arc::clone(&state));
         Some(state)
+    }
+
+    /// Lets the inputs `names`, and no others, move anything: run action bindings
+    /// (ADR-0207), and move value bindings, channels and `midi` modifiers, which read an
+    /// input only while its state is [`bindable`](MidiState::bindable) and otherwise
+    /// [`bound`](Self::bound) (ADR-0123 §3). What every input draws is unchanged.
+    pub fn set_bindable(&self, names: impl IntoIterator<Item = String>) {
+        // The named lock first, as `input` takes it, so an input made meanwhile sees
+        // the new set.
+        let named = lock(&self.named);
+        let mut bindable = lock(&self.bindable);
+        let was = std::mem::replace(&mut *bindable, names.into_iter().collect());
+        for (name, state) in named.iter() {
+            state
+                .bindable
+                .store(bindable.contains(name), Ordering::Relaxed);
+        }
+        // An input dropped while it held a key or a controller leaves nothing in the
+        // bound state: it is rebuilt from what the inputs still let in hold now. A
+        // message one of them sends meanwhile may be overwritten by what it held just
+        // before, until its next message.
+        if was.iter().any(|name| !bindable.contains(name)) {
+            let kept: Vec<_> = named
+                .iter()
+                .filter(|(name, _)| bindable.contains(*name))
+                .map(|(_, state)| Arc::clone(state))
+                .collect();
+            self.bound.rebuild_from(&kept);
+        }
+    }
+
+    /// The inputs whose MIDI may move anything, by name.
+    pub fn bindable(&self) -> Vec<String> {
+        lock(&self.bindable).iter().cloned().collect()
     }
 
     /// Each named input's latest control change ([`MidiState::last_control`]), by name.
@@ -402,6 +682,21 @@ impl MidiInputs {
         lock(&self.named)
             .iter()
             .filter_map(|(name, state)| Some((name.clone(), state.last_control()?)))
+            .collect()
+    }
+
+    /// Each named input's latest note-on, with how many note events it has sent, by
+    /// name: what a client learning a note watches (ADR-0202). An input whose latest
+    /// notes hold no note-on is left out.
+    pub fn last_notes(&self) -> Vec<(String, (u64, NoteEvent))> {
+        let mut recent = Vec::with_capacity(16);
+        lock(&self.named)
+            .iter()
+            .filter_map(|(name, state)| {
+                state.recent(&mut recent, 16);
+                let on = recent.iter().rev().find(|n| n.velocity > 0)?;
+                Some((name.clone(), (state.pushed(), *on)))
+            })
             .collect()
     }
 
@@ -416,12 +711,16 @@ impl MidiInputs {
     }
 
     /// Records `message` from input `name` at `at_ms`, in that input's state and the
-    /// any-input state. An input thread looks its state up once with
-    /// [`input`](Self::input) and pushes to it and to [`any`](Self::any) itself, so
-    /// it never takes this lookup's lock per message; this is for callers that don't.
+    /// any-input state, and the bound state while the input is bindable. An input
+    /// thread looks its state up once with [`feed`](Self::feed) and pushes through
+    /// that, so it never takes this lookup's lock per message; this is for callers
+    /// that don't.
     pub fn push(&self, name: &str, at_ms: u64, message: &Message) {
         if let Some(state) = self.input(name) {
             state.push(at_ms, message);
+            if state.bindable() {
+                self.bound.push(at_ms, message);
+            }
         }
         self.any.push(at_ms, message);
     }

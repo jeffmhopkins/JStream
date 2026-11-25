@@ -260,18 +260,34 @@ fn star_id(column: u32, row: i32, whole: u32, layer: u32) -> u32 {
     return hash(column ^ hash(bitcast<u32>(row) - whole) ^ (layer * 0x9e3779b9u) ^ seed());
 }
 
-// Whether the cell of star `id` in `row` holds a star: with chance `odds` times the
-// cell's share of the sky, so stars are as dense everywhere.
-fn holds_star(id: u32, row: i32, frac: f32, cell: f32, odds: f32) -> bool {
+// How much of a star the cell of star `id` in `row` holds, 0 (none) to 1: one with
+// chance `odds` times the cell's share of the sky, so stars are as dense everywhere.
+// The share changes as the cells stream past at warp, so a star comes and goes with it:
+// it fades in over the last STAR_FADE of the share that keeps it, rather than popping
+// in whole, which at a slow warp reads as stars and their streaks switching on.
+fn star_weight(id: u32, row: i32, frac: f32, cell: f32, odds: f32) -> f32 {
     // A cell's share of the sky is at most 1, so most cells are empty whatever theirs
     // is, and are passed over before it is worked out.
     let dice = f32(id & 0xffffffu) / 16777216.0;
     if dice >= odds {
-        return false;
+        return 0.0;
     }
     // The cell's share of the sky: sin^2 of its angle from the travel.
     let s = 1.0 / cosh((f32(row) + 0.5 + frac) * cell);
-    return dice < odds * s * s;
+    let keep = odds * s * s;
+    if dice >= keep {
+        return 0.0;
+    }
+    return smoothstep(0.0, 1.0, (keep - dice) / (STAR_FADE * keep));
+}
+
+// The share of the odds over which a star fades in as its cell's share of the sky grows,
+// and out as it shrinks.
+const STAR_FADE: f32 = 0.2;
+
+// Whether the cell of star `id` in `row` holds any of a star (`star_weight`).
+fn holds_star(id: u32, row: i32, frac: f32, cell: f32, odds: f32) -> bool {
+    return star_weight(id, row, frac, cell, odds) > 0.0;
 }
 
 // A pixel's place on one layer of stars, and what every star of its column shares.
@@ -299,17 +315,29 @@ struct Seat {
 // The pixel along `d` on a layer of `columns` around the travel that has moved `frac`
 // of a cell, each star drawing a streak `streak` cells long behind it. `pixel` is one
 // canvas pixel's angle.
-fn seat(d: vec3<f32>, columns: f32, frac: f32, streak: f32, pixel: f32) -> Seat {
+//
+// `off` picks the column: the pixel's own (0) or the one before or after it (-1, 1),
+// whose stars' glow can reach across into the pixel's where its columns are narrow.
+fn seat(d: vec3<f32>, columns: f32, frac: f32, streak: f32, pixel: f32, off: i32) -> Seat {
     let cell = TAU / columns;
     // Aberration: a star seen at log-tan v is where the still sky has it at v plus the
     // warp's rapidity, so the stars crowd toward the direction of travel.
     let at = about_travel(d) + vec2<f32>(0.0, rapidity());
     let sin_t = max(length(d.xy), 1e-7);
-    let col = floor(at.x / cell);
+    let col = floor(at.x / cell) + f32(off);
+    // The column as the grid numbers it, wrapped around the travel.
+    let half = i32(columns * 0.5);
+    let wrapped = ((i32(col) + half) % (2 * half) + 2 * half) % (2 * half) - half;
     let g = at.y / cell - frac;
-    let first = i32(floor(g));
-    let count = min(i32(floor(g + streak)) - first, MAX_STREAK_CELLS);
     let sigma = max(pixel * 0.6, 1e-5);
+    // A star's glow reaches six of its widths along the column too, past its own cell
+    // into the next, so the cells that far ahead and behind are looked at as well.
+    // Without them a star near its cell's edge is cut off there, and as the stars stream
+    // past at warp it pops in whole once a pixel's centre comes inside its cell.
+    // Near the travel, where a cell is smaller than a pixel, no more than two cells.
+    let along = min(6.0 * sigma / (cell * sin_t), 2.0);
+    let first = i32(floor(g - along));
+    let count = min(i32(floor(g + streak + along)) - first, MAX_STREAK_CELLS);
     // A star sits between 0.3 and 0.7 of the way across its column, so a pixel further
     // than six of a star's widths outside that part gets under a hundred-millionth of
     // any star's light: nothing, without looking for one.
@@ -322,8 +350,8 @@ fn seat(d: vec3<f32>, columns: f32, frac: f32, streak: f32, pixel: f32) -> Seat 
         g,
         first,
         count,
-        i32(col),
-        u32(i32(col) + 1000000) * 2654435761u,
+        wrapped,
+        u32(wrapped + 1000000) * 2654435761u,
         cell * sin_t,
         sigma,
         spread,
@@ -382,16 +410,20 @@ fn stars(
     pixel: f32,
     crowd: f32,
 ) -> vec3<f32> {
-    let at = seat(d, columns, frac, streak, pixel);
-    if at.empty {
-        return vec3<f32>(0.0);
-    }
     var sum = vec3<f32>(0.0);
-    for (var k = 0; k <= at.count; k++) {
-        let row = at.first + k;
-        let id = star_id(at.column, row, whole, layer);
-        if holds_star(id, row, frac, TAU / columns, chance * crowd) {
-            sum += star_light(id, row, at, streak);
+    // The pixel's column and those either side, whose stars can glow into it.
+    for (var off = -1; off <= 1; off++) {
+        let at = seat(d, columns, frac, streak, pixel, off);
+        if at.empty {
+            continue;
+        }
+        for (var k = 0; k <= at.count; k++) {
+            let row = at.first + k;
+            let id = star_id(at.column, row, whole, layer);
+            let weight = star_weight(id, row, frac, TAU / columns, chance * crowd);
+            if weight > 0.0 {
+                sum += star_light(id, row, at, streak) * weight;
+            }
         }
     }
     return sum;
@@ -440,7 +472,16 @@ fn fs_stars(@builtin(position) p: vec4<f32>) -> @location(0) vec4<u32> {
 // The bright stars along `d`, each drawing a streak `streak` cells long behind it:
 // what `stars` gives for their layer, visiting only the cells the table says hold one.
 fn bright_stars(d: vec3<f32>, streak: f32, pixel: f32) -> vec3<f32> {
-    let at = seat(d, BRIGHT_COLUMNS, u.travel.x, streak, pixel);
+    var sum = vec3<f32>(0.0);
+    // The pixel's column and those either side, whose stars can glow into it.
+    for (var off = -1; off <= 1; off++) {
+        sum += bright_stars_of(seat(d, BRIGHT_COLUMNS, u.travel.x, streak, pixel, off), streak);
+    }
+    return sum;
+}
+
+// The bright stars of the column `at` seats the pixel in.
+fn bright_stars_of(at: Seat, streak: f32) -> vec3<f32> {
     // The rows to look at, as the table counts them.
     let low = max(at.first + TABLE_ROW_ZERO, 0);
     let high = min(at.first + at.count + TABLE_ROW_ZERO, TABLE_ROWS - 1);
@@ -463,7 +504,9 @@ fn bright_stars(d: vec3<f32>, streak: f32, pixel: f32) -> vec3<f32> {
         for (var n = 0; n < 32 && bits != 0u; n++) {
             let row = base + i32(firstTrailingBit(bits)) - TABLE_ROW_ZERO;
             bits &= bits - 1u;
-            sum += star_light(star_id(at.column, row, whole, BRIGHT_LAYER), row, at, streak);
+            let id = star_id(at.column, row, whole, BRIGHT_LAYER);
+            let weight = star_weight(id, row, u.travel.x, TAU / BRIGHT_COLUMNS, bright_chance());
+            sum += star_light(id, row, at, streak) * weight;
         }
     }
     return sum;

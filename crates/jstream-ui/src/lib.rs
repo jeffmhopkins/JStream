@@ -5,23 +5,27 @@
 //!
 //! It holds connecting and the session (`session`), the shell (`app`), the header bar
 //! (`header`) and its Help menu's links, About dialog (`about`) and update check (`updates`), the views' reports to the engine (`views`), the dock model (`dock`) and the workspace that draws it (`workspace`),
+//! every mapping grouped by source (`mapping_index`),
 //! the hotkeys the page runs (`hotkeys`), the state the panels share (`store`), the
 //! panels (`panels`), the Browse buttons on path fields (`browse`), the pairing panel
 //! (`pairing`), the Plugins section (`plugins`), the preview canvas (`canvas`), the right-click menu (`menu`) and the
-//! selected items' entries in it (`item_menu`), copy and paste (`clipboard`), screenshots (`screenshot`), the modal dialog frame (`dialog`), the UI scale (`ui_scale`) and
+//! selected items' entries in it (`item_menu`), copy and paste (`clipboard`), screenshots (`screenshot`), the modal dialog frame (`dialog`), the PTZ camera list (`ptz_cameras`), the UI scale (`ui_scale`) and
 //! the prototype's icons (`icons`).
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#views, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/UI-FEATURES.md#theme, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking, docs/UI-FEATURES.md#canvas, docs/UI-FEATURES.md#menus, docs/UI-FEATURES.md#dialogs, docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects, docs/UI-FEATURES.md#inspector, docs/UI-FEATURES.md#transform, docs/UI-FEATURES.md#filters, docs/UI-FEATURES.md#mixer, docs/UI-FEATURES.md#outputs, docs/UI-FEATURES.md#transitions, docs/UI-FEATURES.md#keyboard, docs/UI-FEATURES.md#automation, docs/UI-FEATURES.md#beyond, docs/UI-DESIGN.md#colour, docs/UI-DESIGN.md#buttons, docs/UI-DESIGN.md#menus, docs/UI-DESIGN.md#type, docs/UI-DESIGN.md#controls, docs/UI-DESIGN.md#tabs, docs/UI-DESIGN.md#dialogs, docs/UI-DESIGN.md#forms, docs/UI-DESIGN.md#copy, docs/adr/0045-leptos-web-ui.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#views, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/UI-FEATURES.md#theme, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking, docs/UI-FEATURES.md#canvas, docs/UI-FEATURES.md#menus, docs/UI-FEATURES.md#dialogs, docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects, docs/UI-FEATURES.md#inspector, docs/UI-FEATURES.md#transform, docs/UI-FEATURES.md#filters, docs/UI-FEATURES.md#mixer, docs/UI-FEATURES.md#outputs, docs/UI-FEATURES.md#transitions, docs/UI-FEATURES.md#keyboard, docs/UI-FEATURES.md#automation, docs/UI-FEATURES.md#mappings, docs/UI-FEATURES.md#ptz, docs/UI-FEATURES.md#show, docs/UI-FEATURES.md#beyond, docs/UI-DESIGN.md#colour, docs/UI-DESIGN.md#buttons, docs/UI-DESIGN.md#menus, docs/UI-DESIGN.md#type, docs/UI-DESIGN.md#controls, docs/UI-DESIGN.md#tabs, docs/UI-DESIGN.md#dialogs, docs/UI-DESIGN.md#forms, docs/UI-DESIGN.md#copy, docs/adr/0045-leptos-web-ui.md
 
 #![forbid(unsafe_code)]
 
 pub mod about;
 pub mod agents;
 pub mod app;
+pub mod bindings;
 pub mod browse;
 pub mod canvas;
+pub mod chrome;
 pub mod clap_plugins;
 pub mod clipboard;
+pub mod device_asks;
 pub mod dialog;
 pub mod dock;
 pub mod header;
@@ -30,12 +34,15 @@ pub mod hotkeys;
 pub mod icons;
 pub mod item_menu;
 pub mod jtunnel;
+pub mod live_sources;
+pub mod mapping_index;
 pub mod menu;
 pub mod pairing;
 pub mod panels;
 pub mod plugins;
 pub mod project;
 pub mod projector;
+pub mod ptz_cameras;
 pub mod ptz_controllers;
 pub mod rendering;
 pub mod screenshot;

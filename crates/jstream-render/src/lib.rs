@@ -13,6 +13,7 @@ mod cache;
 mod color;
 mod compositor;
 mod convert;
+mod downscale;
 mod error;
 mod filter;
 mod gpu;
@@ -35,6 +36,7 @@ mod wipe;
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::{Compositor, ModelUploader};
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
+pub use downscale::{Downscaled, Downscaler};
 pub use error::{NO_ADAPTER_HINT, RenderError};
 pub use filter::{
     DepthReflection, DepthShadow, DepthSurface, ExternalFilter, ExternalProgram,
@@ -47,7 +49,7 @@ pub use filter::{
     reads_surface as video_filter_reads_surface, reflection_floor as video_filter_reflection_floor,
     screen_reflections_descriptor,
 };
-pub use gpu::{OpenOptions, adapter_available, context_lost};
+pub use gpu::{OpenOptions, adapter_available, context_lost, submits_on_this_thread};
 pub use image::{Image, Seen};
 pub use jstream_protocol::BlendMode;
 pub use model::{

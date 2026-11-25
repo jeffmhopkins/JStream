@@ -213,6 +213,9 @@ pub struct Modifier {
     pub clock: Clock,
     /// Whether it applies. A disabled modifier contributes nothing.
     pub enabled: bool,
+    /// Whether its value replaces the property's own (ADR-0203) rather than adding to
+    /// it: see [`Offsets::set`].
+    pub replace: bool,
 }
 
 /// Why a modifier, or an item's list of them, is refused.
@@ -435,6 +438,13 @@ pub struct Offsets {
     pub crop: [f32; 4],
     /// Multiplies the width and the height alone, after `scale` (ADR-0178).
     pub size: [f32; 2],
+    /// What a `replace` modifier (ADR-0203) sets each property to, by
+    /// [`Property::ALL`]'s order, before the offsets above add to it: the value, and how
+    /// far toward it from the item's own value it goes (its amount, 1 for all the way).
+    /// The value is the property itself: x, y, the angles, depth and crops in their own
+    /// units, the opacity from 0 to 1, and the scale, width and height as the factor
+    /// itself. The last one in the list wins.
+    pub set: [Option<(f32, f32)>; 14],
 }
 
 impl Offsets {
@@ -450,6 +460,7 @@ impl Offsets {
         opacity: 1.0,
         crop: [0.0; 4],
         size: [1.0; 2],
+        set: [None; 14],
     };
 
     /// Whether it changes nothing.
@@ -489,22 +500,54 @@ impl Offsets {
         }
     }
 
-    /// An item's `opacity` with these offsets applied, clamped to `0..=1`.
-    pub fn opacity_of(&self, opacity: f32) -> f32 {
-        (opacity * self.opacity).clamp(0.0, 1.0)
+    /// `own`, the property's own value, as a `replace` modifier sets it ([`Self::set`]),
+    /// or `own` when none does.
+    pub fn base(&self, property: Property, own: f32) -> f32 {
+        match self.set[property as usize] {
+            Some((value, weight)) => {
+                let v = own + (value - own) * weight;
+                if v.is_finite() { v } else { own }
+            }
+            None => own,
+        }
     }
 
-    /// An item's scale with these offsets applied, never negative.
+    /// An additive property's value `own` with these offsets applied: its [`Self::base`]
+    /// plus what the `add` modifiers add. For x, y, the angles, depth and the crops.
+    pub fn on(&self, property: Property, own: f32) -> f32 {
+        let add = match property {
+            Property::X => self.x,
+            Property::Y => self.y,
+            Property::Rotation => self.rotation,
+            Property::Tilt => self.tilt,
+            Property::Turn => self.turn,
+            Property::Depth => self.depth,
+            Property::CropLeft => self.crop[0],
+            Property::CropTop => self.crop[1],
+            Property::CropRight => self.crop[2],
+            Property::CropBottom => self.crop[3],
+            Property::Scale | Property::Opacity | Property::Width | Property::Height => 0.0,
+        };
+        self.base(property, own) + add
+    }
+
+    /// An item's `opacity` with these offsets applied, clamped to `0..=1`.
+    pub fn opacity_of(&self, opacity: f32) -> f32 {
+        (self.base(Property::Opacity, opacity) * self.opacity).clamp(0.0, 1.0)
+    }
+
+    /// An item's scale with these offsets applied, never negative. A `replace` modifier
+    /// sets the factor it is multiplied by, which is otherwise 1.
     pub fn scale_of(&self, scale: f32) -> f32 {
-        (scale * self.scale).max(0.0)
+        (scale * self.base(Property::Scale, 1.0) * self.scale).max(0.0)
     }
 
     /// A box's width and height with these offsets applied: `scale`, then each alone,
     /// never negative.
     pub fn size_of(&self, width: f32, height: f32) -> [f32; 2] {
         [
-            (self.scale_of(width) * self.size[0]).max(0.0),
-            (self.scale_of(height) * self.size[1]).max(0.0),
+            (self.scale_of(width) * self.base(Property::Width, 1.0) * self.size[0]).max(0.0),
+            (self.scale_of(height) * self.base(Property::Height, 1.0) * self.size[1]).max(0.0),
         ]
     }
 
@@ -533,6 +576,17 @@ impl Offsets {
                 lerp(self.size[0], to.size[0]),
                 lerp(self.size[1], to.size[1]),
             ],
+            // A property both sides set blends; one only one side sets switches halfway.
+            set: std::array::from_fn(|i| match (self.set[i], to.set[i]) {
+                (Some((a, wa)), Some((b, wb))) => Some((lerp(a, b), lerp(wa, wb))),
+                (from, to) => {
+                    if progress < 0.5 {
+                        from
+                    } else {
+                        to
+                    }
+                }
+            }),
         }
     }
 }
@@ -592,6 +646,13 @@ pub fn evaluate_scaled(
         };
         let scale = f64::from(amount(&m.id));
         let value = m.value_heard(t, envelope);
+        if m.replace {
+            if m.enabled && value.is_finite() {
+                let weight = if scale.is_finite() { scale as f32 } else { 1.0 };
+                out.set[m.property as usize] = Some((value as f32, weight));
+            }
+            continue;
+        }
         out.add(
             m.property,
             if scale == 1.0 || !scale.is_finite() {
@@ -660,6 +721,7 @@ mod tests {
             kind,
             clock: Clock::Engine,
             enabled: true,
+            replace: false,
         }
     }
 
@@ -942,6 +1004,7 @@ mod tests {
             ),
             Modifier {
                 enabled: false,
+                replace: false,
                 ..modifier(
                     "e",
                     Property::Y,
@@ -1012,6 +1075,7 @@ mod tests {
         // A disabled audio modifier adds nothing, heard or not.
         let off = Modifier {
             enabled: false,
+            replace: false,
             ..mods[1].clone()
         };
         assert_eq!(
@@ -1179,5 +1243,50 @@ mod tests {
             },
             "wrap",
         );
+    }
+
+    #[test]
+    fn a_replace_modifier_sets_the_property_and_the_adds_go_on_top() {
+        let fader = |id: &str, property, from: f64, to: f64, replace| Modifier {
+            replace,
+            ..modifier(
+                id,
+                property,
+                Kind::Midi(Midi {
+                    smoothing_ms: 0.0,
+                    from,
+                    to,
+                    ..Midi::default()
+                }),
+            )
+        };
+        let list = [
+            fader("push", Property::X, 0.0, 10.0, false),
+            fader("first", Property::X, 0.0, 100.0, true),
+            fader("last", Property::X, 0.0, 400.0, true),
+            fader("fade", Property::Opacity, 0.0, 1.0, true),
+            fader("big", Property::Scale, 0.0, 2.0, true),
+        ];
+        let by = evaluate_with(&list, 0.0, None, |_| None, |_| Some(0.5));
+        // The last replace in the list wins, and the add adds to it.
+        assert_eq!(by.on(Property::X, 30.0), 205.0);
+        assert_eq!(by.on(Property::Y, 30.0), 30.0, "nothing sets y");
+        assert_eq!(by.opacity_of(0.2), 0.5);
+        assert_eq!(by.scale_of(3.0), 3.0, "the factor is 1");
+        assert_eq!(by.size_of(10.0, 20.0), [10.0, 20.0]);
+        // Its amount pulls it toward the item's own value.
+        let half = evaluate_scaled(&list, 0.0, None, |_| None, |_| Some(0.5), |_| 0.5);
+        assert_eq!(half.on(Property::X, 0.0), 102.5);
+        // A bypassed replace sets nothing.
+        let off = [Modifier {
+            enabled: false,
+            ..fader("last", Property::X, 0.0, 400.0, true)
+        }];
+        assert!(evaluate_with(&off, 0.0, None, |_| None, |_| Some(1.0)).is_identity());
+        // During a Move, both sides' replaces blend; one side's switches halfway.
+        let to = evaluate_with(&list[..3], 0.0, None, |_| None, |_| Some(1.0));
+        assert_eq!(by.blend(&to, 0.25).on(Property::X, 0.0), 250.0 + 6.25);
+        assert_eq!(by.blend(&to, 0.25).opacity_of(1.0), 0.5);
+        assert_eq!(by.blend(&to, 0.75).opacity_of(1.0), 1.0);
     }
 }

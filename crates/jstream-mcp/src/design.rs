@@ -67,8 +67,9 @@ A countdown or clock: a `timer` source (`mode` `countdown` with `duration` in se
 and an `end_text` such as LIVE, `stopwatch`, or `clock` with a `clock_format` and an \
 optional IANA `time_zone`), styled like `text`. Its frame keeps one size whatever it \
 shows, so size its item once from `source.sizes`; editing its look keeps it counting, \
-and changing `mode` or `duration` restarts it. To run it again from the start at the same \
-length, change `restart` to any other number. \
+and changing `mode` or `duration` restarts it. A countdown or stopwatch starts again each \
+time its scene goes on program; to run it again at any other moment, use the \
+`source.restart` action or change `restart` to any other number. \
 A graphic of several parts that should read as one (a scoreboard, a framed camera \
 with its name bar): build it in its own scene, place that scene with a `scene` source, \
 crop the item to the graphic's bounds, and put `rounded_corners` and `drop_shadow` in \
@@ -235,17 +236,25 @@ how soft the far background gets; things nearer or farther blur in proportion. A
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
 `blur_px` is the aperture: 0 keeps everything sharp. With `autofocus: true` the camera \
-focuses each frame on the nearest item at the centre of the frame, gliding there, and \
+focuses each frame on the nearest item at the centre of the frame, gliding there (an \
+item blended any way but `normal`, such as an additive glow or hologram, or under half \
+opaque, is seen through, so it doesn't steal the focus), and \
 `focus_px` is only where it starts; a camera motion modifier on `autofocus` (on at 0.5 \
 or more, added to 1 when the camera's switch is on) lets a CC button switch it. \
 Models blur too, each part by its own distance, so a near part of a model goes soft \
 while the focus sits on something past it. \
+With `fixed_aperture: true` the blur behaves like a real lens: `blur_px` is the blur of \
+the framing camera (45°, focused at its framing distance), and zooming in (a smaller \
+`fov_deg`) or focusing closer softens the background, by the square of the zoom and the \
+inverse of the focus distance; a dolly zoom (moving the camera back while narrowing \
+`fov_deg` to keep the subject's size) then softens the background as it goes. \
 A camera can move on its own: `scene.set_camera_motion` gives it up to 32 modifiers, the \
 kinds and clocks of `item.set_motion` (all but `audio`), on `position_x`/`_y`/`_z`, \
 `target_x`/`_y`/`_z`, `pan`, `tilt` (degrees, turning the view about the camera), `fov`, \
 `roll`, `focus`, `blur` or `autofocus`; a slow `wiggle` of 4-8 px on the position is a hand-held \
 camera. A `midi` modifier there takes the same fields as an item's (`controller`, \
-`channel`, `input` such as a JTunnel sender's name, `from`, `to`, `smoothing_ms`), so a \
+`channel`, `input`: leave it out for any input, which is how to read the live JTunnel sender, \
+`from`, `to`, `smoothing_ms`), so a \
 fader or knob moves, turns or zooms the camera; a controller reads 0 until it is first \
 sent, so make `from` the value at rest (0 keeps the stored view). A `data` one follows a \
 DAW's live data the same way. To follow the pointer over a screen capture, add a `follow_pointer` \
@@ -423,7 +432,8 @@ source; a source's or a bus's fader; a send), use a value binding: `binding.set_
 with a `binding_id`, the `midi` or `data` fields a modifier takes (`kind`, `controller`, \
 `channel`, `input`, `smoothing_ms`, `curve`, `from`, `to`), and a `target` \
 (`source_setting` or `filter_setting` with its `param`, `source_gain`, `bus_gain`, \
-`send_gain`). Its value replaces the setting, in the setting's unit and kept within its \
+`send_gain`, or `ptz_axis` with a PTZ `camera` name and an `axis`: `pan`, `tilt`, `zoom` or \
+`focus`, in the head's own counts, which aims the head rather than changing a setting). Its value replaces the setting, in the setting's unit and kept within its \
 range (a fader in dB, so `from` -60 and `to` 0 is a usable throw; a `bool` is on at one \
 half), once the control first moves, so the project opens as saved; nothing is stored, \
 and `binding.clear_value` hands the setting back. Only `live` settings take one \
@@ -471,10 +481,12 @@ loop) belongs in a timeline, not in a page: `timeline.set` stores in a scene a \
 or a `range` with `from_ms` and `to_ms` for an intro then a loop) and `cues` in time order, \
 each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
 `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`, \
-`channel.set_value`, `channel.switch`, `channel.nudge`, `source.restart` (a page or video from its start) or another timeline's `play`, `stop` \
+`channel.set_value`, `channel.switch`, `channel.nudge`, `source.restart` (a page, video or timer from its start) or another timeline's `play`, `stop` \
 or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
 hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
 after a first play read `timeline.cue_fired` in `events` for errors. \
+`source.seek` (a `source_id` and `at_ms`) plays a video on from that point; a hotkey \
+can bind it, but a cue can't run it. \
 A timeline with `lanes` is a sequence: it moves a few channels over time while the \
 scene stays as it is (a keyframe repositions the whole scene instead). Each lane is \
 `{target: {channel}, points: [{at_ms, value, curve}]}`, `value` 0 to 1 and `curve` \

@@ -10,9 +10,11 @@
 //! Docs: crates/jstream-core/README.md#design, docs/adr/0032-live-edits-and-undo.md, docs/ARCHITECTURE.md#threading
 
 use crate::snapshot::LiveParams;
+use jstream_graph::State;
 use jstream_protocol::{
-    ClientId, Edit, Event, GestureId, GestureInfo, ItemId, LiveOutcome, MAX_GESTURES_PER_CLIENT,
-    MAX_LIVE_VALUES, ProtocolError, SceneId, Settings, SourceId, is_live_adjustable,
+    BusId, ClientId, Edit, Event, FilterId, FilterOwner, GestureId, GestureInfo, ItemId,
+    LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, ProtocolError, SceneId, Settings,
+    SourceId, is_live_adjustable, live_problem,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
@@ -34,6 +36,17 @@ enum Param {
     Setting(SourceId, String),
     /// A scene's camera, or a keyframe scene's override of it (ADR-0094).
     Camera(SceneId),
+    /// One setting of a filter, which its kind marks `live` (ADR-0213).
+    FilterSetting(FilterOwner, FilterId, String),
+    /// An item's opacity, as the item has it or as a keyframe scene overrides it
+    /// (ADR-0213).
+    Opacity(Option<SceneId>, ItemId),
+    /// A source's fader (ADR-0213).
+    SourceGain(SourceId),
+    /// A bus's fader (ADR-0213).
+    BusGain(BusId),
+    /// The gain of a source's send into a bus (ADR-0213).
+    SendGain(SourceId, BusId),
 }
 
 impl Param {
@@ -52,41 +65,94 @@ impl Param {
             Edit::ItemSetCrop {
                 item_id, scene_id, ..
             } => Some(Param::Crop(keyframe(scene_id), item_id.clone())),
+            Edit::ItemSetOpacity {
+                item_id, scene_id, ..
+            } => Some(Param::Opacity(keyframe(scene_id), item_id.clone())),
             Edit::SceneSetCamera { scene_id, .. } => Some(Param::Camera(scene_id.clone())),
+            Edit::SourceSetAudio { source_id, .. } => Some(Param::SourceGain(source_id.clone())),
+            Edit::BusSetFader { bus_id, .. } => Some(Param::BusGain(bus_id.clone())),
+            Edit::SendSet {
+                source_id, bus_id, ..
+            } => Some(Param::SendGain(source_id.clone(), bus_id.clone())),
             _ => None,
         }
+    }
+
+    /// Whether the engine draws and hears it through the collection with the value
+    /// applied (ADR-0091, ADR-0213) rather than the render parameter channel: every
+    /// parameter but an item's placement and crop and a scene's camera.
+    fn is_drawn(&self) -> bool {
+        !matches!(
+            self,
+            Param::Placement(..) | Param::Crop(..) | Param::Camera(_)
+        )
     }
 
     /// The item it belongs to, if it is an item's.
     fn item(&self) -> Option<&ItemId> {
         match self {
-            Param::Placement(_, item_id) | Param::Crop(_, item_id) => Some(item_id),
-            Param::Setting(..) | Param::Camera(_) => None,
+            Param::Placement(_, item_id) | Param::Crop(_, item_id) | Param::Opacity(_, item_id) => {
+                Some(item_id)
+            }
+            _ => None,
         }
     }
 
     /// The keyframe scene it belongs to, if it is a keyframe's.
     fn keyframe(&self) -> Option<&SceneId> {
         match self {
-            Param::Placement(keyframe, _) | Param::Crop(keyframe, _) => keyframe.as_ref(),
-            Param::Setting(..) | Param::Camera(_) => None,
+            Param::Placement(keyframe, _)
+            | Param::Crop(keyframe, _)
+            | Param::Opacity(keyframe, _) => keyframe.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Whether what it sets is still in `state`: its item (in the keyframe scene it
+    /// names, which must still be one), source, filter, scene, bus or send.
+    fn exists(&self, state: &State, is_keyframe: &impl Fn(&SceneId) -> bool) -> bool {
+        match self {
+            Param::Placement(..) | Param::Crop(..) | Param::Opacity(..) => {
+                self.item().is_some_and(|item| state.item(item).is_some())
+                    && self.keyframe().is_none_or(is_keyframe)
+            }
+            Param::Setting(source_id, _) | Param::SourceGain(source_id) => {
+                state.source(source_id).is_some()
+            }
+            Param::Camera(scene_id) => state.scene(scene_id).is_some(),
+            Param::FilterSetting(owner, filter_id, _) => state.filter(owner, filter_id).is_some(),
+            Param::BusGain(bus_id) => state.bus(bus_id).is_some(),
+            Param::SendGain(source_id, bus_id) => state.send(source_id, bus_id).is_some(),
         }
     }
 }
 
-/// `value` as one value per parameter: a source's settings patch split into one setting
-/// each (ADR-0091), any other value as it is.
+/// `value` as one value per parameter: a source's or a filter's settings patch split
+/// into one setting each (ADR-0091, ADR-0213), any other value as it is.
 fn split(value: Edit) -> Vec<Edit> {
+    let one = |id: &str, v: &serde_json::Value| {
+        let mut one = Settings::new();
+        one.insert(id, v.clone());
+        one
+    };
     match value {
         Edit::SourceSetSettings { source_id, patch } => patch
             .iter()
-            .map(|(id, v)| {
-                let mut one = Settings::new();
-                one.insert(id, v.clone());
-                Edit::SourceSetSettings {
-                    source_id: source_id.clone(),
-                    patch: one,
-                }
+            .map(|(id, v)| Edit::SourceSetSettings {
+                source_id: source_id.clone(),
+                patch: one(id, v),
+            })
+            .collect(),
+        Edit::FilterSetSettings {
+            owner,
+            filter_id,
+            patch,
+        } => patch
+            .iter()
+            .map(|(id, v)| Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: filter_id.clone(),
+                patch: one(id, v),
             })
             .collect(),
         other => vec![other],
@@ -100,6 +166,14 @@ fn param_of(value: &Edit, is_keyframe: impl Fn(&SceneId) -> bool) -> Option<Para
             .iter()
             .next()
             .map(|(id, _)| Param::Setting(source_id.clone(), id.to_owned())),
+        Edit::FilterSetSettings {
+            owner,
+            filter_id,
+            patch,
+        } => patch
+            .iter()
+            .next()
+            .map(|(id, _)| Param::FilterSetting(owner.clone(), filter_id.clone(), id.to_owned())),
         other => Param::of(other, is_keyframe),
     }
 }
@@ -144,7 +218,8 @@ pub(crate) struct Gestures {
 impl Gestures {
     /// Checks the shape of a `live.set` before its values are validated against the
     /// collection: at most [`MAX_LIVE_VALUES`] values, at least one, each a
-    /// live-adjustable setter, and room for the gesture among the client's open ones.
+    /// live-adjustable setter carrying only live fields ([`live_problem`]: a fader's
+    /// gain alone), and room for the gesture among the client's open ones.
     pub(crate) fn check_set(
         &self,
         client_id: &ClientId,
@@ -165,6 +240,13 @@ impl Gestures {
                     values[at].name()
                 ),
             ));
+        }
+        if let Some((at, (field, reason))) = values
+            .iter()
+            .enumerate()
+            .find_map(|(at, value)| live_problem(value).map(|problem| (at, problem)))
+        {
+            return Err(invalid(&format!("values.{at}.{field}"), reason));
         }
         let key = (client_id.clone(), gesture_id.clone());
         if !self.open.contains_key(&key) && self.count(client_id) >= MAX_GESTURES_PER_CLIENT {
@@ -267,11 +349,9 @@ impl Gestures {
     pub(crate) fn commit(&mut self, client_id: &ClientId, gesture_id: &GestureId, generation: u64) {
         let key = (client_id.clone(), gesture_id.clone());
         if let Some(mut gesture) = self.remove(&key) {
-            // A setting's committed value is in the collection the snapshot is built
-            // from, so only item values wait for the render thread.
-            gesture
-                .values
-                .retain(|param, _| !matches!(param, Param::Setting(..)));
+            // A drawn value's committed value is in the collection the snapshot is
+            // built from, so only the channel's values wait for the render thread.
+            gesture.values.retain(|param, _| !param.is_drawn());
             if !gesture.values.is_empty() {
                 self.releasing.push((generation, gesture.values));
             }
@@ -301,23 +381,16 @@ impl Gestures {
         !self.releasing.is_empty()
     }
 
-    /// Drops every live value that `exists` says has nothing left to draw it: a batch
-    /// deleted its item, or the keyframe scene it is addressed to (the second
-    /// argument, `None` for the item's own), its source, or the scene whose camera it
-    /// sets. Returns whether any went.
+    /// Drops every live value that has nothing left to draw it in `state`: a batch
+    /// deleted its item, or the keyframe scene it is addressed to (`is_keyframe` says
+    /// which scenes still are), its source, filter, bus or send, or the scene whose
+    /// camera it sets. Returns whether any went.
     pub(crate) fn drop_missing(
         &mut self,
-        exists: impl Fn(&ItemId, Option<&SceneId>) -> bool,
-        source_exists: impl Fn(&SourceId) -> bool,
-        scene_exists: impl Fn(&SceneId) -> bool,
+        state: &State,
+        is_keyframe: impl Fn(&SceneId) -> bool,
     ) -> bool {
-        let here = |param: &Param| match param {
-            Param::Setting(source_id, _) => source_exists(source_id),
-            Param::Camera(scene_id) => scene_exists(scene_id),
-            _ => param
-                .item()
-                .is_some_and(|item| exists(item, param.keyframe())),
-        };
+        let here = |param: &Param| param.exists(state, &is_keyframe);
         let gone: Vec<Param> = self
             .holders
             .keys()
@@ -358,13 +431,14 @@ impl Gestures {
         )
     }
 
-    /// The open gestures' values of sources' settings (ADR-0091), one setting each: the
-    /// engine draws the collection with them applied. Committed gestures' settings are
-    /// in the collection already, so none wait for the render thread.
-    pub(crate) fn settings(&self) -> Vec<Edit> {
+    /// The open gestures' values the engine draws the collection with applied: sources'
+    /// and filters' settings, one setting each, items' opacity and the gains (ADR-0091,
+    /// ADR-0213). Committed gestures' values are in the collection already, so none
+    /// wait for the render thread.
+    pub(crate) fn drawn(&self) -> Vec<Edit> {
         self.holders
             .iter()
-            .filter(|(param, _)| matches!(param, Param::Setting(..)))
+            .filter(|(param, _)| param.is_drawn())
             .filter_map(|(param, key)| self.open.get(key)?.values.get(param).cloned())
             .collect()
     }

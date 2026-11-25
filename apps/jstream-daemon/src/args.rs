@@ -70,16 +70,26 @@ Options:
                        changed. Every paired device has to check the new
                        fingerprint, and a native client that pinned the old
                        one has to pair again
+  --lan-quiet          with --lan: don't announce the network listener on
+                       mDNS (ADR-0233). By default it is announced as
+                       _jstream._tcp.local, so a device finds it without its
+                       address; pairing still needs the code and fingerprint
   --jtunnel-accept <name@address:port>
                        receive from this JTunnel sender (ADR-0123): a DAW
                        plugin's tunnel name and the LAN address and port it
                        sends from (repeatable). Off without it: no socket is
                        open. A `network_audio` source naming the sender then
-                       records its audio
+                       records its audio; one with no sender named records
+                       the first given (ADR-0221)
   --jtunnel-no-state <name>
                        ignore the DAW state the accepted JTunnel sender <name>
                        sends (ADR-0171): its transport, tracks and clips, which
                        data.list and data.get read otherwise (repeatable)
+  --jtunnel-midi <name>
+                       let the MIDI the accepted JTunnel sender <name> sends
+                       run the collection's MIDI action bindings (ADR-0123 §3,
+                       ADR-0207); without it its MIDI is only drawn
+                       (repeatable)
   --ui-dir <dir>       serve the web UI's built files from this directory at
                        http://127.0.0.1:<port>/ (the browser asks for the token
                        as a password)
@@ -167,6 +177,8 @@ pub struct Lan {
     pub bind: Option<IpAddr>,
     /// `--lan-renew`: make a new key and certificate first.
     pub renew: bool,
+    /// Announce the listener on mDNS (ADR-0233); `--lan-quiet` turns it off.
+    pub announce: bool,
 }
 
 /// A parsed command line.
@@ -192,9 +204,11 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut lan_port = None;
     let mut lan_bind = None;
     let mut lan_renew = false;
+    let mut lan_quiet = false;
     let mut register_vcam = false;
     let mut unregister_vcam = false;
     let mut jtunnel_no_state: Vec<String> = Vec::new();
+    let mut jtunnel_midi: Vec<String> = Vec::new();
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || rest.next().ok_or_else(|| format!("`{arg}` needs a value"));
@@ -220,6 +234,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             }
             "--lan" => lan = true,
             "--lan-renew" => lan_renew = true,
+            "--lan-quiet" => lan_quiet = true,
             "--lan-port" => {
                 let text = value()?;
                 let parsed = text
@@ -297,6 +312,13 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 }
                 jtunnel_no_state.push(name.clone());
             }
+            "--jtunnel-midi" => {
+                let name = value()?;
+                if jtunnel_midi.contains(name) {
+                    return Err(format!("`--jtunnel-midi` names the sender `{name}` twice"));
+                }
+                jtunnel_midi.push(name.clone());
+            }
             "--log-dir" => {
                 let dir = value()?;
                 if options.log_dir.replace(dir.clone()).is_some() {
@@ -366,14 +388,27 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
         };
         *sender = sender.clone().with_state(false);
     }
+    // "Use this sender's MIDI" (ADR-0123 §3) is off for an accepted sender; this turns
+    // it on, only for a sender accepted here.
+    for name in jtunnel_midi {
+        let Some(sender) = options.jtunnel.iter_mut().find(|s| s.name() == name) else {
+            return Err(format!(
+                "`--jtunnel-midi` names `{name}`, which no `--jtunnel-accept` accepts"
+            ));
+        };
+        *sender = sender.clone().with_midi(true);
+    }
     if lan {
         options.lan = Some(Lan {
             port: lan_port.unwrap_or(LAN_PORT),
             bind: lan_bind,
             renew: lan_renew,
+            announce: !lan_quiet,
         });
-    } else if lan_port.is_some() || lan_bind.is_some() || lan_renew {
-        return Err("`--lan-port`, `--lan-bind` and `--lan-renew` need `--lan`".to_owned());
+    } else if lan_port.is_some() || lan_bind.is_some() || lan_renew || lan_quiet {
+        return Err(
+            "`--lan-port`, `--lan-bind`, `--lan-renew` and `--lan-quiet` need `--lan`".to_owned(),
+        );
     }
     jstream_core::PtzControllerSetup::new(
         options.ptz_controllers.clone(),
@@ -444,6 +479,21 @@ mod tests {
             error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-no-state A --jtunnel-no-state A")
                 .contains("twice")
         );
+        // ADR-0123 §3: a sender's MIDI runs bindings only when named, and only for an
+        // accepted sender.
+        let options = serve(
+            "--jtunnel-accept Bitwig@192.168.1.5:9000 --jtunnel-accept Live@10.0.0.2:9000 --jtunnel-midi Live",
+        );
+        let midi: Vec<bool> = options.jtunnel.iter().map(|s| s.uses_midi()).collect();
+        assert_eq!(midi, [false, true]);
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-midi B")
+                .contains("no `--jtunnel-accept`")
+        );
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-midi A --jtunnel-midi A")
+                .contains("twice")
+        );
     }
 
     /// ADR-0104 §1: network access is off unless `--lan` turns it on, on a fixed port.
@@ -455,20 +505,22 @@ mod tests {
             Some(Lan {
                 port: LAN_PORT,
                 bind: None,
-                renew: false
+                renew: false,
+                announce: true
             })
         );
         assert_eq!(
-            serve("--lan-port 5000 --lan --lan-bind 192.168.1.20 --lan-renew").lan,
+            serve("--lan-port 5000 --lan --lan-bind 192.168.1.20 --lan-renew --lan-quiet").lan,
             Some(Lan {
                 port: 5000,
                 bind: Some([192, 168, 1, 20].into()),
-                renew: true
+                renew: true,
+                announce: false
             })
         );
         assert_eq!(
             error("--lan-port 5000"),
-            "`--lan-port`, `--lan-bind` and `--lan-renew` need `--lan`"
+            "`--lan-port`, `--lan-bind`, `--lan-renew` and `--lan-quiet` need `--lan`"
         );
         assert_eq!(
             error("--lan --lan-port 0"),

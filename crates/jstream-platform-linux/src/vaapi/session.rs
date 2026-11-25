@@ -36,12 +36,14 @@ use jstream_platform::{
     CodecInfo, FrameSync, GpuFrame, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
+use super::av1;
 use super::display::{Display, Va};
 use super::ffi::{
     ATTRIB_NOT_SUPPORTED, CODED_BUF_STATUS_SLICE_OVERFLOW_MASK, CodedBufferSegment, ConfigAttrib,
     DrmPrimeSurfaceDescriptor, FOURCC_NV12, INVALID_ID, Id, Image, ImageFormat, Nv12Object,
-    PACKED_HEADER_SEQUENCE, PACKED_HEADER_SLICE, PROGRESSIVE, PackedHeaderParam, RT_FORMAT_YUV420,
-    SURFACE_RENDERING, SURFACE_SKIPPED, SurfaceAttrib, attrib, buffer, packed, surface_attrib,
+    PACKED_HEADER_PICTURE, PACKED_HEADER_SEQUENCE, PACKED_HEADER_SLICE, PROGRESSIVE,
+    PackedHeaderParam, RT_FORMAT_YUV420, SURFACE_RENDERING, SURFACE_SKIPPED, SurfaceAttrib, attrib,
+    buffer, packed, surface_attrib,
 };
 use super::h264::{self, RcMode};
 use super::hevc;
@@ -58,7 +60,8 @@ pub(crate) const DEPTH: usize = 4;
 /// three leave one spare.
 const RECON: usize = 3;
 /// The most buffers one picture submits: sequence, three misc, picture, the packed
-/// sequence header's two, the packed slice header's two (HEVC), slice.
+/// sequence header's two, the packed slice header's two (HEVC) or the packed frame
+/// header's two (AV1), slice or tile group.
 const MAX_BUFFERS: usize = 10;
 /// How long an encode waits for render's write of a GPU frame. Render submitted it
 /// before queueing the frame, so this is reached only when the GPU hangs.
@@ -107,17 +110,19 @@ impl Resources {
     }
 
     /// A packed header of `kind` holding `bytes` (whole NAL units, emulation prevention
-    /// included): its parameter buffer and its data buffer, pushed onto `buffers`.
+    /// included, or whole AV1 OBUs, which have none): its parameter buffer and its data
+    /// buffer, pushed onto `buffers`.
     fn packed_header(
         &self,
         kind: u32,
         bytes: &[u8],
+        emulation: bool,
         buffers: &mut Vec<Id>,
     ) -> Result<(), PlatformError> {
         let param = PackedHeaderParam {
             kind,
             bit_length: u32::try_from(bytes.len() * 8).unwrap_or(u32::MAX),
-            has_emulation_bytes: 1,
+            has_emulation_bytes: u8::from(emulation),
             va_reserved: [0; 4],
         };
         buffers.push(self.buffer(buffer::PACKED_HEADER_PARAMETER, &param)?);
@@ -452,6 +457,10 @@ enum Stream {
         settings: hevc::Settings,
         gop: hevc::Gop,
     },
+    Av1 {
+        settings: av1::Settings,
+        gop: av1::Gop,
+    },
 }
 
 /// One picture of either codec's stream.
@@ -459,6 +468,7 @@ enum Stream {
 enum Picture {
     H264(h264::Picture),
     Hevc(hevc::Picture),
+    Av1(av1::Picture),
 }
 
 impl Picture {
@@ -466,13 +476,15 @@ impl Picture {
         match self {
             Self::H264(p) => p.idr,
             Self::Hevc(p) => p.idr,
+            Self::Av1(p) => p.key,
         }
     }
 }
 
 impl Stream {
-    /// The stream for `config` on an encoder of `profile`. HEVC is checked with the
-    /// default tools; [`Self::with_tools`] sets the driver's.
+    /// The stream for `config` on an encoder of `profile`. HEVC and AV1 are checked
+    /// with the default tools; [`Self::with_tools`] and [`Self::with_av1_tools`] set
+    /// the driver's.
     fn new(config: &VideoEncoderConfig, profile: VaProfile) -> Result<Self, PlatformError> {
         Ok(match profile {
             VaProfile::H264(profile) => {
@@ -489,6 +501,31 @@ impl Stream {
                     settings,
                 }
             }
+            VaProfile::Av1Main => {
+                let settings = av1::check(config, av1::Tools::DEFAULT)?;
+                Self::Av1 {
+                    gop: av1::Gop::new(&settings),
+                    settings,
+                }
+            }
+        })
+    }
+
+    /// An AV1 stream checked again for the driver's `tools`; another as it is.
+    fn with_av1_tools(
+        self,
+        config: &VideoEncoderConfig,
+        tools: av1::Tools,
+    ) -> Result<Self, PlatformError> {
+        Ok(match self {
+            Self::Av1 { .. } => {
+                let settings = av1::check(config, tools)?;
+                Self::Av1 {
+                    gop: av1::Gop::new(&settings),
+                    settings,
+                }
+            }
+            other => other,
         })
     }
 
@@ -506,7 +543,7 @@ impl Stream {
                     settings,
                 }
             }
-            h264 => h264,
+            other => other,
         })
     }
 
@@ -514,6 +551,7 @@ impl Stream {
         match self {
             Self::H264 { .. } => Codec::H264,
             Self::Hevc { .. } => Codec::Hevc,
+            Self::Av1 { .. } => Codec::Av1,
         }
     }
 
@@ -521,15 +559,18 @@ impl Stream {
         match self {
             Self::H264 { settings, .. } => settings.rc,
             Self::Hevc { settings, .. } => settings.rate.rc,
+            Self::Av1 { settings, .. } => settings.rate.rc,
         }
     }
 
     /// The size of the surfaces and the context: whole macroblocks for H.264, the
-    /// aligned coded size for HEVC. The SPS crops the excess.
+    /// aligned coded size for HEVC, whole superblocks for AV1. The SPS (or the AV1 frame
+    /// size) crops the excess.
     fn coded_size(&self) -> (u32, u32) {
         match self {
             Self::H264 { settings, .. } => (settings.width_mbs * 16, settings.height_mbs * 16),
             Self::Hevc { settings, .. } => (settings.coded_width, settings.coded_height),
+            Self::Av1 { settings, .. } => (settings.coded_width, settings.coded_height),
         }
     }
 
@@ -537,14 +578,17 @@ impl Stream {
         match self {
             Self::H264 { settings, .. } => settings.coded_buffer_size(),
             Self::Hevc { settings, .. } => settings.coded_buffer_size(),
+            Self::Av1 { settings, .. } => settings.coded_buffer_size(),
         }
     }
 
-    /// The parameter sets, sent as one packed sequence header on IDR frames.
+    /// The parameter sets (AV1's sequence header OBU), sent as one packed sequence
+    /// header on IDR (key) frames.
     fn parameter_sets(&self) -> Vec<u8> {
         match self {
             Self::H264 { settings, .. } => [h264::sps(settings), h264::pps(settings)].concat(),
             Self::Hevc { settings, .. } => hevc::parameter_sets(settings),
+            Self::Av1 { settings, .. } => av1::sequence_header(settings),
         }
     }
 
@@ -552,6 +596,7 @@ impl Stream {
         match self {
             Self::H264 { gop, .. } => Picture::H264(gop.next_picture()),
             Self::Hevc { gop, .. } => Picture::Hevc(gop.next_picture()),
+            Self::Av1 { gop, .. } => Picture::Av1(gop.next_picture()),
         }
     }
 
@@ -559,6 +604,7 @@ impl Stream {
         match self {
             Self::H264 { gop, .. } => gop.force_idr(),
             Self::Hevc { gop, .. } => gop.force_idr(),
+            Self::Av1 { gop, .. } => gop.force_key(),
         }
     }
 
@@ -567,6 +613,7 @@ impl Stream {
         match self {
             Self::H264 { .. } => "H.264 encode",
             Self::Hevc { .. } => "HEVC encode",
+            Self::Av1 { .. } => "AV1 encode",
         }
     }
 
@@ -574,6 +621,7 @@ impl Stream {
         match self {
             Self::H264 { .. } => "H.264 keyframe request",
             Self::Hevc { .. } => "HEVC keyframe request",
+            Self::Av1 { .. } => "AV1 keyframe request",
         }
     }
 
@@ -581,11 +629,12 @@ impl Stream {
         match self {
             Self::H264 { .. } => "VA-API H.264 encoder",
             Self::Hevc { .. } => "VA-API HEVC encoder",
+            Self::Av1 { .. } => "VA-API AV1 encoder",
         }
     }
 }
 
-/// One H.264 or HEVC encode session on a VA-API driver.
+/// One H.264, HEVC or AV1 encode session on a VA-API driver.
 pub(crate) struct VaapiEncoder {
     res: Resources,
     info: CodecInfo,
@@ -596,6 +645,8 @@ pub(crate) struct VaapiEncoder {
     headers: Option<Vec<u8>>,
     /// Whether the driver takes packed slice headers (HEVC only).
     packed_slice: bool,
+    /// Whether each frame's packed frame header OBU is sent (AV1, always).
+    packed_frame: bool,
     /// The last picture's reconstructed surface: the next P frame's reference.
     reference: Option<(Id, Picture)>,
     /// How many of `res.surfaces` are input surfaces: [`DEPTH`] on CPU frames, none on
@@ -661,17 +712,26 @@ impl VaapiEncoder {
         let (va, dpy) = (res.display.va.clone(), res.display.dpy);
         let (profile, entrypoint) = (encoder.profile.va(), encoder.entrypoint as c_int);
         let hevc = stream.codec() == Codec::Hevc;
+        let av1 = stream.codec() == Codec::Av1;
         let mut offered = [
             attrib::RT_FORMAT,
             attrib::RATE_CONTROL,
             attrib::ENC_PACKED_HEADERS,
-            // HEVC only: what the driver codes.
-            attrib::ENC_HEVC_FEATURES,
+            // HEVC: what the driver codes. AV1: how it sizes OBUs and transforms.
+            if av1 {
+                attrib::ENC_AV1_EXT2
+            } else {
+                attrib::ENC_HEVC_FEATURES
+            },
             attrib::ENC_HEVC_BLOCK_SIZES,
             attrib::PREDICTION_DIRECTION,
         ]
         .map(|kind| ConfigAttrib { kind, value: 0 });
-        let asked: c_int = if hevc { 6 } else { 3 };
+        let asked: c_int = match (hevc, av1) {
+            (true, _) => 6,
+            (_, true) => 4,
+            _ => 3,
+        };
         // SAFETY: the display is initialised; `offered` holds at least `asked`
         // attributes, whose values libva fills in place.
         // C: `VAStatus vaGetConfigAttributes(VADisplay, VAProfile, VAEntrypoint,
@@ -689,6 +749,9 @@ impl VaapiEncoder {
             let tools =
                 hevc::Tools::from_attributes(offered[3].value, offered[4].value, offered[5].value);
             stream.with_tools(config, tools)?
+        } else if av1 {
+            let tools = av1::Tools::from_attributes(offered[3].value, &info.name)?;
+            stream.with_av1_tools(config, tools)?
         } else {
             stream
         };
@@ -708,6 +771,17 @@ impl VaapiEncoder {
         let packed = has(offered[2], PACKED_HEADER_SEQUENCE);
         // JStream's slice headers match its own parameter sets, not the driver's.
         let packed_slice = packed && hevc && has(offered[2], PACKED_HEADER_SLICE);
+        // AV1 is encoded as FFmpeg does it: JStream writes the sequence and frame
+        // header OBUs, and the driver rewrites the fields its rate controller picks.
+        let packed_frame = av1;
+        if av1 && !has(offered[2], PACKED_HEADER_SEQUENCE | PACKED_HEADER_PICTURE) {
+            return Err(PlatformError::Unsupported {
+                what: format!(
+                    "AV1 encoding on {}, which doesn't take packed headers",
+                    info.name
+                ),
+            });
+        }
         let mut wanted = vec![
             ConfigAttrib {
                 kind: attrib::RT_FORMAT,
@@ -719,7 +793,12 @@ impl VaapiEncoder {
             },
         ];
         let packed_bits = if packed { PACKED_HEADER_SEQUENCE } else { 0 }
-            | if packed_slice { PACKED_HEADER_SLICE } else { 0 };
+            | if packed_slice { PACKED_HEADER_SLICE } else { 0 }
+            | if packed_frame {
+                PACKED_HEADER_PICTURE
+            } else {
+                0
+            };
         if packed_bits != 0 {
             wanted.push(ConfigAttrib {
                 kind: attrib::ENC_PACKED_HEADERS,
@@ -808,6 +887,7 @@ impl VaapiEncoder {
             config: *config,
             headers: packed.then(|| stream.parameter_sets()),
             packed_slice,
+            packed_frame,
             stream,
             reference: None,
             inputs,
@@ -858,6 +938,7 @@ impl VaapiEncoder {
         let stream = &self.stream;
         let headers = self.headers.as_deref().filter(|_| picture.idr());
         let packed_slice = self.packed_slice;
+        let packed_frame = self.packed_frame;
         let buffers = &mut self.buffers;
         buffers.clear();
         let mut built = || -> Result<(), PlatformError> {
@@ -866,7 +947,7 @@ impl VaapiEncoder {
                 (Stream::H264 { settings: s, .. }, Picture::H264(p)) => {
                     let reference = reference.as_ref().and_then(|(id, r)| match r {
                         Picture::H264(r) => Some((*id, r)),
-                        Picture::Hevc(_) => None,
+                        Picture::Hevc(_) | Picture::Av1(_) => None,
                     });
                     if p.idr {
                         buffers.push(res.buffer(buffer::SEQUENCE_PARAMETER, &h264::sequence(s))?);
@@ -879,7 +960,7 @@ impl VaapiEncoder {
                         &h264::picture(s, p, recon, reference, coded),
                     )?);
                     if let Some(headers) = headers {
-                        res.packed_header(packed::SEQUENCE, headers, buffers)?;
+                        res.packed_header(packed::SEQUENCE, headers, true, buffers)?;
                     }
                     buffers
                         .push(res.buffer(buffer::SLICE_PARAMETER, &h264::slice(s, p, reference))?);
@@ -887,7 +968,7 @@ impl VaapiEncoder {
                 (Stream::Hevc { settings: s, .. }, Picture::Hevc(p)) => {
                     let reference = reference.as_ref().and_then(|(id, r)| match r {
                         Picture::Hevc(r) => Some((*id, r)),
-                        Picture::H264(_) => None,
+                        Picture::H264(_) | Picture::Av1(_) => None,
                     });
                     if p.idr {
                         buffers.push(res.buffer(buffer::SEQUENCE_PARAMETER, &hevc::sequence(s))?);
@@ -900,14 +981,40 @@ impl VaapiEncoder {
                         &hevc::picture(s, p, recon, reference, coded),
                     )?);
                     if let Some(headers) = headers {
-                        res.packed_header(packed::SEQUENCE, headers, buffers)?;
+                        res.packed_header(packed::SEQUENCE, headers, true, buffers)?;
                     }
                     if packed_slice {
                         let header = hevc::slice_header(s, p, reference);
-                        res.packed_header(packed::SLICE, &header, buffers)?;
+                        res.packed_header(packed::SLICE, &header, true, buffers)?;
                     }
                     buffers
                         .push(res.buffer(buffer::SLICE_PARAMETER, &hevc::slice(s, p, reference))?);
+                }
+                (Stream::Av1 { settings: s, .. }, Picture::Av1(p)) => {
+                    // The frame before: the one an inter frame predicts from.
+                    let reference = reference.as_ref().and_then(|(id, r)| match r {
+                        Picture::Av1(_) => Some(*id),
+                        Picture::H264(_) | Picture::Hevc(_) => None,
+                    });
+                    if p.key {
+                        buffers.push(res.buffer(buffer::SEQUENCE_PARAMETER, &av1::sequence(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &av1::rate_control(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &av1::hrd(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &av1::frame_rate(s))?);
+                    }
+                    let header = av1::frame_header(s, p);
+                    let sequence_bytes = headers.map_or(0, <[u8]>::len);
+                    buffers.push(res.buffer(
+                        buffer::PICTURE_PARAMETER,
+                        &av1::picture(s, p, recon, reference, coded, &header, sequence_bytes),
+                    )?);
+                    if let Some(headers) = headers {
+                        res.packed_header(packed::SEQUENCE, headers, false, buffers)?;
+                    }
+                    if packed_frame {
+                        res.packed_header(packed::PICTURE, &header.bytes, false, buffers)?;
+                    }
+                    buffers.push(res.buffer(buffer::SLICE_PARAMETER, &av1::tile_group())?);
                 }
                 _ => {
                     return Err(PlatformError::InvalidState {
@@ -973,6 +1080,12 @@ impl VaapiEncoder {
                     other?;
                     continue;
                 }
+            };
+            // An AV1 packet is a temporal unit, which starts with a temporal delimiter.
+            let data = if self.stream.codec() == Codec::Av1 {
+                [&av1::TEMPORAL_DELIMITER[..], &data].concat()
+            } else {
+                data
             };
             self.pending.push(Packet::new(
                 self.stream.codec(),

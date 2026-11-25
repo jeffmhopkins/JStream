@@ -57,7 +57,13 @@ docs show a full example.
 prelude, then the generated `Params` struct (one field per parameter in declaration
 order, at group 0, binding 4, as `p`), then the effect's file. `bool` and `enum` are
 `u32` (an enum is its option's index), `int` is `i32`, `float` is `f32`, and `color` is a
-`vec4<f32>` of linear-light RGB with straight alpha. The effect defines
+`vec4<f32>` of linear-light RGB with straight alpha. Values reach `p` as the settings hold
+them: the host can't tell which parameters count in pixels, so it scales none, and a pixel
+parameter counts in the input's texels (`frame.in_size`). The built-in kinds' count in the
+input's extent ([ADR-0211](../../docs/adr/0211-a-filters-pixel-settings-count-in-its-inputs-extent.md)),
+so on an image drawn with fewer texels than it is placed at (a model's smaller layer, or
+an item's layer scaled down to fit the largest side) a pack
+effect reaches further across the picture than a built-in one. The effect defines
 `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>` and may add functions, constants
 and `var<private>` globals. It may not add bindings, immediates, overrides (the host has
 no value for them) or entry points. Its memory is capped at `MAX_VALUE_BYTES` (16 KiB) in

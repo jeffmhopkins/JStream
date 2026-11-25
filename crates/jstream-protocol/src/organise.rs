@@ -29,6 +29,11 @@ pub struct FolderInfo {
     /// The folder it sits in. Omitted for a top-level folder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<FolderId>,
+    /// The scene whose keyframe scenes and sequences it organises, under that scene
+    /// in the scene list (ADR-0222, since 0.190). Omitted for a folder of the scene
+    /// list itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_id: Option<SceneId>,
 }
 
 /// Everything that carries one label (ADR-0133): its action group, as `label.members`

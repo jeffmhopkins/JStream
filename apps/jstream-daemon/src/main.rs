@@ -405,6 +405,7 @@ fn network_config(
     let config = jstream_server::NetworkConfig {
         bind: std::net::SocketAddr::new(ip, lan.port),
         identity: Arc::new(identity),
+        announce: lan.announce,
     };
     Ok((config, notes))
 }

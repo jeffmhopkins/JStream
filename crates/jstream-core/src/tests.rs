@@ -21,6 +21,7 @@ mod item_actions;
 mod keyframe_tracks;
 mod keyframes;
 mod live_values;
+mod mute;
 mod packs;
 mod page_api;
 mod preview;
@@ -28,6 +29,8 @@ mod projects;
 mod ptz;
 mod rendering;
 mod sequences;
+mod show_scene;
+mod shows;
 mod source_sizes;
 mod sources;
 mod timelines;
@@ -1635,6 +1638,7 @@ fn organise_script() -> Vec<Call> {
     }
     fn folder(id: &str, parent: Option<&str>) -> Edit {
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new(id),
             name: format!("Folder {id}"),
             parent: parent.map(FolderId::new),
@@ -3177,6 +3181,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
                 height: 1080,
             }),
             depth: None,
+            duration_ms: None,
         }]
     );
 
@@ -4482,9 +4487,10 @@ mod cpu_pipeline {
             .next_back();
         let (render_ticks, load) = tick.expect("a stats.tick");
         assert_eq!(render_ticks, 9);
-        // Two ticks drawn, and the nine skipped ones not counted as frames.
+        // Three ticks drawn (the mix's first draw, which is pushed to no one, and the
+        // two frames), and the nine skipped ones not counted as frames.
         let frames = load.expect("the engine's load").program_frames;
-        assert_eq!(frames, 2, "the nine skipped ticks are not frames");
+        assert_eq!(frames, 3, "the nine skipped ticks are not frames");
         block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
@@ -4600,6 +4606,8 @@ mod cpu_pipeline {
         assert_eq!(stream.dropped, 0, "{stream:?}");
         assert!(stream.target_kbps > 0, "{stream:?}");
         assert!(stream.fps.get() > 0.0, "{stream:?}");
+        // The encoder encoding it is named (protocol 0.185); the fakes' is software.
+        assert!(!stream.encoder.is_empty() && !stream.hardware, "{stream:?}");
         let mixer = info.mixer.expect("the mixer");
         assert!(mixer.block_ms.get() > 0.0, "{mixer:?}");
         assert!(mixer.late_blocks <= mixer.blocks, "{mixer:?}");

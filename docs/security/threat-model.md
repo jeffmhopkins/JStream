@@ -136,7 +136,9 @@ a stolen token, local denial of service.
   `ServerConfig::network`); it is off by default. The desktop app keeps that switch in
   its data folder and saves it only through its own window's command, never through
   the control API, so no agent, plugin or paired device can turn it on. Turning it off
-  applies at the app's next start and doesn't revoke the paired devices, which are
+  closes the listener at once and ends the sessions admitted on it
+  ([ADR-0234](../adr/0234-network-access-applies-at-once.md)), and doesn't revoke the
+  paired devices, which are
   admitted again if it is turned back on; revoking them ends their access:
   - **TLS only**, with rustls on the ring provider: TLS 1.3 and 1.2 with rustls' default
     suites for them, ALPN `http/1.1`, no client certificates. Plain HTTP gets no answer.
@@ -167,6 +169,10 @@ a stolen token, local denial of service.
     so it is also reachable on public Wi-Fi or a VPN the machine joins: `--lan-bind`
     picks one address. On Windows and macOS, the first start can raise the OS firewall's
     prompt.
+  - **Announced** unless turned off: while it is open, the host announces it on mDNS
+    ([ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md); see
+    [Pairing](#pairing)). The daemon's `--lan-quiet`, or the desktop app's "Let devices
+    find JStream on my network" unticked, keeps it quiet.
   The desktop app serves only its window, on an OS-picked port with a token kept in
   memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
   (4455 by default), turns MCP on and takes its token from a token file with the
@@ -254,9 +260,11 @@ covers = [
   "crates/jstream-server/src/admitted.rs",
   "crates/jstream-server/src/pair.rs",
   "crates/jstream-server/src/pair_page.rs",
+  "crates/jstream-server/src/asks.rs",
   "crates/jstream-server/src/gate.rs",
+  "crates/jstream-server/src/announce.rs",
 ]
-depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md", "docs/adr/0104-network-listener-over-tls.md"]
+depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md", "docs/adr/0104-network-listener-over-tls.md", "docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md"]
 -->
 
 **Built:** codes, device tokens, and the browser pairing page and device cookie (#288),
@@ -289,6 +297,35 @@ that connection ([ADR-0104](../adr/0104-network-listener-over-tls.md)). With `--
 on the network can void each open code with five wrong guesses, so pairing can be
 denied while they keep at it, never won; ADR-0044's five are kept rather than giving the
 network its own allowance.
+
+**Accepted** ([ADR-0235](../adr/0235-pair-a-device-by-approving-it-on-the-host.md)):
+while the server pairs devices, a device may ask to pair instead of typing a code
+(`POST /api/v1/pair/ask`), and the host shows the person its name and address with
+Allow and Deny. Anyone on the network can ask, so the person can be shown asks they
+didn't expect; at most 4 are open at once and one per address, each for at most 2
+minutes, and an ask admits no one until a person presses Allow. The name is the
+device's own text, shown as data. A device that pairs this way doesn't compare
+fingerprints: it trusts the certificate it saw when it asked, so an attacker already in
+the middle of that connection at that moment could be the one it trusts, and the person
+pressing Allow on an unexpected ask pairs a stranger's device with the control token's
+power. The prompt says so, the address helps tell the person's own device apart,
+Paired devices lists it for revoking, and the code (with its fingerprint check) stays
+for anyone who doesn't want the risk. No ask, name or token is logged beyond `info`,
+and no token at all ([R-SEC-001](../RULES.md#R-SEC-001)).
+
+**Accepted** ([ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md)): while
+the network listener is open, the host announces it on mDNS as `_jstream._tcp.local`
+(the host name, the port and `v=1`; no fingerprint, version or project), unless the
+desktop app's "Let devices find JStream on my network" is off or the daemon runs with
+`--lan-quiet`. That tells anyone on the link, unasked, that this machine runs JStream
+and where; the port was already reachable to anyone who tried it. The responder on UDP
+5353 only answers queries for that service, and only from a private, link-local or
+loopback source, so a host with a public address that can reach the port learns
+nothing (#1799 B1); one on a private network routed to this one (a VPN, say) still can,
+as with the JTunnel socket. It answers the group at most once a second, reads each query with bounds on
+its size, questions and labels, and admits no one: a device it points somewhere still checks the
+fingerprint and pairs with a code, so a spoofed answer can only send a device to an
+address the fingerprint check refuses.
 
 **Gaps:** the devices file's Windows DACL, like the token file's, waits on a Windows
 hardware run (#546, for #344).
@@ -734,13 +771,24 @@ somewhere it shouldn't.
 - It sends only subscribe and bye packets and names packets, only to accepted senders'
   addresses, which must be loopback, private IPv4 or link-local, and every 10 s one mDNS PTR query for
   `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
-  socket (a legacy unicast query, so senders answer that socket; no socket joins the
-  group or binds port 5353). It never announces itself and never sends audio or MIDI.
+  socket. It never announces itself and never sends audio or MIDI.
+- Senders answer and announce to the group, so a second socket, the mDNS listener
+  ([ADR-0221](../adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)),
+  binds port 5353 with address reuse beside the system's responder and joins the group
+  while the receiver runs. Nothing is sent from it. It takes only an mDNS message from a
+  LAN address's port 5353, into the same parser and list as below, and drops the rest
+  uncounted; it reads at most 16 datagrams per turn of the thread, so other programs'
+  mDNS traffic can't hold up playout. Another local program on 5353 sees the same
+  group traffic it always did; the receiver adds nothing to it. (The network listener's
+  own mDNS announcement, while network access is on, is a separate socket on the same
+  port that answers only for `_jstream._tcp.local`; see [Pairing](#pairing).)
+- In the desktop app one accepted sender is live at a time (ADR-0221): only it is
+  subscribed to, so a reader naming no input reads only that sender's data.
 - A names packet ([ADR-0181](../adr/0181-jstream-names-a-jtunnel-senders-params.md))
   tells an accepted sender whose state is on what the collection calls its modulation
   params, so its DAW shows them. It carries only the names of what reads the sender's
   `params` key (an item's source and property, a scene's camera property, a value
-  binding's target, a channel's name or ID), each at most 40 bytes with no control characters, at most 32 of
+  binding's target, which may be a PTZ camera's name and axis, a channel's name or ID), each at most 40 bytes with no control characters, at most 32 of
   them. It goes beside the keepalive while any slot is named, and as an empty list four
   more times once none is. A sender with its state off is sent none. The receiver never
   parses one.
@@ -754,8 +802,22 @@ somewhere it shouldn't.
   instance's name is copied, once it matches; a message declaring more than 256 records
   is refused unread, so one costs at most a few tens of thousands of steps); a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
-  name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
-  doesn't trigger bindings (ADR-0142 §2).
+  name and the every-input one, which the `midi_*` sources draw (and whose clock gives
+  their beat). It moves anything only once the person turns on "Use this sender's MIDI"
+  for that sender (the desktop app's checkbox, the daemon's `--jtunnel-midi`), off by
+  default ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md) §3,
+  [ADR-0207](../adr/0207-mute-actions-and-held-triggers.md),
+  [ADR-0220](../adr/0220-every-midi-reader-goes-through-the-senders-switch.md)): the
+  engine's action-binding runner (`binding.set`, so any bindable action, `output.stop`
+  included) reads only the inputs `MidiInputs::bindable` names, and value bindings,
+  channels and `midi` modifiers read a named input only while its state is bindable
+  (reading it as a control at rest otherwise, in `Control::read`) and, naming none, only
+  the bound state, which a sender feeds only while it is let in and which is rebuilt
+  without it when it is dropped. A press a sender holds (a
+  push-to-talk) is let go once the switch goes off, its binding changes, or the sender
+  has sent nothing for 500 ms, so a dropped sender can't leave a mute open. Tests show a
+  sender left out moves no action binding, value binding, channel or `midi` modifier,
+  and one switched off mid-hold leaves nothing held.
 - A sender's state packets (JTunnel's side channel, a DAW's JSON messages under keys,
   [ADR-0171](../adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2) are
   taken only from an accepted sender, and counted and dropped while the person has
@@ -782,13 +844,16 @@ somewhere it shouldn't.
   ([ADR-0152](../adr/0152-a-ptz-controller-drives-scene-cameras.md)) pass the same LAN
   check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server) for
   what they may send and receive. Unlike the JTunnel socket, a controller endpoint binds
-  only the one address the person gives.
+  only the one address the person gives. A value binding aiming a head's axis
+  (ADR-0209) sends only to the heads the machine lists, as a shot does; a binding
+  naming a camera this machine doesn't list sends nothing.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it, or notes into what its MIDI sources draw
 (ADR-0123 §6), as with JTunnel anywhere. An accepted sender, and anything on the path to
-its address, learns the names of the sources, scenes, buses and channels bound to its
-params (ADR-0181); its state switch turns that off.
+its address, learns the names of the sources, scenes, buses, channels and PTZ cameras
+bound to its params (ADR-0181, [ADR-0209](../adr/0209-value-bindings-aim-ptz-cameras.md));
+its state switch turns that off.
 Off by default, LAN only and accepted one sender at a time bound it to someone on the
 same network who already targets this machine. The check is of the source address a
 datagram claims, and the socket is bound to every IPv4 interface: a host beyond the LAN

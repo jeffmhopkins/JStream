@@ -1,0 +1,213 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "JStream",
+	"Version": "0.1.0.0",
+	"Author": "JStream contributors",
+	"Actions": [
+		{
+			"Name": "Show",
+			"UUID": "io.github.jeffmhopkins.jstream.show",
+			"Icon": "imgs/actions/show/icon",
+			"Tooltip": "Runs a show: play, continue, pause, stop, back, skip or go to a bookmark. Lights while the show plays or waits.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/show/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Switch scene",
+			"UUID": "io.github.jeffmhopkins.jstream.scene",
+			"Icon": "imgs/actions/scene/icon",
+			"Tooltip": "Switches program to a scene. Lights red while the scene is on program.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/scene/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Go to keyframe",
+			"UUID": "io.github.jeffmhopkins.jstream.keyframe",
+			"Icon": "imgs/actions/keyframe/icon",
+			"Tooltip": "Moves a scene to one of its keyframes. Lights while the scene is at that keyframe.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/keyframe/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Show or hide source",
+			"UUID": "io.github.jeffmhopkins.jstream.visibility",
+			"Icon": "imgs/actions/visibility/icon",
+			"Tooltip": "Shows or hides a source in a scene. Lights while it's shown.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/visibility/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Mute source",
+			"UUID": "io.github.jeffmhopkins.jstream.mute",
+			"Icon": "imgs/actions/mute/icon",
+			"Tooltip": "Mutes or unmutes a source's audio. Lights red while it's muted.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/mute/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Sequence",
+			"UUID": "io.github.jeffmhopkins.jstream.sequence",
+			"Icon": "imgs/actions/sequence/icon",
+			"Tooltip": "Plays or stops a sequence. Lights while it plays.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/sequence/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Effect on or off",
+			"UUID": "io.github.jeffmhopkins.jstream.effect",
+			"Icon": "imgs/actions/effect/icon",
+			"Tooltip": "Turns an effect on a source, scene or item on or off. Lights while it's on.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/effect/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Stream or record",
+			"UUID": "io.github.jeffmhopkins.jstream.output",
+			"Icon": "imgs/actions/output/icon",
+			"Tooltip": "Starts or stops a stream or a recording. Lights red while live.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/output/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Channel switch",
+			"UUID": "io.github.jeffmhopkins.jstream.channel",
+			"Icon": "imgs/actions/channel/icon",
+			"Tooltip": "Switches a channel on or off. Lights while it's on.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/channel/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		},
+		{
+			"Name": "Run action",
+			"UUID": "io.github.jeffmhopkins.jstream.action",
+			"Icon": "imgs/actions/action/icon",
+			"Tooltip": "Runs the action a JStream hotkey is bound to, or any action written as JSON.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "imgs/actions/action/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 11
+				}
+			]
+		}
+	],
+	"Category": "JStream",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"CodePath": "bin/plugin.js",
+	"Description": "Control JStream from Stream Deck over the network: run shows, switch scenes, go to keyframes, show, hide and mute sources, play sequences, turn effects on and off, start streams and recordings, flip channels and run hotkey actions. Keys light up with JStream's live state.",
+	"Icon": "imgs/plugin/marketplace",
+	"SDKVersion": 3,
+	"Software": {
+		"MinimumVersion": "7.1"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "24",
+		"Debug": "disabled"
+	},
+	"UUID": "io.github.jeffmhopkins.jstream",
+	"URL": "https://github.com/jeffmhopkins/JStream/tree/main/integrations/streamdeck"
+}

@@ -305,13 +305,19 @@ pub(super) fn draw_probes(
     for mut run in runs.collect::<Vec<_>>() {
         // A try counts whether or not it draws, so one that can't keeps no slot.
         chains.probe_tries.insert(run.key.clone(), frame);
-        if !capture(
+        // A probe's faces are small and read blurred: its models aren't multisampled
+        // (ADR-0242 decision 4), and the frame's are again after it.
+        let samples = compositor.model_antialiasing();
+        compositor.set_model_antialiasing(1);
+        let captured = capture(
             compositor,
             (cache, chains),
             (shot, at),
             &mut run,
             (live, captures),
-        )? {
+        );
+        compositor.set_model_antialiasing(samples);
+        if !captured? {
             continue;
         }
         if run.drawn < 6 {
@@ -434,7 +440,7 @@ fn capture(
             pose(compositor, shown.model, shown.shown);
             let (drives, driving) = crate::sourced::materials(
                 shot.source_drives(shown.item),
-                |m| shot.source_value(shown.item, m, at),
+                |m, own| shot.source_value(shown.item, m, at, own),
                 |m| shot.tint(shown.item, m),
             );
             let (texture, reflection) = super::model_maps(shot, cache, shown.source, shown.shown);

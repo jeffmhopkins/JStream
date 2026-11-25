@@ -4,25 +4,40 @@
 //! trigger bar lists what starts and stops it as sentences, with "+ Trigger" to add one.
 //!
 //! Each lane is one channel over the timeline's length: a double-click adds a point
-//! (snapped to a tenth of a second, Shift for free), a drag moves one, and a right-click
-//! sets the curve into it or deletes it. Each gesture is one `timeline.set`, so one undo
-//! step. A lane with no point at 0 starts from the channel's value, drawn dashed from
+//! (snapped to a tenth of a second, Shift for free), a drag moves one, and a click or a
+//! right-click opens its menu (its curve, time and value, delete). A switch lane is its
+//! on bars instead: a double-click in a gap adds one, a drag moves a bar or one of its
+//! ends, and a click or a right-click opens its menu (on at, off at, delete). Each
+//! gesture is one `timeline.set`, so one undo step. A lane with no point at 0 starts from the channel's value, drawn dashed from
 //! where the channel is now. The play head follows `timeline.changed`, and a click on
-//! the ruler seeks there.
+//! the ruler seeks there. The zoom bar along the foot (`seq_zoom`) zooms and scrolls the
+//! lanes, as the Show panel's does.
 //!
 //! Docs: docs/adr/0184-sequences-lanes-and-triggers.md, docs/UI-FEATURES.md#automation
 
 use crate::app::SessionContext;
+use crate::dialog::Info;
 use crate::icons::Icon;
-use crate::panels::channels::{ChannelSearch, live_values, new_channel, open_channel};
+use crate::menu::{Entry, Menus};
+use crate::panels::channels::{live_values, new_channel, open_channel, search};
+use crate::panels::lane_offers::{
+    self, Grip, Offer, bar_points, drag_bar, followed_channel, insert_bar, is_switch, kinds_needed,
+    offers, switch_bars, switch_points,
+};
+use crate::panels::learn::follows;
 use crate::panels::number::NumberField;
+use crate::panels::seq_zoom;
+use crate::panels::show::time::Viewport;
+use crate::session::Session;
 use crate::store::{Collection, Studio, now_ms};
+use jstream_control::protocol::MIN_LOOP_MS;
 use jstream_control::protocol::{
     Action, ChannelEdge, ChannelValueInfo, Edit, Finite32, KeyframeEdge, LaneCurve, LanePoint,
-    LaneTarget, SceneEdge, SceneId, TimelineEdge, TimelineId, TimelineInfo, TimelineLane,
+    LaneTarget, Rev, SceneEdge, SceneId, TimelineEdge, TimelineId, TimelineInfo, TimelineLane,
     TimelineLoop, TimelineTrigger,
 };
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use leptos::wasm_bindgen::JsCast;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -33,6 +48,11 @@ const COLOURS: usize = 4;
 
 /// Where a dragged point snaps to without Shift, in ms.
 const SNAP_MS: u32 = 100;
+
+/// How far a lane's drawing area sits in from each side of its column, in px (the
+/// `.seq-area` margin in style.css). The ruler and the play head keep to it too, so a
+/// time lines up down every row.
+pub(crate) const AREA_INSET_PX: f64 = 8.0;
 
 /// The scene whose sequences the panel lists for `scene`: a keyframe's parent.
 pub fn family(collection: &Collection, scene: &SceneId) -> SceneId {
@@ -66,6 +86,7 @@ pub fn fresh_sequence(collection: &Collection) -> (TimelineId, String) {
 /// An empty sequence, six seconds long.
 pub fn empty_sequence(id: TimelineId, name: String) -> TimelineInfo {
     TimelineInfo {
+        folder: None,
         timeline_id: id,
         name,
         duration_ms: 6000,
@@ -207,6 +228,123 @@ pub fn with_lane(t: &mut TimelineInfo, channel_id: &str, level: f32) -> bool {
     true
 }
 
+/// A loop range kept valid for a timeline `duration_ms` long: `to_ms` at most the
+/// length, and at least [`MIN_LOOP_MS`] after `from_ms`. `None` when the timeline is
+/// too short to hold one.
+pub fn fit_range(from_ms: u32, to_ms: u32, duration_ms: u32) -> Option<TimelineLoop> {
+    if duration_ms < MIN_LOOP_MS {
+        return None;
+    }
+    let to_ms = to_ms.clamp(MIN_LOOP_MS, duration_ms);
+    let from_ms = from_ms.min(to_ms - MIN_LOOP_MS);
+    Some(TimelineLoop::Range { from_ms, to_ms })
+}
+
+/// What the loop button turns `looping` into: once, then the whole sequence, then a
+/// range (its second half: an intro, then a loop), then once again.
+pub fn next_loop(looping: TimelineLoop, duration_ms: u32) -> TimelineLoop {
+    match looping {
+        TimelineLoop::Once => TimelineLoop::Loop,
+        TimelineLoop::Loop => {
+            let half = snap(f64::from(duration_ms) / 2.0, false);
+            fit_range(half, duration_ms, duration_ms).unwrap_or(TimelineLoop::Once)
+        }
+        _ => TimelineLoop::Once,
+    }
+}
+
+/// Whether `a` and `b` watch the same thing the same way, whatever each waits first.
+pub fn same_watch(a: &TimelineTrigger, b: &TimelineTrigger) -> bool {
+    let mut a = serde_json::to_value(a).unwrap_or_default();
+    let mut b = serde_json::to_value(b).unwrap_or_default();
+    for v in [&mut a, &mut b] {
+        if let Some(o) = v.as_object_mut() {
+            o.remove("delay_ms");
+        }
+    }
+    a == b
+}
+
+/// Adds `trigger` to `t`'s starts, or takes out the one that watches the same thing:
+/// a menu line's check (A14).
+pub fn toggle_start(t: &mut TimelineInfo, trigger: &TimelineTrigger) {
+    if let Some(n) = t.starts.iter().position(|s| same_watch(s, trigger)) {
+        t.starts.remove(n);
+    } else {
+        t.starts.push(trigger.clone());
+    }
+}
+
+/// The "Play a sequence" submenu of a scene's or a keyframe's menu (A14, SQ-03): for
+/// each of `watches` (a heading and the trigger it adds), every sequence of the
+/// collection, checked while that trigger starts it; a click adds or removes the
+/// trigger. Last, a new sequence in `family` that the first watch starts, opened in the
+/// Sequence panel.
+pub fn trigger_submenu(
+    studio: Studio,
+    session: SessionContext,
+    family: SceneId,
+    watches: Vec<(&'static str, TimelineTrigger)>,
+) -> crate::menu::Entry {
+    use crate::menu::Entry;
+    let sequences: Vec<(SceneId, TimelineInfo)> = studio.collection.with_untracked(|c| {
+        c.iter()
+            .flat_map(|c| &c.scenes)
+            .flat_map(|s| s.timelines.iter().map(|t| (s.scene_id.clone(), t.clone())))
+            .collect()
+    });
+    let send = move |scene_id: SceneId, timeline: TimelineInfo| {
+        if let Some(s) = session.get() {
+            studio.apply(&s, vec![Edit::TimelineSet { scene_id, timeline }]);
+        }
+    };
+    let mut lines = Vec::new();
+    for (head, trigger) in &watches {
+        lines.push(Entry::Head((*head).to_owned()));
+        for (scene_id, t) in &sequences {
+            let on = t.starts.iter().any(|s| same_watch(s, trigger));
+            let (scene_id, id, trigger) =
+                (scene_id.clone(), t.timeline_id.clone(), trigger.clone());
+            lines.push(
+                Entry::item(timeline_name(t), move || {
+                    // Read again on the click, so another edit since the menu opened stays.
+                    let now = studio.collection.with_untracked(|c| {
+                        c.as_ref()
+                            .and_then(|c| c.timeline(&id))
+                            .map(|(_, t)| t.clone())
+                    });
+                    if let Some(mut t) = now {
+                        toggle_start(&mut t, &trigger);
+                        send(scene_id.clone(), t);
+                    }
+                })
+                .checked(on),
+            );
+        }
+    }
+    if let Some((head, trigger)) = watches.into_iter().next() {
+        if !sequences.is_empty() {
+            lines.push(Entry::Sep);
+        }
+        lines.push(Entry::item(
+            format!("New sequence: {}", head.to_lowercase()),
+            move || {
+                let Some((id, name)) = studio
+                    .collection
+                    .with_untracked(|c| c.as_ref().map(fresh_sequence))
+                else {
+                    return;
+                };
+                let mut t = empty_sequence(id.clone(), name);
+                t.starts.push(trigger.clone());
+                send(family.clone(), t);
+                open_sequence(studio, id);
+            },
+        ));
+    }
+    Entry::submenu("Play a sequence", lines)
+}
+
 /// Opens sequence `timeline_id` in the Sequence panel, showing the panel.
 pub fn open_sequence(studio: Studio, timeline_id: TimelineId) {
     studio.sequence.set(Some(timeline_id));
@@ -278,13 +416,47 @@ fn curve_name(curve: LaneCurve) -> &'static str {
     }
 }
 
-/// A point being dragged: its lane and index, and where it is now.
+/// A point being dragged: its lane and index, where it is now, where the pointer went
+/// down, and whether it has moved past a click's few pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Drag {
     lane: usize,
     point: usize,
     at_ms: u32,
     value: f32,
+    x0: f64,
+    y0: f64,
+    moved: bool,
+}
+
+/// A switch lane's bars, as `(on_ms, off_ms)` in time order.
+type Bars = Vec<(u32, u32)>;
+
+/// How far a pointer goes, in px, before a press is a drag and not a click.
+const CLICK_SLOP: f64 = 3.0;
+
+/// A switch lane's bar being dragged (by its body or one end): the lane's bars as they
+/// were, which one, where it is now, how far into it the pointer went down, and whether
+/// it has moved past a click's few pixels.
+#[derive(Clone, Debug, PartialEq)]
+struct BarDrag {
+    lane: usize,
+    bar: usize,
+    grip: Grip,
+    held: Vec<(u32, u32)>,
+    now: (u32, u32),
+    offset_ms: i64,
+    x0: f64,
+    moved: bool,
+}
+
+/// The menu a click or right-click on a switch lane's bar opens.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BarMenu {
+    lane: usize,
+    bar: usize,
+    x: f64,
+    y: f64,
 }
 
 /// The menu a right-click on a point opens, at a point in the window.
@@ -294,6 +466,82 @@ struct PointMenu {
     point: usize,
     x: f64,
     y: f64,
+}
+
+/// The edits the panel sent that the engine hasn't shown back yet: the open sequence as
+/// they leave it, so the panel draws it, and builds the next edit on it, at once.
+///
+/// Each edit is a whole `timeline.set`, so one built on the collection's copy while an
+/// earlier one is still on its way (the engine answers, then the panel reads the
+/// collection again) would send that copy back and undo the earlier one: a second point
+/// added quickly took the first away, and a second click on M put the lane back. The
+/// draft goes once every edit has been answered and the collection has caught up with
+/// the last, or at once when one is refused, which the problem bar shows.
+#[derive(Clone, Copy)]
+struct Pending {
+    /// The open sequence as the edits leave it, with the scene that holds it.
+    draft: RwSignal<Option<(SceneId, TimelineInfo)>>,
+    /// How many edits are on their way.
+    sent: StoredValue<u32>,
+    /// The revision the last answered edit made.
+    rev: StoredValue<Rev>,
+}
+
+impl Pending {
+    fn new(studio: Studio) -> Self {
+        let pending = Pending {
+            draft: RwSignal::new(None),
+            sent: StoredValue::new(0),
+            rev: StoredValue::new(Rev(0)),
+        };
+        // The collection caught up: draw from it again.
+        Effect::new(move |_| {
+            let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
+            if rev.is_some_and(|rev| pending.settled(rev)) {
+                pending.draft.set(None);
+            }
+        });
+        pending
+    }
+
+    /// Whether nothing is on its way and the collection at `rev` holds the last edit.
+    fn settled(self, rev: Rev) -> bool {
+        self.sent.get_value() == 0 && rev >= self.rev.get_value()
+    }
+
+    /// Sends `edits`, the last of which leaves the sequence as `draft` (in `scene`), and
+    /// draws the draft until the engine shows it back.
+    fn send(
+        self,
+        studio: Studio,
+        session: &Session,
+        scene: SceneId,
+        draft: TimelineInfo,
+        edits: Vec<Edit>,
+    ) {
+        self.draft.set(Some((scene, draft)));
+        self.sent.update_value(|n| *n += 1);
+        let session = session.clone();
+        spawn_local(async move {
+            let answer = crate::store::apply(&session, edits, None).await;
+            self.sent.update_value(|n| *n = n.saturating_sub(1));
+            match answer {
+                Ok(rev) => {
+                    self.rev.update_value(|r| *r = (*r).max(rev));
+                    let now = studio
+                        .collection
+                        .with_untracked(|c| c.as_ref().map(|c| c.rev));
+                    if now.is_some_and(|now| self.settled(now)) {
+                        self.draft.set(None);
+                    }
+                }
+                Err(error) => {
+                    studio.report(&error);
+                    self.draft.set(None);
+                }
+            }
+        });
+    }
 }
 
 /// The Sequence panel.
@@ -330,10 +578,12 @@ pub fn Sequence() -> impl IntoView {
                 .unwrap_or_default()
         })
     };
-    // The open sequence: the one picked, or this scene's first.
+    let pending = Pending::new(studio);
+    // The open sequence: the one picked, or this scene's first; as the panel's edits on
+    // their way leave it, so it shows them at once.
     let open = Memo::new(move |_| {
         let picked = studio.sequence.get();
-        let found = picked.and_then(|id| {
+        let found = picked.clone().and_then(|id| {
             studio.collection.with(|c| {
                 c.as_ref().and_then(|c| {
                     c.timeline(&id)
@@ -341,14 +591,35 @@ pub fn Sequence() -> impl IntoView {
                 })
             })
         });
-        found.or_else(|| {
+        let found = found.or_else(|| {
             let scene = family_id()?;
             list().into_iter().next().map(|t| (scene, t))
-        })
+        });
+        let draft = pending.draft.get().filter(|(_, d)| match &found {
+            Some((_, t)) => t.timeline_id == d.timeline_id,
+            // A sequence just made, not in the collection yet.
+            None => picked.as_ref() == Some(&d.timeline_id),
+        });
+        draft.or(found)
     });
-    let apply = move |scene_id: SceneId, timeline: TimelineInfo| {
+    // The part of the open sequence in view: all of it, until the zoom bar or the wheel
+    // zooms in; a different sequence opens whole.
+    let zoom = RwSignal::new(seq_zoom::fit());
+    let open_id = Memo::new(move |_| open.with(|o| o.as_ref().map(|(_, t)| t.timeline_id.clone())));
+    Effect::new(move |was: Option<Option<TimelineId>>| {
+        let now = open_id.get();
+        if was.is_some_and(|w| w != now) {
+            zoom.set(seq_zoom::fit());
+        }
+        now
+    });
+    let apply = move |scene_id: SceneId, timeline: TimelineInfo, mut edits: Vec<Edit>| {
         if let Some(s) = session.0.get_value() {
-            studio.apply(&s, vec![Edit::TimelineSet { scene_id, timeline }]);
+            edits.push(Edit::TimelineSet {
+                scene_id: scene_id.clone(),
+                timeline: timeline.clone(),
+            });
+            pending.send(studio, &s, scene_id, timeline, edits);
         }
     };
     let change = move |f: &dyn Fn(&mut TimelineInfo)| {
@@ -361,7 +632,7 @@ pub fn Sequence() -> impl IntoView {
         if t == before {
             return false;
         }
-        apply(scene, t);
+        apply(scene, t, Vec::new());
         true
     };
     let act = move |action: Action| {
@@ -383,7 +654,7 @@ pub fn Sequence() -> impl IntoView {
             return;
         };
         studio.sequence.set(Some(id.clone()));
-        apply(scene, empty_sequence(id, name));
+        apply(scene, empty_sequence(id, name), Vec::new());
     };
     let pick = move |e: leptos::ev::Event| {
         let v = event_target_value(&e);
@@ -417,21 +688,37 @@ pub fn Sequence() -> impl IntoView {
             });
         }
     };
-    let looped = move || {
-        open.with(|o| {
-            o.as_ref()
-                .is_some_and(|(_, t)| !matches!(t.looping, TimelineLoop::Once))
-        })
+    let looping = move || open.with(|o| o.as_ref().map(|(_, t)| t.looping));
+    let looped = move || looping().is_some_and(|l| !matches!(l, TimelineLoop::Once));
+    // Its state is the button's: lit while it loops, and "Loop range" for a range.
+    let loop_text = move || match looping() {
+        Some(TimelineLoop::Range { .. }) => "Loop range",
+        _ => "Loop",
     };
     let toggle_loop = move |_| {
-        change(&|t| {
-            t.looping = if matches!(t.looping, TimelineLoop::Once) {
-                TimelineLoop::Loop
-            } else {
-                TimelineLoop::Once
-            };
-        });
+        change(&|t| t.looping = next_loop(t.looping, t.duration_ms));
     };
+    // A range's ends, in seconds: `None` while the loop isn't a range.
+    let range_end = move |to: bool| {
+        Signal::derive(move || match looping()? {
+            TimelineLoop::Range { from_ms, to_ms } => {
+                Some(f64::from(if to { to_ms } else { from_ms }) / 1000.0)
+            }
+            _ => None,
+        })
+    };
+    let set_range_end = move |to: bool, v: f64| {
+        let ms = snap(v * 1000.0, true);
+        change(&|t| {
+            if let TimelineLoop::Range { from_ms, to_ms } = t.looping {
+                let (from, until) = if to { (from_ms, ms) } else { (ms, to_ms) };
+                if let Some(range) = fit_range(from, until, t.duration_ms) {
+                    t.looping = range;
+                }
+            }
+        })
+    };
+    let ranged = move || matches!(looping(), Some(TimelineLoop::Range { .. }));
     let length = Signal::derive(move || {
         open.with(|o| o.as_ref().map(|(_, t)| f64::from(t.duration_ms) / 1000.0))
     });
@@ -439,22 +726,31 @@ pub fn Sequence() -> impl IntoView {
         let ms = (v * 1000.0).round() as u32;
         change(&|t| {
             t.duration_ms = ms.max(100);
+            if let TimelineLoop::Range { from_ms, to_ms } = t.looping {
+                t.looping = fit_range(from_ms, to_ms, t.duration_ms).unwrap_or(TimelineLoop::Once);
+            }
             for lane in &mut t.lanes {
                 lane.points.retain(|p| p.at_ms <= t.duration_ms);
             }
             t.cues.retain(|c| c.at_ms <= t.duration_ms);
         })
     };
-    let rename = move |e: leptos::ev::Event| {
-        let name = event_target_value(&e);
-        change(&|t| t.name = name.trim().to_owned());
+    // Rename, from the ⋯ menu: the picker turns into the name's field until Enter, a
+    // click away or Escape.
+    let renaming = RwSignal::new(false);
+    let rename = move |name: Option<String>| {
+        renaming.set(false);
+        if let Some(name) = name.map(|n| n.trim().to_owned()).filter(|n| !n.is_empty()) {
+            change(&|t| t.name = name.clone());
+        }
     };
-    let delete = move |_| {
+    let delete = move || {
         let Some((_, t)) = open.get_untracked() else {
             return;
         };
         if let Some(s) = session.0.get_value() {
             studio.sequence.set(None);
+            pending.draft.set(None);
             studio.apply(
                 &s,
                 vec![Edit::TimelineDelete {
@@ -466,6 +762,9 @@ pub fn Sequence() -> impl IntoView {
 
     // Add lane.
     let adding = RwSignal::new(false);
+    // Where Add lane's search opens: under its button's right end, in the window, so a
+    // short dock doesn't clip it.
+    let adding_at = RwSignal::new((0.0_f64, 0.0_f64));
     let add_lane = move |channel_id: String| {
         adding.set(false);
         let level = values.with_untracked(|v| v.get(&channel_id).map_or(0.0, |c| c.value.get()));
@@ -476,9 +775,6 @@ pub fn Sequence() -> impl IntoView {
     let make_lane = move |name: String| {
         adding.set(false);
         let Some((scene, mut t)) = open.get_untracked() else {
-            return;
-        };
-        let Some(s) = session.0.get_value() else {
             return;
         };
         let channel = studio.collection.with_untracked(|c| {
@@ -500,86 +796,387 @@ pub fn Sequence() -> impl IntoView {
             }],
             on: true,
         });
-        studio.apply(
-            &s,
-            vec![
-                Edit::ChannelSet { channel },
-                Edit::TimelineSet {
-                    scene_id: scene,
-                    timeline: t,
-                },
-            ],
-        );
+        apply(scene, t, vec![Edit::ChannelSet { channel }]);
+    };
+
+    // A setting from Add lane's Settings or Switches group (A13): the channel it
+    // follows, or a new one it follows from now on, and a lane on that channel (a
+    // switch lane for an on/off setting), in one batch.
+    let add_offer = move |offer: Offer| {
+        adding.set(false);
+        let Some((scene, mut t)) = open.get_untracked() else {
+            return;
+        };
+        let mut edits = Vec::new();
+        let followed = studio
+            .collection
+            .with_untracked(|c| c.as_ref().and_then(|c| followed_channel(c, &offer.target)));
+        let channel_id = match followed {
+            Some(id) => id,
+            None => {
+                let channel = studio.collection.with_untracked(|c| {
+                    new_channel(
+                        &offer.label,
+                        Some(scene.clone()),
+                        offer.at,
+                        c.as_ref().map_or(&[][..], |c| &c.channels[..]),
+                    )
+                });
+                let id = channel.channel_id.clone();
+                let binding = follows(&id, &offer.target, offer.range);
+                edits.push(Edit::ChannelSet { channel });
+                edits.push(Edit::BindingSetValue { binding });
+                id
+            }
+        };
+        let level = values
+            .with_untracked(|v| v.get(&channel_id).map(|c| c.value.get()))
+            .unwrap_or(offer.at);
+        if !with_lane(&mut t, &channel_id, level) {
+            if edits.is_empty() {
+                return;
+            }
+        } else if offer.switch
+            && let Some(lane) = t.lanes.last_mut()
+        {
+            lane.points = switch_points(level >= 0.5, t.duration_ms);
+        }
+        apply(scene, t, edits);
     };
 
     let none = move || open.with(Option::is_none);
+    let menus = use_context::<Menus>();
+    let more = move |event: leptos::ev::MouseEvent| {
+        let Some(menus) = menus else { return };
+        menus.open(
+            &event,
+            vec![
+                Entry::item("Rename", move || renaming.set(true)),
+                Entry::Sep,
+                Entry::item("Delete sequence", delete).danger(),
+            ],
+        );
+    };
+    let name_now =
+        move || open.with(|o| o.as_ref().map(|(_, t)| t.name.clone()).unwrap_or_default());
     view! {
         <section class="panel seq-panel">
             <div class="seq-bar">
                 <Icon name="sequence" size=14 />
-                <select class="seq-select" aria-label="Sequence" on:change=pick>
-                    {move || {
-                        let current = open.with(|o| o.as_ref().map(|(_, t)| t.timeline_id.clone()));
-                        let mut rows: Vec<_> = list()
-                            .into_iter()
-                            .map(|t| {
-                                let id = t.timeline_id.to_string();
-                                let on = current.as_ref() == Some(&t.timeline_id);
-                                view! { <option value=id selected=on>{timeline_name(&t)}</option> }.into_any()
-                            })
-                            .collect();
-                        if current.is_none() {
-                            rows.insert(0, view! { <option value="" selected=true>"No sequence"</option> }.into_any());
-                        }
-                        rows.push(view! { <option value="+new">"+ New sequence"</option> }.into_any());
-                        rows
-                    }}
-                </select>
+                <Show
+                    when=move || renaming.get() && !none()
+                    fallback=move || view! {
+                        <select class="seq-select" aria-label="Sequence" on:change=pick>
+                            {move || {
+                                let shown = open.get().map(|(_, t)| t);
+                                let current = shown.as_ref().map(|t| t.timeline_id.clone());
+                                // The open one as the panel's edits leave it: a sequence just
+                                // made or renamed shows before the engine says so.
+                                let mut all = list();
+                                if let Some(t) = shown {
+                                    match all.iter_mut().find(|l| l.timeline_id == t.timeline_id) {
+                                        Some(l) => *l = t,
+                                        None => all.push(t),
+                                    }
+                                }
+                                let mut rows: Vec<_> = all
+                                    .into_iter()
+                                    .map(|t| {
+                                        let id = t.timeline_id.to_string();
+                                        let on = current.as_ref() == Some(&t.timeline_id);
+                                        view! { <option value=id selected=on>{timeline_name(&t)}</option> }.into_any()
+                                    })
+                                    .collect();
+                                if current.is_none() {
+                                    rows.insert(0, view! { <option value="" selected=true>"No sequence"</option> }.into_any());
+                                }
+                                rows.push(view! { <option value="+new">"+ New sequence"</option> }.into_any());
+                                rows
+                            }}
+                        </select>
+                    }
+                >
+                    <RenameField value=name_now() done=rename />
+                </Show>
                 <Show when=move || !none()>
-                    <input class="seq-name" aria-label="Sequence name"
-                        prop:value=move || open.with(|o| o.as_ref().map(|(_, t)| t.name.clone()).unwrap_or_default())
-                        on:change=rename />
-                    <button type="button" class="seq-play" class:on=move || playing().is_some() on:click=play
-                        title="Play from the start, or stop">
-                        {move || if playing().is_some() { "■ Stop" } else { "▶ Play" }}
+                    <button type="button" class="row-action more seq-more" aria-label="More for this sequence" title="More"
+                        on:click=more>"⋯"</button>
+                    <span class="seq-sep"></span>
+                    <button type="button" class="sm seq-play" class:on=move || playing().is_some()
+                        aria-pressed=move || if playing().is_some() { "true" } else { "false" }
+                        on:click=play
+                        title=move || if playing().is_some() { "Stop it" } else { "Play it from the start" }>
+                        <span class="seq-play-mark" class:stop=move || playing().is_some()></span>
+                        {move || if playing().is_some() { "Stop" } else { "Play" }}
                     </button>
-                    <button type="button" class="seq-loop" class:on=looped on:click=toggle_loop title="Loop">
-                        {move || if looped() { "⟳ Loop on" } else { "⟳ Loop off" }}
+                    <button type="button" class="sm seq-loop" class:on=looped
+                        aria-pressed=move || if looped() { "true" } else { "false" }
+                        on:click=toggle_loop
+                        title="Loop: off, the whole sequence, or a range (it plays from the start, then repeats the range)">
+                        {loop_text}
                     </button>
-                    <span class="seq-label">"Length"</span>
-                    <NumberField named=Signal::derive(|| "Length".to_owned()) unit="s" value=length step=0.5 decimals=1 min=0.1 max=3600.0 send=set_length />
+                    <Show when=ranged>
+                        <label class="seq-field">
+                            <span class="seq-label">"From"</span>
+                            <NumberField named=Signal::derive(|| "Loop from".to_owned()) unit="s" value=range_end(false) step=0.1 decimals=2 min=0.0 max=3600.0
+                                send=move |v| set_range_end(false, v) />
+                        </label>
+                        <label class="seq-field">
+                            <span class="seq-label">"to"</span>
+                            <NumberField named=Signal::derive(|| "Loop to".to_owned()) unit="s" value=range_end(true) step=0.1 decimals=2 min=0.1 max=3600.0
+                                send=move |v| set_range_end(true, v) />
+                        </label>
+                    </Show>
+                    <label class="seq-field">
+                        <span class="seq-label">"Length"</span>
+                        <NumberField named=Signal::derive(|| "Length".to_owned()) unit="s" value=length step=0.5 decimals=1 min=0.1 max=3600.0 send=set_length />
+                    </label>
                     <span class="seq-spacer"></span>
                     <div class="seq-add">
-                        <button type="button" class="seq-add-button" on:click=move |_| adding.update(|a| *a = !*a)>
-                            <Icon name="search" size=13 />
-                            "Add lane: a channel"
+                        <button type="button" class="sm seq-add-button" aria-haspopup="dialog" aria-expanded=move || if adding.get() { "true" } else { "false" }
+                            on:click=move |e: leptos::ev::MouseEvent| {
+                                if let Some(b) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) {
+                                    let r = crate::ui_scale::rect(&b);
+                                    adding_at.set((r.right(), r.bottom()));
+                                }
+                                adding.update(|a| *a = !*a);
+                            }>
+                            <Icon name="plus" size=12 />
+                            "Add lane"
                         </button>
                         {move || adding.get().then(|| view! {
                             <div class="ctx-catcher" on:pointerdown=move |_| adding.set(false)></div>
-                            <div class="context-menu seq-add-menu">
-                                <ChannelSearch placeholder="Add lane: search channels" pick=add_lane make=make_lane values=values />
+                            <div class="context-menu seq-add-menu"
+                                style:left=move || format!("{}px", (adding_at.get().0 - 300.0).max(4.0))
+                                style:top=move || format!("{}px", adding_at.get().1 + 4.0)>
+                                <AddLaneSearch scene=open.with_untracked(|o| o.as_ref().map(|(s, _)| s.clone())) pick=add_lane make=make_lane offer=add_offer values=values />
                             </div>
                         })}
                     </div>
+                    <Info text="Double-click a lane to add a point there (snapped to a tenth of a second; Shift for free), drag a point to move it, and click or right-click it for its curve, time and value. On a switch lane, double-click a gap to add a bar, drag a bar or one of its ends, and click it for its times. Double-click the Events lane to add a one-off event. A control moved by hand takes its lane over until the sequence plays again." />
                 </Show>
             </div>
-            {move || match open.get() {
-                None => view! {
-                    <p class="placeholder seq-empty">
-                        "A sequence moves channels over time and starts itself when something happens. "
-                        <button type="button" class="seq-new" on:click=move |_| create()>"+ New sequence"</button>
-                    </p>
-                }.into_any(),
-                Some((scene, t)) => view! {
-                    <Triggers timeline=t.clone() change=change />
-                    <Lanes timeline=t scene=scene change=change values=values position=Signal::derive(position) />
-                    <div class="seq-foot">
-                        <span class="hint">"Double-click a lane to add a point · drag to move (Shift: free) · right-click for its curve · a control moved by hand takes its lane over"</span>
-                        <button type="button" class="seq-delete" on:click=delete>"Delete sequence"</button>
-                    </div>
-                }.into_any(),
-            }}
+            <div class="seq-scroll">
+                {move || match open.get() {
+                    None => view! {
+                        <div class="empty-state seq-empty-state">
+                            <Icon name="sequence" size=18 />
+                            <p class="empty-title">"No sequence in this scene"</p>
+                            <p class="empty-note">"A sequence moves channels over time, runs one-off events and can start itself when something happens."</p>
+                            <button type="button" class="sm seq-new" on:click=move |_| create()>"+ New sequence"</button>
+                        </div>
+                    }.into_any(),
+                    Some((scene, t)) => view! {
+                        <Triggers timeline=t.clone() change=change />
+                        <Lanes timeline=t scene=scene change=change values=values position=Signal::derive(position) zoom=zoom />
+                    }.into_any(),
+                }}
+            </div>
         </section>
+    }
+}
+
+/// A sequence's name being renamed in place of the picker: Enter or a click away keeps
+/// it, Escape drops it.
+#[component]
+fn RenameField(
+    /// The name now.
+    value: String,
+    /// Takes the new name, or `None` when dropped.
+    done: impl Fn(Option<String>) + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    let input = NodeRef::<leptos::html::Input>::new();
+    Effect::new(move |_| {
+        if let Some(el) = input.get() {
+            _ = el.focus();
+            el.select();
+        }
+    });
+    // Enter and Escape end it before the blur that follows, which then sends nothing.
+    let ended = StoredValue::new(false);
+    let finish = move |name: Option<String>| {
+        if !ended.get_value() {
+            ended.set_value(true);
+            done(name);
+        }
+    };
+    view! {
+        <input class="seq-name" aria-label="Sequence name" node_ref=input prop:value=value
+            on:keydown=move |e: leptos::ev::KeyboardEvent| match e.key().as_str() {
+                "Enter" => {
+                    e.prevent_default();
+                    finish(Some(event_target_value(&e)));
+                }
+                "Escape" => {
+                    e.prevent_default();
+                    e.stop_propagation();
+                    finish(None);
+                }
+                _ => {}
+            }
+            on:blur=move |e| finish(Some(event_target_value(&e))) />
+    }
+}
+
+/// Add lane's search (A13, SQ-01): one box over three groups, "Channels", "Settings
+/// (makes a channel)" and "Switches", with "+ New channel" at its foot. The settings are
+/// read from the scene's sources' kind descriptors, which it asks for as it opens.
+#[component]
+fn AddLaneSearch(
+    /// The sequence's scene, whose sources it offers.
+    scene: Option<SceneId>,
+    /// Takes a picked channel's ID.
+    pick: impl Fn(String) + Copy + Send + Sync + 'static,
+    /// Takes the name typed for a new channel.
+    make: impl Fn(String) + Copy + Send + Sync + 'static,
+    /// Takes a picked setting.
+    offer: impl Fn(Offer) + Copy + Send + Sync + 'static,
+    /// The live values, for the level beside each channel.
+    values: RwSignal<HashMap<String, ChannelValueInfo>>,
+) -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let session = expect_context::<SessionContext>();
+    let text = RwSignal::new(String::new());
+    let input = NodeRef::<leptos::html::Input>::new();
+    Effect::new(move |_| {
+        if let Some(el) = input.get() {
+            _ = el.focus();
+        }
+    });
+    let scene = StoredValue::new(scene);
+    // The descriptors the Settings and Switches groups need, each read once.
+    if let (Some(s), Some(scene)) = (session.0.get_value(), scene.get_value()) {
+        let kinds = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| kinds_needed(c, &scene))
+                .unwrap_or_default()
+        });
+        leptos::task::spawn_local(async move {
+            for kind in kinds {
+                // A kind that can't be described offers nothing; the channels still work.
+                _ = studio.descriptor(&s, &kind).await;
+            }
+        });
+    }
+    let found = move || -> (Vec<(String, String)>, Vec<Offer>, Vec<Offer>) {
+        let q = text.get();
+        let Some(scene) = scene.get_value() else {
+            return Default::default();
+        };
+        studio.collection.with(|c| {
+            let Some(c) = c else {
+                return Default::default();
+            };
+            let (here, rest) = search(&c.channels, &q, Some(&scene));
+            let channels = here
+                .into_iter()
+                .chain(rest)
+                .map(|ch| (ch.channel_id.clone(), c.channel_name(&ch.channel_id)))
+                .collect();
+            let all = studio.descriptors.with(|d| offers(c, &scene, d));
+            let (switches, settings) = all
+                .into_iter()
+                .filter(|o| lane_offers::matches(o, &q))
+                .partition(|o| o.switch);
+            (channels, settings, switches)
+        })
+    };
+    let level = move |id: &str| {
+        values
+            .with(|v| v.get(id).map(|c| c.value.get()))
+            .map(|v| format!("{:.0} %", v * 100.0))
+            .unwrap_or_default()
+    };
+    let offer_rows = move |list: Vec<Offer>| {
+        list.into_iter()
+            .map(|o| {
+                let label = o.label.clone();
+                let o = StoredValue::new(o);
+                view! {
+                    <button type="button" class="menuitem chan-pick" on:click=move |_| offer(o.get_value())>
+                        <span class="ctx-label">{label}</span>
+                    </button>
+                }
+            })
+            .collect_view()
+    };
+    let groups = move || {
+        let (channels, settings, switches) = found();
+        let channels_view = (!channels.is_empty()).then(|| {
+            view! {
+                <div class="ctx-head">"Channels"</div>
+                {channels.into_iter().map(|(id, name)| {
+                    let shown = id.clone();
+                    view! {
+                        <button type="button" class="menuitem chan-pick" on:click=move |_| pick(id.clone())>
+                            <span class="ctx-label">{name}</span>
+                            <span class="hint">{move || level(&shown)}</span>
+                        </button>
+                    }
+                }).collect_view()}
+            }
+        });
+        let settings_view = (!settings.is_empty()).then(|| {
+            view! {
+                <div class="ctx-head">"Settings (makes a channel)"</div>
+                {offer_rows(settings)}
+            }
+        });
+        let switches_view = (!switches.is_empty()).then(|| {
+            view! {
+                <div class="ctx-head">"Switches"</div>
+                {offer_rows(switches)}
+            }
+        });
+        view! { {channels_view} {settings_view} {switches_view} }
+    };
+    let create = move || {
+        let q = text.get_untracked();
+        make(if q.trim().is_empty() {
+            "Channel".into()
+        } else {
+            q.trim().to_owned()
+        });
+    };
+    let new_label = move || {
+        let q = text.get();
+        if q.trim().is_empty() {
+            "+ New channel".to_owned()
+        } else {
+            format!("+ New channel “{}”", q.trim())
+        }
+    };
+    view! {
+        <div class="chan-search">
+            <div class="tree-search">
+                <Icon name="search" size=13 />
+                <input
+                    node_ref=input
+                    type="search"
+                    placeholder="Add lane: a channel, a setting or a switch"
+                    aria-label="Search channels and settings"
+                    prop:value=move || text.get()
+                    on:input=move |e| text.set(event_target_value(&e))
+                    on:keydown=move |e: leptos::ev::KeyboardEvent| {
+                        if e.key() == "Enter" {
+                            let (channels, settings, switches) = untrack(found);
+                            if let Some((id, _)) = channels.into_iter().next() {
+                                pick(id);
+                            } else if let Some(o) = settings.into_iter().chain(switches).next() {
+                                offer(o);
+                            } else {
+                                create();
+                            }
+                        }
+                    }
+                />
+            </div>
+            <div class="chan-search-list">{groups}</div>
+            <div class="menu-sep"></div>
+            <button type="button" class="menuitem chan-new" on:click=move |_| create()>
+                {new_label}
+            </button>
+        </div>
     }
 }
 
@@ -590,7 +1187,16 @@ fn Triggers(
     change: impl Fn(&dyn Fn(&mut TimelineInfo)) -> bool + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
-    let editing = RwSignal::new(None::<bool>);
+    // The editor open: whether it adds a stop, and where it opens (below its button).
+    let editing = RwSignal::new(None::<(bool, f64, f64)>);
+    let open_editor = move |stop: bool, e: leptos::ev::MouseEvent| {
+        let at = e
+            .current_target()
+            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+            .map(|b| crate::ui_scale::rect(&b));
+        let (x, y) = at.map_or_else(|| crate::ui_scale::pointer(&e), |r| (r.left(), r.bottom()));
+        editing.set(Some((stop, x, y)));
+    };
     let chips = move |stop: bool, list: Vec<TimelineTrigger>| {
         list.into_iter()
             .enumerate()
@@ -620,16 +1226,26 @@ fn Triggers(
     let starts = chips(false, timeline.starts.clone());
     let stops = chips(true, timeline.stops.clone());
     let own = timeline.timeline_id.clone();
+    let driven: Vec<String> = timeline
+        .lanes
+        .iter()
+        .map(|l| l.target.channel.clone())
+        .collect();
     view! {
         <div class="seq-triggers">
-            <span class="eyebrow">"Starts when"</span>
-            {starts}
-            <button type="button" class="seq-plus" on:click=move |_| editing.set(Some(false))>"+ Trigger"</button>
-            <span class="eyebrow seq-stops">"Stops when"</span>
-            {stops}
-            <button type="button" class="seq-plus" aria-label="Add a trigger that stops it" on:click=move |_| editing.set(Some(true))>"+"</button>
-            {move || editing.get().map(|stop| {
+            <div class="seq-trigger-group">
+                <span class="eyebrow">"Starts when"</span>
+                {starts}
+                <button type="button" class="seq-plus" aria-label="Add a trigger that starts it" on:click=move |e| open_editor(false, e)>"+ Trigger"</button>
+            </div>
+            <div class="seq-trigger-group">
+                <span class="eyebrow">"Stops when"</span>
+                {stops}
+                <button type="button" class="seq-plus" aria-label="Add a trigger that stops it" on:click=move |e| open_editor(true, e)>"+ Trigger"</button>
+            </div>
+            {move || editing.get().map(|(stop, x, y)| {
                 let own = own.clone();
+                let driven = driven.clone();
                 let done = move |trigger: Option<TimelineTrigger>| {
                     editing.set(None);
                     if let Some(trigger) = trigger {
@@ -641,7 +1257,7 @@ fn Triggers(
                 };
                 view! {
                     <div class="ctx-catcher" on:pointerdown=move |_| editing.set(None)></div>
-                    <TriggerEditor stop=stop own=own done=done />
+                    <TriggerEditor stop=stop own=own driven=driven x=x y=y done=done />
                 }
             })}
         </div>
@@ -665,6 +1281,12 @@ fn TriggerEditor(
     stop: bool,
     /// The sequence itself, which a trigger can't name.
     own: TimelineId,
+    /// The channels its own lanes drive, which can't start or stop it: the engine
+    /// refuses them.
+    driven: Vec<String>,
+    /// Where it opens, in the window: below this point, kept inside the window.
+    x: f64,
+    y: f64,
     /// Takes the new trigger, or `None` when cancelled.
     done: impl Fn(Option<TimelineTrigger>) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
@@ -675,6 +1297,7 @@ fn TriggerEditor(
     let level = RwSignal::new(50.0_f64);
     let wait = RwSignal::new(0.0_f64);
     let own = StoredValue::new(own);
+    let driven = StoredValue::new(driven);
     // The objects for each kind: (value, name).
     let objects = move || -> Vec<(String, String)> {
         studio.collection.with(|c| {
@@ -685,6 +1308,7 @@ fn TriggerEditor(
                 When::Channel => c
                     .channels
                     .iter()
+                    .filter(|ch| driven.with_value(|d| !d.contains(&ch.channel_id)))
                     .map(|ch| (ch.channel_id.clone(), c.channel_name(&ch.channel_id)))
                     .collect(),
                 When::Scene => c
@@ -787,14 +1411,21 @@ fn TriggerEditor(
         (When::Channel, "A channel"),
         (When::Scene, "A scene"),
         (When::Keyframe, "A keyframe"),
-        (When::Timeline, "Another sequence"),
+        (When::Timeline, "A sequence"),
     ];
+    let (left, top) = crate::panels::events::place(x, y, 300.0);
     view! {
-        <div class="context-menu seq-trigger-editor" role="dialog" aria-label="New trigger">
-            <div class="ctx-head">{if stop { "Stop it when" } else { "Play it when" }}</div>
-            <div class="seq-kinds">
+        <div class="context-menu seq-trigger-editor" role="dialog" aria-label="New trigger"
+            style:left=left style:top=top
+            on:keydown=move |e: leptos::ev::KeyboardEvent| if e.key() == "Escape" {
+                e.prevent_default();
+                e.stop_propagation();
+                done(None);
+            }>
+            <div class="ctx-head">{if stop { "Stop it when" } else { "Start it when" }}</div>
+            <div class="segmented full seq-kinds" role="group" aria-label="What it watches">
                 {kinds.into_iter().map(|(k, label)| view! {
-                    <button type="button" class="seq-kind" class:on=move || when.get() == k on:click=move |_| when.set(k)>{label}</button>
+                    <button type="button" aria-pressed=move || if when.get() == k { "true" } else { "false" } on:click=move |_| when.set(k)>{label}</button>
                 }).collect_view()}
             </div>
             <label class="seq-row">
@@ -840,7 +1471,7 @@ fn TriggerEditor(
                         Some(trigger) => done(Some(trigger)),
                         None => studio.problem.set(Some("Pick what the trigger watches first.".into())),
                     }
-                }>{if stop { "Stop it" } else { "Play it" }}</button>
+                }>"Add trigger"</button>
             </div>
         </div>
     }
@@ -854,6 +1485,8 @@ fn Lanes(
     change: impl Fn(&dyn Fn(&mut TimelineInfo)) -> bool + Copy + Send + Sync + 'static,
     values: RwSignal<HashMap<String, ChannelValueInfo>>,
     position: Signal<Option<u32>>,
+    /// The part of the sequence in view (`seq_zoom`).
+    zoom: RwSignal<Viewport>,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
@@ -861,13 +1494,12 @@ fn Lanes(
     let id = StoredValue::new(timeline.timeline_id.clone());
     let drag = RwSignal::new(None::<Drag>);
     let menu = RwSignal::new(None::<PointMenu>);
+    let bar_drag = RwSignal::new(None::<BarDrag>);
+    let bar_menu = RwSignal::new(None::<BarMenu>);
     let live = move |channel: &str| values.with(|v| v.get(channel).map(|c| c.value.get()));
-    let ticks = {
-        let step = match duration {
-            0..=10_000 => 1000,
-            10_001..=60_000 => 5000,
-            _ => 30_000,
-        };
+    // The ruler's ticks, finer as the view zooms in.
+    let ticks = move || {
+        let step = seq_zoom::tick_step(duration, zoom.get());
         (0..=duration / step)
             .map(|n| {
                 let ms = n * step;
@@ -875,6 +1507,21 @@ fn Lanes(
                 view! { <span class="seq-tick" style:left=format!("{left:.3}%")>{seconds(ms)}</span> }
             })
             .collect_view()
+    };
+    // Each time column's frame: the whole sequence, widened and slid to the part in view.
+    let frame_w = move |inset: f64| seq_zoom::frame(zoom.get(), inset).0;
+    let frame_l = move |inset: f64| seq_zoom::frame(zoom.get(), inset).1;
+    let ruler_clip = NodeRef::<leptos::html::Div>::new();
+    let wheel = move |e: leptos::ev::WheelEvent| {
+        let Some(el) = ruler_clip.get_untracked() else {
+            return;
+        };
+        let rect = el.get_bounding_client_rect();
+        let x = f64::from(e.client_x()) - rect.left();
+        if seq_zoom::wheel(zoom, &e, x, rect.width()) {
+            e.prevent_default();
+            e.stop_propagation();
+        }
     };
     let seek = move |e: leptos::ev::MouseEvent| {
         let Some(el) = e
@@ -895,6 +1542,18 @@ fn Lanes(
                 },
             );
         }
+    };
+    // A loop range, shaded on the ruler.
+    let band = match timeline.looping {
+        TimelineLoop::Range { from_ms, to_ms } => {
+            let left = f64::from(from_ms) / f64::from(duration) * 100.0;
+            let width = f64::from(to_ms.saturating_sub(from_ms)) / f64::from(duration) * 100.0;
+            Some(view! {
+                <span class="seq-range" style:left=format!("{left:.3}%") style:width=format!("{width:.3}%")
+                    title=format!("Repeats {} to {}", seconds(from_ms), seconds(to_ms))></span>
+            })
+        }
+        _ => None,
     };
     let head = move || {
         position.get().map(|ms| {
@@ -923,6 +1582,8 @@ fn Lanes(
             let name = studio.collection.with_untracked(|c| {
                 c.as_ref().map_or_else(|| channel.clone(), |c| c.channel_name(&channel))
             });
+            // A switch lane (A13): bars where it is on, and points that sit at 0 or 1.
+            let switch = is_switch(&lane);
             let lane = StoredValue::new(lane);
             let ch = StoredValue::new(channel);
             // The points as shown: the drag's point where it is now.
@@ -937,14 +1598,132 @@ fn Lanes(
                 let from = ch.with_value(|c| live(c)).unwrap_or(0.0);
                 lane_path(&shown(), duration, from)
             };
+            // A switch lane's bars: where it is on, as drawn from its points (off before
+            // the first, whatever the channel was), with the dragged one where it is now.
+            let held_bars = move || lane.with_value(|l| switch_bars(&l.points, duration, false));
+            let set_bars = move |bars: Vec<(u32, u32)>| {
+                change(&|t| {
+                    let duration = t.duration_ms;
+                    if let Some(l) = t.lanes.get_mut(n) {
+                        l.points = bar_points(&bars, duration);
+                    }
+                })
+            };
+            let grab = move |grip: Grip, b: usize, e: leptos::ev::PointerEvent| {
+                if e.button() != 0 {
+                    return;
+                }
+                e.stop_propagation();
+                e.prevent_default();
+                let Some(el) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
+                    return;
+                };
+                el.set_pointer_capture(e.pointer_id()).ok();
+                let Some(area) = el.closest(".seq-area").ok().flatten() else {
+                    return;
+                };
+                let (ms, _) = at(&e, &area);
+                let held = held_bars();
+                let Some(&now) = held.get(b) else {
+                    return;
+                };
+                bar_drag.set(Some(BarDrag {
+                    lane: n,
+                    bar: b,
+                    grip,
+                    held,
+                    now,
+                    offset_ms: i64::from(ms) - i64::from(now.0),
+                    x0: f64::from(e.client_x()),
+                    moved: false,
+                }));
+            };
+            // Drawn once per edit; a drag moves its bar's style, so the bar it holds
+            // stays put and keeps the pointer.
+            let bars = move || {
+                held_bars()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(b, (from, to))| {
+                        let span = move || {
+                            bar_drag.with(|d| {
+                                d.as_ref().filter(|d| d.lane == n && d.bar == b).map_or((from, to), |d| d.now)
+                            })
+                        };
+                        let left = move || format!("{:.3}%", f64::from(span().0) / f64::from(duration) * 100.0);
+                        let width = move || {
+                            let (a, z) = span();
+                            format!("{:.3}%", f64::from(z - a) / f64::from(duration) * 100.0)
+                        };
+                        let label = format!("On from {} to {}", seconds(from), seconds(to));
+                        // From the keyboard: Enter, Space, the Menu key or Shift+F10
+                        // open the bar's menu beside it, and Delete removes it.
+                        let key = move |e: leptos::ev::KeyboardEvent| {
+                            let k = e.key();
+                            if k == "Enter" || k == " " || crate::menu::asks_for_menu(&e) {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                let Some(el) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
+                                    return;
+                                };
+                                let r = crate::ui_scale::rect(&el);
+                                bar_menu.set(Some(BarMenu { lane: n, bar: b, x: r.left(), y: r.bottom() }));
+                            } else if k == "Delete" || k == "Backspace" {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                let mut bars = held_bars();
+                                if b < bars.len() {
+                                    bars.remove(b);
+                                    set_bars(bars);
+                                }
+                            }
+                        };
+                        let context = move |e: leptos::ev::MouseEvent| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                            let (x, y) = crate::ui_scale::pointer(&e);
+                            bar_menu.set(Some(BarMenu { lane: n, bar: b, x, y }));
+                        };
+                        let title = format!("{label} · drag to move, drag an end to change it, click for more");
+                        view! {
+                            <div
+                                class="seq-switch-bar"
+                                class:dragging=move || bar_drag.with(|d| d.as_ref().is_some_and(|d| d.lane == n && d.bar == b && d.moved))
+                                role="button"
+                                tabindex="0"
+                                aria-haspopup="menu"
+                                aria-label=label
+                                title=title
+                                style:left=left style:width=width
+                                on:pointerdown=move |e| grab(Grip::Body, b, e)
+                                on:keydown=key
+                                on:contextmenu=context
+                                on:dblclick=|e: leptos::ev::MouseEvent| e.stop_propagation()
+                            >
+                                <span class="seq-bar-end start" title="Drag to change where it switches on"
+                                    on:pointerdown=move |e| grab(Grip::Start, b, e)></span>
+                                <span class="seq-bar-end end" title="Drag to change where it switches off"
+                                    on:pointerdown=move |e| grab(Grip::End, b, e)></span>
+                            </div>
+                        }
+                    })
+                    .collect_view()
+            };
+            // Drawn once per edit; a drag moves its dot's style, so the dot it holds
+            // stays put and keeps the pointer.
             let dots = move || {
-                shown()
+                lane.get_value()
                     .points
                     .iter()
                     .enumerate()
                     .map(|(p, point)| {
-                        let left = f64::from(point.at_ms) / f64::from(duration) * 100.0;
-                        let top = (1.0 - f64::from(point.value.get())) * 100.0;
+                        let place = move || {
+                            shown().points.get(p).map_or((0.0, 0.0), |q| {
+                                (f64::from(q.at_ms) / f64::from(duration) * 100.0, (1.0 - f64::from(q.value.get())) * 100.0)
+                            })
+                        };
+                        let left = move || format!("{:.3}%", place().0);
+                        let top = move || format!("{:.3}%", place().1);
                         let title = format!(
                             "{} · {:.0} % · {}",
                             seconds(point.at_ms),
@@ -971,6 +1750,9 @@ fn Lanes(
                                 point: p,
                                 at_ms: pt.at_ms,
                                 value: pt.value.get(),
+                                x0: f64::from(e.client_x()),
+                                y0: f64::from(e.client_y()),
+                                moved: false,
                             }));
                         };
                         let context = move |e: leptos::ev::MouseEvent| {
@@ -1022,7 +1804,7 @@ fn Lanes(
                                 aria-label=label
                                 on:keydown=key
                                 class:dragging=move || drag.get().is_some_and(|d| d.lane == n && d.point == p)
-                                style:left=format!("{left:.3}%") style:top=format!("{top:.3}%")
+                                style:left=left style:top=top
                                 title=title
                                 on:pointerdown=down
                                 on:contextmenu=context
@@ -1037,6 +1819,18 @@ fn Lanes(
                     return;
                 };
                 let (ms, v) = at(&e, &el);
+                if switch {
+                    // A one-second bar from here, cut short before the next one.
+                    match insert_bar(&held_bars(), ms, 1000, duration) {
+                        Some((bars, _)) => {
+                            set_bars(bars);
+                        }
+                        None => studio.problem.set(Some(
+                            "There's no room for a bar there: it needs a tenth of a second before the next one.".into(),
+                        )),
+                    }
+                    return;
+                }
                 change(&|t| {
                     if let Some(l) = t.lanes.get_mut(n) {
                         add_point(&mut l.points, ms, v);
@@ -1044,19 +1838,56 @@ fn Lanes(
                 });
             };
             let moving = move |e: leptos::ev::PointerEvent| {
-                let Some(d) = drag.get_untracked().filter(|d| d.lane == n) else {
-                    return;
-                };
                 let Some(el) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
                     return;
                 };
                 let (ms, v) = at(&e, &el);
-                drag.set(Some(Drag { at_ms: ms, value: v, ..d }));
-            };
-            let up = move |_| {
+                if let Some(d) = bar_drag.get_untracked().filter(|d| d.lane == n) {
+                    // A few pixels are still a click.
+                    if !d.moved && (f64::from(e.client_x()) - d.x0).abs() <= CLICK_SLOP {
+                        return;
+                    }
+                    let to = match d.grip {
+                        Grip::Body => (i64::from(ms) - d.offset_ms).clamp(0, i64::from(duration)) as u32,
+                        _ => ms,
+                    };
+                    let now = drag_bar(&d.held, d.bar, d.grip, to, duration);
+                    bar_drag.set(Some(BarDrag { now, moved: true, ..d }));
+                    return;
+                }
                 let Some(d) = drag.get_untracked().filter(|d| d.lane == n) else {
                     return;
                 };
+                if !d.moved
+                    && (f64::from(e.client_x()) - d.x0).hypot(f64::from(e.client_y()) - d.y0) <= CLICK_SLOP
+                {
+                    return;
+                }
+                drag.set(Some(Drag { at_ms: ms, value: v, moved: true, ..d }));
+            };
+            // Letting go ends a drag as one edit; a press that didn't move is a click,
+            // which opens the point's or bar's menu where it was clicked.
+            let up = move |e: leptos::ev::PointerEvent| {
+                let (x, y) = crate::ui_scale::pointer(&e);
+                if let Some(d) = bar_drag.get_untracked().filter(|d| d.lane == n) {
+                    bar_drag.set(None);
+                    if !d.moved {
+                        bar_menu.set(Some(BarMenu { lane: n, bar: d.bar, x, y }));
+                    } else if d.held.get(d.bar) != Some(&d.now) {
+                        let mut bars = d.held;
+                        bars[d.bar] = d.now;
+                        set_bars(bars);
+                    }
+                    return;
+                }
+                let Some(d) = drag.get_untracked().filter(|d| d.lane == n) else {
+                    return;
+                };
+                drag.set(None);
+                if !d.moved {
+                    menu.set(Some(PointMenu { lane: n, point: d.point, x, y }));
+                    return;
+                }
                 let moved = lane
                     .with_value(|l| l.points.get(d.point).is_some_and(|p| p.at_ms != d.at_ms || (p.value.get() - d.value).abs() > 1e-4));
                 if moved {
@@ -1066,7 +1897,10 @@ fn Lanes(
                         }
                     });
                 }
+            };
+            let cancel = move |_| {
                 drag.set(None);
+                bar_drag.set(None);
             };
             let on = lane.with_value(|l| l.on);
             let mute = move |_| {
@@ -1095,36 +1929,49 @@ fn Lanes(
             view! {
                 <div class=colour class:off=!on>
                     <div class="seq-lane-head">
-                        <button type="button" class="seq-lane-name" on:click=open title="Open the channel">
+                        <div class="seq-lane-title">
                             <span class="seq-swatch"></span>
-                            {name}
-                        </button>
-                        <div class="seq-lane-meta">
-                            <span class="hint">"channel · "{level}</span>
-                            <span class="seq-meter"><span style:width=meter></span></span>
+                            <button type="button" class="seq-lane-name" on:click=open title="Open the channel in the Channels panel">
+                                {name}
+                            </button>
                             <button type="button" class="seq-mute" class:on=!on on:click=mute
-                                title=if on { "Mute this lane" } else { "Unmute this lane" }>"M"</button>
-                            <button type="button" class="chan-x" aria-label="Remove this lane" title="Remove this lane" on:click=remove>"×"</button>
+                                aria-pressed=if on { "false" } else { "true" }
+                                title=if on { "Mute this lane: it stops moving its channel" } else { "Unmute this lane" }>"M"</button>
+                            <button type="button" class="seq-lane-x" aria-label="Remove this lane" title="Remove this lane" on:click=remove>
+                                <Icon name="close" size=12 />
+                            </button>
+                        </div>
+                        <div class="seq-lane-meta">
+                            <span class="hint">{if switch { "Switch" } else { "Channel" }}</span>
+                            <span class="seq-meter"><span style:width=meter></span></span>
+                            <span class="seq-level">{level}</span>
                         </div>
                     </div>
+                    <div class="seq-clip">
                     <div
                         class="seq-area"
+                        style:width=move || frame_w(AREA_INSET_PX)
+                        style:margin-left=move || frame_l(AREA_INSET_PX)
                         on:dblclick=add
                         on:pointermove=moving
                         on:pointerup=up
-                        on:pointercancel=up
+                        on:pointercancel=cancel
                     >
                         <svg viewBox="0 0 1000 100" preserveAspectRatio="none" class="seq-svg" aria-hidden="true">
-                            {move || {
+                            {move || if switch {
+                                ().into_any()
+                            } else {
                                 let (lead, path) = paths();
                                 view! {
                                     <path d=lead.clone() class="seq-lead" />
                                     <path d=format!("{path} L1000 100 L{} 100 Z", path_start(&path)) class="seq-fill" />
                                     <path d=path class="seq-line" />
                                 }
+                                .into_any()
                             }}
                         </svg>
-                        {dots}
+                        {move || if switch { bars().into_any() } else { dots().into_any() }}
+                    </div>
                     </div>
                 </div>
             }
@@ -1132,10 +1979,42 @@ fn Lanes(
         .collect_view();
     let close_menu = move || menu.set(None);
     let point_keys = crate::menu::keys(close_menu);
+    let snapshot = StoredValue::new(timeline.clone());
     let point_menu = move || {
         let m = menu.get()?;
+        let point = snapshot.with_value(|t| {
+            t.lanes
+                .get(m.lane)
+                .and_then(|l| l.points.get(m.point))
+                .map(|p| (p.at_ms, p.value.get()))
+        })?;
+        let (point_ms, point_value) = point;
+        // A typed time (s) or value (%), kept between the point's neighbours (A11).
+        let set_point = move |at_ms: Option<u32>, value: Option<f32>| {
+            menu.set(None);
+            change(&|t| {
+                let duration = t.duration_ms;
+                if let Some(l) = t.lanes.get_mut(m.lane)
+                    && let Some((was_ms, was)) =
+                        l.points.get(m.point).map(|p| (p.at_ms, p.value.get()))
+                {
+                    let at = at_ms.unwrap_or(was_ms);
+                    let v = value.unwrap_or(was);
+                    move_point(&mut l.points, m.point, at, v, duration);
+                }
+            })
+        };
+        // The fields take arrow keys, Home and End, which the menu's keys would take.
+        let field_keys = |e: leptos::ev::KeyboardEvent| {
+            if e.key() != "Escape" {
+                e.stop_propagation();
+            }
+        };
         let node = NodeRef::<leptos::html::Div>::new();
         crate::menu::focus_first(node);
+        // Beside the click, kept in the window: a point near the bottom or the right
+        // edge opens it above or to the left.
+        let (left, top) = crate::panels::events::place(m.x, m.y, 300.0);
         let set_curve = move |curve: LaneCurve| {
             menu.set(None);
             change(&|t| {
@@ -1161,7 +2040,20 @@ fn Lanes(
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
             <div class="context-menu" role="menu" aria-label="Point" node_ref=node on:keydown=point_keys
-                style:left=format!("{}px", m.x) style:top=format!("{}px", m.y)>
+                style:left=left style:top=top>
+                <div class="seq-point-fields" on:keydown=field_keys>
+                    <span class="seq-label">"Time"</span>
+                    <NumberField named=Signal::derive(|| "Point time".to_owned()) unit="s"
+                        value=Signal::derive(move || Some(f64::from(point_ms) / 1000.0))
+                        step=0.1 decimals=2 min=0.0 max=3600.0
+                        send=move |v| set_point(Some(snap(v * 1000.0, true)), None) />
+                    <span class="seq-label">"Value"</span>
+                    <NumberField named=Signal::derive(|| "Point value".to_owned()) unit="%"
+                        value=Signal::derive(move || Some(f64::from(point_value) * 100.0))
+                        step=1.0 decimals=1 min=0.0 max=100.0
+                        send=move |v| set_point(None, Some((v / 100.0) as f32)) />
+                </div>
+                <div class="menu-sep"></div>
                 <div class="ctx-head">"Curve into this point"</div>
                 {[LaneCurve::Linear, LaneCurve::EaseIn, LaneCurve::EaseOut, LaneCurve::EaseInOut, LaneCurve::Hold]
                     .into_iter()
@@ -1180,22 +2072,94 @@ fn Lanes(
             </div>
         })
     };
+    // A switch lane's bar: where it switches on and off, typed, and Delete. No curves:
+    // a switch only jumps.
+    let close_bar_menu = move || bar_menu.set(None);
+    let bar_keys = crate::menu::keys(close_bar_menu);
+    let bar_menu_view = move || {
+        let m = bar_menu.get()?;
+        let (from, to) = snapshot.with_value(|t| {
+            t.lanes
+                .get(m.lane)
+                .map(|l| switch_bars(&l.points, t.duration_ms.max(1), false))
+                .and_then(|b| b.get(m.bar).copied())
+        })?;
+        // Edits the bar as it is in the sequence now, kept between its neighbours.
+        let edit = move |f: &dyn Fn(&mut Bars, u32)| {
+            bar_menu.set(None);
+            change(&|t| {
+                let duration = t.duration_ms.max(1);
+                if let Some(l) = t.lanes.get_mut(m.lane) {
+                    let mut bars = switch_bars(&l.points, duration, false);
+                    if m.bar < bars.len() {
+                        f(&mut bars, duration);
+                        l.points = bar_points(&bars, duration);
+                    }
+                }
+            })
+        };
+        let set_end = move |grip: Grip, ms: u32| {
+            edit(&|bars, duration| bars[m.bar] = drag_bar(bars, m.bar, grip, ms, duration))
+        };
+        let field_keys = |e: leptos::ev::KeyboardEvent| {
+            if e.key() != "Escape" {
+                e.stop_propagation();
+            }
+        };
+        let node = NodeRef::<leptos::html::Div>::new();
+        crate::menu::focus_first(node);
+        let (left, top) = crate::panels::events::place(m.x, m.y, 140.0);
+        Some(view! {
+            <div class="ctx-catcher" on:pointerdown=move |_| bar_menu.set(None)></div>
+            <div class="context-menu" role="menu" aria-label="Bar" node_ref=node on:keydown=bar_keys
+                style:left=left style:top=top>
+                <div class="seq-point-fields" on:keydown=field_keys>
+                    <span class="seq-label">"On at"</span>
+                    <NumberField named=Signal::derive(|| "Switches on at".to_owned()) unit="s"
+                        value=Signal::derive(move || Some(f64::from(from) / 1000.0))
+                        step=0.1 decimals=2 min=0.0 max=3600.0
+                        send=move |v| set_end(Grip::Start, snap(v * 1000.0, true)) />
+                    <span class="seq-label">"Off at"</span>
+                    <NumberField named=Signal::derive(|| "Switches off at".to_owned()) unit="s"
+                        value=Signal::derive(move || Some(f64::from(to) / 1000.0))
+                        step=0.1 decimals=2 min=0.0 max=3600.0
+                        send=move |v| set_end(Grip::End, snap(v * 1000.0, true)) />
+                </div>
+                <div class="menu-sep"></div>
+                <button type="button" class="menuitem danger" role="menuitem" on:click=move |_| {
+                    edit(&|bars, _| {
+                        bars.remove(m.bar);
+                    });
+                }>
+                    <span class="ctx-check"></span>
+                    <span class="ctx-label">"Delete bar"</span>
+                </button>
+            </div>
+        })
+    };
     let empty = timeline.lanes.is_empty();
     view! {
-        <div class="seq-lanes">
+        <div class="seq-lanes" on:wheel=wheel>
             <div class="seq-ruler-row">
                 <div class="seq-lane-head seq-ruler-head"></div>
-                <div class="seq-ruler" on:click=seek title="Click to play from here">{ticks}</div>
+                <div class="seq-clip" node_ref=ruler_clip>
+                    <div class="seq-ruler" on:click=seek title="Click to play from here"
+                        style:width=move || frame_w(AREA_INSET_PX) style:margin-left=move || frame_l(AREA_INSET_PX)>{band}{ticks}</div>
+                </div>
             </div>
             <div class="seq-body">
-                <crate::panels::events::Events timeline=timeline.clone() scene=scene change=change />
+                <crate::panels::events::Events timeline=timeline.clone() scene=scene change=change zoom=zoom />
                 {lanes}
                 {empty.then(|| view! {
-                    <p class="placeholder seq-empty">"No lanes yet. Add lane searches the channels; a lane starts from where its channel is."</p>
+                    <p class="hint seq-empty">"No lanes yet. Add lane picks a channel or a setting; a lane starts from where its channel is."</p>
                 })}
-                <div class="seq-head-layer">{head}</div>
+                <div class="seq-head-layer">
+                    <div class="seq-head-frame" style:width=move || frame_w(AREA_INSET_PX) style:margin-left=move || frame_l(AREA_INSET_PX)>{head}</div>
+                </div>
             </div>
+            <seq_zoom::SeqZoomBar zoom=zoom duration_ms=timeline.duration_ms position=position />
             {point_menu}
+            {bar_menu_view}
         </div>
     }
 }
@@ -1236,6 +2200,65 @@ mod tests {
         assert_eq!((points[0].at_ms, points[0].value.get()), (0, 0.0));
         assert_eq!(snap(1234.0, false), 1200);
         assert_eq!(snap(1234.4, true), 1234);
+    }
+
+    #[test]
+    fn a_menu_line_adds_or_removes_its_trigger() {
+        let mut t = empty_sequence(TimelineId::new("seq_1"), "S".into());
+        let shown = TimelineTrigger::Scene {
+            scene_id: SceneId::new("intro"),
+            edge: SceneEdge::Shown,
+            delay_ms: 0,
+        };
+        toggle_start(&mut t, &shown);
+        assert_eq!(t.starts, vec![shown.clone()]);
+        // One the operator gave a wait is still the same watch.
+        t.starts[0] = TimelineTrigger::Scene {
+            scene_id: SceneId::new("intro"),
+            edge: SceneEdge::Shown,
+            delay_ms: 500,
+        };
+        let hidden = TimelineTrigger::Scene {
+            scene_id: SceneId::new("intro"),
+            edge: SceneEdge::Hidden,
+            delay_ms: 0,
+        };
+        assert!(same_watch(&t.starts[0], &shown));
+        assert!(!same_watch(&t.starts[0], &hidden));
+        toggle_start(&mut t, &shown);
+        assert!(t.starts.is_empty(), "a second click takes it out");
+    }
+
+    #[test]
+    fn the_loop_button_steps_through_a_range() {
+        let looped = next_loop(TimelineLoop::Once, 6000);
+        assert_eq!(looped, TimelineLoop::Loop);
+        let range = next_loop(looped, 6000);
+        assert_eq!(
+            range,
+            TimelineLoop::Range {
+                from_ms: 3000,
+                to_ms: 6000
+            },
+            "an intro, then the second half again and again"
+        );
+        assert_eq!(next_loop(range, 6000), TimelineLoop::Once);
+        assert_eq!(
+            fit_range(5950, 9000, 6000),
+            Some(TimelineLoop::Range {
+                from_ms: 5900,
+                to_ms: 6000
+            }),
+            "kept to the length, a minimum loop apart"
+        );
+        assert_eq!(
+            fit_range(0, 0, 6000),
+            Some(TimelineLoop::Range {
+                from_ms: 0,
+                to_ms: 100
+            })
+        );
+        assert_eq!(fit_range(0, 50, 50), None, "too short for a loop");
     }
 
     #[test]
