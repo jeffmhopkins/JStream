@@ -9035,8 +9035,9 @@ fn draw_sky_of(
     let (environment, look, opacity) =
         environment_at((shot, cache), (placed, light, sky), at, live);
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
-    // Its arrival's pictures (ADR-0188, ADR-0198), where their frames were uploaded this frame.
-    let pinned = |arrival: Option<crate::chain::Arrival>| {
+    // Its arrival's pictures (ADR-0188, ADR-0198), where their frames were uploaded this
+    // frame, at `shown` over the deep sky's fade (ADR-0239).
+    let pinned = |arrival: Option<crate::chain::Arrival>, shown: f32| {
         let mut pictures = [None; jstream_render::MAX_SKY_PICTURES];
         let parts =
             arrival.and_then(|arrival| Some((arrival, arrival_parts(shot, placed, arrival)?)));
@@ -9047,38 +9048,39 @@ fn draw_sky_of(
                         image,
                         direction: arrival.part(part.offset_deg).map(|v| v as f32),
                         width_deg: (sky.sky_picture_deg * part.scale).clamp(1.0, 120.0),
-                        opacity: 1.0,
+                        opacity: shown,
                     }
                 });
             }
         }
         pictures
     };
-    let draw =
-        |[turn_deg, tilt_deg, roll_deg]: [f32; 3], (opacity, warp, travel, dropping), arrival| {
-            jstream_render::SkyDraw {
-                environment: jstream_render::Environment {
-                    turn_deg,
-                    tilt_deg,
-                    roll_deg,
-                    ..environment
-                },
-                camera,
-                stars: look.stars,
-                star_brightness: look.star_brightness,
-                opacity,
-                deep: jstream_render::DeepSky {
-                    nebula: look.nebula,
-                    nebula_colors: look.nebula_colors.map(colour),
-                    galaxy: look.galaxy,
-                    seed: sky.sky_seed,
-                },
-                warp,
-                travel,
-                dropping,
-                pictures: pinned(arrival),
-            }
-        };
+    let draw = |[turn_deg, tilt_deg, roll_deg]: [f32; 3],
+                (opacity, warp, travel, dropping),
+                (arrival, pictured)| {
+        jstream_render::SkyDraw {
+            environment: jstream_render::Environment {
+                turn_deg,
+                tilt_deg,
+                roll_deg,
+                ..environment
+            },
+            camera,
+            stars: look.stars,
+            star_brightness: look.star_brightness,
+            opacity,
+            deep: jstream_render::DeepSky {
+                nebula: look.nebula,
+                nebula_colors: look.nebula_colors.map(colour),
+                galaxy: look.galaxy,
+                seed: sky.sky_seed,
+            },
+            warp,
+            travel,
+            dropping,
+            pictures: pinned(arrival, pictured),
+        }
+    };
     // The new sky shows at `shown * faded`, over the leaving one; drawing the leaving one
     // at `shown * (1 - faded) / (1 - shown * faded)` makes them `shown * faded` of the new
     // and `shown * (1 - faded)` of the old, `shown` in all, whatever the backdrop's
@@ -9097,7 +9099,11 @@ fn draw_sky_of(
             &draw(
                 leaving.angles,
                 (under_opacity, 0.0, leaving.travel, 0.0),
-                leaving.arrival,
+                // Drawn still, its picture fades by the warp now (ADR-0239).
+                (
+                    leaving.arrival,
+                    crate::chain::picture_shown(state.warp, state.dropping),
+                ),
             ),
             under,
         )?;
@@ -9107,7 +9113,10 @@ fn draw_sky_of(
         &draw(
             state.angles(warp_aiming(&environment, sky)),
             (shown * faded, state.warp, state.travel, state.dropping),
-            state.arrival,
+            (
+                state.arrival,
+                crate::chain::picture_opacity(state.warp, state.dropping),
+            ),
         ),
         target,
     )?;
@@ -9144,7 +9153,7 @@ pub(crate) fn arrival_light(
     let source = &part.source;
     let (environment, look, opacity) =
         environment_at((shot, cache), (placed, light, sky), at, live);
-    let shown = crate::chain::deep_shown(state.warp, state.dropping);
+    let shown = crate::chain::picture_shown(state.warp, state.dropping);
     let intensity = look.intensity * opacity * sky.sky_picture_light * shown;
     if intensity <= 0.0 {
         return None;
