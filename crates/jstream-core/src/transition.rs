@@ -19,6 +19,7 @@
 //! children's own tracks ([`Inside`]), planned the same way inside the group's layer
 //! with the group item's progress (ADR-0049 §3).
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use jstream_graph::{Graph, Overrides};
@@ -148,6 +149,11 @@ pub(crate) struct Visual {
     /// The size of the image in pixels, which bounds its crop, when known.
     pub(crate) size: Option<[u32; 2]>,
     pub(crate) settings: ItemTransition,
+    /// Whether its effects run over the canvas, as a model's layer does, so it can't
+    /// glide (ADR-0106). Within a family it swaps to its other side at once rather than
+    /// crossfading with it: two copies of one opaque layer, each part faded, show
+    /// through.
+    pub(crate) covers_canvas: bool,
     /// Its effects' kinds and settings in order (ADR-0065), empty without: two items
     /// pair only when theirs are the same kinds in the same order, with settings a Move
     /// can blend ([`effects_pair`]).
@@ -740,11 +746,49 @@ pub(crate) fn plan(
     partners.resize(tracks.len(), None);
     tracks.extend(arriving);
     partners.extend(arriving_partners);
+    if by_item {
+        swap_what_covers_the_canvas(&mut tracks);
+    }
     let end_ms = tracks
         .iter()
         .map(|(_, track)| track.end_ms())
         .fold(0.0, f32::max);
     (Planned { tracks, end_ms }, partners)
+}
+
+/// Within a family, an item whose effects cover the canvas goes and comes back rather
+/// than gliding (ADR-0106): each of its halves in `tracks` swaps at once, at the start,
+/// rather than crossfading with the other. Two copies of one opaque layer, the one
+/// fading out under the one fading in, would show what is behind them half-way.
+fn swap_what_covers_the_canvas(tracks: &mut [(Visual, Track)]) {
+    let swapped: BTreeSet<ItemId> = tracks
+        .iter()
+        .filter(|(visual, track)| visual.covers_canvas && matches!(track, Track::Appear { .. }))
+        .map(|(visual, _)| visual.item_id.clone())
+        .filter(|item| {
+            tracks.iter().any(|(visual, track)| {
+                visual.covers_canvas
+                    && &visual.item_id == item
+                    && matches!(track, Track::Disappear { .. })
+            })
+        })
+        .collect();
+    for (visual, track) in tracks.iter_mut() {
+        if !swapped.contains(&visual.item_id) {
+            continue;
+        }
+        match track {
+            Track::Appear { effect, timing, .. } | Track::Disappear { effect, timing, .. } => {
+                *effect = Effect::None;
+                *timing = Timing {
+                    delay_ms: 0.0,
+                    duration_ms: 0.0,
+                    easing: timing.easing,
+                };
+            }
+            Track::Pair { .. } | Track::Through { .. } => {}
+        }
+    }
 }
 
 /// A stinger's picture under its overlay: `from` shows until `cut_ms` and `to` from
@@ -943,6 +987,7 @@ mod tests {
             },
             size: None,
             settings: ItemTransition::default(),
+            covers_canvas: false,
             effects: Vec::new(),
             blend_from: None,
             inside: None,

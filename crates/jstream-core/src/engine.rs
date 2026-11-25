@@ -6310,6 +6310,7 @@ impl State {
             }
             _ => None,
         };
+        let carried = self.running_fades(now).unwrap_or_default();
         self.graph
             .place_keyframe(scene_id.clone(), keyframe_id.clone());
         self.refresh_shown();
@@ -6329,7 +6330,7 @@ impl State {
                     from_camera,
                     via: Vec::new(),
                     in_place: false,
-                    carried: Default::default(),
+                    carried,
                 }),
             );
         }
@@ -6789,6 +6790,8 @@ impl State {
         }
         let now = self.action_now();
         self.switched_at = Some(now);
+        // The fades of a Move this one cuts short, which go on (ADR-0237 decision 2).
+        let carried = self.running_fades(now).unwrap_or_default();
         let running = match (run, from_scene) {
             (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
@@ -6841,7 +6844,7 @@ impl State {
                     // Only a Move within the family follows a path (ADR-0166 decision 2).
                     via: if by_item { via } else { Vec::new() },
                     in_place: false,
-                    carried: Default::default(),
+                    carried,
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
@@ -7016,35 +7019,10 @@ impl State {
             let shown = self.graph.state().visible_in(&item_id, Some(program));
             (self.screen_now(program, run, now), shown)
         });
-        // From the program scene as it was drawn: at rest, or partway through another
-        // item's showing or hiding there, drawn as the scene with its fades, which go on
-        // (ADR-0237); never a Move between views, or one drawn track by track.
-        let carried = match self.studio.running() {
-            None => Some(snapshot::ShowFades::new()),
-            Some(running) if running.in_place => {
-                let Self {
-                    graph,
-                    shown,
-                    frames,
-                    frame_versions,
-                    live,
-                    ..
-                } = self;
-                let graph: &Graph = shown.as_ref().unwrap_or(graph);
-                let assets = live.filter_assets();
-                snapshot::glide_fades(
-                    graph,
-                    running,
-                    now,
-                    &mut |id| match frames.get(id) {
-                        Some(frame) => Some(Look::frame(frame.clone(), None)),
-                        None => live.look_quiet(id, now, frame_versions),
-                    },
-                    &assets,
-                )
-            }
-            Some(_) => None,
-        };
+        // From the program scene as it was drawn: at rest, or partway through a Move
+        // drawn as the scene with its fades, which go on (ADR-0237); never one drawn
+        // track by track.
+        let carried = self.running_fades(now);
         let in_place = carried.is_some();
         let carried = carried.unwrap_or_default();
         let applied = self
@@ -7082,6 +7060,35 @@ impl State {
         }
         self.changed(client_id, request_id, &edits, applied.rev, None, wake);
         Ok(())
+    }
+
+    /// The fades still running at `now` of the Move on program, which a cue cutting it
+    /// short carries on (ADR-0237 decision 2): none when nothing runs, and `None` when it
+    /// is drawn track by track.
+    fn running_fades(&mut self, now: MediaTime) -> Option<snapshot::ShowFades> {
+        let Some(running) = self.studio.running() else {
+            return Some(snapshot::ShowFades::new());
+        };
+        let Self {
+            graph,
+            shown,
+            frames,
+            frame_versions,
+            live,
+            ..
+        } = self;
+        let graph: &Graph = shown.as_ref().unwrap_or(graph);
+        let assets = live.filter_assets();
+        snapshot::glide_fades(
+            graph,
+            running,
+            now,
+            &mut |id| match frames.get(id) {
+                Some(frame) => Some(Look::frame(frame.clone(), None)),
+                None => live.look_quiet(id, now, frame_versions),
+            },
+            &assets,
+        )
     }
 
     /// Whether `item_id` is an item of the internal show scene's own.
