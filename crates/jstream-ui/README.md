@@ -409,7 +409,9 @@ Contents ([Design](#design) explains the choices):
   with `model_resolution`; choosing Fixed starts it at 100,
   [ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md))
   and a Lowest automatic resolution field (50 to 100 in steps of 1, disabled while the
-  size is fixed, `min_model_resolution`, sent with `min_model_resolution`). A typed
+  size is fixed, `min_model_resolution`, sent with `min_model_resolution`), and a 3D
+  anti-aliasing select (Off, 2x, 4x or 8x multisampling, `model_antialiasing`, sent with
+  `model_antialiasing`, [ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)). A typed
   percentage is rounded and held to `MODEL_RESOLUTION_RANGE` (`typed_percent`). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an

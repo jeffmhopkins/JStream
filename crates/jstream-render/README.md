@@ -55,6 +55,12 @@ and calls this crate.
   The layer may have fewer pixels than the canvas it stands for, its extent
   ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)):
   the model is placed on the extent's canvas and the layer holds the same picture, less sharp.
+  It is drawn multisampled, with the samples `Compositor::set_model_antialiasing` last
+  set (1, none, until set; a count the device can't draw steps down to the most it can,
+  `model/msaa.rs`), its colour resolved into the layer as the pass ends and a surface
+  buffer drawn with it resolved to the nearest sample of each texel
+  (`surface_resolve.wgsl`); a lit card's quad is drawn with one sample
+  ([ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)).
   The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.

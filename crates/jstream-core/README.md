@@ -1816,7 +1816,8 @@ decision 1) are an application setting too, answered before the collection lock
 (`Engine::rendering_call`): a `screen_space_steps` that isn't one of
 `SCREEN_SPACE_STEPS`, a `max_probe_resolution` that isn't one of
 `PROBE_RESOLUTIONS`, a `model_resolution` that is neither 0 nor in
-`MODEL_RESOLUTION_RANGE` (50 to 100), or a `min_model_resolution` outside it, is `invalid_argument` and changes nothing; otherwise each switch the
+`MODEL_RESOLUTION_RANGE` (50 to 100), a `min_model_resolution` outside it, or a
+`model_antialiasing` that isn't one of `MODEL_ANTIALIASING`, is `invalid_argument` and changes nothing; otherwise each switch the
 call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
@@ -5299,7 +5300,11 @@ smaller than `min_model_resolution` (`Shot::min_model_resolution`, given each ti
 so a floor between two steps (90) is the last step down and 100 keeps models whole
 ([ADR-0241](../../docs/adr/0241-a-floor-for-the-model-size-and-any-whole-percentage.md)). A
 floor raised past the size drawn lifts it to the floor at once, and a fixed size below
-the floor is drawn as set. A drawer whose meter has no budget
+the floor is drawn as set. Every frame draws its models with the switches'
+`model_antialiasing` samples (`Compositor::set_model_antialiasing`, set with the
+blending space as the frame starts), and a probe's capture draws them with one, setting
+the frame's back after it
+([ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)). A drawer whose meter has no budget
 (not the program's) never lowers it itself. The size goes to the meter each tick
 (`DrawMeter::model_percent`), and `profile.get` reports it as the drawer's
 `model_resolution`, with the frames of the window drawn below 100 as
