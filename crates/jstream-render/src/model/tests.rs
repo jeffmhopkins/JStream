@@ -3509,3 +3509,48 @@ fn a_layer_still_holding_the_same_model_draw_is_kept() {
         .expect("the model draws");
     assert_ne!(layer.generation(), was, "drawn without its depth");
 }
+
+/// `warm_3d` makes a model layer's pipelines at the samples set and at one, so a first
+/// draw at either compiles nothing, multisampled or not, with its view depth.
+#[test]
+fn warming_3d_makes_the_model_layers_pipelines_at_its_samples() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    if compositor.set_model_antialiasing(4) != 4 {
+        return;
+    }
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+    compositor.warm_3d();
+    let made = compositor.pipelines_made();
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry: boxed(80.0, 50.0, 50.0),
+        camera: Some(SceneCamera::framing(canvas())),
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    for samples in [4, 1] {
+        compositor.set_model_antialiasing(samples);
+        compositor
+            .draw_model_and_depth(&draw, &layer, None, &depth)
+            .expect("the model draws");
+        assert_eq!(
+            compositor.pipelines_made(),
+            made,
+            "drawn at {samples}x, nothing more made"
+        );
+    }
+}

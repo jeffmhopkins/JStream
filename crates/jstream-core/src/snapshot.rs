@@ -6299,6 +6299,9 @@ const PRIME_SIDE: u32 = 256;
 /// nothing). A scene that fails to draw is only logged: it fails the same way on air.
 fn prime(shot: &Shot, at: MediaTime, compositor: &mut Compositor) {
     if !shot.cameras.is_empty() {
+        // At the samples its models will draw with, so the multisampled pipelines are
+        // made too though no model has loaded yet.
+        compositor.set_model_antialiasing(shot.features.model_antialiasing);
         compositor.warm_3d();
     }
     let Ok(canvas) = shot.canvas() else { return };

@@ -2702,8 +2702,9 @@ impl Compositor {
 
     /// Makes what a 3D scene draws with and a 2D one never needs, which is otherwise made
     /// at the first draw that needs it: the sky's pipeline, its bake's, and the scene
-    /// passes' depth pipelines, and the pipeline that blurs a reflected panorama. The
-    /// models' are made with the compositor. Each is found if a
+    /// passes' depth pipelines, the pipeline that blurs a reflected panorama, and a
+    /// model layer's pipelines at the samples [`Self::set_model_antialiasing`] set and
+    /// at one. The models' others are made with the compositor. Each is found if a
     /// compositor on the device made it already (`pipelines.rs`), so a caller on a
     /// thread of its own makes them for every compositor on its device ahead of the
     /// first 3D frame, which would otherwise wait for their shaders to compile.
@@ -2714,6 +2715,7 @@ impl Compositor {
         self.ensure_depth_pipelines();
         self.panorama_blur
             .get_or_init(|| BlurPipeline::new(&self.gpu.device));
+        self.models.warm(&self.gpu);
     }
 
     /// Makes the depth pipelines once, and a depth target of `width` by `height`.

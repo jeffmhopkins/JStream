@@ -279,9 +279,10 @@ and calls this crate.
   preview or a snapshot drew is compiled for the program stage, and a caller may
   compile ahead of time on a thread of its own: by drawing what will be drawn on any
   compositor of the context, and with `Compositor::warm_3d` for what a 3D scene alone
-  draws with (the sky's two pipelines, its bake's and the scene passes' depth pipelines,
-  otherwise made at the first draw that needs them, and the compositor's own panorama
-  blur). This covers the blend, depth,
+  draws with (the sky's two pipelines, its bake's, the scene passes' depth pipelines and
+  a model layer's at the samples `set_model_antialiasing` set and at one, otherwise made
+  at the first draw that needs them, and the compositor's own panorama blur;
+  `warming_3d_makes_the_model_layers_pipelines_at_its_samples`). This covers the blend, depth,
   model, sky, sky bake and filter pipelines; the mip, panorama blur, resolve, wipe, probe
   resampling, NV12 and ingest ones are still each compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
   edited over and over keeps only the versions a compositor still holds, 4 a filter). `Compositor::pipelines_made` counts the

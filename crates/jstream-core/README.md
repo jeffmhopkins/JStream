@@ -2248,7 +2248,8 @@ compositor on the engine's context shares them
 compiles no shader on its first frame of a scene it never showed: on Direct3D 12 a 3D
 scene's shaders take seconds, which was a stall at the output's start or at the switch.
 A scene with a camera also has what a 3D scene alone draws with made
-(`Compositor::warm_3d`), whether or not anything in it draws yet. A primed draw has
+(`Compositor::warm_3d`, after setting the samples its models draw with, so their
+multisampled pipelines are made too), whether or not anything in it draws yet. A primed draw has
 images and filters of its own, dropped after it, so it leaves the snapshots' cache and
 GPU memory as they were. It runs only with a GPU context to share (`SharedGpu::lends`,
 and the snapshot thread skips the job when the context won't open, so nothing is drawn

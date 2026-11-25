@@ -2630,6 +2630,13 @@ impl ModelRuntime {
         self.samples
     }
 
+    /// Makes the layer's pipelines at the sample count set and at one sample, which a
+    /// GPU short of time draws with (ADR-0243), ahead of the first draw that needs them.
+    pub(crate) fn warm(&mut self, gpu: &Gpu) {
+        self.pipelines_at(gpu, 1);
+        self.pipelines_at(gpu, self.samples);
+    }
+
     /// Where [`Self::layer`] holds the pipelines drawn with `samples`, made first if
     /// they aren't yet.
     fn pipelines_at(&mut self, gpu: &Gpu, samples: u32) -> usize {
