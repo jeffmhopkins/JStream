@@ -201,7 +201,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
   0.113, `NetworkProfile` and `NetworkInputProfile`, since 0.120
-  `PtzControllerProfile`, and since 0.121 `PtzCameraProfile`, among them),
+  `PtzControllerProfile`, since 0.121 `PtzCameraProfile`, and since 0.197
+  `GpuPartProfile` and `GpuPart`, among them),
   `quality.probe` (since 0.110, `quality.rs`: `ProbeStream`, `QualityProbeInfo` with its
   `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
   `MAX_PSNR_DB`), with `QueryResult`
@@ -410,7 +411,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.196 because the rendering switches gain `model_antialiasing`,
+`PROTOCOL_VERSION` is 0.197 because `profile.get`'s units give their GPU time apart
+by part (`UnitProfile`'s `gpu_parts`: a 3D model's draw, a model's or a scene's view
+depth, a scene's surface buffer and shadow maps, and each of a chain's first `GPU_PART_FILTERS` filters); 0.196
+because the rendering switches gain `model_antialiasing`,
 the samples each pixel of a 3D model's layer is drawn with: 1, 2, 4 (the default) or 8
 (`MODEL_ANTIALIASING`, [ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)); 0.195 because `capture.targets` lists the audio input and output
 devices (`CaptureTargetKind::AudioInput` and `AudioOutput`, `primary` for the system's
@@ -2261,7 +2265,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   compositor's own are counted), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
-  its frames, average and recent longest time and share of its drawer's time; the
+  its frames, average and recent longest time and share of its drawer's time, and since
+  0.197 where its GPU time went (`gpu_parts`, each a `GpuPart` with its `gpu_ms`:
+  `model`, `view_depth`, `surface`, `shadow_maps`, or `filter` with its `index` in the
+  unit's chain, for the first `GPU_PART_FILTERS` (16); each is inside the unit's
+  `gpu_ms`); the
   sources the `jstream-sources` thread and the planner spent time on; the plans; the
   process's CPU; and its threads by name, as a percentage of one core (JStream's own
   `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)

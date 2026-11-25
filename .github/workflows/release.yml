@@ -1,5 +1,5 @@
 # release: builds the desktop app for every platform from a version tag, the portable
-# Windows zip, the Linux .deb and AppImage and the macOS disk image, and publishes them as
+# Windows zip, the Linux .deb and AppImage, the macOS disk image and the Stream Deck plugin, and publishes them as
 # one GitHub release (docs/runbooks/release.md, ROADMAP.md#beta). The tag is `v` and the workspace version the shipped
 # apps take (Cargo.toml's [workspace.package]); a version with a pre-release part
 # (`0.1.0-alpha.1`) makes a pre-release. Builds are unsigned: Windows until a certificate
@@ -413,9 +413,76 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The Stream Deck plugin (integrations/streamdeck), with the release's version stamped on
+  # its manifest: typechecked, unit-tested, validated and packed by Elgato's CLI. Node is
+  # the release the plugin runs on (its manifest's Nodejs.Version), downloaded and checked
+  # by hash like the UI's tools. The tests that drive a built daemon skip here.
+  streamdeck:
+    needs: ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_VERSION: 24.22.2
+      NODE_SHA256: 48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Node
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          node="node-v${NODE_VERSION}-linux-x64"
+          curl -sSLf -o node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/${node}.tar.xz"
+          echo "${NODE_SHA256}  node.tar.xz" | sha256sum -c -
+          tar xJf node.tar.xz
+          echo "$RUNNER_TEMP/${node}/bin" >> "$GITHUB_PATH"
+      - name: Test and pack the plugin
+        working-directory: integrations/streamdeck
+        env:
+          TAG: ${{ needs.ui.outputs.tag }}
+          VERSION: ${{ needs.ui.outputs.version }}
+        run: |
+          set -euo pipefail
+          node --version
+          npm ci
+          npm run typecheck
+          npm run build
+          npm test
+          node --experimental-strip-types scripts/set-version.ts "$VERSION"
+          npm run pack
+          mkdir -p ../../dist
+          mv dist/io.github.jeffmhopkins.jstream.streamDeckPlugin "../../dist/jstream-${TAG}-streamdeck.streamDeckPlugin"
+      # The plugin's part of the release text.
+      - name: Write the checksum and the release notes
+        env:
+          TAG: ${{ needs.ui.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd dist
+          plugin="jstream-${TAG}-streamdeck.streamDeckPlugin"
+          sha256sum "$plugin" > "$plugin.sha256"
+          {
+            echo "### Stream Deck plugin"
+            echo
+            echo "- \`${plugin}\`, for the Stream Deck app 7.1 or newer on Windows 10 or later or macOS 12 or later: double-click it to install. Keys switch scenes and keyframes, run shows, toggle sources, effects and outputs, and light up with JStream's state. See [the plugin's README](https://github.com/${REPO}/blob/${TAG}/integrations/streamdeck/README.md) to pair it."
+            echo
+            echo "SHA-256:"
+            echo "- \`${plugin}\`: \`$(cut -d ' ' -f 1 "$plugin.sha256")\`"
+            echo
+          } > notes-4-streamdeck.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-streamdeck
+          path: |
+            dist/*.streamDeckPlugin
+            dist/*.sha256
+            dist/notes-*.md
+          if-no-files-found: error
+          retention-days: 7
+
   # Publishing is its own job, so only it can write to the repository.
   publish:
-    needs: [ui, zip, linux, macos]
+    needs: [ui, zip, linux, macos, streamdeck]
     runs-on: ubuntu-latest
     permissions:
       contents: write   # creates the release and uploads its files; nothing else
@@ -426,14 +493,14 @@ jobs:
           merge-multiple: true
           path: release
       # One release text: a line on the release, then each platform's part, Windows,
-      # macOS, then Linux.
+      # macOS, then Linux, then the Stream Deck plugin's.
       - name: Gather the release notes
         env:
           VERSION: ${{ needs.ui.outputs.version }}
         run: |
           set -euo pipefail
           {
-            echo "JStream ${VERSION}, the desktop app for Windows, macOS and Linux."
+            echo "JStream ${VERSION}, the desktop app for Windows, macOS and Linux, and its Stream Deck plugin."
             echo
             cat release/notes-*.md
           } > notes.md
@@ -453,6 +520,6 @@ jobs:
             gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
           fi
           gh release create "$TAG" release/*.zip release/*.dmg release/*.deb release/*.AppImage \
-            release/*.sha256 \
+            release/*.streamDeckPlugin release/*.sha256 \
             --repo "$GITHUB_REPOSITORY" --verify-tag "${prerelease[@]}" \
             --title "JStream $VERSION" --notes-file notes.md --generate-notes

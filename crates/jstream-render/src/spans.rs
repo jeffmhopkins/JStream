@@ -15,6 +15,12 @@
 //! ([`Compositor::gpu_units`](crate::Compositor::gpu_units)), each unit's spans in the
 //! frame added together.
 //!
+//! Inside a unit, the drawer may name a part of its work
+//! ([`Compositor::gpu_part`](crate::Compositor::gpu_part)): a 3D model's draw, a
+//! filter of its chain. A span of a named part comes back under the unit's id with the
+//! part in its top bits ([`gpu_unit_part`]), so the drawer can add it to the unit and
+//! to the part both; naming a unit clears the part.
+//!
 //! One unit is named at a time and every span is one submit's, so a frame's spans never
 //! nest or overlap: its units' times add up to the GPU time of the frame's timed work.
 //! The program's render thread relies on that sum to choose the size 3D models are drawn
@@ -46,6 +52,15 @@ const PENDING: u8 = 1;
 const MAPPED: u8 = 2;
 const FAILED: u8 = 3;
 
+/// Where a part's number sits in the id a span comes back with ([`gpu_unit_part`]).
+const PART_SHIFT: u32 = 24;
+
+/// The id a span of `unit`'s work comes back with, split into the unit and the part
+/// named while it was submitted (0 for none). A unit's id must be below `1 << 24`.
+pub fn gpu_unit_part(id: u32) -> (u32, u8) {
+    (id & ((1 << PART_SHIFT) - 1), (id >> PART_SHIFT) as u8)
+}
+
 /// One compositor's frame spans: inert on a device without `TIMESTAMP_QUERY`.
 pub(crate) struct Spans {
     inner: Mutex<Option<Inner>>,
@@ -57,6 +72,8 @@ struct Inner {
     open: Option<usize>,
     /// The unit the work submitted now belongs to.
     unit: Option<u32>,
+    /// The part of the unit it is, 0 for none.
+    part: u8,
     /// Nanoseconds per timestamp tick.
     period: f64,
     /// Each unit's nanoseconds in the frame being read, reused.
@@ -111,6 +128,7 @@ impl Spans {
                 frames: (0..FRAMES).map(|_| FrameSet::new(device)).collect(),
                 open: None,
                 unit: None,
+                part: 0,
                 period: f64::from(queue.get_timestamp_period()),
                 sums: Vec::with_capacity(SPANS as usize),
             });
@@ -139,6 +157,7 @@ impl Spans {
             inner.frames[open].busy = false;
         }
         inner.unit = None;
+        inner.part = 0;
         let free = inner
             .frames
             .iter()
@@ -154,9 +173,20 @@ impl Spans {
     }
 
     /// Names the unit the work submitted from now on belongs to; `None` times none.
+    /// Clears the part.
     pub(crate) fn unit(&self, unit: Option<u32>) {
         if let Some(inner) = self.lock().as_mut() {
+            debug_assert!(unit.is_none_or(|unit| unit < 1 << PART_SHIFT));
             inner.unit = unit;
+            inner.part = 0;
+        }
+    }
+
+    /// Names the part of the current unit the work submitted from now on is; 0 for
+    /// none.
+    pub(crate) fn part(&self, part: u8) {
+        if let Some(inner) = self.lock().as_mut() {
+            inner.part = part;
         }
     }
 
@@ -164,7 +194,7 @@ impl Spans {
     pub(crate) fn span(&self) -> Option<Span> {
         let mut guard = self.lock();
         let inner = guard.as_mut()?;
-        let unit = inner.unit?;
+        let unit = inner.unit? | u32::from(inner.part) << PART_SHIFT;
         let set = &mut inner.frames[inner.open?];
         let index = u32::try_from(set.units.len()).ok()?;
         if index >= SPANS {
@@ -370,6 +400,52 @@ mod tests {
         opened
             .compositor
             .gpu_units(|tag, unit, _| panic!("frame {tag} unit {unit} came back twice"));
+    }
+
+    /// A part named inside a unit comes back under the unit's id with the part in its
+    /// top bits, apart from the unit's own work; naming a unit again clears the part.
+    #[test]
+    fn a_parts_gpu_time_comes_back_with_its_unit() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        if !opened.compositor.times_gpu() {
+            return;
+        }
+        let input = image(&opened, 64, &[[255, 0, 0, 255]; 64 * 64]);
+        let mut sharpen = filter("sharpen", serde_json::json!({}));
+        let clock = FilterClock::default();
+        let mut run = |opened: &mut crate::tests::Opened| {
+            opened
+                .compositor
+                .apply_filter(&mut sharpen, &input, clock)
+                .expect("drawn");
+        };
+        assert!(opened.compositor.begin_gpu_frame(5));
+        opened.compositor.gpu_unit(Some(7));
+        run(&mut opened);
+        opened.compositor.gpu_part(2);
+        run(&mut opened);
+        opened.compositor.gpu_part(0);
+        run(&mut opened);
+        opened.compositor.gpu_part(9);
+        // A unit named again starts without a part.
+        opened.compositor.gpu_unit(Some(8));
+        run(&mut opened);
+        opened.compositor.end_gpu_frame();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut times = Vec::new();
+        while times.is_empty() && Instant::now() < deadline {
+            let _ = opened
+                .compositor
+                .device()
+                .poll(wgpu::PollType::wait_indefinitely());
+            opened
+                .compositor
+                .gpu_units(|_, id, _| times.push(crate::gpu_unit_part(id)));
+        }
+        times.sort_unstable();
+        assert_eq!(times, [(7, 0), (7, 2), (8, 0)]);
     }
 
     /// A frame's way out is timed with the unit named around it: a readback's copy, and

@@ -25,9 +25,11 @@ covers = ["integrations/streamdeck/io.github.jeffmhopkins.jstream.sdPlugin/manif
 The plugin needs the Stream Deck app 7.1 or newer, on Windows 10 or later or macOS 12 or later.
 Stream Deck and JStream can run on different computers on the same network.
 
-1. **Install.** Double-click `io.github.jeffmhopkins.jstream.streamDeckPlugin`. The Stream
-   Deck app asks to install it, and a **JStream** group appears in its action list. The
-   file is built by `npm run pack` (see [Build](#build)).
+1. **Install.** Download `jstream-v<version>-streamdeck.streamDeckPlugin` from the
+   release on GitHub, next to JStream's own packages, and double-click it. The Stream
+   Deck app asks to install it, and a **JStream** group appears in its action list. A
+   newer release's plugin installs over the old one. To build it yourself, see
+   [Build](#build).
 2. **Let devices in.** On the JStream computer, turn on **Allow devices on my network** in
    **Settings › Devices**. It applies at once. The network listener uses port 4456
    unless that was changed. The daemon's flag is `--lan`
@@ -161,7 +163,7 @@ npm run pack                # validates, then writes dist/io.github.jeffmhopkins
 ```
 
 - `test/unit.test.ts` covers the lists, labels, key images, fingerprints and discovery
-  answers.
+  answers. `test/version.test.ts` covers the release version stamp.
 - `test/daemon.test.ts` runs against a real `jstream-daemon --lan`. It finds the daemon
   by its mDNS announcement, probes the
   certificate, refuses a wrong fingerprint, pairs, and drives a scene, keyframe, item,
@@ -183,6 +185,14 @@ checked by hand against `deny.toml`'s allow list, since `cargo deny` doesn't rea
 lockfile. All are on it except `tslib` (0BSD), a build-only dependency of
 `@rollup/plugin-typescript` that isn't in the packaged plugin; 0BSD asks even less than
 MIT.
+
+Each release builds the plugin too (`streamdeck` in `.github/workflows/release.yml`,
+[runbook](../../docs/runbooks/release.md)): it runs the unit tests, stamps the release's
+version on the manifest with `node --experimental-strip-types scripts/set-version.ts
+<version>`, which turns a pre-release into Stream Deck's fourth number (`0.1.0-alpha.14`
+is `0.1.0.14`, `beta.N` is `100 + N`, `rc.N` is `200 + N` and `0.1.0` is `0.1.0.1000`),
+then packs it as `jstream-v<version>-streamdeck.streamDeckPlugin`. The committed manifest
+keeps `0.1.0.0`, so a local build never looks newer than a release.
 
 `npm run watch` rebuilds and restarts the plugin in a Stream Deck app on the same computer
 (`streamdeck link io.github.jeffmhopkins.jstream.sdPlugin` once first). The images under

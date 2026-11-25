@@ -663,7 +663,7 @@ impl Count {
                 let unit = if self.clock.seconds() { 1 } else { 60 };
                 let ts = Timestamp::from_second(at.saturating_mul(unit))
                     .unwrap_or(Timestamp::UNIX_EPOCH);
-                let civil = ts.to_zoned(self.zone.clone());
+                let civil = ts.to_zoned_datetime(self.zone.clone());
                 clock_text(
                     civil.hour().unsigned_abs().into(),
                     civil.minute().unsigned_abs().into(),

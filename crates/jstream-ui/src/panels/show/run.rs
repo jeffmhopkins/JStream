@@ -56,6 +56,28 @@ fn on_program(show: &ShowView, at: u32, inclusive: bool) -> (Option<&ClipView>, 
     (clip, key)
 }
 
+/// What the show waits on at a pausing bookmark at `at`. The runner puts the program clip
+/// that starts there up as it pauses, without a keyframe, so the show waits on the scene
+/// the bookmark marks; everything else that starts there happens on Continue.
+fn at_pause(show: &ShowView, at: u32) -> (Option<&ClipView>, Option<&ClipView>) {
+    match show.program().iter().find(|c| c.start_ms == at) {
+        Some(clip) => (Some(clip), None),
+        None => on_program(show, at, false),
+    }
+}
+
+/// Whether the show waits at a pausing bookmark at the play head, rather than held there
+/// by hand.
+fn at_a_pausing_bookmark(show: &ShowView, run: &model::RunView, head: u32) -> bool {
+    match &run.phase {
+        RunPhase::Paused { bookmark, .. } => show
+            .bookmarks
+            .iter()
+            .any(|b| &b.id == bookmark && b.pausing && b.at_ms == head),
+        _ => false,
+    }
+}
+
 /// Every keyframe marker in the show, in time order.
 fn keyframes(show: &ShowView) -> impl Iterator<Item = &ClipView> {
     show.tracks
@@ -144,7 +166,11 @@ fn script(note: &str) -> impl IntoView + use<> {
 
 /// The NOW card: what is on program and what the runner is doing.
 pub fn now(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Card {
-    let (clip, key) = on_program(show, head, settled(run));
+    let (clip, key) = if at_a_pausing_bookmark(show, run, head) {
+        at_pause(show, head)
+    } else {
+        on_program(show, head, settled(run))
+    };
     let title = match &run.off_script {
         Some(scene) => scene.clone(),
         None => scene_and_key(clip, key),
@@ -217,10 +243,10 @@ pub fn next_picture(show: &ShowView, run: &model::RunView, head: u32) -> Option<
     } else {
         match run.phase {
             RunPhase::Stopped => on_program(show, 0, true),
-            // Continue goes on to the next pausing bookmark, which waits before what
-            // starts there.
+            // Continue goes on to the next pausing bookmark, which waits on the program
+            // clip that starts there, before anything else that starts there.
             RunPhase::Playing | RunPhase::Transition => {
-                on_program(show, show.next_pause(head)?.at_ms, false)
+                at_pause(show, show.next_pause(head)?.at_ms)
             }
             RunPhase::Paused { .. } => on_program(show, head, true),
         }
@@ -264,7 +290,12 @@ pub fn next(show: &ShowView, run: &model::RunView, head: u32) -> Card {
             },
         },
         RunPhase::Paused { .. } => {
-            let cut = show.program().iter().find(|c| c.start_ms == head);
+            // At a pausing bookmark the program clip that starts there is already up.
+            let cut = show
+                .program()
+                .iter()
+                .find(|c| c.start_ms == head)
+                .filter(|_| !at_a_pausing_bookmark(show, run, head));
             let key = keyframes(show).find(|k| k.start_ms == head);
             let (title, mut line) = match (cut, key) {
                 (Some(c), k) => (
@@ -1210,9 +1241,9 @@ mod tests {
         };
         assert_eq!(next_picture(&show, &run, 180_000).as_deref(), Some("intro"));
         run.phase = RunPhase::Playing;
-        // Playing in the waiting room: Continue goes to Intro, which waits before the
-        // video starts, so Starting soon is still up.
-        assert_eq!(next_picture(&show, &run, 10_000).as_deref(), Some("soon"));
+        // Playing in the waiting room: Continue goes to Intro, which waits on the video
+        // that starts there (#1815).
+        assert_eq!(next_picture(&show, &run, 10_000).as_deref(), Some("intro"));
         run.armed_ms = Some(430_000);
         assert_eq!(next_picture(&show, &run, 10_000).as_deref(), Some("demo"));
     }
@@ -1220,13 +1251,72 @@ mod tests {
     #[test]
     fn next_at_a_cut_names_the_scene_and_its_transition() {
         let (show, mut run, _) = mockup();
+        // Held by hand (no bookmark) just as intro.mp4 is due: Continue cuts to it.
         run.phase = RunPhase::Paused {
-            bookmark: "b2".to_owned(),
+            bookmark: String::new(),
             since: 0.0,
         };
         let card = next(&show, &run, 180_000);
         assert_eq!(card.title, "intro.mp4");
         assert_eq!(card.line, "Scene intro.mp4, with a Fade");
+    }
+
+    /// #1815: a pausing bookmark on a program clip's first frame waits on that clip, as
+    /// the runner puts it up when it pauses; only the keyframe there waits for Continue.
+    #[test]
+    fn a_pause_on_a_clips_first_frame_is_already_on_that_clip() {
+        let (mut show, mut run, t) = mockup();
+        for track in &mut show.tracks {
+            if track.kind == TrackKind::Keyframes {
+                let mut key = clip(
+                    "k5",
+                    420_000,
+                    0,
+                    "Two-up",
+                    ClipKind::Keyframe("two-up".to_owned()),
+                );
+                key.transition_in = Some("Move 0.8 s".to_owned());
+                track.clips.insert(2, key);
+            }
+        }
+        // Demo pauses at 7:00, exactly where Segment · Demo starts and Main ends.
+        run.phase = RunPhase::Paused {
+            bookmark: "b4".to_owned(),
+            since: 1000.0,
+        };
+        assert_eq!(
+            now(&show, &run, 420_000, t),
+            Card {
+                title: "Segment · Demo".to_owned(),
+                line: "Paused at bookmark Demo for 2:14".to_owned(),
+            }
+        );
+        assert_eq!(
+            next(&show, &run, 420_000),
+            Card {
+                title: "Two-up".to_owned(),
+                line: "Keyframe Two-up, with a Move".to_owned(),
+            }
+        );
+        assert_eq!(
+            next_picture(&show, &run, 420_000).as_deref(),
+            Some("two-up")
+        );
+        assert_eq!(clocks(&show, &run, 420_000).left, "3:00");
+        // Without a keyframe there, Continue plays on in the clip already up.
+        show.tracks
+            .iter_mut()
+            .filter(|t| t.kind == TrackKind::Keyframes)
+            .for_each(|t| t.clips.retain(|c| c.id != "k5"));
+        let card = next(&show, &run, 420_000);
+        assert_eq!(card.title, "Segment · Demo");
+        assert_eq!(card.line, "Plays on");
+        // Intro pauses on intro.mp4's first frame the same way.
+        run.phase = RunPhase::Paused {
+            bookmark: "b2".to_owned(),
+            since: 0.0,
+        };
+        assert_eq!(now(&show, &run, 180_000, 0.0).title, "intro.mp4");
     }
 
     #[test]

@@ -335,14 +335,15 @@ export async function sourceSizes(page, sizes) {
 }
 
 /** Lets a test say what is arriving at the engine, which the mock engine never hears: the
- * page's WebSocket goes through a route that answers `data.list`, `data.get` and
- * `midi.last_controls` from what the test last gave the returned function, and passes
- * every other message on. `senders` is each JTunnel sender's messages by key, such as
- * `{ Bitwig: { params: { values: [...], names: [...] } } }`, and `controls` the MIDI
- * inputs' latest control changes, as `midi.last_controls` reports them. Call it before
+ * page's WebSocket goes through a route that answers `data.list`, `data.get`,
+ * `midi.last_controls` and `midi.last_notes` from what the test last gave the returned
+ * function, and passes every other message on. `senders` is each JTunnel sender's
+ * messages by key, such as `{ Bitwig: { params: { values: [...], names: [...] } } }`,
+ * `controls` the MIDI inputs' latest control changes, as `midi.last_controls` reports
+ * them, and `notes` their latest note-ons, as `midi.last_notes` does. Call it before
  * `connect`. */
 export async function liveSources(page) {
-  let now = { senders: {}, controls: [] };
+  let now = { senders: {}, controls: [], notes: [] };
   const answer = (id, result) => JSON.stringify({ type: 'response', id, result: { kind: 'query', result } });
   await page.routeWebSocket(/.*/, (ws) => {
     const server = ws.connectToServer();
@@ -366,6 +367,8 @@ export async function liveSources(page) {
         ws.send(answer(id, value === undefined ? { type: 'data.get' } : { type: 'data.get', remote_value: value }));
       } else if (query?.type === 'midi.last_controls') {
         ws.send(answer(id, { type: 'midi.last_controls', controls: now.controls }));
+      } else if (query?.type === 'midi.last_notes') {
+        ws.send(answer(id, { type: 'midi.last_notes', notes: now.notes }));
       } else {
         server.send(message);
       }
@@ -373,6 +376,6 @@ export async function liveSources(page) {
     server.onMessage((message) => ws.send(message));
   });
   return (next) => {
-    now = { senders: {}, controls: [], ...next };
+    now = { senders: {}, controls: [], notes: [], ...next };
   };
 }
