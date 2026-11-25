@@ -1761,7 +1761,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Re-read the mock and capture-item parts against the mock's new device controls and the controls lines in capture targets; nothing there describes that output, so it holds." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:9b621f1c62bdc213", by = "agent:claude-min-model-resolution", note = "run/tests.rs gains min_model_resolution in the studio get line; control's design change is the mock's new refusal; the CLI's parser, connector and mock opt-in described here are unchanged" }
+stamp = { hash = "b3:a931bdddabfff33a", by = "agent:aa-thread", note = "Re-read the parsing, mock and connector parts: only the studio.get golden in run/tests.rs gained model_antialiasing; the design holds." }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:1c9936a59c9c02c5", by = "agent:perf-thread", note = "Contents now lists bench.rs, the jstream-cli bench command (#1220); it is still a client through Control and the protocol types only" }
@@ -1791,7 +1791,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Re-read: capture targets output stays in run.rs; it now adds a line per camera control, which the purpose's contents list needs no change for (#1196)." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:9b621f1c62bdc213", by = "agent:claude-min-model-resolution", note = "only run/tests.rs changed: the studio get expectation gains min_model_resolution 50; the section lists modules and the mock feature, none of which changed" }
+stamp = { hash = "b3:a931bdddabfff33a", by = "agent:aa-thread", note = "Re-read in full: run/tests.rs's studio.get golden now includes model_antialiasing 4 (ADR-0242); the contents list holds." }
 
 ["CRATE-jstream-cli#usage"."body"]
 stamp = { hash = "b3:f87505261e656e9f", by = "agent:bindings", note = "Re-read the hotkey usage: hotkey.set adds after the chord's actions, hotkey.clear unbinds all, output.toggle bindable, as args.rs parses." }
