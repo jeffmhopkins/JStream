@@ -6853,6 +6853,9 @@ pub(crate) fn compose_metered(
     // Read once, so every chain of the frame is on the same beat (ADR-0148).
     let beat = shot.beat_at(at);
     compositor.set_blending(shot.blending);
+    // Every model of the frame is drawn with the samples the rendering switches ask
+    // for (ADR-0242).
+    compositor.set_model_antialiasing(shot.features.model_antialiasing);
     // A follow camera no frame has drawn for a while starts again at rest.
     chains.cameras().sweep(at);
     let uploads = Instant::now();

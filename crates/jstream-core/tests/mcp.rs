@@ -128,7 +128,8 @@ fn an_mcp_agent_drives_the_engine_in_process() {
                 "screen_space_reflections": false,
                 "screen_space_steps": 16,
                 "model_resolution": 0,
-                "min_model_resolution": 50
+                "min_model_resolution": 50,
+                "model_antialiasing": 4
             }
         })
     );

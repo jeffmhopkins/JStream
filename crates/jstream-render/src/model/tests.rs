@@ -3080,3 +3080,113 @@ fn golden_model_drawn_with_fewer_pixels_is_as_soft_out_of_focus() {
         "the edge ramps over {half} canvas pixels at half size, {full} at full"
     );
 }
+
+/// Pixels of `shot` that are neither the cube's front red nor the black around it: the
+/// edge's blends.
+fn blended_reds(shot: &Snapshot) -> usize {
+    (0..HEIGHT)
+        .flat_map(|y| (0..WIDTH).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            let [r, g, b] = rgb(shot, x, y);
+            (24..232).contains(&r) && g < 8 && b < 8
+        })
+        .count()
+}
+
+/// ADR-0242 decision 1: multisampled, a model's slanted edges are smoothed in its layer,
+/// each edge texel the model's share of it, and its inside is drawn as without.
+#[test]
+fn golden_model_multisampling_smooths_a_slanted_edge() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut geometry = boxed(80.0, 50.0, 50.0);
+    geometry.rotation_deg = finite(17.0);
+    let cube = coloured_cube();
+    assert_eq!(compositor.model_antialiasing(), 1, "a new compositor");
+    let aliased = draw(compositor, &cube, geometry, None, Lighting::Studio);
+    assert_eq!(compositor.set_model_antialiasing(4), 4);
+    let smoothed = draw(compositor, &cube, geometry, None, Lighting::Studio);
+    let (before, after) = (blended_reds(&aliased), blended_reds(&smoothed));
+    assert!(before <= 4, "{before} blended edge pixels drawn aliased");
+    // The box's edges are about 200 pixels long.
+    assert!(
+        after >= 100,
+        "{after} blended edge pixels drawn with 4 samples"
+    );
+    assert_near(rgb(&smoothed, 80, 50), FRONT, (80, 50));
+    assert_near(rgb(&smoothed, 4, 4), [0, 0, 0], (4, 4));
+    assert_eq!(compositor.set_model_antialiasing(1), 1);
+    let again = draw(compositor, &cube, geometry, None, Lighting::Studio);
+    assert_eq!(blended_reds(&again), before, "off again draws as before");
+}
+
+/// ADR-0242 decision 2: a count the device can't draw steps down to the most it can,
+/// and none is less than one.
+#[test]
+fn a_sample_count_steps_down_to_one_the_device_draws() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    assert_eq!(compositor.set_model_antialiasing(0), 1);
+    assert_eq!(compositor.set_model_antialiasing(1), 1);
+    // Every device draws four.
+    assert_eq!(compositor.set_model_antialiasing(4), 4);
+    assert!(matches!(compositor.set_model_antialiasing(3), 1 | 2));
+    assert!(matches!(compositor.set_model_antialiasing(64), 4 | 8));
+    assert!(matches!(compositor.model_antialiasing(), 4 | 8));
+}
+
+/// ADR-0242 decision 3: multisampled, a model's surface drawn with its layer holds what
+/// it holds single-sampled inside the model, one sample of each texel resolved, not a
+/// blend, and nothing where the model isn't.
+#[test]
+fn a_multisampled_surface_matches_the_single_sampled_one_inside() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = Some(SceneCamera::framing(canvas()));
+    let sphere = compositor
+        .upload_model(&grey_sphere())
+        .expect("the model uploads");
+    let lights = [ambient(1.0)];
+    let draw = ModelDraw {
+        model: &sphere,
+        geometry: boxed(80.0, 50.0, 60.0),
+        camera,
+        lighting: Lighting::Scene,
+        lights: Some(&lights[..]),
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let mut drawn = Vec::new();
+    for samples in [1, 4] {
+        assert_eq!(compositor.set_model_antialiasing(samples), samples);
+        let beside = [(); 3].map(|()| compositor.layer(WIDTH, HEIGHT).expect("a layer"));
+        let colour = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+        compositor
+            .draw_model_with_surface(&draw, &colour, [&beside[0], &beside[1], &beside[2]])
+            .expect("the model draws");
+        drawn.push(beside.each_ref().map(|layer| read_layer(compositor, layer)));
+    }
+    for (n, (single, multi)) in drawn[0].iter().zip(&drawn[1]).enumerate() {
+        for (x, y) in [(80, 50), (70, 45), (90, 58), (2, 2), (150, 90)] {
+            let (one, four) = (
+                single.pixel(x, y).expect("inside"),
+                multi.pixel(x, y).expect("inside"),
+            );
+            assert!(
+                one.iter().zip(four).all(|(a, b)| a.abs_diff(b) <= 2),
+                "layer {n} at ({x}, {y}): {one:?} single-sampled, {four:?} with 4"
+            );
+        }
+    }
+}

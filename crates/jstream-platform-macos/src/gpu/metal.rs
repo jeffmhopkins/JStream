@@ -357,8 +357,11 @@ impl GpuInterop for MetalGpu {
         let (device, queue) = ready(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("jstream"),
             // Timestamp queries where the adapter has them, so the compositor can time
-            // effect-pack passes on this device (#349).
-            required_features: adapter.features() & wgpu::Features::TIMESTAMP_QUERY,
+            // effect-pack passes on this device (#349), and the adapter's own format
+            // features, so it draws models with every sample count it can (ADR-0242).
+            required_features: adapter.features()
+                & (wgpu::Features::TIMESTAMP_QUERY
+                    | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES),
             ..Default::default()
         }))
         .ok_or_else(|| os("wgpu", "request_device didn't complete at once on Metal"))?

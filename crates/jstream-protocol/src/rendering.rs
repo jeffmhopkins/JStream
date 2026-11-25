@@ -66,6 +66,14 @@ pub struct RenderFeatures {
     /// `model_resolution` is drawn as set, whatever this is.
     #[serde(default = "min_model")]
     pub min_model_resolution: u32,
+    /// The samples each pixel of a 3D model's layer is drawn with (ADR-0242, since
+    /// 0.196): multisampled anti-aliasing, one of [`MODEL_ANTIALIASING`]. 1 draws models
+    /// without it, their slanted edges stepped; more smooths their edges, thin ones
+    /// included, before any filter (a bloom among them) runs over the layer, at more GPU
+    /// time and memory. 4, the default, is what a file or client that leaves it out
+    /// reads as. A count the GPU can't draw draws with the most it can below it.
+    #[serde(default = "model_antialiasing")]
+    pub model_antialiasing: u32,
 }
 
 /// The sizes a reflection probe's faces may be, in pixels a side (ADR-0170 decision 3).
@@ -83,6 +91,15 @@ pub const MODEL_RESOLUTIONS: [u32; 6] = [0, 100, 85, 75, 67, 50];
 /// [`RenderFeatures::min_model_resolution`] may be (since 0.194): any whole one from
 /// the smallest of [`MODEL_RESOLUTIONS`] to 100.
 pub const MODEL_RESOLUTION_RANGE: std::ops::RangeInclusive<u32> = 50..=100;
+
+/// The samples a pixel of a 3D model's layer may be drawn with
+/// ([`RenderFeatures::model_antialiasing`], ADR-0242): off, then 2x, 4x and 8x
+/// multisampling.
+pub const MODEL_ANTIALIASING: [u32; 4] = [1, 2, 4, 8];
+
+fn model_antialiasing() -> u32 {
+    MODEL_ANTIALIASING[2]
+}
 
 fn min_model() -> u32 {
     *MODEL_RESOLUTION_RANGE.start()
@@ -127,6 +144,7 @@ impl RenderFeatures {
         screen_space_steps: 16,
         model_resolution: 0,
         min_model_resolution: 50,
+        model_antialiasing: 4,
     };
 
     /// Whether a scene filter of `kind_id` is drawn: `false` only for a filter kind a
@@ -161,6 +179,7 @@ impl RenderFeatures {
             min_model_resolution: change
                 .min_model_resolution
                 .unwrap_or(self.min_model_resolution),
+            model_antialiasing: change.model_antialiasing.unwrap_or(self.model_antialiasing),
         }
     }
 
@@ -219,6 +238,11 @@ pub struct RenderFeaturesChange {
     /// 0.194). `studio.set_rendering` refuses any other value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_model_resolution: Option<u32>,
+    /// The samples a pixel of a 3D model's layer is drawn with, one of
+    /// [`MODEL_ANTIALIASING`], or left out to keep it (since 0.196).
+    /// `studio.set_rendering` refuses any other count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_antialiasing: Option<u32>,
 }
 
 #[cfg(test)]

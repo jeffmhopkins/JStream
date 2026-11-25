@@ -188,8 +188,8 @@ pub use query::{
     SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
 pub use rendering::{
-    MODEL_RESOLUTION_RANGE, MODEL_RESOLUTIONS, PROBE_RESOLUTIONS, RenderFeatures,
-    RenderFeaturesChange, SCREEN_SPACE_STEPS,
+    MODEL_ANTIALIASING, MODEL_RESOLUTION_RANGE, MODEL_RESOLUTIONS, PROBE_RESOLUTIONS,
+    RenderFeatures, RenderFeaturesChange, SCREEN_SPACE_STEPS,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
