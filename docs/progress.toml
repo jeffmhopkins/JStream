@@ -1413,10 +1413,9 @@ note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), 
 id = "F6b"
 milestone = "M3"
 title = "Choose HEVC or AV1 from a client"
-status = "review"
+status = "done"
 prs = [807, 814, 1760]
-note = "F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877); #1760 records HEVC (hvc1) and AV1 (av01) to MP4, the last codec gap, into the alpha.13 train"
-needs = ["build"]
+note = "F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877); #1760 records HEVC (hvc1) and AV1 (av01) to MP4, the last codec gap, landed with the alpha.13 train (#1745)"
 
 [[item]]
 id = "F7"
