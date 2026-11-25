@@ -276,6 +276,38 @@ fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
     assert_eq!(status(&engine, "mic"), None);
 }
 
+/// A `desktop_audio` source with a `device` records what that output device plays,
+/// rather than the default output's.
+#[test]
+fn desktop_audio_with_a_device_records_that_output() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let speakers = jstream_platform::fake::FAKE_SPEAKERS;
+    batch(
+        &control,
+        Batch::single(audio_source(
+            "desk",
+            "desktop_audio",
+            Some(("device", speakers)),
+        )),
+    )
+    .expect("desk");
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(eventually(
+        || status(&engine, "desk") == Some(AudioStatus::Recording)
+    ));
+    assert_eq!(
+        audio.input_targets(),
+        vec![AudioInputTarget::OutputLoopback(
+            jstream_platform::DeviceId::new(speakers)
+        )]
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
+}
+
 /// Shows or hides the item that places the media file.
 fn show_clip(control: &crate::InProcessControl, visible: bool) {
     batch(

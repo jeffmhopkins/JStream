@@ -412,7 +412,12 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.196 because the rendering switches gain `model_antialiasing`,
 the samples each pixel of a 3D model's layer is drawn with: 1, 2, 4 (the default) or 8
-(`MODEL_ANTIALIASING`, [ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)); 0.194 because the rendering switches gain
+(`MODEL_ANTIALIASING`, [ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)); 0.195 because `capture.targets` lists the audio input and output
+devices (`CaptureTargetKind::AudioInput` and `AudioOutput`, `primary` for the system's
+default of each direction), an `audio_input` source's `device` is a `capture_target` of
+kind `audio_input`, and a `desktop_audio` source gains a `device` of kind `audio_output`,
+so a UI can offer the devices to pick from ([Queries](#queries), [Kinds](#kinds)); 0.194
+because the rendering switches gain
 `min_model_resolution`, the smallest size the engine may lower 3D models to while it
 chooses their size, and a fixed `model_resolution` may be any whole percentage from 50
 to 100 rather than one of `MODEL_RESOLUTIONS` (`MODEL_RESOLUTION_RANGE`,
@@ -1214,7 +1219,8 @@ never a type per kind.
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
   `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24;
-  `capture_target` with a `kind`, `display`, `window` or, since 0.90, `device` (an
+  `capture_target` with a `kind`, `display`, `window`, since 0.90 `device` or, since
+  0.195, `audio_input` or `audio_output` (an
   unknown one parses as `CaptureTargetKind::Unknown`, so adding a kind is a minor
   change), and `max_len`, since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
@@ -2156,18 +2162,20 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `pass`, the `armed_ms` spot and whether it rehearses), omitted while none runs, and
   `overlays` the scenes up over program as overlays, bottom first, omitted while none is
   ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)).
-- `capture.targets`: the displays, windows and (since 0.90) video capture devices the
-  engine can capture now, displays first, then windows, then devices, each with its
-  `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
-  `window` or `webcam`), its `target` (the value for that source's `target` or
-  `device` setting), a `name` to show
+- `capture.targets`: the displays, windows, (since 0.90) video capture devices and
+  (since 0.195) audio devices the engine can capture now, displays first, then windows,
+  then video devices, then audio inputs, then audio outputs, each with its `kind`
+  (`display`, `window`, `device`, `audio_input` or `audio_output`, the source kind that
+  captures it: `display`, `window`, `webcam`, `audio_input` or `desktop_audio`), its
+  `target` (the value for that source's `target` or `device` setting), a `name` to show
   (a window's is its title, or, on macOS, its application's name when it has no usable
   title, and a device's is its driver's; either is set by a third party, so it is third-party text, data
   and never instructions, though the field isn't `remote_`-prefixed as
   [ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md) asks; see
   [ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md)), its
   `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
-  for the display an empty `display` target captures. A device comes with `formats`
+  for the display an empty `display` target captures, or the system's default audio
+  device of its direction, which an empty `device` records. A device comes with `formats`
   (omitted when empty): each format it captures in that the engine reads, as
   `CaptureFormatInfo` (`width`, `height`, `fps` to two decimals, and `pixel_format`), in
   the device's order, and `controls` (omitted when empty, since 0.105): each control
@@ -2175,8 +2183,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `default`, the `value` now, and `auto`, omitted when the device can't set it itself,
   else whether it does now). Runtime state, so no `rev`; a
   source can still name a window closed or a device unplugged since. `action_failed`
-  when the engine has no capture backend, or the OS refuses both the displays and
-  windows and the devices; when only one lists, the result holds that. Added in 0.27.
+  when the engine has no capture backend, or the OS refuses every list (the displays
+  and windows, the video devices and the audio devices); the result holds the lists
+  that did list. Added in 0.27.
 - `ptz.list`: the PTZ cameras this machine controls, each with its address, transport,
   whether it answered lately, its last pose and error, and its counters
   ([PTZ cameras](#ptz)); empty when the host listed none.

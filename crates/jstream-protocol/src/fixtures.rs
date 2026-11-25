@@ -3376,6 +3376,14 @@ fn color_kind() -> KindDescriptor {
                 json!(""),
             ),
             param(
+                "speakers",
+                ParamType::CaptureTarget {
+                    kind: CaptureTargetKind::AudioOutput,
+                    max_len: 512,
+                },
+                json!(""),
+            ),
+            param(
                 "resolution",
                 ParamType::CaptureFormat {
                     part: CaptureFormatPart::Resolution,
@@ -4087,6 +4095,24 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         value: 4600,
                         auto: Some(true),
                     }],
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::AudioInput,
+                    target: "{0.0.1.00000000}.{8a3c1e2f-55b0-4d2a-9c61-0f2e7d1b9a44}".into(),
+                    name: "Microphone (USB Audio)".into(),
+                    size: None,
+                    primary: true,
+                    formats: Vec::new(),
+                    controls: Vec::new(),
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::AudioOutput,
+                    target: "{0.0.0.00000000}.{3f7d9b10-2c4e-4e8a-b1d5-6a9e0c2f8b73}".into(),
+                    name: "Speakers (Realtek Audio)".into(),
+                    size: None,
+                    primary: false,
+                    formats: Vec::new(),
+                    controls: Vec::new(),
                 },
             ],
         },

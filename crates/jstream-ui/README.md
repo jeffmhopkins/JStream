@@ -920,9 +920,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   restricted to audio, such as their `audio_source`, offers only the sources that
   report audio settings, less `scene` sources, as the engine accepts no other), or capture
   target list per parameter type. A `capture_target` (a `display` or `window` source's
-  `target`, or a `webcam`'s `device`) lists the targets of its kind that
-  `capture.targets` reports, each by name and size, after "Primary display", "First
-  device listed" or "None" for the empty value. A target the source names that isn't
+  `target`, a `webcam`'s `device`, or an `audio_input`'s or `desktop_audio`'s `device`)
+  lists the targets of its kind that `capture.targets` reports, each by name and size,
+  after "Primary display", "First device listed", "System default input", "System
+  default output" or "None" for the empty value; the audio device that is the system's
+  default now is marked "default now". A target the source names that isn't
   listed as is but, for a window, has a listed window's key (the part after `;`, which
   finds a window again once it is opened again), else the same part before it (the same
   window, its title changed), else the same key but for its last field, with the others

@@ -8,7 +8,9 @@ use crate::runtime::{RETRY_MS, cpu_draw};
 use crate::{Engine, RecordingPublish};
 use jstream_control::Control;
 use jstream_media::FrameSize;
-use jstream_platform::fake::{FAKE_CAPTURE_CARD, FAKE_WEBCAM, FakeCapture, FakeVideoDevices};
+use jstream_platform::fake::{
+    FAKE_CAPTURE_CARD, FAKE_MIC, FAKE_SPEAKERS, FAKE_WEBCAM, FakeCapture, FakeVideoDevices,
+};
 use jstream_platform::{
     Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
     CursorCapture, DeviceId, MediaClock, PlatformError, VideoSurface,
@@ -187,8 +189,9 @@ fn capture_source(source: &str, kind: &str, target: &str) -> Edit {
 }
 
 /// `capture.targets` lists what the backend can capture, displays first, then windows,
-/// then the video devices with the formats the engine reads, with the IDs a source's
-/// `target` or `device` takes, whether or not an output runs. With no backend it fails.
+/// then the video devices with the formats the engine reads, then the audio inputs and
+/// outputs with the system's defaults marked `primary`, with the IDs a source's `target`
+/// or `device` takes, whether or not an output runs. With no backend it fails.
 #[test]
 fn capture_targets_lists_the_displays_then_the_windows_then_the_devices() {
     let setup = Setup::new();
@@ -225,7 +228,25 @@ fn capture_targets_lists_the_displays_then_the_windows_then_the_devices() {
                 "Fake capture card",
                 false
             ),
+            (
+                CaptureTargetKind::AudioInput,
+                FAKE_MIC,
+                "Fake microphone",
+                true
+            ),
+            (
+                CaptureTargetKind::AudioOutput,
+                FAKE_SPEAKERS,
+                "Fake speakers",
+                true
+            ),
         ]
+    );
+    assert!(
+        targets[5..]
+            .iter()
+            .all(|t| t.size.is_none() && t.formats.is_empty() && t.controls.is_empty()),
+        "an audio device has no size, formats or controls"
     );
     let format = |w, h, fps: f64, pf: &str| CaptureFormatInfo {
         width: w,

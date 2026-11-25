@@ -3228,19 +3228,21 @@ impl Engine {
     }
 
     /// `capture.targets`: what the platform's capture backend can capture now, then the
-    /// video devices with the formats the engine reads of each, listed with no engine
-    /// lock held, since listing windows and devices calls the OS. A list that fails is
-    /// left out, and logged; the query fails only when both do.
+    /// video devices with the formats the engine reads of each, then the audio input and
+    /// output devices, listed with no engine lock held, since listing windows and
+    /// devices calls the OS. A list that fails is left out, and logged; the query fails
+    /// only when all three do.
     fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
         let backends = self.media.as_ref().and_then(|host| {
             lock(&host.backends).as_ref().map(|backends| {
                 (
                     Arc::clone(&backends.capture),
                     Arc::clone(&backends.video_devices),
+                    Arc::clone(&backends.audio),
                 )
             })
         });
-        let Some((capture, devices)) = backends else {
+        let Some((capture, devices, audio)) = backends else {
             return Err(ProtocolError::ActionFailed {
                 reason: "the engine has no capture backend".into(),
             });
@@ -3251,28 +3253,22 @@ impl Engine {
         let listed = devices
             .devices()
             .map_err(|err| format!("listing video devices: {err}"));
-        let (mut targets, devices_listed) = match (captured, listed) {
-            (Err(capture), Err(devices)) => {
-                return Err(ProtocolError::ActionFailed {
-                    reason: format!("{capture}; {devices}"),
-                });
-            }
-            (captured, listed) => {
-                let targets: Vec<_> = match captured {
-                    Ok(targets) => targets
-                        .into_iter()
-                        .filter_map(capture_target_info)
-                        .collect(),
-                    Err(err) => {
-                        tracing::warn!(error = %err, "capture.targets lists the video devices only");
-                        Vec::new()
-                    }
-                };
-                let listed = listed.unwrap_or_else(|err| {
-                    tracing::warn!(error = %err, "capture.targets lists no video devices");
-                    Vec::new()
-                });
-                (targets, listed)
+        let heard = audio
+            .devices()
+            .map_err(|err| format!("listing audio devices: {err}"));
+        if let (Err(capture), Err(devices), Err(audio)) = (&captured, &listed, &heard) {
+            return Err(ProtocolError::ActionFailed {
+                reason: format!("{capture}; {devices}; {audio}"),
+            });
+        }
+        let mut targets: Vec<_> = match captured {
+            Ok(targets) => targets
+                .into_iter()
+                .filter_map(capture_target_info)
+                .collect(),
+            Err(err) => {
+                tracing::warn!(error = %err, "capture.targets lists no displays or windows");
+                Vec::new()
             }
         };
         let rank = |kind: CaptureTargetKind| match kind {
@@ -3281,11 +3277,18 @@ impl Engine {
             _ => 2,
         };
         targets.sort_by_key(|info| rank(info.kind));
-        targets.extend(
-            devices_listed
-                .into_iter()
-                .map(|device| device_target_info(devices.as_ref(), device)),
-        );
+        match listed {
+            Ok(listed) => targets.extend(
+                listed
+                    .into_iter()
+                    .map(|device| device_target_info(devices.as_ref(), device)),
+            ),
+            Err(err) => tracing::warn!(error = %err, "capture.targets lists no video devices"),
+        }
+        match heard {
+            Ok(heard) => targets.extend(audio_target_infos(heard)),
+            Err(err) => tracing::warn!(error = %err, "capture.targets lists no audio devices"),
+        }
         Ok(CallResult::Query {
             result: QueryResult::CaptureTargets { targets },
         })
@@ -8874,6 +8877,33 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
         formats: Vec::new(),
         controls: Vec::new(),
     })
+}
+
+/// The audio devices as `capture.targets` reports them: the inputs, then the outputs,
+/// each in the order the platform lists them, with `primary` marking the system's
+/// default of each direction.
+fn audio_target_infos(
+    devices: Vec<jstream_platform::AudioDeviceInfo>,
+) -> impl Iterator<Item = jstream_protocol::CaptureTargetInfo> {
+    let (inputs, outputs): (Vec<_>, Vec<_>) = devices
+        .into_iter()
+        .partition(|d| d.direction == jstream_platform::AudioDirection::Input);
+    let info = |kind| {
+        move |device: jstream_platform::AudioDeviceInfo| jstream_protocol::CaptureTargetInfo {
+            kind,
+            target: device.id.as_str().to_owned(),
+            name: device.name,
+            size: None,
+            primary: device.is_default,
+            formats: Vec::new(),
+            controls: Vec::new(),
+        }
+    };
+    let inputs = inputs.into_iter().map(info(CaptureTargetKind::AudioInput));
+    let outputs = outputs
+        .into_iter()
+        .map(info(CaptureTargetKind::AudioOutput));
+    inputs.chain(outputs)
 }
 
 /// A video device as `capture.targets` reports it, with the formats the engine reads
