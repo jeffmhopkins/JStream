@@ -1263,7 +1263,9 @@ mod tests {
             encoder.encode(frame(&config, 0)),
             Err(PlatformError::Unsupported { .. })
         ));
-        let ring: Vec<_> = (0..3)
+        // One more target than the session may hold (`MAX_FRAME_DELAY`), so one has
+        // always come back; with fewer, the session can keep them all waiting for more.
+        let ring: Vec<_> = (0..=super::MAX_FRAME_DELAY)
             .map(|_| gpu.encode_target(&context, config.size).expect("a target"))
             .collect();
         let frames = 10u32;
