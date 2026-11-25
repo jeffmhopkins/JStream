@@ -1583,9 +1583,9 @@ h2 .h2-sub { margin-left: 14px; color: var(--muted); font-weight: 400; letter-sp
 .trigger-buttons { display: inline-flex; gap: 4px; }
 .trigger-new { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--raised); }
 .trigger-new > .settings-check-note { flex-basis: 100%; margin: 0; }
-.midi-trigger-form select { width: auto; }
-.midi-trigger-form input[type="number"] { width: 5.5rem; }
-.midi-trigger-form input[type="text"] { flex: 1 1 8rem; width: auto; }
+.midi-trigger-form select, .data-trigger-form select { width: auto; }
+.midi-trigger-form input[type="number"], .data-trigger-form input[type="number"] { width: 5.5rem; }
+.midi-trigger-form input[type="text"], .data-trigger-form input[type="text"] { flex: 1 1 8rem; width: auto; }
 .action-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; flex: 1 1 100%; }
 .action-picker select { width: auto; max-width: 100%; }
 .action-amount { display: inline-flex; align-items: center; gap: 2px; }

@@ -237,7 +237,8 @@ At show time switch to **Run**, press **▶ Play show**, and press **Continue** 
 bookmark. The run of show lists the bookmarks, and a click on one goes there at once.
 To run it from keys or a pad controller, open **File › Settings… › Keys & MIDI**, add a
 key or MIDI trigger, and give it **Continue the show**, or **Go to bookmark 1 to 8** with
-a number for each of a row of pads. An agent can build and run a show too; ask it to
+a number for each of a row of pads. To follow Bitwig over JTunnel instead, add a **Data
+trigger** such as "a scene launched on any track" and give it a bookmark. An agent can build and run a show too; ask it to
 rehearse first, since playing a show switches program.
 
 <a id="vcam"></a>
