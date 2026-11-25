@@ -1824,7 +1824,8 @@ call names takes its value
 collection lock released, saves them in the file the host named with
 `Engine::with_rendering_file` (`rendering_file.rs`, `rendering.json` in the data folder
 for the desktop app and the daemon), which the next start reads back. A file that can't
-be read is logged and read as none, and a switch it leaves out takes its default (on, but screen-space reflections off). `studio.get`
+be read is logged and read as none, and a switch it leaves out takes its default (on, but screen-space reflections off, and
+models drawn with 4 samples, ADR-0242). `studio.get`
 reports them as `rendering`. Every plan reads them (see *Snapshots*).
 
 **Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its
@@ -2940,8 +2941,8 @@ scene's space, `centre_of`) through six 90° cameras along ±x, ±y and ±z
 (`face_cameras`), into square `GpuKey::ProbeFace` layers at the probe's `resolution`
 capped by `max_probe_resolution` (`RenderFeatures::probe_face`). Each model it shows is
 drawn again through each face camera into its `GpuKey::ProbeModel`, lit by the scene's
-lights as that face sees them and its environment, unshadowed and with no probe, so a
-capture never reads itself, and with no depth layer, since a model's `Item::depth` is
+lights as that face sees them and its environment, unshadowed, with one sample
+(ADR-0242 decision 4) and with no probe, so a capture never reads itself, and with no depth layer, since a model's `Item::depth` is
 seen from the scene's camera rather than a face's; cards keep their lit layers, and the compositor sorts them
 again for each face. The faces are kept between the frames of a capture, and in the frame
 that draws the sixth `Compositor::resample_probe` turns the six into the probe's

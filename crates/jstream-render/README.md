@@ -737,6 +737,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Surface pipelines (a model drawn into a surface buffer, the layer pipelines with a surface beside the layer, and the merge) and the buffer's depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another; a bind group per merge |
 | Model depth targets (`Depth32Float`) | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
+| Multisampled model targets (ADR-0242): colour (`Rgba16Float`) and depth (`Depth32Float`) at the count `set_model_antialiasing` set, and a surface buffer's three with their resolve bind group once a model is drawn with one; the surface resolve pipeline | The size and count of the last two multisampled draws (`model/msaa.rs`), made again for another; none while models draw with one sample; the pipeline with the compositor |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -931,7 +932,9 @@ so a pixel that several surfaces cover is shaded once, at the nearest, and not o
 surface: the shading is by far the dearer part (up to five textures, eight lights, the
 shadow taps and the sky), and a model seen from inside, such as a room or a cockpit, has
 several surfaces behind most pixels. The clip position is `@invariant`, so both draws
-place a fragment at the same depth. The shading draws the primitives last to first:
+place a fragment at the same depth. Drawn multisampled (ADR-0242), both draws and the depth
+target have the layer's samples: the depth and the `Equal` test are per sample and the
+shading still runs once a pixel, and the colour resolves into the layer as the pass ends. The shading draws the primitives last to first:
 where two lie in one plane both pass the equal test and the later draw replaces the
 earlier, so that order shows the first of them, as before (inside one primitive the
 triangles still draw in index order, so of two of its own in one plane the later shows)
@@ -1090,7 +1093,9 @@ A scene's **surface buffer**, for its screen-space reflections (ADR-0170 decisio
 `Compositor::clear_surface(targets)` clears three canvas-sized layers and a depth of
 their size. `Compositor::draw_model_with_surface(draw, target, surface)` draws a model's
 layer and, from the same shading (`fs_with_surface`, its opaque primitives only), its
-surface into three layers of the layer's size, cleared first; then
+surface into three layers of the layer's size, cleared first (multisampled, the
+surface is drawn at the layer's samples and `surface_resolve.wgsl` keeps each texel's
+nearest sample, its largest `1 / w`, never a blend, ADR-0242 decision 3); then
 `Compositor::merge_model_surface(layers, targets)` merges them into the buffer
 ([ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)) where
 they are nearer than what it holds (`surface_merge.wgsl`, one full-screen triangle cut
