@@ -41,7 +41,7 @@ clap-sys = { version = "0.5", default-features = false }
 # `jstream-browser`'s `helper` feature turns `sandbox` on for CEF's bootstrap layout
 # (ADR-0048), and `build-util`/`resources` are app-bundling helpers. Only that feature
 # pulls it in.
-cef = { version = "=156.4.0", default-features = false }
+cef = { version = "=156.7.0", default-features = false }
 # Benchmarks (`benches/` in jstream-render, jstream-audio and jstream-encode), dev-only.
 # No default features: no `rayon` or `plotters`, so no HTML plots; the JSON estimates under
 # `target/criterion` are what the `bench` workflow records. `cargo_bench_support` keeps
@@ -81,7 +81,7 @@ js-sys = { version = "0.3", default-features = false, features = ["std"] }
 # `/usr/share/zoneinfo` on Linux and macOS, and `tzdb-bundle-platform` compiles them in
 # (`jiff-tzdb`) only where the OS has none, which is Windows. No default features: no
 # `serde`, no `alloc`-only builds, no concatenated Android database.
-jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"] }
+jiff = { version = "1.0", default-features = false, features = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"] }
 jstream-aac = { path = "crates/jstream-aac" }
 jstream-anim = { path = "crates/jstream-anim" }
 jstream-audio = { path = "crates/jstream-audio" }
@@ -128,7 +128,7 @@ socket2 = { version = "0.6", default-features = false, features = ["all"] }
 # WGSL parsing and validation for effect packs (`jstream-effects`). Pinned to wgpu's
 # exact version (ADR-0004), so it is the copy wgpu already brings in. `wgsl-in` is the
 # only feature: no back ends, no `std`-only extras.
-naga = { version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
+naga = { version = "=30.0.2", default-features = false, features = ["wgsl-in"] }
 # PNG for `video.snapshot` (ADR-0140: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.
@@ -306,7 +306,7 @@ wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", default-features = false, features = ["std"] }
 # GPU (ADR-0004): pinned exactly, because wgpu-hal interop can change between releases;
 # the version spike S1 proved the Windows interop on. Backends are picked per crate.
-wgpu = { version = "=30.0.1", default-features = false, features = ["std"] }
+wgpu = { version = "=30.0.2", default-features = false, features = ["std"] }
 # The WASM automation plugin host (`jstream-plugin-wasm`, ADR-0035). No default features:
 # `cranelift` compiles a plugin once at load, `runtime` runs it, and nothing else: no WASI,
 # no async (plugins reach `Control` through a blocking bridge), no component model, GC,

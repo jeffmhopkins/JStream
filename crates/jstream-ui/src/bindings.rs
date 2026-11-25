@@ -20,7 +20,8 @@ use jstream_control::protocol::{
 pub enum When {
     /// A key chord, heard while JStream has the focus or, in the desktop app, anywhere.
     Key(Chord),
-    /// A MIDI note, control change or program change, which the engine hears.
+    /// A MIDI note, control change or program change, or a live-data trigger
+    /// (ADR-0202), which the engine hears.
     Midi(Trigger),
 }
 
@@ -845,9 +846,206 @@ pub fn midi_trigger(kind: &str, number: u32, channel: u32, input: &str) -> Optio
     trigger.problem().is_none().then_some(trigger)
 }
 
+/// A ready-made live-data trigger (ADR-0202): what Bitwig's JTunnel sender streams, so
+/// a person picks "a scene launched" rather than typing its key and field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DataPreset {
+    /// A scene selected in Bitwig's grid: `grid`, `selectedScene`, equal to a number.
+    SceneSelected,
+    /// A scene launched on any track: `track/*`, `playing`, equal to the scene's index.
+    SceneLaunched,
+    /// A JTunnel Mod at or above a level: `params`, `values.<n - 1>`, rising to 0.5.
+    ModAbove,
+    /// Any key and field, typed.
+    Custom,
+}
+
+impl DataPreset {
+    /// Every preset, as the form lists them.
+    pub const ALL: [DataPreset; 4] = [
+        DataPreset::SceneSelected,
+        DataPreset::SceneLaunched,
+        DataPreset::ModAbove,
+        DataPreset::Custom,
+    ];
+
+    /// Its name in the form's list.
+    pub fn label(self) -> &'static str {
+        match self {
+            DataPreset::SceneSelected => "Bitwig: a scene selected",
+            DataPreset::SceneLaunched => "Bitwig: a scene launched on any track",
+            DataPreset::ModAbove => "A Mod rising to a level",
+            DataPreset::Custom => "Any key and field",
+        }
+    }
+
+    /// Its value in the form's `<select>`.
+    pub fn id(self) -> &'static str {
+        match self {
+            DataPreset::SceneSelected => "scene_selected",
+            DataPreset::SceneLaunched => "scene_launched",
+            DataPreset::ModAbove => "mod_above",
+            DataPreset::Custom => "custom",
+        }
+    }
+
+    /// The preset a `<select>` value names, or `None`.
+    pub fn from_id(id: &str) -> Option<DataPreset> {
+        DataPreset::ALL.into_iter().find(|p| p.id() == id)
+    }
+
+    /// What it fills in: the key, the field, the condition (`equals`, `changes`,
+    /// `rises` or `falls`) and the value or level. A Mod preset reads Mod 1 until the
+    /// person picks another.
+    pub fn fill(self) -> DataForm {
+        let form = |key: &str, field: &str, on: &str, value: &str| DataForm {
+            key: key.into(),
+            field: field.into(),
+            on: on.into(),
+            value: value.into(),
+        };
+        match self {
+            DataPreset::SceneSelected => form("grid", "selectedScene", "equals", "0"),
+            DataPreset::SceneLaunched => form("track/*", "playing", "equals", "0"),
+            DataPreset::ModAbove => form("params", "values.0", "rises", "0.5"),
+            DataPreset::Custom => form("", "", "changes", ""),
+        }
+    }
+
+    /// What the value means for it, under the form.
+    pub fn hint(self) -> &'static str {
+        match self {
+            DataPreset::SceneSelected => {
+                "Value: the scene's number as Bitwig sends it, counted from 0."
+            }
+            DataPreset::SceneLaunched => {
+                "Value: the scene's number, counted from 0. Any track launching it fires."
+            }
+            DataPreset::ModAbove => {
+                "Fires when the Mod reaches the level and lets go below it, so a Mod held up works as a held button."
+            }
+            DataPreset::Custom => {
+                "Key: the message's key, where a * segment matches any one segment (track/*). Field: a dotted path into it, or blank for the whole message."
+            }
+        }
+    }
+}
+
+/// The text of the live-data trigger form, as typed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DataForm {
+    /// The message's key: `grid`, `track/*`, `params`.
+    pub key: String,
+    /// A dotted path into the message, or blank for all of it.
+    pub field: String,
+    /// `equals`, `changes`, `rises` or `falls`.
+    pub on: String,
+    /// What it equals, or the level it rises to or falls below; unused for `changes`.
+    pub value: String,
+}
+
+/// The Mod (1 to 32) a `params` field `values.<n - 1>` reads, or `None`.
+pub fn data_mod(form: &DataForm) -> Option<u8> {
+    if form.key != "params" {
+        return None;
+    }
+    let n: u8 = form.field.strip_prefix("values.")?.parse().ok()?;
+    (n < crate::panels::data_read::MOD_SLOTS).then_some(n + 1)
+}
+
+/// The live-data trigger a person filled in, from `input` (blank for any sender), or why
+/// it isn't one, as the engine would say it.
+pub fn data_trigger(input: &str, form: &DataForm) -> Result<Trigger, String> {
+    use jstream_control::protocol::{DataOn, Finite32};
+    let level = || {
+        form.value
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .and_then(Finite32::new)
+            .ok_or_else(|| "The level must be a number.".to_owned())
+    };
+    let on = match form.on.as_str() {
+        "equals" => DataOn::Equals {
+            value: form.value.trim().to_owned(),
+        },
+        "changes" => DataOn::Changes,
+        "rises" => DataOn::Rises { level: level()? },
+        "falls" => DataOn::Falls { level: level()? },
+        _ => return Err("Pick when it fires.".into()),
+    };
+    let trigger = Trigger::Data {
+        input: Some(input.trim().to_owned()).filter(|i| !i.is_empty()),
+        key: form.key.trim().to_owned(),
+        field: form.field.trim().to_owned(),
+        on,
+    };
+    match trigger.problem() {
+        Some((field, why)) => {
+            let name = match field {
+                "input" => "The sender",
+                "key" => "The key",
+                "field" => "The field",
+                _ => "The value",
+            };
+            Err(format!("{name}: {why}."))
+        }
+        None => Ok(trigger),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_data_trigger_is_filled_from_a_preset_and_checked() {
+        use jstream_control::protocol::{DataOn, Finite32};
+        let mut form = DataPreset::SceneLaunched.fill();
+        form.value = " 3 ".into();
+        assert_eq!(
+            data_trigger(" Bitwig ", &form),
+            Ok(Trigger::Data {
+                input: Some("Bitwig".into()),
+                key: "track/*".into(),
+                field: "playing".into(),
+                on: DataOn::Equals { value: "3".into() },
+            })
+        );
+        let mut mod_form = DataPreset::ModAbove.fill();
+        assert_eq!(data_mod(&mod_form), Some(1));
+        mod_form.field = "values.19".into();
+        assert_eq!(data_mod(&mod_form), Some(20));
+        assert_eq!(
+            data_trigger("", &mod_form),
+            Ok(Trigger::Data {
+                input: None,
+                key: "params".into(),
+                field: "values.19".into(),
+                on: DataOn::Rises {
+                    level: Finite32::new(0.5).expect("finite")
+                },
+            })
+        );
+        mod_form.value = "half".into();
+        assert_eq!(
+            data_trigger("", &mod_form),
+            Err("The level must be a number.".into())
+        );
+        let mut custom = DataPreset::Custom.fill();
+        assert!(data_trigger("", &custom).is_err(), "a key is needed");
+        custom.key = "track/a*".into();
+        assert_eq!(
+            data_trigger("", &custom),
+            Err("The key: a `*` must be a whole segment: `track/*`.".into())
+        );
+        custom.key = "transport".into();
+        custom.field = "playing".into();
+        assert!(data_trigger("", &custom).is_ok());
+        for preset in DataPreset::ALL {
+            assert_eq!(DataPreset::from_id(preset.id()), Some(preset));
+        }
+    }
     use jstream_control::protocol::{Binding, HotkeyBinding, OutputInfo, RtmpTarget};
 
     fn output(id: &str, kind: OutputKind) -> OutputInfo {

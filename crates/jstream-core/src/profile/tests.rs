@@ -7,7 +7,7 @@ use jstream_platform::ThreadTime;
 use jstream_platform::fake::FakeThreads;
 use jstream_protocol::{Drawer, ItemId, ProfileUnit, SceneId, SourceId};
 
-use super::meter::{BUCKETS, bucket_top, histogram_bucket};
+use super::meter::{BUCKETS, GpuPart, bucket_top, histogram_bucket};
 use super::{InputTotals, Phase, Profiler, SourceMeters};
 use crate::chain::ChainOwner;
 
@@ -131,7 +131,7 @@ fn a_unit_timed_on_the_gpu_carries_its_gpu_time() {
         meter.chain(&untimed, begun.checked_sub(ms(1)).expect("earlier"));
         // One frame in four is timed, its times back a frame or so later.
         if frame % 4 == 1 {
-            meter.gpu_chain_by_hand(&timed, ms(12));
+            meter.gpu_chain_by_hand(frame, &timed, None, ms(12));
         }
         meter.end_frame(ms(3), start + ms(1000 * frame), drop);
     }
@@ -147,6 +147,52 @@ fn a_unit_timed_on_the_gpu_carries_its_gpu_time() {
     let timed_ms = gpu_of(false).expect("timed").get();
     assert!((timed_ms - 12.0).abs() < 0.01, "{info:?}");
     assert_eq!(gpu_of(true), None);
+}
+
+/// A unit's parts timed apart come back as its `gpu_parts`, each averaged over the timed
+/// frames it ran in, inside the unit's `gpu_ms`, which counts each timed frame once
+/// however many parts it had; a unit with no parts timed carries none.
+#[test]
+fn a_units_parts_carry_their_gpu_time_inside_its_own() {
+    let profiler = Profiler::new(ms(33), Arc::new(SourceMeters::default()));
+    let mut meter = profiler.program_meter();
+    let timed = ChainOwner::Item(SceneId::new("main"), ItemId::new("model"));
+    let start = Instant::now();
+    for frame in 0..8u64 {
+        let begun = Instant::now();
+        meter.chain(&timed, begun.checked_sub(ms(2)).expect("earlier"));
+        if frame % 4 == 1 {
+            meter.gpu_chain_by_hand(frame, &timed, None, ms(1));
+            meter.gpu_chain_by_hand(frame, &timed, Some(GpuPart::Model), ms(6));
+            meter.gpu_chain_by_hand(frame, &timed, Some(GpuPart::ViewDepth), ms(2));
+            // The filter is timed in only one of the two frames.
+            if frame == 1 {
+                meter.gpu_chain_by_hand(frame, &timed, Some(GpuPart::Filter(1)), ms(4));
+            }
+            // Past the filters given apart: in the unit, in no part.
+            meter.gpu_chain_by_hand(frame, &timed, Some(GpuPart::Filter(99)), ms(1));
+        }
+        meter.end_frame(ms(3), start + ms(1000 * frame), drop);
+    }
+    let info = profiler.profile(Some(60), None, None, InputTotals::default());
+    let unit = &info.units[0];
+    let gpu = unit.gpu_ms.expect("timed").get();
+    // (1 + 6 + 2 + 4 + 1) and (1 + 6 + 2 + 1) over two frames.
+    assert!((gpu - 12.0).abs() < 0.01, "{unit:?}");
+    let parts: Vec<(jstream_protocol::GpuPart, f32)> = unit
+        .gpu_parts
+        .iter()
+        .map(|part| (part.part.clone(), part.gpu_ms.get()))
+        .collect();
+    assert_eq!(
+        parts,
+        [
+            (jstream_protocol::GpuPart::Model, 6.0),
+            (jstream_protocol::GpuPart::ViewDepth, 2.0),
+            (jstream_protocol::GpuPart::Filter { index: 1 }, 4.0),
+        ],
+        "{unit:?}"
+    );
 }
 
 /// A unit in a later window counts only what it did since the earlier one, and a new

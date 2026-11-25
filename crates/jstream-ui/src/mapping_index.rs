@@ -109,8 +109,9 @@ impl Reader {
 
 /// Every reader in the collection: the channels' inputs, the value bindings, then the
 /// items' and the cameras' motion, scene by scene. A motion row counts when it reads a
-/// source or a channel scales it. A keyframe scene's item motion counts only where it
-/// differs from its parent's, so a row is listed once.
+/// source or a channel scales it. A keyframe scene's item motion counts where the
+/// keyframe overrides that item's motion; where it doesn't, the rows are its parent's
+/// and are listed there once.
 pub fn readers(collection: &Collection) -> Vec<Reader> {
     let mut out = Vec::new();
     for channel in &collection.channels {
@@ -141,11 +142,19 @@ pub fn readers(collection: &Collection) -> Vec<Reader> {
     for scene in &collection.scenes {
         let parent = scene.variant_of.as_ref().and_then(|p| collection.scene(p));
         for item in &scene.items {
+            // A keyframe that overrides the item's motion holds its own copy of every
+            // row, even one equal to its parent's, so each is listed (and moved when a
+            // Mod is named). One that doesn't shows its parent's rows, listed there.
+            let overridden = scene
+                .overrides
+                .iter()
+                .any(|o| o.item_id == item.item_id && o.motion.is_some());
             let inherited: &[MotionModifier] = parent
+                .filter(|_| !overridden)
                 .and_then(|p| p.items.iter().find(|i| i.item_id == item.item_id))
                 .map_or(&[], |i| &i.motion);
             for m in &item.motion {
-                if !counts(&m.kind, &m.amount) || (parent.is_some() && inherited.contains(m)) {
+                if !counts(&m.kind, &m.amount) || inherited.contains(m) {
                     continue;
                 }
                 let setting = m
@@ -590,6 +599,16 @@ pub fn rows(collection: &Collection) -> Vec<Row> {
                     .filter(|t| t.lanes.iter().any(|l| &l.target.channel == id))
                     .map(|t| Setter::Sequence(t.timeline_id.clone())),
             );
+            // A key or trigger that runs two of the channel's actions (a toggle and a
+            // nudge) sets it once: one chip, not one per action (ADR-0208).
+            let mut seen: Vec<Setter> = Vec::with_capacity(setters.len());
+            setters.retain(|s| {
+                let fresh = !seen.contains(s);
+                if fresh {
+                    seen.push(s.clone());
+                }
+                fresh
+            });
             let followers = all
                 .iter()
                 .filter(|r| r.follows() == Some(id.as_str()) || r.amount.as_deref() == Some(id.as_str()))
@@ -1374,6 +1393,23 @@ mod tests {
     }
 
     #[test]
+    fn a_key_running_two_of_a_channels_actions_sets_it_once() {
+        let mut c = studio();
+        c.hotkeys.push(HotkeyBinding::new(
+            Chord::new("F5"),
+            &Action::ChannelNudge {
+                channel_id: "key".into(),
+                by: jstream_control::protocol::Finite32::new(0.1).expect("finite"),
+                fade_ms: None,
+            },
+        ));
+        let Row::Channel { setters, .. } = &rows(&c)[0] else {
+            panic!("the channel first");
+        };
+        assert_eq!(setters, &[Setter::Key(Chord::new("F5"))]);
+    }
+
+    #[test]
     fn rows_group_a_channel_and_share_a_source_between_targets() {
         let c = studio();
         let rows = rows(&c);
@@ -1564,6 +1600,101 @@ mod tests {
             40,
             "cut at a character boundary"
         );
+    }
+
+    fn scene_with(
+        id: &str,
+        motion: Vec<jstream_control::protocol::MotionModifier>,
+    ) -> jstream_control::protocol::SceneInfo {
+        use jstream_control::protocol::{
+            Crop, ItemInfo, ItemTransform, PlacementForm, SceneInfo, SceneRole,
+        };
+        SceneInfo {
+            overrides: Vec::new(),
+            filters: Default::default(),
+            variant_of: None,
+            scene_id: id.into(),
+            name: id.into(),
+            role: SceneRole::Scene,
+            folder: None,
+            meta: Default::default(),
+            options: Default::default(),
+            items: vec![ItemInfo {
+                motion,
+                item_id: "logo".into(),
+                source_id: "logo".into(),
+                placement: PlacementForm::Legacy,
+                transform: ItemTransform::IDENTITY,
+                geometry: None,
+                crop: Crop::NONE,
+                visible: true,
+                effects: Vec::new(),
+                opacity: Finite32::ONE,
+                blend: Default::default(),
+                transition: Default::default(),
+                locked: false,
+                effects_space: jstream_control::protocol::EffectsSpace::Box,
+            }],
+            transition_in: None,
+            transition_out: None,
+            camera: None,
+            camera_anchor: None,
+            camera_motion: Vec::new(),
+            ptz_shots: Vec::new(),
+            camera_follow: None,
+            timelines: Vec::new(),
+        }
+    }
+
+    /// Round 1's N2 on #1705: a keyframe that overrides an item's motion with a copy of
+    /// its parent's rows still has its own rows, so naming the Mod they read moves them too.
+    #[test]
+    fn naming_a_mod_moves_a_keyframes_copy_of_its_parents_motion() {
+        let row = jstream_control::protocol::MotionModifier {
+            modifier_id: "spin".into(),
+            property: jstream_control::protocol::MotionProperty::Rotation,
+            effect: None,
+            source: None,
+            kind: mod_in(None, 3),
+            clock: Default::default(),
+            enabled: true,
+            amount: None,
+            mode: Default::default(),
+        };
+        let parent = scene_with("main", vec![row.clone()]);
+        let mut keyframe = scene_with("close", vec![row.clone()]);
+        keyframe.variant_of = Some("main".into());
+        let mut c = Collection {
+            scenes: vec![parent, keyframe.clone()],
+            ..Collection::default()
+        };
+        assert_eq!(readers(&c).len(), 1, "an inherited row is its parent's");
+        keyframe.overrides = vec![jstream_control::protocol::ItemOverride {
+            item_id: "logo".into(),
+            geometry: None,
+            transform: None,
+            crop: None,
+            visible: None,
+            opacity: None,
+            effects: None,
+            motion: Some(vec![row]),
+            timing: None,
+        }];
+        c.scenes[1] = keyframe;
+        assert_eq!(
+            readers(&c).len(),
+            2,
+            "an overriding keyframe has its own row"
+        );
+        let edits = name_mod_edits(&c, "DAW", 3, "Spin", mod_in(Some("DAW"), 3));
+        let moved: Vec<Option<&str>> = edits
+            .iter()
+            .filter_map(|e| match e {
+                Edit::ItemSetMotion { scene_id, .. } => Some(scene_id.as_ref().map(|s| s.as_str())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(moved, [Some("main"), Some("close")], "{edits:#?}");
     }
 
     #[test]

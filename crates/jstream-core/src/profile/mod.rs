@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use jstream_platform::{ThreadCpu, ThreadTime};
 use jstream_protocol::{
-    DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, Finite32,
+    DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, Finite32, GpuPartProfile,
     MAX_PROFILE_SECONDS, MAX_PROFILE_TOP, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit,
     SourceId, SourceProfile, ThreadProfile, UnitProfile,
 };
@@ -31,6 +31,7 @@ use crate::lock;
 
 use meter::{BUCKETS, PHASES, UnitTotals, bucket_top, nanos};
 pub(crate) use meter::{DrawMeter, DrawerSlot, DrawerTotals, Phase, Retired, UnitKey};
+pub(crate) use meter::{GpuPart, gpu_part};
 pub(crate) use streams::{
     InputTotals, MixerGuard, MixerMeter, MixerSource, StreamGuard, StreamMeter, StreamRegistry,
     StreamTotals,
@@ -569,6 +570,21 @@ fn unit_profiles(
                 .gpu_nanos
                 .saturating_sub(before.map_or(0, |b| b.gpu_nanos));
             let gpu_ms = (gpu_frames > 0).then(|| ms(gpu_spent / gpu_frames));
+            let gpu_parts = totals
+                .gpu_parts
+                .iter()
+                .enumerate()
+                .filter_map(|(number, &(part_frames, part_spent))| {
+                    let (before_frames, before_spent) =
+                        before.map_or((0, 0), |b| b.gpu_parts[number]);
+                    let part_frames = part_frames.saturating_sub(before_frames);
+                    let part = GpuPart::of(number)?;
+                    (part_frames > 0).then(|| GpuPartProfile {
+                        part: protocol_part(part),
+                        gpu_ms: ms(part_spent.saturating_sub(before_spent) / part_frames),
+                    })
+                })
+                .collect();
             let share = if drawn == 0 {
                 0.0
             } else {
@@ -583,11 +599,25 @@ fn unit_profiles(
                     recent_max_ms: ms(totals.recent_max),
                     share: finite(share),
                     gpu_ms,
+                    gpu_parts,
                 },
                 spent,
             ))
         })
         .collect()
+}
+
+/// The protocol's name for `part`.
+fn protocol_part(part: GpuPart) -> jstream_protocol::GpuPart {
+    match part {
+        GpuPart::Model => jstream_protocol::GpuPart::Model,
+        GpuPart::ViewDepth => jstream_protocol::GpuPart::ViewDepth,
+        GpuPart::Surface => jstream_protocol::GpuPart::Surface,
+        GpuPart::ShadowMaps => jstream_protocol::GpuPart::ShadowMaps,
+        GpuPart::Filter(index) => jstream_protocol::GpuPart::Filter {
+            index: index as u32,
+        },
+    }
 }
 
 /// The protocol's name for `key`.

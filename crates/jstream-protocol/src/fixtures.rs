@@ -28,6 +28,7 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
+use crate::{GpuPart, GpuPartProfile};
 
 /// A certificate fingerprint as `NetworkAccess` writes it: 32 bytes, colon-separated.
 const FINGERPRINT: &str = "3F:A1:07:C2:9B:44:E8:15:6D:0A:B3:72:C9:5E:21:8F:\
@@ -2992,7 +2993,29 @@ fn profile_info() -> ProfileInfo {
                 ms: ms(4.0),
                 recent_max_ms: ms(6.5),
                 share: ms(0.42),
-                gpu_ms: None,
+                gpu_ms: Some(ms(3.5)),
+                gpu_parts: vec![
+                    GpuPartProfile {
+                        part: GpuPart::ShadowMaps,
+                        gpu_ms: ms(0.5),
+                    },
+                    GpuPartProfile {
+                        part: GpuPart::Model,
+                        gpu_ms: ms(2.0),
+                    },
+                    GpuPartProfile {
+                        part: GpuPart::ViewDepth,
+                        gpu_ms: ms(0.25),
+                    },
+                    GpuPartProfile {
+                        part: GpuPart::Surface,
+                        gpu_ms: ms(0.25),
+                    },
+                    GpuPartProfile {
+                        part: GpuPart::Filter { index: 0 },
+                        gpu_ms: ms(0.75),
+                    },
+                ],
             },
             UnitProfile {
                 drawer: Drawer::Program,
@@ -3004,6 +3027,7 @@ fn profile_info() -> ProfileInfo {
                 recent_max_ms: ms(2.0),
                 share: ms(0.08),
                 gpu_ms: None,
+                gpu_parts: Vec::new(),
             },
         ]
         .into_iter()
@@ -3040,6 +3064,7 @@ fn profile_info() -> ProfileInfo {
                 recent_max_ms: ms(0.5),
                 share: ms(0.01),
                 gpu_ms: Some(ms(0.125)),
+                gpu_parts: Vec::new(),
             }),
         )
         .collect(),

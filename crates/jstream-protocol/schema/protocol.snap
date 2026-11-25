@@ -9545,6 +9545,101 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "GpuPart": {
+      "description": "A part of a unit's GPU time.",
+      "oneOf": [
+        {
+          "description": "Drawing a 3D model into its layer: shaded, with its depth prepass and its\nmultisampled resolve.",
+          "properties": {
+            "type": {
+              "const": "model",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Drawing a 3D model's view depth, or a 3D scene's, for the items after it and the\ndepth-aware filters to read.",
+          "properties": {
+            "type": {
+              "const": "view_depth",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Drawing a 3D scene's surface buffer for screen-space reflections: its models\nwhose layers didn't draw their surface, and merging those that did.",
+          "properties": {
+            "type": {
+              "const": "surface",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Drawing a 3D scene's shadow maps.",
+          "properties": {
+            "type": {
+              "const": "shadow_maps",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One filter of the unit's chain. An item's effects don't give apart the filters\nof the 3D model source it shows, which run over its layer and count toward it.",
+          "properties": {
+            "index": {
+              "description": "Its place in the chain, from 0.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "filter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "index"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "GpuPartProfile": {
+      "description": "One part of a unit's GPU time ([`UnitProfile::gpu_parts`]).",
+      "properties": {
+        "gpu_ms": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The average GPU time it took in a timed frame it ran in, in milliseconds."
+        },
+        "part": {
+          "$ref": "#/$defs/GpuPart",
+          "description": "Which part."
+        }
+      },
+      "required": [
+        "part",
+        "gpu_ms"
+      ],
+      "type": "object"
+    },
     "HardwarePreference": {
       "description": "Whether a video encoder runs on the GPU's encoder block. Serialized as a snake_case\nstring. Hardware encoders limit how many sessions run at once, per GPU vendor and\ndriver; the engine doesn't guess that limit, and `output.status` reports the\nhardware sessions in use.",
       "oneOf": [
@@ -19439,6 +19534,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           ],
           "description": "The average GPU time it took in a frame it ran in, in milliseconds, when\n`gpu_timing` is on."
         },
+        "gpu_parts": {
+          "description": "Where its GPU time went, for the parts of it timed apart (since 0.197): a 3D\nmodel's draw, a model's or a scene's view depth, a scene's surface buffer and its\nshadow maps, and each of\nthe first [`GPU_PART_FILTERS`] filters of its chain. Each is the average GPU time\nit took in a timed frame it ran in, in milliseconds. They are inside `gpu_ms`,\nwhich also holds the work no part names. Empty without `gpu_timing`.",
+          "items": {
+            "$ref": "#/$defs/GpuPartProfile"
+          },
+          "type": "array"
+        },
         "ms": {
           "$ref": "#/$defs/Finite32",
           "default": 0.0,
@@ -20891,5 +20993,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.196"
+  "title": "JStream protocol 0.197"
 }

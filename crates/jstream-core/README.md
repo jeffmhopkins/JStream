@@ -816,7 +816,15 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   (`Compositor::gpu_unit`, by an id the meter gives the unit on its first timed frame),
   and the times that come back a frame or two later go into the unit's `gpu_frames` and
   `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
-  `gpu_timing` is on once any unit carries one. The composite's `gpu_ms` includes the
+  `gpu_timing` is on once any unit carries one. Inside a unit, the draw names the part of
+  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw and its view
+  depth (`draw_model`), a scene's shadow maps (around `draw_shadows`), its view depth and
+  its surface buffer (the scene pass), and each filter of a chain by its place
+  (`Chains::run_one`, the first `GPU_PART_FILTERS`; a model source's filters, counted
+  with its item's effects, are no part). A part's spans come back under the
+  unit's id with the part in its top bits; the meter adds them to the unit, counting a
+  timed frame once however many parts it had, and to the part's own totals
+  (`UnitTotals::gpu_parts`), which `profile.get` reports as the unit's `gpu_parts`. The composite's `gpu_ms` includes the
   frame's way out, which the draw names it around: the conversion to NV12 into the
   encoders' target and the copy of a readback, each a submit of its own after the
   composite's. Its `ms` doesn't: on the CPU those stay in the finish phase. The preview hub's thread times none. Each

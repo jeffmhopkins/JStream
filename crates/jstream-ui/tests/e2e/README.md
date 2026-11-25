@@ -63,8 +63,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   `stats.tick`s the same way, since the mock runs no pipeline.
   `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
   the mock makes no frames and reports none, and returns a function that sends the
-  page a `source.size_changed`. `liveSources` routes it to answer `data.list`, `data.get`
-  and `midi.last_controls` from what a test last gave the function it returns, since the
+  page a `source.size_changed`. `liveSources` routes it to answer `data.list`, `data.get`,
+  `midi.last_controls` and `midi.last_notes` from what a test last gave the function it returns, since the
   mock engine hears no DAW and no MIDI. `recordCalls` routes it too, passing everything on, and
   its `sent(type)` lists every edit or action of that type the page has sent, for the
   transition edits the mock engine refuses.
@@ -595,7 +595,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   adds Reset the loudness meter after it; Go live with no stream output says to add one
   and adds nothing; a chip's ✕ unbinds one action and Remove the key. A typed MIDI note
   40 on channel 10 is bound to Switch to Main, and the search finds it by its action
-  and not by another's. Learn isn't driven, since the mock reads no MIDI.
+  and not by another's. With `liveSources` answering `midi.last_notes`, Learn takes the
+  next pad played (note 38 on channel 10 from Pads). + Data trigger's Bitwig preset
+  for a scene launched, from Bitwig, equal to 2, reads itself back and is bound to
+  Switch to Intro; the Mod preset reads Mod 20 as `values.19`, and a level that isn't a
+  number says so and keeps Next off ([ADR-0202](../../../../docs/adr/0202-live-data-triggers-and-note-learn.md)).
 - **Keyframes and hotkeys** (`keyframes.spec.js`): New keyframe on Main's row nests
   "Keyframe 1" under it with the diamond, selected, under the canvas banner, and Main's
   caret folds it away and back; in the keyframe, the eye and the X field write its
