@@ -466,6 +466,17 @@ impl Engine {
                 ),
             )));
         }
+        if let Some(samples) = change.model_antialiasing
+            && !jstream_protocol::MODEL_ANTIALIASING.contains(&samples)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "model_antialiasing",
+                format!(
+                    "a 3D model's pixel is drawn with {:?} samples, not {samples}",
+                    jstream_protocol::MODEL_ANTIALIASING
+                ),
+            )));
+        }
         if let Some(size) = change.max_probe_resolution
             && !jstream_protocol::PROBE_RESOLUTIONS.contains(&size)
         {

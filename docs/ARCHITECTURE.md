@@ -864,7 +864,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   probes' face size, sets the screen-space steps, and since 0.178 says how many pixels
   3D models are drawn with or leaves that to the engine
   ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)), and
-  since 0.194 the smallest size the engine may lower them to.
+  since 0.194 the smallest size the engine may lower them to, and since 0.196 the
+  samples their edges are anti-aliased with
+  ([ADR-0242](adr/0242-3d-models-are-drawn-multisampled.md)).
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1473,7 +1475,10 @@ canvas, while the program's GPU is short of time or the rendering switches name 
 [ADR-0197](adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md),
 [ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)),
 through the scene's camera or the item's own
-viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
+viewer, multisampled with the rendering switches' samples and resolved into the layer
+before its filters (4 until set,
+[ADR-0242](adr/0242-3d-models-are-drawn-multisampled.md)),
+with its own reversed `Depth32Float` depth test and the metallic-roughness model
 under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
 lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,
 spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in

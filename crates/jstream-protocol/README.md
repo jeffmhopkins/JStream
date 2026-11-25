@@ -82,7 +82,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   cap since 0.165, with `PROBE_RESOLUTIONS`, and its screen-space reflection switch and
   steps since 0.172, with `SCREEN_SPACE_STEPS`, and its `model_resolution` since 0.178,
   with `MODEL_RESOLUTIONS`, and `min_model_resolution` since 0.194, with
-  `MODEL_RESOLUTION_RANGE`, which a fixed `model_resolution` may be since then too),
+  `MODEL_RESOLUTION_RANGE`, which a fixed `model_resolution` may be since then too, and
+  `model_antialiasing` since 0.196, with `MODEL_ANTIALIASING`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -409,7 +410,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.195 because `capture.targets` lists the audio input and output
+`PROTOCOL_VERSION` is 0.196 because the rendering switches gain `model_antialiasing`,
+the samples each pixel of a 3D model's layer is drawn with: 1, 2, 4 (the default) or 8
+(`MODEL_ANTIALIASING`, [ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)); 0.195 because `capture.targets` lists the audio input and output
 devices (`CaptureTargetKind::AudioInput` and `AudioOutput`, `primary` for the system's
 default of each direction), an `audio_input` source's `device` is a `capture_target` of
 kind `audio_input`, and a `desktop_audio` source gains a `device` of kind `audio_output`,
@@ -1984,10 +1987,10 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
   floor_reflections?, reflection_probes?, max_probe_resolution?,
   screen_space_reflections?, screen_space_steps?, model_resolution?,
-  min_model_resolution?}` (0.147,
+  min_model_resolution?, model_antialiasing?}` (0.147,
   `reflection_probes` and `max_probe_resolution` since 0.165, the two screen-space ones
   since 0.172, `model_resolution` since 0.178, `min_model_resolution` since 0.194,
-  [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  `model_antialiasing` since 0.196, [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
   draws its effect in no scene, whatever a light (`shadows`) or a scene filter
@@ -2013,15 +2016,21 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   every size it has), and any other is `invalid_argument` on `min_model_resolution`
   ([ADR-0241](../../docs/adr/0241-a-floor-for-the-model-size-and-any-whole-percentage.md)). A floor between two of its sizes is
   the last step down (90 steps from 100 to 90 and no further), 100 keeps models whole,
-  and a fixed `model_resolution` is drawn as set whatever the floor. All are on
+  and a fixed `model_resolution` is drawn as set whatever the floor.
+  `model_antialiasing` is the samples each pixel of a 3D model's layer is drawn with,
+  multisampled anti-aliasing resolved into the layer before any filter runs over it: 1
+  (off), 2, 4 (the default) or 8 (`MODEL_ANTIALIASING`), and any other is
+  `invalid_argument` on `model_antialiasing`; a count the GPU can't draw draws with the
+  most it can below it ([ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)). All are on
   until set but `screen_space_reflections`, which is off (`RenderFeatures::DEFAULT`,
   [ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)). An application setting, like
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
   reads as on (`screen_space_reflections` as off), a cap it leaves out as 512, steps it
-  leaves out as 16, a `model_resolution` it leaves out as 0, and a
-  `min_model_resolution` it leaves out as 50.
+  leaves out as 16, a `model_resolution` it leaves out as 0, a
+  `min_model_resolution` it leaves out as 50, and a `model_antialiasing` it leaves out
+  as 4.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),

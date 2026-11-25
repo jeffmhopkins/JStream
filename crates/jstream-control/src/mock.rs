@@ -1505,6 +1505,17 @@ impl State {
                         ),
                     ));
                 }
+                if let Some(samples) = change.model_antialiasing
+                    && !jstream_protocol::MODEL_ANTIALIASING.contains(&samples)
+                {
+                    return Err(ProtocolError::invalid_argument(
+                        "model_antialiasing",
+                        format!(
+                            "a 3D model's pixel is drawn with {:?} samples, not {samples}",
+                            jstream_protocol::MODEL_ANTIALIASING
+                        ),
+                    ));
+                }
                 if let Some(steps) = change.screen_space_steps
                     && !jstream_protocol::SCREEN_SPACE_STEPS.contains(&steps)
                 {

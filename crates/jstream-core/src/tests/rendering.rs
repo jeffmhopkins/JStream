@@ -229,3 +229,41 @@ fn the_smallest_model_resolution_is_a_percentage_from_50_to_100() {
     }
     assert_eq!(rendering(&control), Some(set_to), "nothing changed");
 }
+
+/// ADR-0242 decision 2: models are drawn with 4 samples until it is set, and only a count
+/// of `MODEL_ANTIALIASING` is taken.
+#[test]
+fn the_model_antialiasing_is_one_of_the_counts() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    assert_eq!(
+        rendering(&control).map(|now| now.model_antialiasing),
+        Some(4),
+        "4x until it is set"
+    );
+    set(
+        &control,
+        RenderFeaturesChange {
+            model_antialiasing: Some(1),
+            ..RenderFeaturesChange::default()
+        },
+    );
+    let set_to = rendering(&control).expect("reported");
+    assert_eq!(set_to.model_antialiasing, 1);
+    for refused in [0, 3, 16] {
+        let refused = block_on(control.call(Call::Action {
+            action: Action::StudioSetRendering {
+                change: RenderFeaturesChange {
+                    model_antialiasing: Some(refused),
+                    shadows: Some(false),
+                    ..RenderFeaturesChange::default()
+                },
+            },
+        }));
+        assert!(
+            matches!(&refused, Err(error) if error.to_string().contains("model_antialiasing")),
+            "{refused:?}"
+        );
+    }
+    assert_eq!(rendering(&control), Some(set_to), "nothing changed");
+}

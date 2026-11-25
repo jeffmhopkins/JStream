@@ -307,8 +307,11 @@ impl Gpu {
     fn from_adapter(adapter: wgpu::Adapter) -> Result<Self, RenderError> {
         let (device, queue) = ready(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("jstream-render"),
-            // Times effect-pack passes where the adapter can (#349, `timer.rs`).
-            required_features: adapter.features() & wgpu::Features::TIMESTAMP_QUERY,
+            // Times effect-pack passes where the adapter can (#349, `timer.rs`), and
+            // draws models with every sample count it can (ADR-0242).
+            required_features: adapter.features()
+                & (wgpu::Features::TIMESTAMP_QUERY
+                    | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES),
             ..Default::default()
         }))
         .ok_or_else(|| RenderError::Device {

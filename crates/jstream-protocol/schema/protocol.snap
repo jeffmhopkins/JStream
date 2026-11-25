@@ -626,6 +626,15 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "model_antialiasing": {
+              "description": "The samples a pixel of a 3D model's layer is drawn with, one of\n[`MODEL_ANTIALIASING`], or left out to keep it (since 0.196).\n`studio.set_rendering` refuses any other count.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "model_resolution": {
               "description": "How many pixels 3D models are drawn with, 0 to let the engine choose or a whole\npercentage in [`MODEL_RESOLUTION_RANGE`] (one of [`MODEL_RESOLUTIONS`] until\n0.194), or left out to keep it (since 0.178). `studio.set_rendering` refuses any\nother value.",
               "format": "uint32",
@@ -17165,6 +17174,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "model_antialiasing": {
+          "default": 4,
+          "description": "The samples each pixel of a 3D model's layer is drawn with (ADR-0242, since\n0.196): multisampled anti-aliasing, one of [`MODEL_ANTIALIASING`]. 1 draws models\nwithout it, their slanted edges stepped; more smooths their edges, thin ones\nincluded, before any filter (a bloom among them) runs over the layer, at more GPU\ntime and memory. 4, the default, is what a file or client that leaves it out\nreads as. A count the GPU can't draw draws with the most it can below it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "model_resolution": {
           "default": 0,
           "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.178): 0, the default, lets the engine choose,\nlowering it through [`MODEL_RESOLUTIONS`] while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size. Until\n0.194 a fixed size was one of [`MODEL_RESOLUTIONS`]; since, it is any whole\npercentage in [`MODEL_RESOLUTION_RANGE`].",
@@ -20875,5 +20891,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.195"
+  "title": "JStream protocol 0.196"
 }

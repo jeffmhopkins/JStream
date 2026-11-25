@@ -1816,14 +1816,16 @@ decision 1) are an application setting too, answered before the collection lock
 (`Engine::rendering_call`): a `screen_space_steps` that isn't one of
 `SCREEN_SPACE_STEPS`, a `max_probe_resolution` that isn't one of
 `PROBE_RESOLUTIONS`, a `model_resolution` that is neither 0 nor in
-`MODEL_RESOLUTION_RANGE` (50 to 100), or a `min_model_resolution` outside it, is `invalid_argument` and changes nothing; otherwise each switch the
+`MODEL_RESOLUTION_RANGE` (50 to 100), a `min_model_resolution` outside it, or a
+`model_antialiasing` that isn't one of `MODEL_ANTIALIASING`, is `invalid_argument` and changes nothing; otherwise each switch the
 call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
 collection lock released, saves them in the file the host named with
 `Engine::with_rendering_file` (`rendering_file.rs`, `rendering.json` in the data folder
 for the desktop app and the daemon), which the next start reads back. A file that can't
-be read is logged and read as none, and a switch it leaves out takes its default (on, but screen-space reflections off). `studio.get`
+be read is logged and read as none, and a switch it leaves out takes its default (on, but screen-space reflections off, and
+models drawn with 4 samples, ADR-0242). `studio.get`
 reports them as `rendering`. Every plan reads them (see *Snapshots*).
 
 **Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its
@@ -2939,8 +2941,8 @@ scene's space, `centre_of`) through six 90° cameras along ±x, ±y and ±z
 (`face_cameras`), into square `GpuKey::ProbeFace` layers at the probe's `resolution`
 capped by `max_probe_resolution` (`RenderFeatures::probe_face`). Each model it shows is
 drawn again through each face camera into its `GpuKey::ProbeModel`, lit by the scene's
-lights as that face sees them and its environment, unshadowed and with no probe, so a
-capture never reads itself, and with no depth layer, since a model's `Item::depth` is
+lights as that face sees them and its environment, unshadowed, with one sample
+(ADR-0242 decision 4) and with no probe, so a capture never reads itself, and with no depth layer, since a model's `Item::depth` is
 seen from the scene's camera rather than a face's; cards keep their lit layers, and the compositor sorts them
 again for each face. The faces are kept between the frames of a capture, and in the frame
 that draws the sixth `Compositor::resample_probe` turns the six into the probe's
@@ -5299,7 +5301,11 @@ smaller than `min_model_resolution` (`Shot::min_model_resolution`, given each ti
 so a floor between two steps (90) is the last step down and 100 keeps models whole
 ([ADR-0241](../../docs/adr/0241-a-floor-for-the-model-size-and-any-whole-percentage.md)). A
 floor raised past the size drawn lifts it to the floor at once, and a fixed size below
-the floor is drawn as set. A drawer whose meter has no budget
+the floor is drawn as set. Every frame draws its models with the switches'
+`model_antialiasing` samples (`Compositor::set_model_antialiasing`, set with the
+blending space as the frame starts), and a probe's capture draws them with one, setting
+the frame's back after it
+([ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)). A drawer whose meter has no budget
 (not the program's) never lowers it itself. The size goes to the meter each tick
 (`DrawMeter::model_percent`), and `profile.get` reports it as the drawer's
 `model_resolution`, with the frames of the window drawn below 100 as
