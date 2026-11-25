@@ -1399,7 +1399,11 @@ buffer before it and one after it, each an empty compute pass writing a timestam
 submit's command buffers run in order, so the span is the GPU running that work, not the
 time it sat waiting for the drawing thread. `end_gpu_frame` resolves the frame's
 timestamps (at most 256 spans) and maps them, and `gpu_units` polls without waiting and
-hands back each unit's GPU time in each frame read since, a frame or two late. A
+hands back each unit's GPU time in each frame read since, a frame or two late. Inside a
+unit, `gpu_part` names a part of its work (a number from 1 to 255, 0 for none; naming a
+unit clears it), and the spans submitted meanwhile come back under the unit's id with the
+part in its top 8 bits (`gpu_unit_part` splits them), so a drawer can tell a model's draw
+or a filter apart from the rest of the unit while the units still add up to the frame. A
 frame's way out goes through `submit_work` too: a readback ring's copy, with its NV12
 conversion when it has one, and the conversion into an encode target
 (`Nv12Converter::submit`), so a drawer that names a unit around them times them

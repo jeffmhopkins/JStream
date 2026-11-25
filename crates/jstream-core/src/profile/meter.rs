@@ -89,6 +89,64 @@ pub(crate) struct UnitTotals {
     /// running it in them.
     pub(crate) gpu_frames: u64,
     pub(crate) gpu_nanos: u64,
+    /// The same for each part of its GPU time ([`GpuPart`]), by the part's number: the
+    /// timed frames the part ran in and what the GPU spent on it. Inside `gpu_nanos`.
+    pub(crate) gpu_parts: [(u64, u64); GPU_PARTS],
+}
+
+/// A part of a unit's GPU time (`profile.get`'s `gpu_parts`), named to the compositor
+/// while its work is submitted ([`DrawMeter::gpu_part`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GpuPart {
+    /// A 3D model's draw into its layer.
+    Model,
+    /// A 3D model's view depth.
+    ViewDepth,
+    /// A 3D model's surface, drawn into its scene's surface buffer on its own.
+    Surface,
+    /// A 3D scene's shadow maps.
+    ShadowMaps,
+    /// The filter at this place in the unit's chain.
+    Filter(usize),
+}
+
+/// Times the compositor's work from now on as `part` of the unit named last, or as no
+/// part of it with `None`, while a frame is timed (naming a unit clears it). A filter
+/// past the ones given apart is timed as no part.
+pub(crate) fn gpu_part(compositor: &mut jstream_render::Compositor, part: Option<GpuPart>) {
+    compositor.gpu_part(part.and_then(GpuPart::number).unwrap_or(0));
+}
+
+/// The first part number of a chain's filters; the numbers below it name the others.
+const FILTER_PARTS_FROM: usize = 8;
+
+/// The part numbers there are, 0 (no part) included.
+pub(crate) const GPU_PARTS: usize = FILTER_PARTS_FROM + jstream_protocol::GPU_PART_FILTERS as usize;
+
+impl GpuPart {
+    /// Its number in a span's id, or `None` for a filter past the ones given apart.
+    pub(crate) fn number(self) -> Option<u8> {
+        let number = match self {
+            Self::Model => 1,
+            Self::ViewDepth => 2,
+            Self::Surface => 3,
+            Self::ShadowMaps => 4,
+            Self::Filter(index) => FILTER_PARTS_FROM.checked_add(index)?,
+        };
+        (number < GPU_PARTS).then_some(number as u8)
+    }
+
+    /// The part numbered `number`, if one is.
+    pub(crate) fn of(number: usize) -> Option<Self> {
+        Some(match number {
+            1 => Self::Model,
+            2 => Self::ViewDepth,
+            3 => Self::Surface,
+            4 => Self::ShadowMaps,
+            n if (FILTER_PARTS_FROM..GPU_PARTS).contains(&n) => Self::Filter(n - FILTER_PARTS_FROM),
+            _ => return None,
+        })
+    }
 }
 
 /// One frame in this many is timed on the GPU (`profile.get`'s `gpu_ms`), where the
@@ -242,6 +300,9 @@ struct Acc {
     /// Its id in the GPU timing, once a timed frame ran it, with the generation of ids
     /// it was given in.
     gpu: Option<(u32, u32)>,
+    /// The tag of the last timed frame counted in its `gpu_frames`: its parts come back
+    /// apart, and the frame counts once.
+    gpu_tag: Option<u64>,
 }
 
 impl Acc {
@@ -423,7 +484,7 @@ impl DrawMeter {
         // A timed frame comes back whole: its units' times add up to the frame's.
         let mut frame: Option<(u64, Duration)> = None;
         compositor.gpu_units(|tag, id, took| {
-            self.gpu_measured(id, took);
+            self.gpu_measured(tag, id, took);
             frame = Some(match frame {
                 Some((last, sum)) if last == tag => (tag, sum.saturating_add(took)),
                 _ => (tag, took),
@@ -538,17 +599,27 @@ impl DrawMeter {
         }
     }
 
-    /// Adds `took` as `owner`'s chain's GPU time in a timed frame, as a timed frame's
-    /// timestamps would, for tests.
+    /// Adds `took` as `owner`'s chain's GPU time in the timed frame tagged `tag`, as
+    /// that part of it when `part` names one, as a timed frame's timestamps would, for
+    /// tests.
     #[cfg(test)]
-    pub(crate) fn gpu_chain_by_hand(&mut self, owner: &ChainOwner, took: Duration) {
+    pub(crate) fn gpu_chain_by_hand(
+        &mut self,
+        tag: u64,
+        owner: &ChainOwner,
+        part: Option<GpuPart>,
+        took: Duration,
+    ) {
         if let Some(id) = gpu_id(&mut self.chains, &mut self.gpu_units, owner, UnitKey::Chain) {
-            self.gpu_measured(id, took);
+            let part = part.and_then(GpuPart::number).unwrap_or(0);
+            self.gpu_measured(tag, id | u32::from(part) << 24, took);
         }
     }
 
-    /// Adds `took`, GPU time of a timed frame, to the unit of GPU id `id`.
-    fn gpu_measured(&mut self, id: u32, took: Duration) {
+    /// Adds `took`, GPU time of the timed frame tagged `tag`, to the unit of GPU id `id`
+    /// and to the part of it the id names.
+    fn gpu_measured(&mut self, tag: u64, id: u32, took: Duration) {
+        let (id, part) = jstream_render::gpu_unit_part(id);
         let Some(key) = self.gpu_units.units.get(id as usize) else {
             return;
         };
@@ -562,8 +633,16 @@ impl DrawMeter {
         // A unit forgotten since, or one whose id was given again, is let go.
         let generation = self.gpu_units.generation;
         if let Some(acc) = acc.filter(|acc| acc.gpu == Some((generation, id))) {
-            acc.totals.gpu_frames = acc.totals.gpu_frames.saturating_add(1);
+            if acc.gpu_tag.replace(tag) != Some(tag) {
+                acc.totals.gpu_frames = acc.totals.gpu_frames.saturating_add(1);
+            }
             acc.totals.gpu_nanos = acc.totals.gpu_nanos.saturating_add(nanos(took));
+            if part != 0
+                && let Some((frames, spent)) = acc.totals.gpu_parts.get_mut(usize::from(part))
+            {
+                *frames = frames.saturating_add(1);
+                *spent = spent.saturating_add(nanos(took));
+            }
         }
     }
 

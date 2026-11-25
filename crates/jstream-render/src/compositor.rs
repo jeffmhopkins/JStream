@@ -1731,6 +1731,13 @@ impl Compositor {
         self.gpu.spans.unit(unit);
     }
 
+    /// Names the part of the current unit the compositor's work is from now on, while
+    /// a frame is timed: its spans come back under the unit's id with `part` in its top
+    /// bits ([`crate::gpu_unit_part`]). `0` names none; [`Self::gpu_unit`] clears it.
+    pub fn gpu_part(&mut self, part: u8) {
+        self.gpu.spans.part(part);
+    }
+
     /// Closes the frame [`Self::begin_gpu_frame`] opened, sending its timestamps to be
     /// read without waiting.
     pub fn end_gpu_frame(&mut self) {
