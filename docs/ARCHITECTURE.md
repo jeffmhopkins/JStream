@@ -1124,7 +1124,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `profile.get` (protocol 0.73, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
   where the frame time went over the last few seconds: each drawing thread's frame time
   against the budget, the costliest units (a source's upload, a capture, a chain, a
-  scene pass, the composite), each source's paints, looks and builds, the planner, and
+  scene pass, the composite) and where a unit's GPU time went (a model's draw, view
+  depth, shadow maps, surface buffer and each filter, `gpu_parts`, 0.197), each source's
+  paints, looks and builds, the planner, and
   each named thread's CPU, past them each encoded stream and the mixer (0.92), and what
   the clients' views did with their preview pictures, as they report it with
   `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md)),
@@ -1691,7 +1693,10 @@ hardware, which only a hardware run can do.
 The same queries time the program's units of work for `profile.get`'s `gpu_ms`
 ([ADR-0103](adr/0103-per-item-performance-profile.md)): one frame in four, each submit
 of a unit's work is bracketed by timestamps in command buffers of its own (`spans.rs`),
-so the time is the GPU's running it and not the render thread's recording it.
+so the time is the GPU's running it and not the render thread's recording it. Inside a
+unit the render thread also names the part that runs (a model's draw, its view depth, a
+scene's shadow maps or surface buffer, each filter of a chain), and `profile.get`
+reports each part's time as the unit's `gpu_parts`, inside its `gpu_ms`.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:

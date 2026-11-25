@@ -51,7 +51,7 @@ use crate::frames::{self, Sheet};
 use crate::lock;
 use crate::motion::{self, TrackMotion};
 use crate::preview::PreviewCapture;
-use crate::profile::{DrawMeter, Phase};
+use crate::profile::{self, DrawMeter, Phase};
 use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
 use crate::transition::{self, From, Planned, Running, Seen, ShowFade, Visual};
 
@@ -7481,6 +7481,7 @@ fn run_chains(
                 };
                 let drawn = scene(canvas, pass.background, &items);
                 compositor.render_into(&drawn, layer)?;
+                profile::gpu_part(compositor, Some(profile::GpuPart::ViewDepth));
                 let view = match (&pass.view_depth, camera) {
                     (Some(depth), Some(camera)) => draw_view_depth(
                         compositor,
@@ -7492,6 +7493,7 @@ fn run_chains(
                     )?,
                     _ => None,
                 };
+                profile::gpu_part(compositor, None);
                 drop(items);
                 if let (Some(depth), Some(view)) = (&pass.view_depth, view) {
                     // The scene's lights, for the filters that light what they add
@@ -7514,6 +7516,7 @@ fn run_chains(
                         && !shadowed.is_empty()
                         && chains.shadows_of(&pass.scene).is_none()
                     {
+                        profile::gpu_part(compositor, Some(profile::GpuPart::ShadowMaps));
                         let maps = draw_shadows(
                             compositor,
                             (&mut *cache, &mut *chains),
@@ -7526,6 +7529,7 @@ fn run_chains(
                             tracing::debug!(scene = %pass.scene, %error, "shadow maps not drawn this frame");
                             Vec::new()
                         });
+                        profile::gpu_part(compositor, None);
                         chains.drew_shadows(&pass.scene, maps);
                     }
                     // The scene mirrored in its floor, for a filter that reflects it.
@@ -7547,6 +7551,7 @@ fn run_chains(
                     };
                     // What its models show a screen-space reflection, for a filter that
                     // reads it (ADR-0170 decision 4).
+                    profile::gpu_part(compositor, Some(profile::GpuPart::Surface));
                     let surface = match (pass.surface, camera) {
                         (true, Some(camera)) => draw_surface(
                             compositor,
@@ -7561,6 +7566,7 @@ fn run_chains(
                         }),
                         _ => None,
                     };
+                    profile::gpu_part(compositor, None);
                     chains.drew_depth(
                         cache,
                         &pass.scene,
@@ -8036,19 +8042,24 @@ fn draw_model(
                 Some([normal, brdf, reflected])
             });
             surfaced = surface.is_some();
+            profile::gpu_part(compositor, Some(profile::GpuPart::Model));
             let layered = match surface {
                 Some(surface) => compositor.draw_model_with_surface(&draw, layer, surface),
                 None => compositor.draw_model(&draw, layer),
             };
-            Some(layered.and_then(
-                |()| match depth_key.as_ref().and_then(|key| cache.get(key)) {
-                    Some(depth) => {
-                        clear(compositor, depth)?;
-                        compositor.draw_model_depth(&draw, depth)
-                    }
-                    None => Ok(()),
-                },
-            ))
+            profile::gpu_part(compositor, Some(profile::GpuPart::ViewDepth));
+            let depth =
+                layered.and_then(
+                    |()| match depth_key.as_ref().and_then(|key| cache.get(key)) {
+                        Some(depth) => {
+                            clear(compositor, depth)?;
+                            compositor.draw_model_depth(&draw, depth)
+                        }
+                        None => Ok(()),
+                    },
+                );
+            profile::gpu_part(compositor, None);
+            Some(depth)
         }
         _ => None,
     };
@@ -8158,6 +8169,7 @@ fn light_scene(
         // The first model drawn draws the maps of every model that casts, so the
         // models drawn after it this frame are made ready for that first.
         ready_casting_models(compositor, &mut *chains, shot, scene_id);
+        profile::gpu_part(compositor, Some(profile::GpuPart::ShadowMaps));
         let maps = draw_shadows(
             compositor,
             (&mut *cache, &mut *chains),
@@ -8170,6 +8182,7 @@ fn light_scene(
             tracing::debug!(scene = %scene_id, %error, "shadow maps not drawn this frame");
             Vec::new()
         });
+        profile::gpu_part(compositor, None);
         chains.drew_shadows(scene_id, maps);
     }
     (lights, shadowed)
