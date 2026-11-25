@@ -72,26 +72,65 @@ test('scene properties give a scene a camera, and Alt-drag orbits it', async ({ 
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
 
-  // Alt-drag orbits the camera: live on output, then one commit that ends the gesture.
+  // Alt-drag orbits the camera, live on output, and saves nothing (#1809): the Save bar
+  // shows instead.
   const before = await corners(page);
   const startRev = await rev(page);
   const from = await onScreen(page, 960, 540);
-  await page.keyboard.down('Alt');
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(from.x + 60, from.y, { steps: 6 });
-  await expect(page.locator('.stage-overlay .readout text')).toHaveText(/^Camera -?\d+, -?\d+, -?\d+ · 1500 px from target · \d+°$/);
+  const orbit = async () => {
+    await page.keyboard.down('Alt');
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 60, from.y, { steps: 6 });
+    await expect(page.locator('.stage-overlay .readout text')).toHaveText(/^Camera -?\d+, -?\d+, -?\d+ · 1500 px from target · \d+°$/);
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+  };
+  const bar = page.getByRole('toolbar', { name: 'Unsaved camera' });
+  await expect(bar).toBeHidden();
+  await orbit();
   await expect.poll(() => calls.sent('live.set').length).toBeGreaterThan(0);
-  await page.mouse.up();
-  await page.keyboard.up('Alt');
-  // Each live value carries the camera too, so the commit is the last one sent.
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText('Camera moved, not saved');
+  expect(await corners(page)).not.toEqual(before);
+  await page.waitForTimeout(500);
+  expect(await rev(page)).toBe(startRev);
+
+  // Leaving the scene and coming back puts the saved camera back.
+  const sceneRow = (name) => page.locator('.scenes-panel li.row').filter({ hasText: name }).locator('.row-main');
+  await sceneRow('Intro').click();
+  await expect(bar).toBeHidden();
+  await sceneRow('Main').click();
+  await expect.poll(async () => JSON.stringify(await corners(page))).toBe(JSON.stringify(before));
+  await expect(bar).toBeHidden();
+  expect(await rev(page)).toBe(startRev);
+
+  // Revert puts it back too, without leaving.
+  await orbit();
+  await expect(bar).toBeVisible();
+  await bar.getByRole('button', { name: 'Revert' }).click();
+  await expect(bar).toBeHidden();
+  await expect.poll(async () => JSON.stringify(await corners(page))).toBe(JSON.stringify(before));
+  expect(await rev(page)).toBe(startRev);
+
+  // Save commits the moved camera as one revision, ending the gesture.
+  await orbit();
+  const shown = await corners(page);
+  await bar.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(bar).toBeHidden();
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   const orbited = calls.sent('scene.set_camera').at(-1);
   expect(orbited.scene_id).toBe('main');
   expect(orbited.camera.position.x).not.toBe(960);
-  expect(await corners(page)).not.toEqual(before);
+  expect(await corners(page)).toEqual(shown);
+
+  // Saved, it stays when the scene is left and shown again.
+  await sceneRow('Intro').click();
+  await sceneRow('Main').click();
+  await expect.poll(async () => JSON.stringify(await corners(page))).toBe(JSON.stringify(shown));
 
   // One undo puts the camera back.
+  await page.locator('.preview.stage').focus();
   await page.keyboard.press('Control+z');
   await expect.poll(async () => JSON.stringify(await corners(page))).toBe(JSON.stringify(before));
 });
