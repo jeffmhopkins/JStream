@@ -87,10 +87,16 @@ and calls this crate.
   `dropping` (0 to 1, easing out over the last 0.15 toward its setting, [ADR-0186](../../docs/adr/0186-the-sky-eases-out-of-warp-toward-rest.md)) the deep sky returns early, squeezed ahead, and zooms back out to its
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
-  about 0.6 px wide. Up to `MAX_SKY_PICTURES` (4) `SkyPicture`s are drawn over all of
+  about 0.6 px wide. A pixel looks at the cells of its column and the columns either side
+  from six star widths behind it to six ahead (at most two cells each way), so a star's
+  glow isn't cut off at its cell's edges. A cell keeps its star while its share of the
+  sky, which changes as the cells stream past, is above the star's dice roll, and the
+  star fades in over the last 20% of that share (`star_weight`). So at a slow warp no
+  star or streak pops in as the stars stream past
+  (`golden_sky_a_slow_warp_fades_its_stars_in_and_out`). Up to `MAX_SKY_PICTURES` (4) `SkyPicture`s are drawn over all of
   it, bottom first, each read through the tangent plane at its centre (`pinned`, one
   texture binding each, 7 to 10), covering what is behind it and fading as the deep sky
-  does at warp ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
+  does at warp, times its own `opacity` ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
   [ADR-0198](../../docs/adr/0198-an-arrival-can-be-a-planet-with-its-sun.md),
   `golden_sky_a_pinned_picture_covers_the_sky_where_it_is`). The engine places the layer under the scene's items with no camera.
   Its two pipelines (the frame's and the bright stars' table's) are made on the first

@@ -768,6 +768,35 @@ pub(crate) fn deep_shown(warp: f32, dropping: f32) -> f32 {
     rising + (falling - rising) * dropping
 }
 
+/// The warp at and above which an arrival picture is gone going into warp (ADR-0239):
+/// its first touch, as the stars start to move, well before the deep sky goes.
+const PICTURE_GONE_AT: f32 = 0.05;
+
+/// How much an arrival picture shows at `warp` while dropping by `dropping`, 0 to 1
+/// (ADR-0239): gone by [`PICTURE_GONE_AT`] going into warp, back as the deep sky comes
+/// back dropping out. Never more than [`deep_shown`].
+pub(crate) fn picture_shown(warp: f32, dropping: f32) -> f32 {
+    let smooth = |a: f32, b: f32, x: f32| {
+        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let rising = 1.0 - smooth(0.0, PICTURE_GONE_AT, warp);
+    let falling = 1.0 - smooth(0.15, 0.55, warp);
+    let dropping = dropping.clamp(0.0, 1.0);
+    rising + (falling - rising) * dropping
+}
+
+/// An arrival picture's own opacity, over the deep sky's fade the sky shader puts on it
+/// (`sky.wgsl`'s `deep`), so it shows at [`picture_shown`] in all.
+pub(crate) fn picture_opacity(warp: f32, dropping: f32) -> f32 {
+    let deep = deep_shown(warp, dropping);
+    if deep <= 0.0 {
+        0.0
+    } else {
+        (picture_shown(warp, dropping) / deep).clamp(0.0, 1.0)
+    }
+}
+
 /// The sky a backdrop cross-fades from as a warp aimed ahead starts (ADR-0187): as it
 /// was drawn the frame before, still.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -4742,6 +4771,34 @@ mod tests {
     /// with no ramp of its own, so it is never above its setting, picks the next
     /// picture as the deep sky starts to show again, not only once the warp is still,
     /// so it fades in with the deep sky rather than popping in at rest.
+    #[test]
+    fn an_arrival_picture_is_gone_as_the_stars_start_to_move() {
+        use crate::chain::{deep_shown, picture_opacity, picture_shown};
+        // Going in (ADR-0239): full at rest, gone by the first touch of warp, while the
+        // deep sky still shows.
+        assert!((picture_shown(0.0, 0.0) - 1.0).abs() < 1e-6);
+        assert!(picture_shown(0.03, 0.0) < 0.5);
+        assert_eq!(picture_shown(0.05, 0.0), 0.0);
+        assert_eq!(picture_shown(0.33, 0.0), 0.0);
+        assert!(deep_shown(0.05, 0.0) > 0.85);
+        // Dropping out, it comes back with the deep sky (ADR-0188 decision 5).
+        for warp in [0.1_f32, 0.2, 0.3, 0.4, 0.5] {
+            assert!((picture_shown(warp, 1.0) - deep_shown(warp, 1.0)).abs() < 1e-6);
+        }
+        // Never more than the deep sky, and its opacity over the deep sky's fade gives
+        // it in all.
+        for i in 0..=100_u8 {
+            let warp = f32::from(i) / 100.0;
+            for dropping in [0.0_f32, 0.3, 1.0] {
+                let (picture, deep) = (picture_shown(warp, dropping), deep_shown(warp, dropping));
+                assert!(picture <= deep + 1e-6, "{warp} {dropping}");
+                let opacity = picture_opacity(warp, dropping);
+                assert!((0.0..=1.0).contains(&opacity));
+                assert!((opacity * deep - picture).abs() < 1e-5, "{warp} {dropping}");
+            }
+        }
+    }
+
     #[test]
     fn a_warp_followed_down_picks_its_arrival_as_the_sky_shows() {
         let mut sky = crate::chain::SkyState::default();
