@@ -35,6 +35,7 @@ fn settings_map_to_values() {
             wind: [20.0, 0.0, 0.0],
             scattering: 1.0,
             steps: 48,
+            half: true,
         }
     );
     let v = super::values(&settings(
@@ -46,11 +47,9 @@ fn settings_map_to_values() {
         (v.density, v.noise, v.noise_scale, v.scattering),
         (20.0, 0.0, 1.0, 8.0)
     );
-    assert_eq!(v.steps, 96);
-    assert_eq!(
-        super::values(&settings(KIND, json!({"quality": "low"}))).steps,
-        24
-    );
+    assert_eq!((v.steps, v.half), (96, false));
+    let low = super::values(&settings(KIND, json!({"quality": "low"})));
+    assert_eq!((low.steps, low.half), (24, true));
 }
 
 /// ADR-0151 decision 6: the drift is wind times time in noise features, wrapped so a
@@ -409,4 +408,54 @@ fn a_shadow_map_cuts_the_light_through_the_fog() {
         clear.abs_diff(unshadowed) <= 1,
         "an empty map shadows nothing: {clear} against {unshadowed}"
     );
+}
+
+/// A view depth whose columns left of `split` are at `near_d` and the rest at `far_d`
+/// (0 for nothing drawn), through the framing camera.
+fn split_depth(opened: &Opened, split: u32, near_d: f32, far_d: f32) -> ViewDepth {
+    let view = view();
+    let f = view.focal_px();
+    let texel = |d: f32| {
+        if d > 0.0 {
+            [f / d, 0.0, 0.0, 1.0]
+        } else {
+            [0.0; 4]
+        }
+    };
+    let texels: Vec<[f32; 4]> = (0..W * H)
+        .map(|i| texel(if i % W < split { near_d } else { far_d }))
+        .collect();
+    let image = image::upload_unit_f16(&opened.compositor.maker(), W, H, &texels)
+        .expect("the depth uploads");
+    ViewDepth {
+        view: Some(view),
+        ..ViewDepth::new(Arc::new(image), f)
+    }
+}
+
+/// Marching one pixel of each block of two by two (quality Medium) gives what marching
+/// every pixel (High) does, for even unlit fog, which the step count doesn't change: over
+/// an even depth, and on both sides of
+/// an edge between a near model and the far sky that cuts through blocks, where each
+/// pixel takes only the marched texels at its own distance, so neither side's fog
+/// spreads onto the other.
+#[test]
+fn fog_marched_at_half_size_matches_every_pixel_marched_and_keeps_to_its_edges() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let input = solid(&opened.compositor, W, H, [40, 90, 200, 255]);
+    for (split, near_d, far_d) in [(0, 2000.0, 2000.0), (13, 300.0, 0.0), (14, 300.0, 6000.0)] {
+        let shots = ["high", "medium"].map(|quality| {
+            let mut fog = even(json!({"density": 0.5, "max_px": 6000.0, "quality": quality}));
+            fog.set_depth(Some(split_depth(&opened, split, near_d, far_d)));
+            apply(&mut opened, &mut fog, &input)
+        });
+        for y in 0..H {
+            for x in 0..W {
+                let every = shots[0].pixel(x, y).expect("inside");
+                near(&shots[1], x, y, every, 3);
+            }
+        }
+    }
 }

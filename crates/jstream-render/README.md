@@ -1789,15 +1789,27 @@ it out; `filter::testing` reads both lists.
   `falloff_px` (default 400, 0 even), `start_px` (default 0) and `max_px` (default
   8000), `noise` (0 to 1, default 0.3) and `noise_scale_px` (default 300), `wind_x_px`,
   `wind_y_px` and `wind_z_px` (default 20, 0, 0 px a second), `scattering` (0 to 8,
-  default 1) and `quality` (`low` 24, `medium` 48, the default, or `high` 96 steps). It
+  default 1) and `quality` (`low` 24, `medium` 48, the default, or `high` 96 steps;
+  `low` and `medium` march a quarter of the pixels, `high` all of them). It
   needs the whole scene view: `ViewDepth::view`, the camera as seen on the canvas
   (`CameraView::position`, `axes` and `principal`), and `ViewDepth::lights`, packed
   into the shader as a `scene`-lit model's are (`SceneLighting`, the first 8 shading
   lights, in the model's viewing frame); without the view it copies its input. It also
   reads `ViewDepth::shadows` (`reads_shadows`), the first 2 lights' shadow maps, packed
-  as a model's are (`shadow_view`). One draw (`volumetric/fog.wgsl`, drawn with the
+  as a model's are (`shadow_view`). At `high` one draw (`volumetric/fog.wgsl` after
+  `volumetric/march.wgsl`, drawn with the
   shader-source prelude through `Ctx::draw_program` for its four textures: the picture,
-  the depth and two maps, the depth standing in for a missing map) marches each pixel's ray from `start_px` to its depth, or
+  the depth and two maps, the depth standing in for a missing map) marches each pixel's
+  ray; at `low` and `medium` one draw (`volumetric/half.wgsl`, the depth standing in for
+  the picture too) marches only the top-left pixel of each block of two by two, into a
+  scratch layer of half the picture's size holding the scattered light and what is let
+  through, and a second (`volumetric/apply.wgsl`) lays it over the picture, each pixel
+  taking the four marched texels around it bilinearly, weighted again by how near their
+  pixels' `1 / w` is to its own, so fog marched to a near model doesn't spread onto the
+  sky beside it
+  (`fog_marched_at_half_size_matches_every_pixel_marched_and_keeps_to_its_edges`: within
+  3 code values of `high` for even fog, across an edge that cuts through blocks). A ray
+  runs from `start_px` to its depth, or
   `max_px` where nothing was drawn, in equal steps of distance, each sampled at a point
   jittered per pixel and per frame (a seed from the clock's 60ths of a second). At each
   step the extinction is `density / 1000` per pixel of ray, halving every `falloff_px`
@@ -2195,12 +2207,14 @@ refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux 
 items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms (the shadowed
 sphere 24 ms, its map and lit draw without the placing), and depth with
 fog 31 and 48 ms for 4 and 16 cards, depth with ambient occlusion 47 and 67 ms, and
-with volumetric fog 541 and 545 ms, its 48 steps a pixel dominating on a CPU
-rasterizer (criterion's `--quick`). The filters alone, on lavapipe on Linux (llvmpipe,
+with volumetric fog 151 and 163 ms, its 48 steps a marched pixel dominating on a CPU
+rasterizer (criterion's `--quick`; 541 and 545 ms when every pixel marched). The filters alone, on lavapipe on Linux (llvmpipe,
 LLVM 20.1.2, 4 cores of a 2.1 GHz Xeon), where a copy of a 1080p frame takes 7 ms:
 `ambient_occlusion` 49 ms, `depth_bloom` 73 ms, `depth_fog` 16 ms, `volumetric_fog`
 0.60 s, and 1.1 s with eight lights, six of them with a range
-(`scene_filter_1080p`). Run them with
+(`scene_filter_1080p`). Marching a quarter of the pixels at `low` and `medium` cut
+`volumetric_fog` there, measured on one 2.3 GHz machine before and after, from 468 to
+136 ms at `medium`, 244 to 78 ms at `low` and 842 to 220 ms with eight lights. Run them with
 `cargo bench -p jstream-render --bench composite` and `--bench filters`, which take the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the

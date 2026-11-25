@@ -5789,7 +5789,7 @@ source: crates/jstream-core/src/kinds.rs
         ],
         "default": "medium",
         "label": "Quality",
-        "description": "Steps along each ray: Low 24, Medium 48, High 96. More is smoother and costs more.",
+        "description": "Steps along each ray: Low 24, Medium 48, High 96. More is smoother and costs more. Low and Medium march one ray per two by two pixels and spread it over them, keeping to pixels at about its distance; High marches every pixel.",
         "live": true
       }
     ]

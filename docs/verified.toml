@@ -216,7 +216,7 @@ stamp = { hash = "b3:813757b8f56afa0e", by = "agent:aa-thread", note = "Edited t
 stamp = { hash = "b3:d8980baa4f07826b", by = "agent:effects-perf", note = "Re-read against cheaper depth bloom, ambient occlusion and volumetric fog shaders and a per-filter bench: the pipeline's steps, the compositor's passes, the view depth a depth-reading scene filter gets (one more draw into a half-float 1/w layer) and how filters draw into Rgba16Float layers are as described; only the work inside three filters' fragment shaders changed." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:bf1dd3e88ec57a07", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
+stamp = { hash = "b3:73b36525a5a69b9e", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:282dd952573ee86e", by = "agent:claude", note = "Re-read against SceneCamera.fixed_aperture (0.191, ADR-0223) on the latest alpha.13 train: nothing here describes the camera's depth-of-field fields or the protocol number, so it holds." }
@@ -354,13 +354,22 @@ stamp = { hash = "b3:6ab02617d87575e3", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:a676bd0e77e9a425", by = "agent:claude", note = "Edited the screen-space reflection sentence: one pixel in each block of two by two marches and each pixel then takes what marched pixels near it on the same surface found (ADR-0189), as screen.rs, trace.wgsl and resolve.wgsl do; the rest of the section (surface written with the layer, merged nearest, the switch off by default) is unchanged and still holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/volumetric.rs"]
-stamp = { hash = "b3:0517cbf720f5655a", by = "agent:claude", note = "Its scene-filter depth sentence still holds; the fog's use of shadow maps is a filter detail in the render README. | merge: Merged wave/alpha5: #1488 shadows and #1487 volumetric fog (this stack's bases, squashed, with their merge fixes), #1485 AO, #1484 billboards, PTZ #1486/#1496. Depth-aware filters and shadow maps read as described; the bench lists volumetric fog once. | kept from the merged side: the depth-aware filter paragraph still holds; volumetric fog reads the same depth plus the camera view | merge: Merged wave/alpha5: #1485's squash (this PR's base, the same AO content), #1484 billboards, #1486/#1496 PTZ, #1493 and ADR-0151. Depth-aware filters, now three, still read the view depth as described." }
+stamp = { hash = "b3:973f270d865fa368", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/volumetric/apply.wgsl"]
+stamp = { hash = "b3:f410e956adefe8b2", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/volumetric/fog.wgsl"]
-stamp = { hash = "b3:c171985718746d9f", by = "agent:effects-perf", note = "Re-read against cheaper depth bloom, ambient occlusion and volumetric fog shaders and a per-filter bench: the pipeline's steps, the compositor's passes, the view depth a depth-reading scene filter gets (one more draw into a half-float 1/w layer) and how filters draw into Rgba16Float layers are as described; only the work inside three filters' fragment shaders changed." }
+stamp = { hash = "b3:efded3595bc2fe0d", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/volumetric/half.wgsl"]
+stamp = { hash = "b3:123a7ae2b082d5e1", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/volumetric/march.wgsl"]
+stamp = { hash = "b3:715799a33f206701", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/volumetric/tests.rs"]
-stamp = { hash = "b3:ba9789b120b8d885", by = "agent:effects-perf", note = "Re-read against cheaper depth bloom, ambient occlusion and volumetric fog shaders and a per-filter bench: the pipeline's steps, the compositor's passes, the view depth a depth-reading scene filter gets (one more draw into a half-float 1/w layer) and how filters draw into Rgba16Float layers are as described; only the work inside three filters' fragment shaders changed." }
+stamp = { hash = "b3:ddb136be6808d150", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/external.rs"]
 stamp = { hash = "b3:a4cbbf08e13f9ced", by = "agent:alpha5-security", note = "Re-read the device-loss paragraph: replaced 'GPU-time guard not built' with the guard (render's timer.rs brackets pack passes with timestamps; core quarantines a kind over half the budget for 30 frames, gpu.effect_slow 0.102), its limits (preview unguarded, no timestamp queries means loss-only), and the unrun forced TDR." }
@@ -3063,7 +3072,7 @@ stamp = { hash = "b3:27a89c13993b7756", by = "agent:claude", note = "PTZ cameras
 stamp = { hash = "b3:76a2f1b62b2cc8ca", by = "agent:issues-thread", note = "Re-read for #1720 after merging the alpha.13 train again (shows, ADR-0203 replace modifiers, macOS Metal interop, preview.show and keyframe requests, two-plane convert targets), none of which touches item effects layers, their extent or padding: names an item's layer scaled down to fit the largest side as a second case where a pack effect's texel-counted parameters reach further than a built-in kind's; the rest holds." }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:80d7fedc070188a6", by = "agent:claude", note = "Dep render#filters only gained the gpu_part spans paragraph; this section references the filter harness, not GPU timing, so it holds." }
+stamp = { hash = "b3:3c023f861dbfad17", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -5448,13 +5457,22 @@ stamp = { hash = "b3:6ab02617d87575e3", by = "agent:claude", note = "Re-read for
 stamp = { hash = "b3:a676bd0e77e9a425", by = "agent:claude", note = "Re-read for screen-space reflections: the surface buffer paragraph describes what the buffer holds and how models write it, which ADR-0189 does not change (trace.wgsl and resolve.wgsl read the same three layers); the lifetime table's row for a multi-pass filter's scratch layers covers the pass's new half-size layer, taken with Ctx::scratch." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/volumetric.rs"]
-stamp = { hash = "b3:0517cbf720f5655a", by = "agent:claude", note = "Design holds: the fog now draws through Ctx::draw_program for four textures, documented under Filters; model shadow packing unchanged. | merge: Merged wave/alpha5: #1488 shadows and #1487 volumetric fog (this stack's bases, squashed, with their merge fixes), #1485 AO, #1484 billboards, PTZ #1486/#1496. depth/mod.rs and volumetric.rs keep the shafts' shadow inputs over the wave's fog; still holds. | kept from the merged side: SceneLighting is shared with the fog shader; one draw per frame, the design holds | merge: Merged wave/alpha5: #1485's squash (this PR's base, the same AO content), #1484 billboards, #1486/#1496 PTZ, #1493 and ADR-0151. depth/mod.rs registers occlusion, fog and volumetric; still holds." }
+stamp = { hash = "b3:973f270d865fa368", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/volumetric/apply.wgsl"]
+stamp = { hash = "b3:f410e956adefe8b2", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/volumetric/fog.wgsl"]
-stamp = { hash = "b3:c171985718746d9f", by = "agent:effects-perf", note = "Re-read the passes, kept resources, placement math and device selection against the depth bloom, ambient occlusion and volumetric fog changes: they add no layer, buffer or submit (bloom's blur drops its aux read; the uniforms are still each draw's kept buffer, now larger for the kernels), allocate nothing per item, and do no I/O, so R-RT-002 and the resource table hold. model.wgsl's light fade the fog mirrors is unchanged." }
+stamp = { hash = "b3:efded3595bc2fe0d", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/volumetric/half.wgsl"]
+stamp = { hash = "b3:123a7ae2b082d5e1", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/volumetric/march.wgsl"]
+stamp = { hash = "b3:715799a33f206701", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/volumetric/tests.rs"]
-stamp = { hash = "b3:ba9789b120b8d885", by = "agent:effects-perf", note = "Re-read the passes, kept resources, placement math and device selection against the depth bloom, ambient occlusion and volumetric fog changes: they add no layer, buffer or submit (bloom's blur drops its aux read; the uniforms are still each draw's kept buffer, now larger for the kernels), allocate nothing per item, and do no I/O, so R-RT-002 and the resource table hold. model.wgsl's light fade the fog mirrors is unchanged." }
+stamp = { hash = "b3:ddb136be6808d150", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/external.rs"]
 stamp = { hash = "b3:a4cbbf08e13f9ced", by = "agent:alpha5-security", note = "Re-read Device selection: the device asks for TIMESTAMP_QUERY when the adapter has it and no other optional feature (added); compositor, external and program passes' timing is under Filters." }
@@ -5787,7 +5805,7 @@ stamp = { hash = "b3:68a52e1f0e4858d2", by = "agent:smooth-paths", note = "trans
 stamp = { hash = "b3:9b1c8d0332d202f3", by = "agent:claude", note = "Depth layers: re-read Composite, render_into's bounds, the resources table, ResourceCache, depth of field on models and Shadows against the diff; added the depth_layer row, the depth wipe and content of a view depth, and that shadow maps and the focus depth are depth layers" }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:80d7fedc070188a6", by = "agent:claude", note = "Spans paragraph now describes gpu_part: 1..255 in the top 8 bits of the unit id, cleared by gpu_unit, split by gpu_unit_part; checked against spans.rs and compositor.rs." }
+stamp = { hash = "b3:3c023f861dbfad17", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
@@ -5886,13 +5904,22 @@ stamp = { hash = "b3:6ab02617d87575e3", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:a676bd0e77e9a425", by = "agent:claude", note = "Rewrote the screen_space_reflections entry for ADR-0189 and checked it against screen.rs, trace.wgsl and resolve.wgsl: the march into a scratch layer of half the width and height rounded up, chosen's alternating corner, the unchanged steps, hit test, 12-tap disc, luma cap and fades now written premultiplied by k, and the resolve's three pass-through tests, four blocks, screen weight to nothing at three pixels, 2% off-plane weight, fourth-power normal weight, the weighted mean under the pixel's own BRDF, and no change at no weight. The three named tests exist." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/volumetric.rs"]
-stamp = { hash = "b3:0517cbf720f5655a", by = "agent:claude", note = "volumetric_fog entry now covers ViewDepth::shadows, the draw_program path with four textures, and the one-tap shadow test per step; test a_shadow_map_cuts_the_light_through_the_fog. | merge: Merged wave/alpha5: #1488 shadows and #1487 volumetric fog (this stack's bases, squashed, with their merge fixes), #1485 AO, #1484 billboards, PTZ #1486/#1496. Conflicts resolved to this branch's volumetric_fog: it reads ViewDepth::shadows through draw_program's four textures, cutting shafts; text holds. | kept from the merged side: the depth-aware paragraph describes the scene view, and the volumetric_fog bullet its settings, march, noise drift and lighting | merge: Merged wave/alpha5: #1485's squash (this PR's base, the same AO content), #1484 billboards, #1486/#1496 PTZ, #1493 and ADR-0151. Conflict resolved: volumetric_fog's entry follows ambient_occlusion's as on the branch." }
+stamp = { hash = "b3:973f270d865fa368", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/volumetric/apply.wgsl"]
+stamp = { hash = "b3:f410e956adefe8b2", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/volumetric/fog.wgsl"]
-stamp = { hash = "b3:c171985718746d9f", by = "agent:effects-perf", note = "Outline and glow now find the nearest seed in two exact scanning passes when the reach is 17 px or less and by a jump flood whose first step reads the input (no seed pass) past that; sharpen above radius 1 is a row-mean pass and a column pass; the Lanczos stretch works out each axis's weights once per pixel. Rewrote the outline, glow, sharpen and aspect_ratio paragraphs, the glow line under Bounds and the pack's 'one draw each' to say so. Checked the scratch pool text against it: outline and glow still take two scratch layers and sharpen one, within the three it allows. Settings, outsets, reaches and what each kind draws are unchanged: on the comparison images outline is byte-identical, glow differs in 3 pixels of one image (the scan and the flood picked different seeds there; the scan is checked against brute force), and sharpen at radius 2 and 3 differs by one 8-bit step in under 1% of bytes, 2 bytes by up to 4 at a nearly transparent edge." }
+stamp = { hash = "b3:efded3595bc2fe0d", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/volumetric/half.wgsl"]
+stamp = { hash = "b3:123a7ae2b082d5e1", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/volumetric/march.wgsl"]
+stamp = { hash = "b3:715799a33f206701", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/volumetric/tests.rs"]
-stamp = { hash = "b3:ba9789b120b8d885", by = "agent:effects-perf", note = "Outline and glow now find the nearest seed in two exact scanning passes when the reach is 17 px or less and by a jump flood whose first step reads the input (no seed pass) past that; sharpen above radius 1 is a row-mean pass and a column pass; the Lanczos stretch works out each axis's weights once per pixel. Rewrote the outline, glow, sharpen and aspect_ratio paragraphs, the glow line under Bounds and the pack's 'one draw each' to say so. Checked the scratch pool text against it: outline and glow still take two scratch layers and sharpen one, within the three it allows. Settings, outsets, reaches and what each kind draws are unchanged: on the comparison images outline is byte-identical, glow differs in 3 pixels of one image (the scan and the flood picked different seeds there; the scan is checked against brute force), and sharpen at radius 2 and 3 differs by one 8-bit step in under 1% of bytes, 2 bytes by up to 4 at a nearly transparent edge." }
+stamp = { hash = "b3:ddb136be6808d150", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/external.rs"]
 stamp = { hash = "b3:a4cbbf08e13f9ced", by = "agent:alpha5-security", note = "Re-read: added 'GPU time of pack passes': time_passes, Pass::timed (kind ID, built-ins None), two timestamp compute passes per application, 32 slots, gpu_times without waiting and without allocating, and the lavapipe test." }
@@ -6231,13 +6258,22 @@ stamp = { hash = "b3:6ab02617d87575e3", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:a676bd0e77e9a425", by = "agent:claude", note = "Re-read against the half-size march (ADR-0189): the section says what one scene, a model, a sky and a filter are and does not describe how the screen-space reflection pass draws; nothing in it changed." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/volumetric.rs"]
-stamp = { hash = "b3:0517cbf720f5655a", by = "agent:claude", note = "Purpose still holds: ViewDepth gains shadows (DepthShadow), reads_shadows exported as video_filter_reads_shadows; shadow_view became pub(crate). | merge: Merged wave/alpha5: #1488 shadows and #1487 volumetric fog (this stack's bases, squashed, with their merge fixes), #1485 AO, #1484 billboards, PTZ #1486/#1496. depth/mod.rs and volumetric.rs keep the shafts' shadow inputs over the wave's fog; still holds. | kept from the merged side: ViewDepth carries the scene view and volumetric_fog is a third depth kind; the purpose holds | merge: Merged wave/alpha5: #1485's squash (this PR's base, the same AO content), #1484 billboards, #1486/#1496 PTZ, #1493 and ADR-0151. depth/mod.rs registers occlusion, fog and volumetric; still holds." }
+stamp = { hash = "b3:973f270d865fa368", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/volumetric/apply.wgsl"]
+stamp = { hash = "b3:f410e956adefe8b2", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/volumetric/fog.wgsl"]
-stamp = { hash = "b3:c171985718746d9f", by = "agent:effects-perf", note = "Re-read against three depth-aware shaders doing less work per pixel and a new [[bench]] in Cargo.toml: the scene, placement, view depth, cache and device descriptions here are about what is drawn, which is the same (the view depth is still 1/w in red, read by the same kinds). No public API changed." }
+stamp = { hash = "b3:efded3595bc2fe0d", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/volumetric/half.wgsl"]
+stamp = { hash = "b3:123a7ae2b082d5e1", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/volumetric/march.wgsl"]
+stamp = { hash = "b3:715799a33f206701", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/volumetric/tests.rs"]
-stamp = { hash = "b3:ba9789b120b8d885", by = "agent:effects-perf", note = "Re-read against three depth-aware shaders doing less work per pixel and a new [[bench]] in Cargo.toml: the scene, placement, view depth, cache and device descriptions here are about what is drawn, which is the same (the view depth is still 1/w in red, read by the same kinds). No public API changed." }
+stamp = { hash = "b3:ddb136be6808d150", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/external.rs"]
 stamp = { hash = "b3:a4cbbf08e13f9ced", by = "agent:alpha5-security", note = "Re-read after ARCH gpu-pipeline's guard paragraph: the crate's purpose (compositor, filters, device) covers timing pack passes; holds." }
@@ -6570,7 +6606,7 @@ stamp = { hash = "b3:68a52e1f0e4858d2", by = "agent:smooth-paths", note = "trans
 stamp = { hash = "b3:9b1c8d0332d202f3", by = "agent:claude", note = "Depth layers: added Compositor::depth_layer and ResourceCache::depth_layer to the view depth bullet and the cache bullet; re-read the bullets on layers, render_view_depth and draw_model_depth against image.rs, compositor.rs and cache.rs" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:f94955915b7d93b9", by = "agent:mac1-planar", note = "NV12 test paragraph now covers the two-plane frame test (same bytes as the planes path, one stage) and plane_textures' refusals and frame equality, as in convert/tests.rs" }
+stamp = { hash = "b3:4b0fbf2685820058", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -6765,7 +6801,7 @@ stamp = { hash = "b3:978d925ff849ccba", by = "agent:claude", note = "contents ad
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:ccbecf12199dc729", by = "agent:claude-audio-picker", note = "audio_input and desktop_audio each take a device capture_target of kind audio_input or audio_output, an old desktop_audio follows the default output; edited" }
+stamp = { hash = "b3:6cf86b11dbc50fa0", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }

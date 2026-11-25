@@ -4,7 +4,10 @@
 //! taking density from a falloff above `base_y_px` and moving noise, and at each step
 //! the fog's own colour plus the light of each scene light reaching it, with a
 //! forward-scattering phase. The light it scatters toward the camera is added over the
-//! picture times what the fog lets through. A light that casts shadows reaches a step
+//! picture times what the fog lets through. At quality Low and Medium one pixel of each
+//! block of two by two marches, at half the picture's size, and a second pass spreads
+//! each over the pixels around it whose distance is about its own; High marches every
+//! pixel. A light that casts shadows reaches a step
 //! only where its shadow map sees it (ADR-0151 decision 3), so what stands in a beam
 //! cuts a shaft of shadow through it. Without a view depth and its camera (a 2D
 //! scene, any chain but a scene's) it passes its input through.
@@ -21,9 +24,32 @@ use crate::model::{SceneLighting, ShadowMap, shadow_view};
 
 pub(super) const KIND: &str = "volumetric_fog";
 
+/// Marches every pixel's view and lays the fog over the picture: quality High.
 const SHADER: Shader = Shader {
     label: "filter-volumetric-fog",
-    source: include_str!("volumetric/fog.wgsl"),
+    source: concat!(
+        include_str!("volumetric/march.wgsl"),
+        include_str!("volumetric/fog.wgsl")
+    ),
+    blend: Blend::Replace,
+};
+
+/// Marches one pixel of each block of two by two, at half the picture's size: quality
+/// Low and Medium.
+const HALF: Shader = Shader {
+    label: "filter-volumetric-fog-half",
+    source: concat!(
+        include_str!("volumetric/march.wgsl"),
+        include_str!("volumetric/half.wgsl")
+    ),
+    blend: Blend::Replace,
+};
+
+/// Lays [`HALF`]'s fog over the picture at its size, keeping to texels at about the
+/// pixel's distance.
+const APPLY: Shader = Shader {
+    label: "filter-volumetric-fog-apply",
+    source: include_str!("volumetric/apply.wgsl"),
     blend: Blend::Replace,
 };
 
@@ -117,7 +143,9 @@ pub(super) fn descriptor() -> KindDescriptor {
             ParamDescriptor {
                 description: Some(
                     "Steps along each ray: Low 24, Medium 48, High 96. More is smoother and \
-                     costs more."
+                     costs more. Low and Medium march one ray per two by two pixels and \
+                     spread it over them, keeping to pixels at about its distance; High \
+                     marches every pixel."
                         .into(),
                 ),
                 ..choice(
@@ -146,6 +174,8 @@ struct Values {
     wind: [f32; 3],
     scattering: f32,
     steps: u32,
+    /// Whether one ray is marched per block of two by two pixels ([`HALF`]).
+    half: bool,
 }
 
 /// `v` clamped to `min..=max`, `fallback` when it isn't finite.
@@ -181,6 +211,7 @@ fn values(settings: &Settings) -> Values {
             "high" => 96,
             _ => 48,
         },
+        half: read.choice("quality", "medium") != "high",
     }
 }
 
@@ -324,9 +355,27 @@ impl Pass for VolumetricFog {
                 .get(slot)
                 .map_or_else(|| depth.image.as_ref().clone(), |s| s.image.clone())
         };
-        let inputs = [input.clone(), depth.image.as_ref().clone(), map(0), map(1)];
+        if !self.values.half {
+            let inputs = [input.clone(), depth.image.as_ref().clone(), map(0), map(1)];
+            let system = system(input, &inputs);
+            return ctx.draw_program(SHADER.into(), &inputs, &system, &params, output);
+        }
+        // The march's first input is never read at half size: the depth stands in.
+        let marched = ctx.scratch(input.width().div_ceil(2), input.height().div_ceil(2))?;
+        let inputs = [
+            depth.image.as_ref().clone(),
+            depth.image.as_ref().clone(),
+            map(0),
+            map(1),
+        ];
         let system = system(input, &inputs);
-        ctx.draw_program(SHADER.into(), &inputs, &system, &params, output)
+        ctx.draw_program(HALF.into(), &inputs, &system, &params, &marched)?;
+        let inputs = [input.clone(), marched, depth.image.as_ref().clone()];
+        let system = crate::filter::program_system(input, output, &inputs);
+        let alpha = Uniforms::new()
+            .vec4([self.values.color[3], 0.0, 0.0, 0.0])
+            .finish();
+        ctx.draw_program(APPLY.into(), &inputs, &system, &alpha, output)
     }
 }
 

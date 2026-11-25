@@ -299,8 +299,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   scales up with no visible loss.
 - `fog_card`: a generated card of fog, `width` by `height` pixels (at most 4096 a
   side): the `color` everywhere, straight, and the fog in its alpha. It is the cheap
-  stand-in for `volumetric_fog`, which marches every pixel through the scene each
-  frame: a card costs what a still picture does. Placed as an item in a 3D scene in
+  stand-in for `volumetric_fog`, which marches rays through the scene for every pixel
+  (or every block of two by two) each frame: a card costs what a still picture does. Placed as an item in a 3D scene in
   front of what it should veil, it is a plane at a depth, so it shifts against what is
   behind it as the camera moves, and a few at different depths read as fog with volume.
   The clouds are the backdrop's seeded gradient noise, domain-warped, on a grid 4 pixels
