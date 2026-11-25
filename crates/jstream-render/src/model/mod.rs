@@ -131,6 +131,9 @@ struct Uploaded {
     /// A rigged model's palette (ADR-0151 decision 7): its buffer, which
     /// [`crate::Compositor::pose_model`] writes, its bind group and its slot count.
     pose: Option<(wgpu::Buffer, wgpu::BindGroup, usize)>,
+    /// The palette last written to `pose`, and how many times it has changed: a draw
+    /// of the same pose can leave a layer as it is (ADR-0244).
+    posed: Mutex<(Vec<u8>, u64)>,
     /// The material bind groups of its last draw with a live texture (ADR-0107
     /// decision 5), kept while that texture and the material it replaces stay the same,
     /// so a steady frame makes none.
@@ -138,6 +141,117 @@ struct Uploaded {
     /// Each texture's format as uploaded, for tests.
     #[cfg(test)]
     formats: Vec<wgpu::TextureFormat>,
+}
+
+/// What a model's layer was drawn of (ADR-0244): everything its pixels depend on, so a
+/// draw asked for again of the same is left as the layer holds it. Compared as it is,
+/// not hashed, so two different draws never compare equal.
+#[derive(Default)]
+struct Kept {
+    /// The layer, by the counter it and its clones share.
+    target: std::sync::Weak<std::sync::atomic::AtomicU64>,
+    /// What the layer, its view depth and its surface layers held: once drawn, its
+    /// texels, which any later write moves on.
+    held: Vec<crate::image::Seen>,
+    /// Whether it had a view depth, and surface layers.
+    beside: (bool, bool),
+    /// The model, by identity, and how many times its pose had changed.
+    model: std::sync::Weak<Uploaded>,
+    posed: u64,
+    samples: u32,
+    /// The frame's uniform: its placement, camera, lighting, shadow views, sky, floor
+    /// and probe.
+    frame: Vec<u8>,
+    /// The shadow maps, sky and probe pictures it read, with their texels, and which it
+    /// read through a mip chain.
+    maps: [Option<crate::image::Seen>; FRAME_TEXTURES],
+    chained: [bool; FRAME_TEXTURES],
+    /// Each material's drive: none, or the values it drew with.
+    drives: Vec<u8>,
+    /// Its live texture: the picture with its texels, and the material it replaces.
+    live: Option<(Option<crate::image::Seen>, Option<String>)>,
+}
+
+impl Kept {
+    /// Fills in what a draw of `model` as `draw` asks for, reusing the allocations.
+    fn fill(
+        &mut self,
+        (model, draw, owner): (&Arc<Uploaded>, &ModelDraw<'_>, &Owner),
+        (frame, maps, chained): (
+            &[u8],
+            [Option<&Image>; FRAME_TEXTURES],
+            [bool; FRAME_TEXTURES],
+        ),
+        samples: u32,
+    ) {
+        self.model = Arc::downgrade(model);
+        self.posed = model.posed.lock().unwrap_or_else(PoisonError::into_inner).1;
+        self.samples = samples;
+        self.frame.clear();
+        self.frame.extend_from_slice(frame);
+        self.maps = maps.map(|map| map.map(Image::seen));
+        self.chained = chained;
+        self.drives.clear();
+        for m in &model.materials {
+            match driven_values(&m.values, &m.name, draw.materials) {
+                Some(values) => {
+                    self.drives.push(1);
+                    self.drives.extend_from_slice(&material_bytes(&values));
+                }
+                None => self.drives.push(0),
+            }
+        }
+        match draw.texture {
+            Some(texture) => {
+                let seen = texture
+                    .image
+                    .filter(|image| image.owner().is(owner))
+                    .map(Image::seen);
+                let (picture, material) = self.live.get_or_insert((None, None));
+                *picture = seen;
+                match (texture.material, material.as_mut()) {
+                    (Some(name), Some(kept)) => {
+                        kept.clear();
+                        kept.push_str(name);
+                    }
+                    (name, _) => *material = name.map(str::to_owned),
+                }
+            }
+            None => self.live = None,
+        }
+    }
+
+    /// Fills in the layers the draw is into, as they hold now.
+    fn hold(&mut self, target: &Image, view_depth: Option<&Image>, how: &DrawAs<'_>) {
+        self.target = Arc::downgrade(target.identity());
+        self.held.clear();
+        self.held.push(target.seen());
+        self.held.extend(view_depth.map(Image::seen));
+        let surface = match how {
+            DrawAs::LayerWithSurface(layers) => Some(layers),
+            _ => None,
+        };
+        if let Some(layers) = surface {
+            self.held.extend(layers.iter().map(|layer| layer.seen()));
+        }
+        self.beside = (view_depth.is_some(), surface.is_some());
+    }
+}
+
+impl PartialEq for Kept {
+    fn eq(&self, other: &Self) -> bool {
+        self.target.ptr_eq(&other.target)
+            && self.held == other.held
+            && self.beside == other.beside
+            && self.model.ptr_eq(&other.model)
+            && self.posed == other.posed
+            && self.samples == other.samples
+            && self.frame == other.frame
+            && self.maps == other.maps
+            && self.chained == other.chained
+            && self.drives == other.drives
+            && self.live == other.live
+    }
 }
 
 /// Material bind groups with a live texture in place of their base colour's.
@@ -667,6 +781,11 @@ pub(crate) struct ModelRuntime {
     depth: Vec<(u32, u32, wgpu::TextureView)>,
     /// Blended primitives in the order they draw, kept to reuse the allocation.
     order: Vec<(f64, usize)>,
+    /// What each layer a model was last drawn into was drawn of, to leave it as it is
+    /// when asked for the same draw again (ADR-0244).
+    kept: Vec<Kept>,
+    /// The draw being asked for, filled in place each draw.
+    asked: Kept,
     /// The quad a lit card is shaded on ([`Self::light_card`]), once made.
     card: Option<(wgpu::Buffer, wgpu::Buffer)>,
 }
@@ -968,6 +1087,8 @@ impl ModelRuntime {
             clear: (clear_texture, clear_view),
             depth: Vec::with_capacity(KEPT_DEPTHS),
             order: Vec::new(),
+            kept: Vec::new(),
+            asked: Kept::default(),
             card: None,
         }
     }
@@ -1217,6 +1338,7 @@ impl UploadKit {
                     let (buffer, bind) = pose_bind(device, &self.pose_layout, &rest);
                     (buffer, bind, rest.len())
                 }),
+                posed: Mutex::new((Vec::new(), 0)),
                 live: Mutex::new(None),
                 #[cfg(test)]
                 formats,
@@ -1232,12 +1354,25 @@ impl ModelRuntime {
         if let Some((buffer, _, slots)) = &model.inner.pose
             && *slots == palette.len()
         {
-            let bytes: Vec<u8> = palette
-                .iter()
-                .flatten()
-                .flat_map(|v| v.to_le_bytes())
-                .collect();
-            gpu.queue.write_buffer(buffer, 0, &bytes);
+            let mut posed = model
+                .inner
+                .posed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let (bytes, changes) = &mut *posed;
+            // The same pose again writes nothing, so a layer drawn of it can be kept
+            // (ADR-0244).
+            let same = bytes.len() == palette.len() * 64
+                && bytes
+                    .chunks_exact(4)
+                    .zip(palette.iter().flatten())
+                    .all(|(was, v)| was == v.to_le_bytes());
+            if !same {
+                bytes.clear();
+                bytes.extend(palette.iter().flatten().flat_map(|v| v.to_le_bytes()));
+                *changes += 1;
+                gpu.queue.write_buffer(buffer, 0, bytes);
+            }
         }
     }
 
@@ -1585,6 +1720,7 @@ impl ModelRuntime {
                     views,
                 }],
                 pose: None,
+                posed: Mutex::new((Vec::new(), 0)),
                 live: Mutex::new(None),
                 #[cfg(test)]
                 formats: Vec::new(),
@@ -1842,6 +1978,25 @@ impl ModelRuntime {
                 probe.as_ref(),
             ),
         );
+        // A layer that still holds this very draw is left as it is (ADR-0244).
+        let keeps = matches!(how, DrawAs::Layer | DrawAs::LayerWithSurface(_));
+        if keeps {
+            let mut asked = std::mem::take(&mut self.asked);
+            asked.fill(
+                (model, draw, owner),
+                (&frame, maps, chains.map(|chain| chain.is_some())),
+                self.samples,
+            );
+            asked.hold(target, view_depth.map(|(depth, _)| depth), &how);
+            let held = self
+                .kept
+                .iter()
+                .any(|kept| kept.target.ptr_eq(&asked.target) && *kept == asked);
+            self.asked = asked;
+            if held {
+                return Ok(());
+            }
+        }
         let frame_bind = self.frame_bind_for(gpu, maps, chains);
         let live_binds = draw
             .texture
@@ -2090,7 +2245,27 @@ impl ModelRuntime {
             depth.set_content(content);
         }
         drop(submitting);
+        if keeps {
+            self.keep(target, view_depth.map(|(depth, _)| depth), &how);
+        }
         Ok(())
+    }
+
+    /// Remembers that `target`, with its view depth and the surface layers of `how`,
+    /// now holds the draw [`Self::asked`] describes (ADR-0244).
+    fn keep(&mut self, target: &Image, view_depth: Option<&Image>, how: &DrawAs<'_>) {
+        self.kept.retain(|kept| kept.target.strong_count() > 0);
+        let mut asked = std::mem::take(&mut self.asked);
+        asked.hold(target, view_depth, how);
+        match self
+            .kept
+            .iter_mut()
+            .find(|kept| kept.target.ptr_eq(&asked.target))
+        {
+            Some(kept) => std::mem::swap(kept, &mut asked),
+            None => self.kept.push(std::mem::take(&mut asked)),
+        }
+        self.asked = asked;
     }
 
     /// Records the view depth of the model whose layer's pass just tested `depth` into

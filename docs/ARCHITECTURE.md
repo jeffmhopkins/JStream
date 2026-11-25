@@ -1573,7 +1573,9 @@ boxes ([ADR-0201](adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-t
 transparent background remembers the box its items could reach, and its parent draws
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
 group of a few small items doesn't shade the whole canvas twice. A model's layer is
-bounded the same way, by the box of its model's bounds on the canvas. A blur, a mask, a shadow or a glow over
+bounded the same way, by the box of its model's bounds on the canvas, and left as it is
+when it still holds the same draw of the same model, pose, camera, lights, drives and
+unchanged pictures ([ADR-0244](adr/0244-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md)). A blur, a mask, a shadow or a glow over
 such a layer, as an item's effects, shades only that box grown by how far it reaches, and
 keeps the box for what reads it next. A layer or filter target drawn again is made
 transparent over that box rather than cleared whole (#1449). The caller walks the

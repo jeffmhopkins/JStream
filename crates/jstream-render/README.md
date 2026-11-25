@@ -664,7 +664,18 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    (nothing, for the empty scene that clears a model's depth). So a small model's layer, its depth and its
    effects cost the model's box, not the canvas. A rigged model, whose pose can leave
    its bounds, and a model whose bounds reach behind the viewer have no box and are
-   drawn whole (`a_models_layer_is_bounded_by_its_models_box`). A scene placing the layer as a 2D item
+   drawn whole (`a_models_layer_is_bounded_by_its_models_box`).
+   A model's layer that still holds the very draw it is asked for is left as it is too
+   ([ADR-0244](../../docs/adr/0244-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md)):
+   the model pass keeps, by the layer it drew into (`Kept`), the model and its pose
+   count, the frame uniform's bytes, each material's drive, the live texture's picture
+   and material, each shadow map, sky and probe picture with its count of writes and
+   whether a mip chain read it, the sample count, and the counts of writes of the
+   layer, its view depth and its surface layers once drawn. A `draw_model`,
+   `draw_model_with_surface` or `draw_model_and_depth` that matches records and submits
+   nothing and marks none of them changed
+   (`a_layer_still_holding_the_same_model_draw_is_kept`); a lit card, a surface drawn
+   on its own, a depth-only draw and a shadow map are always drawn. A scene placing the layer as a 2D item
    in `normal`, `additive` or `screen`, at a size that needs no chain, draws only the
    part of its quad whose UVs are inside those bounds (`Shape::trim_to`, the same
    affine map cut down). Outside them every bilinear tap reads only transparent
@@ -754,6 +765,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | A reflected panorama's blurred levels (`panorama_blur.rs`): a texture the size of its mip chain with as many levels, a level uniform and bind group each, and the blur pipeline | With the chain, made the first time a model reflects the sky picture or probe capture it was built from, made again when the chain is rebuilt; the pipeline with the first such chain, or by `warm_3d` |
+| What each model layer was last drawn of (`Kept`, ADR-0244): its frame uniform's and drives' bytes, the material name of its live texture, and weak references to the layer, the model and the pictures it read | Compositor, refilled in place each draw; an entry goes when its layer has been dropped, at the next model draw that keeps one |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `depth_layer` texture (`R16Float`) and its render-target view | The returned `Image`; `render_view_depth` and `draw_model_depth` reuse it |
@@ -1005,7 +1017,8 @@ and four weights.
 
 **Skinning** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
 7). A rigged model's upload holds its palette in a storage buffer (bind group 2, read by
-the vertex shader), its rest pose until `Compositor::pose_model` writes another; a model
+the vertex shader), its rest pose until `Compositor::pose_model` writes another (the
+palette already written is not written again, nor counted as a new pose); a model
 without a rig, and a lit card, bind one shared identity that no vertex weighs. In `vs` a
 vertex with any weight stands at the weighted sum of its joints' matrices times its
 position, its normal turned by that matrix's cofactors (its inverse transpose times its

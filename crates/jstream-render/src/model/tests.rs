@@ -1645,6 +1645,34 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
     // A palette of another length is ignored.
     compositor.pose_model(&uploaded, &[identity_f32(), identity_f32()]);
     assert_near(rgb(&shoot(compositor), 80, 50), BACK, (80, 50));
+    // One layer drawn again of the same pose is kept; of a new pose, drawn (ADR-0244).
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera: None,
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let draw_again = |compositor: &mut Compositor| {
+        let was = layer.generation();
+        compositor
+            .draw_model(&draw, &layer)
+            .expect("the model draws");
+        layer.generation() != was
+    };
+    assert!(draw_again(compositor), "first drawn");
+    compositor.pose_model(&uploaded, &[half_turn]);
+    assert!(!draw_again(compositor), "the same pose written again");
+    compositor.pose_model(&uploaded, &[identity_f32()]);
+    assert!(draw_again(compositor), "a new pose");
 }
 
 fn identity_f32() -> [f32; 16] {
@@ -3398,4 +3426,86 @@ fn golden_model_textures_are_block_compressed_but_normal_maps() {
     assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
     assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
     assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+}
+
+/// A model's layer drawn again of the same draw is left as it is, its view depth too,
+/// and holds the same pixels (ADR-0244): neither is marked as changed. A new placement,
+/// a material's drive, another sample count, or a write into the layer since, draws it
+/// again.
+#[test]
+fn a_layer_still_holding_the_same_model_draw_is_kept() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    compositor.set_model_antialiasing(1);
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+    let camera = SceneCamera::framing(canvas());
+    let mut turned = boxed(80.0, 50.0, 50.0);
+    turned.turn_deg = finite(30.0);
+    let brighter = [super::MaterialDrive {
+        color: 0.5,
+        ..super::MaterialDrive::default()
+    }];
+    let draw = |geometry, materials| ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera: Some(camera),
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials,
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    // Whether drawing `draw` wrote the layer and its view depth: both or neither.
+    let drawn = |compositor: &mut Compositor, draw: &ModelDraw<'_>| {
+        let was = (layer.generation(), depth.generation());
+        compositor
+            .draw_model_and_depth(draw, &layer, None, &depth)
+            .expect("the model draws");
+        let wrote = (layer.generation() != was.0, depth.generation() != was.1);
+        assert_eq!(wrote.0, wrote.1, "the layer and its depth go together");
+        wrote.0
+    };
+    let shown = |compositor: &mut Compositor| {
+        let items = [crate::tests::item(
+            &layer,
+            Placement::IDENTITY,
+            Crop::NONE,
+            1.0,
+        )];
+        rgb(&render(compositor, &items), 80, 50)
+    };
+    let still = draw(boxed(80.0, 50.0, 50.0), &[]);
+    assert!(drawn(compositor, &still), "first drawn");
+    let first = shown(compositor);
+    assert!(!drawn(compositor, &still), "the same draw again");
+    assert_eq!(shown(compositor), first, "it holds the same pixels");
+    assert!(drawn(compositor, &draw(turned, &[])), "turned");
+    assert!(!drawn(compositor, &draw(turned, &[])), "turned again");
+    assert!(drawn(compositor, &draw(turned, &brighter)), "driven");
+    assert!(!drawn(compositor, &draw(turned, &brighter)), "driven again");
+    layer.mark_changed();
+    assert!(drawn(compositor, &draw(turned, &brighter)), "written since");
+    if compositor.set_model_antialiasing(4) == 4 {
+        assert!(drawn(compositor, &draw(turned, &brighter)), "multisampled");
+        assert!(
+            !drawn(compositor, &draw(turned, &brighter)),
+            "multisampled again"
+        );
+    }
+    // Without its view depth it is another draw.
+    let was = layer.generation();
+    compositor
+        .draw_model(&draw(turned, &brighter), &layer)
+        .expect("the model draws");
+    assert_ne!(layer.generation(), was, "drawn without its depth");
 }
