@@ -712,8 +712,9 @@ It also generates one block from data rather than from docs:
   milestone, the `release` it first ships in when one is gathering it (with `gate = true`
   when that release waits for it; the next release's row counts its gate items), title,
   `status` (`done`, `hardware` for merged work still waiting on a run
-  on Windows hardware, named by a `note`, `review`, or `planned`) and the PRs that
-  deliver it. An item not yet `done` lists in `needs` the steps it still needs, in order
+  on hardware, named by a `note`, `review`, or `planned`) and the PRs that
+  deliver it. A `hardware` item's `platform` (`windows`, the default, `macos` or
+  `linux`) names where that run is, and its labels say so. An item not yet `done` lists in `needs` the steps it still needs, in order
   (`build`, `wave`, `hardware` or `maintainer`; a `hardware` item without it needs its
   run), and the block's **What's left** table shows each such item with them, linking
   the order they land in ([ROADMAP › Endgame](../ROADMAP.md#endgame)). `docs check`

@@ -25,6 +25,14 @@ pub(crate) struct Drawn {
     pub(crate) rgba: Vec<u8>,
 }
 
+/// How many glyph raster pixels a text may draw for each pixel of its frame. Each glyph
+/// is rasterised over its own box, so text whose glyphs don't overlap draws about one
+/// per frame pixel; a font whose glyphs each span the whole frame would draw every one
+/// of them over all of it, and take seconds to (#1790).
+const RASTER_PER_PIXEL: u64 = 8;
+/// The glyph raster pixels any text may draw, however small its frame.
+const MIN_RASTER: u64 = 1 << 22;
+
 /// The most pixels a frame drawn at a density holds: a 4K canvas's (ADR-0079).
 const MAX_DENSE_PIXELS: f32 = 3840.0 * 2160.0;
 
@@ -278,10 +286,26 @@ pub(crate) fn render_within(
         return Err(too_large(width, height));
     }
     let (w, h) = (width as usize, height as usize);
+    let frame = point(left, top);
+    let raster: u64 = pens
+        .iter()
+        .map(|pen| {
+            let (gw, gh) = pen.raster_size(frame);
+            gw as u64 * gh as u64
+        })
+        .fold(0, u64::saturating_add);
+    if raster > (pixels.saturating_mul(RASTER_PER_PIXEL)).max(MIN_RASTER) {
+        return Err(SourceError::Setting {
+            param: "text".into(),
+            reason: format!(
+                "its glyphs draw {raster} pixels for a {width}x{height} frame, over {RASTER_PER_PIXEL} for each of its pixels"
+            ),
+        });
+    }
 
     let mut fill = vec![0f32; w * h];
     for glyph in &pens {
-        glyph.draw(&mut fill, w, h, point(left, top));
+        glyph.draw(&mut fill, w, h, frame);
     }
     let outline = (style.outline_width > 0).then(|| outline(&fill, w, h, reach));
     let shade = shadow.shows().then(|| {
@@ -407,17 +431,31 @@ impl Pen {
         p
     }
 
+    /// Where its raster's top left goes: whole pixels from the frame's corner `frame`,
+    /// which a density puts between pixels, so each raster pixel lands on one frame
+    /// pixel.
+    fn corner(&self, frame: Point) -> Point {
+        point(
+            (self.min.x - frame.x).floor() + frame.x,
+            (self.min.y - frame.y).floor() + frame.y,
+        )
+    }
+
+    /// The width and height of the raster it draws on a frame whose corner is `frame`:
+    /// none for a glyph with no outline.
+    fn raster_size(&self, frame: Point) -> (usize, usize) {
+        let corner = self.corner(frame);
+        (
+            (self.max.x - corner.x).ceil() as usize,
+            (self.max.y - corner.y).ceil() as usize,
+        )
+    }
+
     /// Rasterises the glyph and adds its coverage to `fill`, a `w` by `h` frame whose
     /// top left is at `frame` in layout pixels.
     fn draw(&self, fill: &mut [f32], w: usize, h: usize, frame: Point) {
-        // Whole pixels from the frame's corner, which a density puts between pixels,
-        // so each raster pixel lands on one frame pixel.
-        let corner = point(
-            (self.min.x - frame.x).floor() + frame.x,
-            (self.min.y - frame.y).floor() + frame.y,
-        );
-        let gw = (self.max.x - corner.x).ceil() as usize;
-        let gh = (self.max.y - corner.y).ceil() as usize;
+        let corner = self.corner(frame);
+        let (gw, gh) = self.raster_size(frame);
         if gw == 0 || gh == 0 {
             // A flat outline covers nothing.
             return;

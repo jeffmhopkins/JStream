@@ -1896,6 +1896,14 @@ impl Engine {
         })
     }
 
+    /// A hold on the program stage's open preview sessions, for tests (#1807).
+    #[cfg(test)]
+    pub(crate) fn hold_preview_encodes(&self) -> Option<crate::preview::HeldEncodes> {
+        let host = self.media.as_ref()?;
+        let gate = lock(&host.gate);
+        Some(gate.program()?.preview_encodes().hold())
+    }
+
     /// Encoder and subscriber counters for `output_id`, if it is running.
     pub fn output_stats_of(&self, output_id: &OutputId) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
