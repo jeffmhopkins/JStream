@@ -433,7 +433,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   times stops early even when its primitives are empty (those are skipped). Buffers that
   name the same file (once percent-decoded) share one read, and all buffers together, a
   `.glb`'s binary chunk included, hold at most 512 MiB. Images decode as the `image` kind decodes them, within the same
-  `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
+  `Limits`, and over 4096 px are shrunk, or over the side `texture_size` asks
+  (`full`, the default, `2048`, `1024` or `512`; not live, so a change loads the file
+  again): halved, each texel the mean of four, until it fits
+  (`a_texture_past_the_side_asked_is_halved_until_it_fits`). `color` (multiplying a file's own), `metallic`, `roughness`,
   `double_sided` (the last three for a shape only), `lighting` (`studio`, `unlit`,
   or `scene`, lit by the `light` sources of its 3D scene), and `casts_shadows` and
   `receives_shadows` (both default on,

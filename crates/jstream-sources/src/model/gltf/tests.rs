@@ -1,7 +1,7 @@
 //! The loader against small files built here: a `.glb` and `.gltf` with data URIs, so
 //! every case is in the test and none needs a fixture on disk.
 
-use super::{Ignored, LoadError, Resources, load};
+use super::{Ignored, LoadError, Resources, load, load_within};
 use jstream_media::model::{AlphaMode, Model};
 use serde_json::{Value, json};
 
@@ -664,4 +664,46 @@ fn a_skinned_mesh_is_placed_by_its_joints() {
     doc["scenes"] = json!([{ "nodes": [0] }]);
     let err = load_glb(&doc, &bin).expect_err("refused");
     assert!(err.0.contains("isn't in the scene"), "{err:?}");
+}
+
+/// Decodes any bytes to a 64 x 32 image of their first byte.
+struct Wide;
+
+impl Resources for Wide {
+    fn read(&mut self, uri: &str) -> Result<Vec<u8>, LoadError> {
+        Err(LoadError(format!("no file {uri}")))
+    }
+
+    fn decode(&mut self, bytes: &[u8], _: &str) -> Result<(u32, u32, Vec<u8>), LoadError> {
+        let v = bytes.first().copied().unwrap_or(0);
+        Ok((64, 32, vec![v; 64 * 32 * 4]))
+    }
+}
+
+/// The source's `texture_size` caps a texture's longer side: one past it is halved
+/// (each texel the mean of four) until it fits, keeping its shape; one within it is
+/// kept as it is.
+#[test]
+fn a_texture_past_the_side_asked_is_halved_until_it_fits() {
+    let (mut doc, mut bin) = triangle(json!({}), true);
+    let image_at = bin.len();
+    bin.extend([9, 9, 9, 9]);
+    let views = doc["bufferViews"].as_array_mut().expect("an array");
+    views.push(json!({ "buffer": 0, "byteOffset": image_at, "byteLength": 4 }));
+    let image_view = views.len() - 1;
+    doc["buffers"][0]["byteLength"] = json!(bin.len());
+    doc["images"] = json!([{ "bufferView": image_view, "mimeType": "image/png" }]);
+    doc["textures"] = json!([{ "source": 0 }]);
+    doc["materials"] = json!([{ "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } } }]);
+    doc["meshes"][0]["primitives"][0]["material"] = json!(0);
+    let side = |max_side: u32| {
+        let (model, _) = load_within(&glb(&doc, &bin), &mut Wide, max_side).expect("loads");
+        let texture = &model.textures()[0];
+        assert_eq!(texture.levels()[0][0], 9, "the texels are kept");
+        (texture.width(), texture.height())
+    };
+    assert_eq!(side(4096), (64, 32));
+    assert_eq!(side(64), (64, 32));
+    assert_eq!(side(16), (16, 8));
+    assert_eq!(side(20), (16, 8));
 }

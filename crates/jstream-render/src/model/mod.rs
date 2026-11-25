@@ -135,6 +135,9 @@ struct Uploaded {
     /// decision 5), kept while that texture and the material it replaces stay the same,
     /// so a steady frame makes none.
     live: Mutex<Option<LiveBinds>>,
+    /// Each texture's format as uploaded, for tests.
+    #[cfg(test)]
+    formats: Vec<wgpu::TextureFormat>,
 }
 
 /// Material bind groups with a live texture in place of their base colour's.
@@ -356,6 +359,12 @@ impl PartialEq for SeenModel {
 }
 
 impl GpuModel {
+    /// Each texture's format as uploaded.
+    #[cfg(test)]
+    pub(crate) fn texture_formats(&self) -> &[wgpu::TextureFormat] {
+        &self.inner.formats
+    }
+
     /// Which upload this is, to tell later whether a model is still the same one.
     pub fn seen(&self) -> SeenModel {
         SeenModel(Arc::downgrade(&self.inner))
@@ -977,6 +986,10 @@ impl ModelRuntime {
             detail_sampler: self.detail_sampler.clone(),
             white: self.white.clone(),
             flat_normal: self.flat_normal.clone(),
+            compress: gpu
+                .device
+                .features()
+                .contains(wgpu::Features::TEXTURE_COMPRESSION_BC),
         }
     }
 }
@@ -998,6 +1011,9 @@ pub(crate) struct UploadKit {
     detail_sampler: wgpu::Sampler,
     white: wgpu::TextureView,
     flat_normal: wgpu::TextureView,
+    /// Whether the device samples BC textures, so a model's textures are block
+    /// compressed on upload (`bc.rs`).
+    compress: bool,
 }
 
 impl UploadKit {
@@ -1028,9 +1044,22 @@ impl UploadKit {
                 });
             }
         }
+        // A normal map stays as it is: BC1's four colours a block would bend its normals
+        // into steps the light shows.
+        let normals: std::collections::BTreeSet<usize> = model
+            .materials()
+            .iter()
+            .filter_map(|m| m.normal_texture.map(|t| t.texture))
+            .collect();
         let mut textures = Vec::with_capacity(model.textures().len());
-        for texture in model.textures() {
-            textures.push(upload_texture(self, texture)?);
+        #[cfg(test)]
+        let mut formats = Vec::with_capacity(model.textures().len());
+        for (index, texture) in model.textures().iter().enumerate() {
+            let compress = self.compress && !normals.contains(&index);
+            let (view, _format) = upload_texture(self, texture, compress)?;
+            #[cfg(test)]
+            formats.push(_format);
+            textures.push(view);
         }
         let view =
             |texture: Option<TextureRef>, fallback: &wgpu::TextureView| -> wgpu::TextureView {
@@ -1189,6 +1218,8 @@ impl UploadKit {
                     (buffer, bind, rest.len())
                 }),
                 live: Mutex::new(None),
+                #[cfg(test)]
+                formats,
             }),
         })
     }
@@ -1555,6 +1586,8 @@ impl ModelRuntime {
                 }],
                 pose: None,
                 live: Mutex::new(None),
+                #[cfg(test)]
+                formats: Vec::new(),
             }),
         };
         let draw = ModelDraw {
@@ -3216,10 +3249,13 @@ fn pose_bind(
     (buffer, bind)
 }
 
+/// Uploads `texture` with its mips, and says in what format: block compressed when `compress` and its sides are
+/// whole blocks (`bc.rs`, BC1 when every texel is opaque, else BC3), else as RGBA8.
 fn upload_texture(
     kit: &UploadKit,
     texture: &ModelTexture,
-) -> Result<wgpu::TextureView, RenderError> {
+    compress: bool,
+) -> Result<(wgpu::TextureView, wgpu::TextureFormat), RenderError> {
     let limit = kit.max_texture_dimension_2d;
     if texture.width() > limit || texture.height() > limit {
         return Err(RenderError::TooLarge {
@@ -3229,9 +3265,18 @@ fn upload_texture(
             limit,
         });
     }
-    let format = match texture.color() {
-        TextureColor::Srgb => wgpu::TextureFormat::Rgba8UnormSrgb,
-        TextureColor::Linear => wgpu::TextureFormat::Rgba8Unorm,
+    let srgb = texture.color() == TextureColor::Srgb;
+    // wgpu takes a compressed texture only in whole blocks at level 0.
+    let compress =
+        compress && texture.width().is_multiple_of(4) && texture.height().is_multiple_of(4);
+    let alpha = compress && !texture.levels().iter().all(|level| bc::opaque(level));
+    let (format, block) = match (compress, alpha, srgb) {
+        (false, _, true) => (wgpu::TextureFormat::Rgba8UnormSrgb, None),
+        (false, _, false) => (wgpu::TextureFormat::Rgba8Unorm, None),
+        (true, false, true) => (wgpu::TextureFormat::Bc1RgbaUnormSrgb, Some(bc::BC1_BLOCK)),
+        (true, false, false) => (wgpu::TextureFormat::Bc1RgbaUnorm, Some(bc::BC1_BLOCK)),
+        (true, true, true) => (wgpu::TextureFormat::Bc3RgbaUnormSrgb, Some(bc::BC3_BLOCK)),
+        (true, true, false) => (wgpu::TextureFormat::Bc3RgbaUnorm, Some(bc::BC3_BLOCK)),
     };
     let uploaded = kit.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("jstream-render-model-texture"),
@@ -3249,13 +3294,27 @@ fn upload_texture(
     });
     // Each level is written from where it is, a band of rows at a time: the queue is
     // locked for one band's copy, not a level's, so a thread that submits meanwhile
-    // waits for little (ADR-0177).
+    // waits for little (ADR-0177). A compressed level's rows are rows of blocks, each
+    // four texels high.
     for (level, texels) in texture.levels().iter().enumerate() {
         let width = (texture.width() >> level).max(1);
         let height = (texture.height() >> level).max(1);
-        let row = width as usize * 4;
+        let (bytes, row, texel_rows, copy_width) = match block {
+            None => (
+                std::borrow::Cow::Borrowed(texels.as_slice()),
+                width as usize * 4,
+                1,
+                width,
+            ),
+            Some(size) => (
+                std::borrow::Cow::Owned(bc::compress(texels, width, height, alpha)),
+                width.div_ceil(4) as usize * size,
+                4,
+                width.div_ceil(4) * 4,
+            ),
+        };
         let band = (TEXTURE_BAND_BYTES / row).max(1);
-        for (at, rows) in texels.chunks(row * band).enumerate() {
+        for (at, rows) in bytes.chunks(row * band).enumerate() {
             let rows_here = (rows.len() / row) as u32;
             kit.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
@@ -3263,7 +3322,7 @@ fn upload_texture(
                     mip_level: level as u32,
                     origin: wgpu::Origin3d {
                         x: 0,
-                        y: (at * band) as u32,
+                        y: (at * band) as u32 * texel_rows,
                         z: 0,
                     },
                     aspect: wgpu::TextureAspect::All,
@@ -3271,21 +3330,24 @@ fn upload_texture(
                 rows,
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some(width * 4),
+                    bytes_per_row: Some(row as u32),
                     rows_per_image: Some(rows_here),
                 },
                 wgpu::Extent3d {
-                    width,
-                    height: rows_here,
+                    width: copy_width,
+                    height: rows_here * texel_rows,
                     depth_or_array_layers: 1,
                 },
             );
         }
-        debug_assert_eq!(texels.len(), row * height as usize);
     }
-    Ok(uploaded.create_view(&wgpu::TextureViewDescriptor::default()))
+    Ok((
+        uploaded.create_view(&wgpu::TextureViewDescriptor::default()),
+        format,
+    ))
 }
 
+mod bc;
 mod depth_resolve;
 pub(crate) mod focus;
 mod msaa;

@@ -765,7 +765,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Model depth targets (`Depth32Float`, sampled too, for a view depth read from them), and the view-depth resolve pipelines (single and multisampled) with a bind group per draw that reads one | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
 | Multisampled model targets (ADR-0242): colour (`Rgba16Float`) and depth (`Depth32Float`) at the count `set_model_antialiasing` set, and a surface buffer's three with their resolve bind group once a model is drawn with one; the surface resolve pipeline | The size and count of the last two multisampled draws (`model/msaa.rs`), made again for another; none while models draw with one sample; the pipeline with the compositor |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
-| `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
+| `GpuModel` vertex and index buffers, textures with their mips (BC1 or BC3 where the device samples them, a normal map RGBA8), material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
 | `Nv12Planes` textures | The planes value |
@@ -986,7 +986,20 @@ submits nothing, so what it wrote goes with the queue's next submit, before any 
 the model. Each texture level is written from the model's own bytes in bands of at most
 4 MiB (`TEXTURE_BAND_BYTES`), since wgpu holds the queue's lock while a write is copied
 in: a thread that submits meanwhile waits for one band
-(`golden_model_one_uploaded_on_another_thread_draws_the_same`). A vertex is 88
+(`golden_model_one_uploaded_on_another_thread_draws_the_same`). On a device that
+samples BC textures (`TEXTURE_COMPRESSION_BC`, every desktop GPU) each texture is block
+compressed as it is uploaded (`model/bc.rs`), level by level: BC1 when every texel is
+opaque, else BC3, in 4 × 4 blocks of 8 or 16 bytes, an eighth or a quarter of RGBA8's
+memory (a 2048² texture with its mips from 22 MB to 2.8 or 5.6 MB), at about 0.1 s of
+the uploading thread's time for a 2048² level in a release build. A block's colour is
+fit along the main axis its texels spread on, its ends at their furthest projections in
+5:6:5, each texel the nearest of the four colours they give; BC3's alpha is its least
+and greatest and the nearest of their eight steps. A normal map stays RGBA8, since
+four colours a block would bend its normals into steps, and so does a texture whose
+sides aren't whole blocks of 4 (wgpu takes a compressed texture only so), and every
+texture on a device without BC
+(`golden_model_textures_are_block_compressed_but_normal_maps`,
+`a_compressed_block_decodes_near_its_texels`). A vertex is 88
 bytes: position, normal, tangent, UV and colour as `f32`s, then four joints as `u16`s
 and four weights.
 
@@ -1214,8 +1227,9 @@ Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped, an
 which D3D12 offers when it has no GPU, is skipped too); then, everywhere, the
 high-performance adapter without `force_fallback_adapter`, then the software adapter,
 then `RenderError::NoAdapter`. The device asks for `TIMESTAMP_QUERY` when the adapter
-has it (the pack passes' and the frame units' GPU time, [Filters](#filters)), and no
-other optional feature.
+has it (the pack passes' and the frame units' GPU time, [Filters](#filters)),
+`TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES` and `TEXTURE_COMPRESSION_BC` (a model's
+textures block compressed, **Models**) likewise, and no other optional feature.
 A hardware adapter whose device refuses to open (limits
 below the defaults, a removed or hung GPU) falls back to the software adapter too, and
 the error names both when that fails as well. When the pick already was the software

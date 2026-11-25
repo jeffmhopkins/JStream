@@ -216,7 +216,7 @@ stamp = { hash = "b3:813757b8f56afa0e", by = "agent:aa-thread", note = "Edited t
 stamp = { hash = "b3:d8980baa4f07826b", by = "agent:effects-perf", note = "Re-read against cheaper depth bloom, ambient occlusion and volumetric fog shaders and a per-filter bench: the pipeline's steps, the compositor's passes, the view depth a depth-reading scene filter gets (one more draw into a half-float 1/w layer) and how filters draw into Rgba16Float layers are as described; only the work inside three filters' fragment shaders changed." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:73b36525a5a69b9e", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+stamp = { hash = "b3:825b574271a09043", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:282dd952573ee86e", by = "agent:claude", note = "Re-read against SceneCamera.fixed_aperture (0.191, ADR-0223) on the latest alpha.13 train: nothing here describes the camera's depth-of-field fields or the protocol number, so it holds." }
@@ -558,7 +558,7 @@ stamp = { hash = "b3:ec9884ac2d146606", by = "agent:claude", note = "Re-read: ca
 stamp = { hash = "b3:5ef676bebc254917", by = "agent:issues-thread", note = "Re-read the one-scene compositor and filter harness paragraphs against #1680: apply_filter/apply_filter_into still draw any image into a layer of the reported size without per-frame allocation; units are described in render Filters." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:03c6cd3d81e1e529", by = "agent:aa-thread", note = "Edited the 3D model paragraph: drawn multisampled with the switches' samples, resolved before filters, 4 until set (ADR-0242); re-read the Windows path, model and depth parts against render's model/msaa.rs, gpu.rs and the platform device features change." }
+stamp = { hash = "b3:8cd0d8771e58004d", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:f4907ec6156d0117", by = "agent:release-alpha13", note = "merge: The alpha.13 train merged #1665 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it." }
@@ -577,6 +577,9 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/mips.rs"]
 stamp = { hash = "b3:d3fbff92bbc3e30a", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/bc.rs"]
+stamp = { hash = "b3:07ea0a1ced72831c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/depth_resolve.rs"]
 stamp = { hash = "b3:bccf483b30956378", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
@@ -609,7 +612,7 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Changed the
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: replaced 'a 3D model's layer isn't blurred' with ADR-0165's model depth of field: colour and view depth drawn first, four passes gathering neighbours whose blur reaches each pixel; the model draw, lights and placement text still hold" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:05d96a7451238307", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
+stamp = { hash = "b3:ad75a3e20c339438", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:2e0355f0482c2fe3", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -624,7 +627,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited the 3D model paragraph: drawn multisampled with the switches' samples, resolved before filters, 4 until set (ADR-0242); re-read the Windows path, model and depth parts against render's model/msaa.rs, gpu.rs and the platform device features change." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:eec385646416e8c3", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
+stamp = { hash = "b3:f1d7bdd3d435bb5c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -5322,7 +5325,7 @@ stamp = { hash = "b3:83fd3bbd406c7796", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to youtube.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:fc22aaafa89c2978", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
+stamp = { hash = "b3:fdbd565b07e32426", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -5661,7 +5664,7 @@ stamp = { hash = "b3:ec9884ac2d146606", by = "agent:claude", note = "Mip section
 stamp = { hash = "b3:5ef676bebc254917", by = "agent:issues-thread", note = "Re-read against #1680: VideoFilter::fit clones and rescales settings only when the input's texel scale changes, so the steady path still allocates nothing per item; no new thread, I/O or freed images." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:03c6cd3d81e1e529", by = "agent:aa-thread", note = "Edited: resources table gains the multisampled model targets and surface resolve pipeline (model/msaa.rs), Models says prepass and Equal shading are per sample with the colour resolved in-pass, and the surface buffer paragraph says the multisampled surface resolves to the nearest sample (ADR-0242); re-read the model, depth-of-field, surface and adapter parts against model/mod.rs, msaa.rs, compositor.rs and gpu.rs." }
+stamp = { hash = "b3:8cd0d8771e58004d", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:f4907ec6156d0117", by = "agent:release-alpha13", note = "merge: The alpha.13 train merged #1665 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it." }
@@ -5680,6 +5683,9 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/mips.rs"]
 stamp = { hash = "b3:d3fbff92bbc3e30a", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/bc.rs"]
+stamp = { hash = "b3:07ea0a1ced72831c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/depth_resolve.rs"]
 stamp = { hash = "b3:bccf483b30956378", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
@@ -5712,7 +5718,7 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: the depth of field paragraph now says models blur as their layer is drawn, and a new paragraph describes ModelFocus's four passes (tiles, reach, pack, gather) as built in model/focus.rs and focus/*.wgsl; the resource table lists its layers and scratch" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:05d96a7451238307", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
+stamp = { hash = "b3:ad75a3e20c339438", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:2e0355f0482c2fe3", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -5727,7 +5733,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited: resources table gains the multisampled model targets and surface resolve pipeline (model/msaa.rs), Models says prepass and Equal shading are per sample with the colour resolved in-pass, and the surface buffer paragraph says the multisampled surface resolves to the nearest sample (ADR-0242); re-read the model, depth-of-field, surface and adapter parts against model/mod.rs, msaa.rs, compositor.rs and gpu.rs." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:eec385646416e8c3", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
+stamp = { hash = "b3:f1d7bdd3d435bb5c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -6462,7 +6468,7 @@ stamp = { hash = "b3:ec9884ac2d146606", by = "agent:claude", note = "Purpose unc
 stamp = { hash = "b3:5ef676bebc254917", by = "agent:issues-thread", note = "Re-read against the filter unit scaling (#1680): the model layer paragraph (fewer pixels than its extent, filters run over it) still holds; no API listed here changed." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:03c6cd3d81e1e529", by = "agent:aa-thread", note = "Edited: the model paragraph says layers draw multisampled with set_model_antialiasing's count (1 until set, stepping down to what the device draws), colour resolved in-pass, surface resolved to the nearest sample, lit cards single-sampled (ADR-0242); checked against model/mod.rs, msaa.rs, surface_resolve.wgsl, compositor.rs, gpu.rs and the new tests." }
+stamp = { hash = "b3:8cd0d8771e58004d", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:f4907ec6156d0117", by = "agent:release-alpha13", note = "merge: The alpha.13 train merged #1665 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it." }
@@ -6481,6 +6487,9 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/mips.rs"]
 stamp = { hash = "b3:d3fbff92bbc3e30a", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/bc.rs"]
+stamp = { hash = "b3:07ea0a1ced72831c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/depth_resolve.rs"]
 stamp = { hash = "b3:bccf483b30956378", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
@@ -6513,7 +6522,7 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Depth of fi
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: the 3D model bullet now says draw_model blurs a model by its own depth when the camera has depth of field (ADR-0165); view depth and placement bullets unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:05d96a7451238307", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
+stamp = { hash = "b3:ad75a3e20c339438", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:2e0355f0482c2fe3", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -6528,7 +6537,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited: the model paragraph says layers draw multisampled with set_model_antialiasing's count (1 until set, stepping down to what the device draws), colour resolved in-pass, surface resolved to the nearest sample, lit cards single-sampled (ADR-0242); checked against model/mod.rs, msaa.rs, surface_resolve.wgsl, compositor.rs, gpu.rs and the new tests." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:eec385646416e8c3", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
+stamp = { hash = "b3:f1d7bdd3d435bb5c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -6801,7 +6810,7 @@ stamp = { hash = "b3:978d925ff849ccba", by = "agent:claude", note = "contents ad
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:6cf86b11dbc50fa0", by = "agent:claude", note = "Replayed on #1812: re-read for half-size volumetric fog at Low and Medium (march.wgsl, half.wgsl, apply.wgsl and the depth-aware blend); the section's text holds with the GPU parts, view-depth and panorama blur changes beside it" }
+stamp = { hash = "b3:94e6c9647cae85d9", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }
@@ -6906,16 +6915,16 @@ stamp = { hash = "b3:001189530918dc34", by = "agent:release-alpha13", note = "me
 stamp = { hash = "b3:807429596e960d3f", by = "agent:issues-thread", note = "merge: Merge of #1711 at a0278b0 (its train merge bdff8a7 with bc989e1's per-action holds and single-action hotkey.clear, protocol 0.187): the train's show scene, PTZ value-binding (ADR-0209), media seek and length text landed beside this PR's ADR-0218 sentences; re-read, the bound-state rebuild and Control::read gate text still holds and agrees with the merged code." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/gltf.rs"]
-stamp = { hash = "b3:5aea3cdad420876d", by = "agent:claude", note = "Rewrote the loader's rig paragraph (node or bind space, JOINTS_0/WEIGHTS_0, inverse binds, clip names, errors, non-tree fallback) and added animation, animation_speed and animation_loop with the media-clock playback and next_change, matching gltf.rs, model/mod.rs and their tests" }
+stamp = { hash = "b3:f6dbfc3810067e2f", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/gltf/tests.rs"]
-stamp = { hash = "b3:4888d84feac0b0d9", by = "agent:claude", note = "Rewrote the loader's rig paragraph (node or bind space, JOINTS_0/WEIGHTS_0, inverse binds, clip names, errors, non-tree fallback) and added animation, animation_speed and animation_loop with the media-clock playback and next_change, matching gltf.rs, model/mod.rs and their tests" }
+stamp = { hash = "b3:96ffa48292b99914", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/mod.rs"]
-stamp = { hash = "b3:4c7af4f28180a139", by = "agent:claude", note = "Re-read the Source::probe paragraph, the model kind's reflections setting and the reflection_probe kind entry (ranges 1..100000 and 0..100000, resolution 128/256/512, refresh 0..MAX_REFRESH_FRAMES, all live) against probe.rs, model/mod.rs, source.rs and registry.rs. | merge: #1600 changes model/mod.rs for model depth; the sources purpose still covers the model kind (with this branch's reflections param) and the reflection_probe kind. | kept from the merged side: The model kind's texture description says it can't be another model (drawn only where an item places it), review N2 on #1578; purpose holds." }
+stamp = { hash = "b3:04b4880585135b9d", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/tests.rs"]
-stamp = { hash = "b3:6d3e833b4eeff3e0", by = "agent:claude", note = "ShownModel line now names texture, texture_material and reflection; the light kind's image also accepts a source reference, which the section's light description already covers" }
+stamp = { hash = "b3:f5145e938b06b815", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/page_api.rs"]
 stamp = { hash = "b3:3fa709a62e0e60ae", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): Purpose holds; Feed::due now times a resting look from the last look instead of the last update, as the page API paragraph says." }

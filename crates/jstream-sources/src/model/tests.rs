@@ -365,3 +365,22 @@ fn an_animation_plays_on_the_media_clock_loops_or_holds_and_a_wrong_name_is_refu
     .expect("refused");
     assert!(err.to_string().contains("it has slide"), "{err}");
 }
+
+/// `texture_size` is one of its four choices: anything else is refused, naming them.
+#[test]
+fn a_texture_size_must_be_one_of_its_choices() {
+    let mut ok = settings(json!({}));
+    for size in ["full", "2048", "1024", "512"] {
+        ok.insert("texture_size", json!(size));
+        assert!(super::texture_side(&ok).is_ok(), "{size}");
+    }
+    let mut before = ok.clone();
+    before.0.remove("texture_size");
+    assert_eq!(
+        super::texture_side(&before).expect("saved before it existed"),
+        jstream_media::model::MAX_TEXTURE_SIDE
+    );
+    ok.insert("texture_size", json!("256"));
+    let err = super::texture_side(&ok).expect_err("refused");
+    assert!(err.to_string().contains("`512`"), "{err}");
+}

@@ -3297,3 +3297,105 @@ fn a_view_depth_read_from_the_layer_is_the_one_drawn_again() {
         }
     }
 }
+
+/// A model's textures are block compressed on upload where the device samples BC
+/// textures: an opaque colour texture as BC1, one with alpha as BC3, a linear one too;
+/// a normal map, whose normals four colours a block would bend into steps, and a texture
+/// whose sides aren't whole blocks of 4 stay RGBA8. A device without BC keeps them all
+/// RGBA8. A compressed texture draws as its texels: a plane of one colour per quadrant
+/// reads each.
+#[test]
+fn golden_model_textures_are_block_compressed_but_normal_maps() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let quadrants = |side: u32, alpha: u8| -> Vec<u8> {
+        (0..side)
+            .flat_map(|y| {
+                (0..side).flat_map(move |x| match (x < side / 2, y < side / 2) {
+                    (true, true) => [255, 0, 0, alpha],
+                    (false, true) => [0, 255, 0, alpha],
+                    (true, false) => [0, 0, 255, alpha],
+                    (false, false) => [255, 255, 255, alpha],
+                })
+            })
+            .collect()
+    };
+    let textures = vec![
+        ModelTexture::new(16, 16, quadrants(16, 255), TextureColor::Srgb).expect("a texture"),
+        ModelTexture::new(16, 16, quadrants(16, 128), TextureColor::Srgb).expect("a texture"),
+        ModelTexture::new(16, 16, quadrants(16, 255), TextureColor::Linear).expect("a texture"),
+        ModelTexture::new(
+            16,
+            16,
+            [128, 128, 255, 255].repeat(256),
+            TextureColor::Linear,
+        )
+        .expect("a texture"),
+        ModelTexture::new(6, 6, quadrants(6, 255), TextureColor::Srgb).expect("a texture"),
+    ];
+    let plane = Shape::Plane
+        .model(Material::default())
+        .expect("the plane builds");
+    let textured = |base: usize| Material {
+        base_color_texture: Some(TextureRef { texture: base }),
+        unlit: true,
+        ..plane.materials()[0].clone()
+    };
+    let materials = vec![
+        Material {
+            metallic_roughness_texture: Some(TextureRef { texture: 2 }),
+            normal_texture: Some(TextureRef { texture: 3 }),
+            ..textured(0)
+        },
+        textured(1),
+        textured(4),
+    ];
+    let model =
+        Model::new(plane.primitives().to_vec(), materials, textures).expect("the plane builds");
+    let uploaded = opened
+        .compositor
+        .upload_model(&model)
+        .expect("the model uploads");
+    use wgpu::TextureFormat as F;
+    let bc = opened
+        .compositor
+        .device()
+        .features()
+        .contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
+    let expected = if bc {
+        [
+            F::Bc1RgbaUnormSrgb,
+            F::Bc3RgbaUnormSrgb,
+            F::Bc1RgbaUnorm,
+            F::Rgba8Unorm,
+            F::Rgba8UnormSrgb,
+        ]
+    } else {
+        [
+            F::Rgba8UnormSrgb,
+            F::Rgba8UnormSrgb,
+            F::Rgba8Unorm,
+            F::Rgba8Unorm,
+            F::Rgba8UnormSrgb,
+        ]
+    };
+    assert_eq!(uploaded.texture_formats(), expected, "BC sampled: {bc}");
+    let single = Model::new(
+        plane.primitives().to_vec(),
+        vec![textured(0)],
+        vec![ModelTexture::new(16, 16, quadrants(16, 255), TextureColor::Srgb).expect("a texture")],
+    )
+    .expect("the plane builds");
+    let shot = draw(
+        &mut opened.compositor,
+        &single,
+        boxed(80.0, 50.0, 80.0),
+        None,
+        Lighting::Studio,
+    );
+    assert_near(rgb(&shot, 60, 30), [255, 0, 0], (60, 30));
+    assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
+    assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
+    assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+}
