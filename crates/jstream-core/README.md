@@ -3774,7 +3774,11 @@ every tick), on the stage's compositor, with the stage's captures. The encoder i
 at the rate that gives, never above the base rate, so a 60 fps ask of a 30 fps stage
 encodes 30. `preview.subscribe` already caps every stream at the collection's base
 rate when it opens, so a hub-drawn stream doesn't pace faster than the program either. At the stage's own size it is the
-program's frame itself, drawn once for every consumer. The render thread reads it back
+program's frame itself, drawn once for every consumer. At a smaller size of the same
+shape, beside a larger picture of the program the stage draws anyway (an output's, or a
+camera's), the scene is not drawn again: the stream's picture is that frame scaled down
+on the GPU (`Downscaler`, each texel the box average of the texels it covers, in linear
+light), due only on that frame's ticks (`MixFrame::scaled_from`, *Runtime*). The render thread reads it back
 without waiting and pushes it to the session. A `jstream-preview-send` thread per stream
 sends each packet as it comes, timed from the stream's first one, with the collection's
 `rev` at that moment. The hub only opens the session again when the picture size
@@ -5363,7 +5367,19 @@ stream's frame and the preview's rate falls instead. After `LOCAL_YIELD_TICKS` (
 ticks in a row a local picture is drawn anyway, so a preview under a GPU that never
 catches up still shows about two pictures a second at 30
 (`a_local_picture_gives_way_while_the_gpu_is_behind`,
-`only_preview_streams_make_a_picture_local`). A mix's first draw makes what every later
+`only_preview_streams_make_a_picture_local`). A picture of a mix that only preview
+streams take is not drawn at all when the tick draws a larger picture of the same mix and
+output chain at the same shape (to within a pixel): `Frames::schedule` names that frame
+as its `MixFrame::scaled_from` (`scale_source`, the largest such) and makes it due only on
+that frame's ticks, and the draw scales it from that frame's output with `Downscaler`
+(`jstream-render`) right after drawing it, before anything draws into that output again,
+then reads it back or converts it as it would its own composite. It is handled after
+the mixes and before the monitored scenes, claims no layers of its own, and misses
+(counted in `preview_skipped`) a tick its source gives way or isn't drawn on, so the
+scene is never drawn a second time for a preview
+(`a_preview_smaller_than_the_program_is_scaled_from_it`,
+`a_scaled_picture_is_read_back_from_the_frame_it_is_scaled_from`). A monitored scene,
+and a picture an output or a camera takes, are still drawn at their own size. A mix's first draw makes what every later
 one uses (pipelines, layers, uploads, its encode targets), so it can run over many
 ticks: it is drawn with no readback, and nothing of it is pushed
 (`MixFrame::priming`), so a session's first frame is one the next follows on time.

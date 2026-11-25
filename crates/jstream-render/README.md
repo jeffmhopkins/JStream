@@ -333,6 +333,19 @@ and calls this crate.
   `Nv12Converter::submit` runs a pass into a platform `GpuFrame` in a submit of its
   own on a compositor's queue, which is how `jstream-core`'s render thread feeds an
   encoder that takes GPU frames.
+- `Downscaler` scales a frame the compositor drew down to a smaller size on the GPU
+  (`downscale.rs`), so a consumer that wants a smaller picture of what was already drawn
+  (a preview stream of the program) gets it without a second composite. One fullscreen
+  pass writes each target texel as the exact box average of the source texels it
+  covers, each weighted by how much of it is covered, read with `textureLoad` (which the
+  sRGB view decodes to linear) and averaged premultiplied, then written back as straight
+  alpha. A target (`Downscaler::target`, a `Downscaled`) is the output's format and
+  usages, `Rgba8UnormSrgb` with `RENDER_ATTACHMENT | COPY_SRC | TEXTURE_BINDING`, so a
+  readback ring or `Nv12Converter` reads the returned `Output` as it would the
+  compositor's. `Downscaler::submit` runs the pass in a submit of its own; the caller
+  submits it before anything draws into the source again, since the compositor reuses
+  its output texture for its next frame of that size
+  (`a_scaled_texel_averages_what_it_covers`).
 - **A lost device** (a driver reset after a hang, Windows' TDR, a removed GPU; #349).
   Every compositor sets wgpu's device-lost callback and uncaptured-error handler on its
   device, its own or the context's (wgpu keeps one of each per device, and the program
@@ -743,6 +756,8 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
 | `Nv12Planes` textures | The planes value |
+| `Downscaler` pipeline and layout | The downscaler |
+| `Downscaled` texture, view and uniform, and the bind group of the source it last read | The target; the bind group made again when the source texture changes |
 | A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
 | A multi-pass filter's scratch layers | Its `VideoFilter`: reused by the next call at the same size; replaced for a new size, and dropped when a call asks for fewer ([Filters](#filters)) |
 | A filter draw's uniform buffers | Its `VideoFilter`: rewritten by the next call's same draw; made again for another compositor or parameter size, and dropped when a call draws fewer times. They hold no texture ([Filters](#filters)) |
