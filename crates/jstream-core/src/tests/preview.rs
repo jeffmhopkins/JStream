@@ -1428,8 +1428,14 @@ fn show(channel: u32, scene: Option<&str>) -> Call {
 
 /// Waits until the stage's preview sessions are `want`, as (session, scene) with the
 /// sessions numbered in the order `ids` first saw them, reading `frames` meanwhile so the
-/// streams never stall.
-fn until_encodes(engine: &Engine, frames: &mut BinaryStream, want: &[Option<&str>]) -> Vec<u64> {
+/// streams never stall. It keeps the frames it reads in `kept`, in order: on a slow
+/// runner the keyframe a switch asks for can come before the sessions show it.
+fn until_encodes(
+    engine: &Engine,
+    frames: &mut BinaryStream,
+    want: &[Option<&str>],
+    kept: &mut std::collections::VecDeque<BinaryFrame>,
+) -> Vec<u64> {
     let deadline = Instant::now() + WAIT;
     loop {
         let shown = engine.preview_encodes_shown();
@@ -1447,7 +1453,9 @@ fn until_encodes(engine: &Engine, frames: &mut BinaryStream, want: &[Option<&str
             Instant::now() < deadline,
             "the sessions show {scenes:?}, not {wanted:?}"
         );
-        let _ = next(frames, Duration::from_millis(20));
+        if let Next::Frame(frame) = next(frames, Duration::from_millis(20)) {
+            kept.push_back(frame);
+        }
     }
 }
 
@@ -1479,16 +1487,21 @@ fn preview_show_moves_a_stream_to_another_scene_on_its_encoder() {
         })
     };
     let mut last_pts = i64::MIN;
+    // The frames read while waiting for the sessions, which the next keyframe may be
+    // among.
+    let mut kept = std::collections::VecDeque::new();
     // The next keyframe on `channel` within the wait, checking that nothing ended and
     // the times go forward.
-    let mut keyframe = |frames: &mut BinaryStream, channel: u32| {
+    let mut keyframe = |frames: &mut BinaryStream,
+                        kept: &mut std::collections::VecDeque<BinaryFrame>,
+                        channel: u32| {
         let deadline = Instant::now() + KEYFRAME_EVERY / 2;
         loop {
             assert!(
                 Instant::now() < deadline,
                 "no keyframe on channel {channel}"
             );
-            let picture = frame(frames);
+            let picture = kept.pop_front().unwrap_or_else(|| frame(frames));
             assert!(!picture.header.end, "a stream ended: {picture:?}");
             if picture.header.channel != channel {
                 continue;
@@ -1502,31 +1515,31 @@ fn preview_show_moves_a_stream_to_another_scene_on_its_encoder() {
     };
 
     act(&control, subscribe(1, Some(30), Vec::new())).expect("subscribed");
-    keyframe(&mut frames, 1);
-    let program = until_encodes(&engine, &mut frames, &[None]);
+    keyframe(&mut frames, &mut kept, 1);
+    let program = until_encodes(&engine, &mut frames, &[None], &mut kept);
 
     // To a scene: the same session, now showing it.
     act(&control, show(1, Some("other"))).expect("shown");
-    let moved = until_encodes(&engine, &mut frames, &[Some("other")]);
+    let moved = until_encodes(&engine, &mut frames, &[Some("other")], &mut kept);
     assert_eq!(moved, program, "the stream kept its encoder session");
-    let first = keyframe(&mut frames, 1);
+    let first = keyframe(&mut frames, &mut kept, 1);
     assert_eq!(first.header.codec, Some(PreviewCodec::H264));
     // Showing what it shows changes nothing.
     act(&control, show(1, Some("other"))).expect("shown again");
 
     // Back to the program, still on the same session.
     act(&control, show(1, None)).expect("program");
-    let back = until_encodes(&engine, &mut frames, &[None]);
+    let back = until_encodes(&engine, &mut frames, &[None], &mut kept);
     assert_eq!(back, program, "the stream kept its encoder session");
-    keyframe(&mut frames, 1);
+    keyframe(&mut frames, &mut kept, 1);
 
     // A second view of the scene has its own session; the first view moving to that
     // scene joins it, and the program's session closes.
     act(&control, subscribe_scene(2, "other")).expect("a scene's view");
-    until_encodes(&engine, &mut frames, &[None, Some("other")]);
+    until_encodes(&engine, &mut frames, &[None, Some("other")], &mut kept);
     act(&control, show(1, Some("other"))).expect("joins");
-    until_encodes(&engine, &mut frames, &[Some("other")]);
-    keyframe(&mut frames, 1);
+    until_encodes(&engine, &mut frames, &[Some("other")], &mut kept);
+    keyframe(&mut frames, &mut kept, 1);
 
     for channel in [1, 2] {
         act(

@@ -2271,7 +2271,7 @@ stamp = { hash = "b3:99a37eeb176bb544", by = "agent:claude-settings", note = "Ad
 stamp = { hash = "b3:40ac482aba32da7b", by = "agent:claude-daw", note = "Added the live-data page API test (keys as they land, a key that goes as null) to the page_api.rs list." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/preview.rs"]
-stamp = { hash = "b3:b16ffc5dbe4a9b1d", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train didn't change tests/preview.rs or this section's preview text (its tests/shows.rs additions are described in the Shows section); the preview.show / preview.request_keyframe test list still matches the tests | kept from the merged side: Re-read: tests/preview.rs gained streams_of_the_same_picture_share_one_encoder_session; the file's description (preview streams, staged and hub-drawn) covers it." }
+stamp = { hash = "b3:e31ce3fcf0c59b3c", by = "agent:a13-train", note = "Re-read the preview.rs entry: preview.show moving a stream between scenes on one encoder session still holds; the change only keeps the frames until_encodes reads so the forced keyframe isn't lost on a slow runner" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/projects.rs"]
 stamp = { hash = "b3:0848b06d8659b67d", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
