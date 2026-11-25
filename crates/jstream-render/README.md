@@ -280,9 +280,10 @@ and calls this crate.
   compile ahead of time on a thread of its own: by drawing what will be drawn on any
   compositor of the context, and with `Compositor::warm_3d` for what a 3D scene alone
   draws with (the sky's two pipelines, its bake's and the scene passes' depth pipelines,
-  otherwise made at the first draw that needs them). This covers the blend, depth,
-  model, sky, sky bake and filter pipelines; the mip, resolve, wipe, probe resampling,
-  NV12 and ingest ones are still each compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
+  otherwise made at the first draw that needs them, and the compositor's own panorama
+  blur). This covers the blend, depth,
+  model, sky, sky bake and filter pipelines; the mip, panorama blur, resolve, wipe, probe
+  resampling, NV12 and ingest ones are still each compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
   edited over and over keeps only the versions a compositor still holds, 4 a filter). `Compositor::pipelines_made` counts the
   ones made on the device, so a draw that leaves it as it was waited for no compile.
   `Compositor::open` is the other
@@ -752,6 +753,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
+| A reflected panorama's blurred levels (`panorama_blur.rs`): a texture the size of its mip chain with as many levels, a level uniform and bind group each, and the blur pipeline | With the chain, made the first time a model reflects the sky picture or probe capture it was built from, made again when the chain is rebuilt; the pipeline with the first such chain, or by `warm_3d` |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `depth_layer` texture (`R16Float`) and its render-target view | The returned `Image`; `render_view_depth` and `draw_model_depth` reuse it |
@@ -1098,7 +1100,18 @@ uniform's mode then says so), and a spread reads the level whose texels are abou
 wide as the ring's taps are apart (`blur_level`: `log2` of the panorama's width times
 `sin(atan(spread)) / 8`), each read kept half a texel of that level inside the top and
 bottom rows (`panorama_uv`). A bright point then spreads into a soft glow rather than
-one sharp copy per tap (`golden_model_a_rough_surface_blurs_a_starry_sky_smoothly`). An ambient light scales it; with none it lights the model on its
+one sharp copy per tap (`golden_model_a_rough_surface_blurs_a_starry_sky_smoothly`).
+The ring is run once per build of the chain, not per fragment (`panorama_blur.rs`): the
+chain's blurred levels (`Mips::blurred`, as many as it has, `Rgba16Float`), made with it
+and made again only when it is rebuilt, hold at level `m` the ring at the spread whose
+`blur_level` is `m` (taps `2^m` level-0 texels apart, capped at a spread of 1), read at
+level `m`, and level 0 unblurred, so a mirror stays sharp. A model binds them in place of
+the chain and reads one trilinear sample at the spread's level where it read nine (18
+inside a probe); a picture bound without levels (not this compositor's) still runs the
+ring. `sky_matte`'s level a step coarser then holds the widest ring too, so a matte
+surface's sky is a little softer than one read of the chain
+(`a_panoramas_blurred_levels_spread_its_light_and_keep_it`,
+`a_panoramas_blurred_levels_are_made_again_only_when_it_changes`). An ambient light scales it; with none it lights the model on its
 own (`golden_model_an_environment_lights_a_model_from_its_sky`).
 A reflection probe's capture (`ModelDraw::probe` and `CardDraw::probe`, a
 `ProbeLookup`: the panorama `resample_probe` drew, the box's centre and half size in the

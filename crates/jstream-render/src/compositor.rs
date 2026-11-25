@@ -14,6 +14,7 @@ use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
 use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime, Panoramas};
+use crate::panorama_blur::{BlurPipeline, Blurred};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Placement, Scene, Snapshot};
 use crate::wipe::Wipe;
@@ -305,6 +306,8 @@ pub struct Compositor {
     /// Writes transparent over part of a layer, in place of clearing all of it (#1449).
     wipe: Wipe,
     mip_pipelines: MipPipelines,
+    /// What makes a panorama's blurred reflections, made with the first one.
+    panorama_blur: std::sync::OnceLock<BlurPipeline>,
     models: ModelRuntime,
     /// Depth of field on models (ADR-0165): its passes and the layers a model with depth
     /// of field is drawn into first, made on first use.
@@ -1290,13 +1293,34 @@ impl Compositor {
     }
 
     /// The mip chain a blurred reflection reads of `image`, a sky picture or a probe's
-    /// capture this compositor made, with the image.
-    fn panorama_chain<'a>(&self, image: Option<&'a Image>) -> Option<(&'a Image, Arc<Mips>)> {
+    /// capture this compositor made, with the image, its blurred levels made from it
+    /// (`panorama_blur.rs`) since its last build.
+    pub(crate) fn panorama_chain<'a>(
+        &self,
+        image: Option<&'a Image>,
+    ) -> Option<(&'a Image, Arc<Mips>)> {
         let image = image.filter(|image| image.owner().is(&self.owner))?;
-        Some((
-            image,
-            self.built_chain(image, "jstream-render-panorama-mips"),
-        ))
+        let chain = self.built_chain(image, "jstream-render-panorama-mips");
+        let pipeline = self
+            .panorama_blur
+            .get_or_init(|| BlurPipeline::new(&self.gpu.device));
+        let blurred = chain
+            .blurred
+            .get_or_init(|| Blurred::new(&self.gpu.device, &self.gpu.queue, pipeline, &chain));
+        if blurred.claim(&chain) {
+            let lock = self.gpu.submit.clone();
+            let submitting = lock.lock();
+            let mut encoder =
+                self.gpu
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("jstream-render-panorama-blur"),
+                    });
+            blurred.record(&mut encoder, pipeline);
+            self.gpu.submit_work(encoder.finish());
+            drop(submitting);
+        }
+        Some((image, chain))
     }
 
     /// [`Self::draw_model`], its errors not yet collected. When the model's camera has
@@ -2075,6 +2099,7 @@ impl Compositor {
             filters,
             wipe,
             mip_pipelines,
+            panorama_blur: std::sync::OnceLock::new(),
             models,
             model_focus: ModelFocusRun::default(),
             sky: None,
@@ -2677,7 +2702,8 @@ impl Compositor {
 
     /// Makes what a 3D scene draws with and a 2D one never needs, which is otherwise made
     /// at the first draw that needs it: the sky's pipeline, its bake's, and the scene
-    /// passes' depth pipelines. The models' are made with the compositor. Each is found if a
+    /// passes' depth pipelines, and the pipeline that blurs a reflected panorama. The
+    /// models' are made with the compositor. Each is found if a
     /// compositor on the device made it already (`pipelines.rs`), so a caller on a
     /// thread of its own makes them for every compositor on its device ahead of the
     /// first 3D frame, which would otherwise wait for their shaders to compile.
@@ -2686,6 +2712,8 @@ impl Compositor {
             .get_or_insert_with(|| crate::sky::SkyRuntime::new(&self.gpu))
             .warm(&self.gpu);
         self.ensure_depth_pipelines();
+        self.panorama_blur
+            .get_or_init(|| BlurPipeline::new(&self.gpu.device));
     }
 
     /// Makes the depth pipelines once, and a depth target of `width` by `height`.

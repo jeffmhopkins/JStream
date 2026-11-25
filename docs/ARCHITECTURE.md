@@ -1502,7 +1502,8 @@ from the box's centre after the chains, one face a frame of one probe at a time,
 refresh never spikes a frame, resampled into an
 equirectangular panorama that the next frame reads. A rough surface reads the sky's
 panorama and a probe's through mip chains of them, at the level its blur spans, so a
-bright point blurs into a soft glow. While the `screen_space_reflections` switch is on
+bright point blurs into a soft glow. The blur itself is made once per rebuild of a chain,
+into blurred levels beside it, so a rough pixel reads one sample where it read nine. While the `screen_space_reflections` switch is on
 (off by default, [ADR-0185](adr/0185-how-reflections-landed-off-by-default.md)), the same
 scenes start their video chain with a screen-space reflection pass, before their own
 filters: each model writes a surface (its normal,

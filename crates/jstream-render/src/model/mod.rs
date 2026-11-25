@@ -92,14 +92,16 @@ pub(crate) struct Panoramas<'a> {
 }
 
 impl<'a> Panoramas<'a> {
-    /// `chain`'s whole view when it was built from `image`.
+    /// The blurred levels of `chain` (`panorama_blur.rs`) when it was built from
+    /// `image`.
     fn of(
         chain: Option<(&'a Image, &'a Mips)>,
         image: &Image,
     ) -> Option<&'a (wgpu::Texture, wgpu::TextureView)> {
         chain
             .filter(|(built, _)| built.texture() == image.texture())
-            .map(|(_, mips)| &mips.whole)
+            .and_then(|(_, mips)| mips.blurred.get())
+            .map(|blurred| &blurred.whole)
     }
 }
 /// Bytes of a material's uniform: five `vec4`.

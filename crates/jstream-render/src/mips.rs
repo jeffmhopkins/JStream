@@ -245,6 +245,9 @@ pub(crate) struct Mips {
     /// How many times the chain was recorded, for tests.
     #[cfg(test)]
     builds: AtomicU64,
+    /// A panorama's blurred reflections, made from the chain when a model first reflects
+    /// it (`panorama_blur.rs`).
+    pub(crate) blurred: std::sync::OnceLock<crate::panorama_blur::Blurred>,
 }
 
 /// How many levels a `width` × `height` chain has, down to 1×1.
@@ -301,7 +304,10 @@ impl Mips {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: MIP_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            // `COPY_SRC` so a test can read back what the passes wrote.
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let level = |i: u32| {
@@ -345,6 +351,7 @@ impl Mips {
             built: AtomicU64::new(NEVER),
             #[cfg(test)]
             builds: AtomicU64::new(0),
+            blurred: std::sync::OnceLock::new(),
         }
     }
 
@@ -362,6 +369,12 @@ impl Mips {
     #[cfg(test)]
     pub(crate) fn builds(&self) -> u64 {
         self.builds.load(Ordering::Relaxed)
+    }
+
+    /// The generation of the image the chain was last built from, or `u64::MAX` before
+    /// its first build.
+    pub(crate) fn generation_built(&self) -> u64 {
+        self.built.load(Ordering::Relaxed)
     }
 
     /// Whether the chain needs building from `image`, which changed since the last
