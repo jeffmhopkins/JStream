@@ -1,6 +1,6 @@
 // Fly mode, camera mode's look-around mode (crates/jstream-ui/src/canvas/fly.rs): W A S D,
 // Space and Shift fly a 3D scene's camera, Q and E roll it and R levels it, the mouse turns it, and a flight
-// commits as one undo step once the camera rests.
+// stays unsaved until the Save bar's Save commits it as one undo step (#1809).
 import { test, expect, connect, recordCalls, rev } from '../fixtures.js';
 
 /** Where canvas point (`x`, `y`) is on the screen, in whole pixels. */
@@ -10,6 +10,15 @@ async function onScreen(page, x, y) {
     return { a, d, e, f };
   });
   return { x: Math.round(x * m.a + m.e), y: Math.round(y * m.d + m.f) };
+}
+
+/** Saves the unsaved camera with the Save bar, then gives the keys back to the stage. */
+async function save(page) {
+  await page.evaluate(() => document.exitPointerLock());
+  const bar = page.getByRole('toolbar', { name: 'Unsaved camera' });
+  await bar.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(bar).toBeHidden();
+  await page.locator('.preview.stage').focus();
 }
 
 /** Gives the shown scene a camera through its Properties dialog. */
@@ -43,12 +52,16 @@ test('fly mode flies the camera with the keys and turns it with the mouse', asyn
   await expect(page.locator('.stage-overlay .readout text')).toContainText('fly ×1.00');
 
   // W held flies toward the canvas (the framing camera looks along −z), live on output,
-  // then commits once, after the camera rests.
+  // and saves nothing until Save, which commits it once.
   let startRev = await rev(page);
   await page.keyboard.down('w');
   await expect.poll(() => calls.sent('live.set').length).toBeGreaterThan(0);
   await page.waitForTimeout(300);
   await page.keyboard.up('w');
+  await expect(page.getByRole('toolbar', { name: 'Unsaved camera' })).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await rev(page)).toBe(startRev);
+  await save(page);
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   const flown = calls.sent('scene.set_camera').at(-1).camera;
   expect(flown.position.z).toBeLessThan(framing.position.z);
@@ -66,6 +79,7 @@ test('fly mode flies the camera with the keys and turns it with the mouse', asyn
   await page.keyboard.up('Space');
   await page.keyboard.up('d');
   await page.keyboard.up('e');
+  await save(page);
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   const risen = calls.sent('scene.set_camera').at(-1).camera;
   expect(risen.position.y).toBeLessThan(flown.position.y);
@@ -78,6 +92,7 @@ test('fly mode flies the camera with the keys and turns it with the mouse', asyn
   await page.waitForTimeout(200);
   await page.keyboard.up('Shift');
   await page.keyboard.press('r');
+  await save(page);
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   const levelled = calls.sent('scene.set_camera').at(-1).camera;
   expect(levelled.position.y).toBeGreaterThan(risen.position.y);
@@ -92,6 +107,7 @@ test('fly mode flies the camera with the keys and turns it with the mouse', asyn
   await page.mouse.down();
   await page.mouse.move(at.x + 80, at.y + 20, { steps: 8 });
   await page.mouse.up();
+  await save(page);
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   const turned = calls.sent('scene.set_camera').at(-1).camera;
   expect(turned.position).toEqual(levelled.position);
@@ -99,13 +115,16 @@ test('fly mode flies the camera with the keys and turns it with the mouse', asyn
 
   // Shift+wheel sets the speed, and that Shift sinks nothing (what it sank before the
   // wheel turned is put back); the wheel zooms.
+  // The wheel turns where the pointer is: back on the picture, off the Save bar.
   startRev = await rev(page);
+  await page.mouse.move(at.x, at.y);
   await page.keyboard.down('Shift');
   await page.mouse.wheel(0, -200);
   await expect(page.locator('.stage-overlay .readout text')).toContainText('fly ×1.49');
   await page.waitForTimeout(200);
   await page.keyboard.up('Shift');
   await page.mouse.wheel(0, 100);
+  await save(page);
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   const zoomed = calls.sent('scene.set_camera').at(-1).camera;
   expect(zoomed.position).toEqual(turned.position);

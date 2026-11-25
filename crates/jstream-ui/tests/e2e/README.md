@@ -689,8 +689,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
-  readout, sends live values, and commits one `scene.set_camera` with a moved camera as
-  one revision, which one undo puts back. In camera mode the live aim's buttons send no
+  readout and sends live values but no revision, showing the "Unsaved camera" bar
+  (#1809); leaving the scene for Intro and coming back, or Revert, hides it and puts the
+  saved camera's outline back; Save commits one `scene.set_camera` with a moved camera as
+  one revision, which stays after leaving and coming back, and one undo puts back. In camera mode the live aim's buttons send no
   `scene.drive_camera` while the pointer only passes over them; a press on Pan right
   sends pan 12 once, nothing more while the held pointer wanders off the button, and pan
   0 once on release; Space on a focused Tilt up drives tilt once whatever its repeats and
@@ -702,7 +704,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   720-wide viewport clamps the dialog; the Nearest on top check sits in front of its
   text, and the Roll field keeps room for its number.
 - **Fly mode** (`fly.spec.js`): in a scene given a camera, F turns on camera mode and
-  fly mode and the pill reads "fly ×1.00"; W held sends live values and then one
+  fly mode and the pill reads "fly ×1.00"; W held sends live values and shows the
+  "Unsaved camera" bar with no revision, and its Save (as after each step below) sends one
   `scene.set_camera` with the camera and its target moved together toward the canvas;
   Space with D raises it and moves it right while E rolls it (D stays a fly key, not the
   Depth tool); Shift lowers it and R levels the roll (not the Turn tool); a left drag

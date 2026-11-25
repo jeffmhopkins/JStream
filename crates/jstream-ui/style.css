@@ -1085,6 +1085,24 @@ h2 .h2-sub { margin-left: 14px; color: var(--muted); font-weight: 400; letter-sp
   white-space: nowrap;
   pointer-events: none;
 }
+/* The Save bar, under the tool bar, while a 3D scene's camera is moved and not saved
+   (#1809). */
+.camera-unsaved {
+  position: absolute;
+  top: 50px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.camera-unsaved-text { color: var(--muted); }
 /* Keyframe rows nest under their scene, with the purple diamond (SC-07). */
 .row.tree-row.keyframe { padding-left: 22px; }
 .tree-icon { display: inline-flex; }
