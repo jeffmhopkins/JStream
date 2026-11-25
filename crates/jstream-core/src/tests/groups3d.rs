@@ -1441,3 +1441,183 @@ fn a_second_show_or_hide_carries_a_fade_on_from_where_it_is() {
         half("just after the second cue");
     }
 }
+
+/// Whatever cues overlap on a 3D scene with a chain (items shown and hidden, views
+/// switched, each cutting the last short at any point), an item whose effects cover
+/// the canvas, as a model's layer does, never shows what is behind it: the wall stays
+/// solid blue at every step. Between views that move only the camera, the scene is drawn
+/// as itself, chain and all, throughout (ADR-0237); a view that moves an item is drawn
+/// track by track, where the wall swaps at once rather than crossfading with itself.
+#[test]
+fn no_overlap_of_cues_shows_through_what_covers_the_canvas() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    // The cues: an item shown or hidden with its Fade, or a Move to a view.
+    const CUES: [(&str, Option<bool>); 7] = [
+        ("card", Some(true)),
+        ("card", Some(false)),
+        ("beam", Some(true)),
+        ("beam", Some(false)),
+        ("main", None),
+        ("k", None),
+        ("k2", None),
+    ];
+    // A small fixed generator, so every run plays the same sequences.
+    let mut seed = 0x2545_f491_u32;
+    let mut next = |below: u32| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        seed % below
+    };
+    let sequences: Vec<Vec<(usize, u64)>> = (0..6)
+        .map(|_| {
+            (0..6)
+                .map(|_| (next(7) as usize, u64::from(next(9)) * 50))
+                .collect()
+        })
+        .collect();
+    let views = |scene: &str| scene == "main" || scene == "k";
+    for cues in sequences {
+        let _gpu = super::one_gpu_test_at_a_time();
+        let clock = FakeClock::new(Timebase::MICROS);
+        let engine = Engine::new();
+        engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+        let (engine, control) = rig_with(true, engine);
+        if pixel(&control, 960, 540).is_none() {
+            return;
+        }
+        let back = {
+            let mut camera = SceneCamera::framing(Canvas::DEFAULT);
+            camera.position.z = finite(camera.position.z.get() + 300.0);
+            camera
+        };
+        let effect = |owner: jstream_protocol::FilterOwner, id: &str| Edit::FilterAdd {
+            owner,
+            chain: jstream_protocol::FilterChain::Video,
+            filter_id: jstream_protocol::FilterId::new(id),
+            kind: "sharpen".into(),
+            settings: Settings::default(),
+            enabled: None,
+            index: None,
+        };
+        let preset = |id: &str, kind: &str| Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new(id),
+            name: id.into(),
+            kind: kind.into(),
+            duration_ms: 400,
+            easing: Easing::Linear,
+            settings: Settings::default(),
+        };
+        let mut setup = vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("rig_item"),
+            },
+            place(
+                "main",
+                "card",
+                "red",
+                boxed(700.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            place(
+                "main",
+                "beam",
+                "red",
+                boxed(1220.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            effect(
+                jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                "look",
+            ),
+            // The wall's effect runs over the canvas, as a model's layer does.
+            effect(
+                jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("wall"),
+                },
+                "wall_fx",
+            ),
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("wall"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            preset("fade", "fade"),
+            preset("move", "move"),
+        ];
+        // Two views: `k` steps the camera back, and `k2` also moves the beam.
+        for view in ["k", "k2"] {
+            setup.push(Edit::SceneCreateVariant {
+                scene_id: SceneId::new(view),
+                variant_of: SceneId::new("main"),
+                name: view.into(),
+            });
+            setup.push(Edit::SceneSetCamera {
+                scene_id: SceneId::new(view),
+                camera: Some(back),
+            });
+        }
+        setup.push(Edit::ItemSetGeometry {
+            item_id: ItemId::new("beam"),
+            scene_id: Some(SceneId::new("k2")),
+            geometry: boxed(1220.0, 340.0, (300.0, 300.0), 200.0),
+        });
+        batch(&control, edits(setup)).expect("the rig");
+        batch(
+            &control,
+            edits(vec![Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("fade"),
+            }]),
+        )
+        .expect("fade by default");
+        let mut seen = Vec::new();
+        let mut moved = false;
+        let mut program = "main";
+        for (cue, wait) in cues.iter().map(|&(cue, wait)| (CUES[cue], wait)) {
+            seen.push(cue);
+            let action = match cue {
+                (item, Some(true)) => Action::ItemShow {
+                    item_id: ItemId::new(item),
+                    scene_id: None,
+                },
+                (item, Some(false)) => Action::ItemHide {
+                    item_id: ItemId::new(item),
+                    scene_id: None,
+                },
+                (scene, None) => {
+                    moved |= !views(scene);
+                    program = scene;
+                    Action::SceneSwitch {
+                        scene_id: SceneId::new(scene),
+                        preset_id: Some(TransitionPresetId::new("move")),
+                        via: Vec::new(),
+                    }
+                }
+            };
+            super::block_on(control.call(Call::Action { action })).expect("the cue");
+            let mut left = wait.max(25);
+            while left > 0 {
+                let step = left.min(100);
+                clock.advance(step * 1000);
+                left -= step;
+                engine.replan();
+                // Once a view that moves an item has played, a later Move can be drawn
+                // track by track; until then, it is the scene as itself.
+                if !moved {
+                    let loaded = engine.render_hub().load();
+                    let shot = loaded.shot();
+                    assert!(
+                        !shot.transitioning() && shot.scene_chain(&SceneId::new(program)).is_some(),
+                        "drawn as the scene, with its chain, after {seen:?}"
+                    );
+                }
+                assert_eq!(
+                    pixel(&control, 960, 860),
+                    Some(BLUE),
+                    "the wall shows through after {seen:?}"
+                );
+            }
+        }
+    }
+}
