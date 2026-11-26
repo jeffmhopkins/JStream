@@ -8028,7 +8028,7 @@ stamp = { hash = "b3:27ab7a66446cf07e", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:1717ff2e47c9051c", by = "agent:claude", note = "Updated scene-cameras and fly entries: moves show the Unsaved camera bar with no revision, leaving or Revert restore, Save commits one revision | merge: #1816 added the data trigger form (style.css selectors shared with .midi-trigger-form, keys-and-midi spec and its README entry); re-read, nothing in this section about the camera Save bar changes | kept from the merged side: Keys & MIDI bullet now covers the note Learn test and the Bitwig data trigger test as keys-and-midi.spec.js drives them; ran that spec, 4 of 4 pass" }
+stamp = { hash = "b3:efcd013e9988021d", by = "agent:preview-toggle", note = "menus.spec.js entry now names the live preview toggle test (off text, kept across a reload, on again) and the menus' new Disable live preview entry; the rest of the list is unchanged." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -8106,7 +8106,7 @@ stamp = { hash = "b3:bd6b1e63aa1b86d2", by = "agent:a13-train", note = "Map cont
 stamp = { hash = "b3:aaf7fc7be9160d3f", by = "agent:mappings-panel", note = "mappings.spec.js's Triggers test now waits for the key capture's focus before F8, as keys-and-midi.spec does; the section's description holds | merge: Merged #1697's head 9b0b36f0 (item targets, map_target, channel_reader) with #1708 and the Mappings panel: map-control bullet's Inspector item test kept, then the Mappings bullet" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
-stamp = { hash = "b3:479f0922ccc1fa3f", by = "agent:claude", note = "Edited the Filters, Scene filters, Tool bars and Menus entries for Edit filters opening Properties on Filters, the menu order, and the Sources back-out button" }
+stamp = { hash = "b3:9ac5600b01e1d70a", by = "agent:preview-toggle", note = "menus.spec.js entry now names the live preview toggle test (off text, kept across a reload, on again) and the menus' new Disable live preview entry; the rest of the list is unchanged." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/mixer.spec.js"]
 stamp = { hash = "b3:b6d1bba66bcd3a81", by = "agent:issues-thread", note = "Edited filters, inspector and mixer descriptions for the live drag, opacity, send and back-to-start tests" }
