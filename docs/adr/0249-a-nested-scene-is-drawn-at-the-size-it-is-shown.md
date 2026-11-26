@@ -75,10 +75,13 @@ compositor, which already hold uploads at the size they are drawn.
 4. **A scene of one whole picture has no layer.** A layer of decision 1 whose scene has
    one item (no effects, move, fade, motion or groups, opaque, in the normal mode,
    uncropped), a capture or a picture over no background, that this frame, with its
-   live values, covers the canvas's box exactly (unrotated, flat, unflipped, and
-   stretched or of the canvas's aspect ratio), is not drawn: its key holds that
-   picture's image, placed at the canvas's size, and the scenes that place it sample
-   the picture itself. A frame where it doesn't draws it into a layer as before.
+   live values, covers the canvas's box (to a hundredth of a pixel, flat, stretched
+   or of the canvas's aspect ratio, and turned by none or a half turn), is not drawn:
+   its key holds that picture's image, placed at the canvas's size, and the scenes
+   that place it sample the picture itself. A picture flipped or turned over is
+   placed mirrored to match, which only items can be told: while a transition, a box
+   or a model shows the scene, a mirrored one is drawn into a layer. A frame where it
+   doesn't cover the box draws it into a layer as before.
 
 No setting, switch, protocol message or file changes.
 

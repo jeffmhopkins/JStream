@@ -9641,12 +9641,15 @@ fn passes_through(shot: &Shot, pass: &Pass) -> bool {
 
 /// Places [`passes_through`] pass `pass`'s layer as its one picture
 /// ([`ResourceCache::share`]) when that picture, posed this frame with its live values,
-/// fills the canvas exactly as the pass would draw it: whole, unrotated, flat, at the
-/// canvas's box, and stretched or of the canvas's aspect ratio. Returns whether it did;
-/// when it didn't, the caller draws the pass.
+/// fills the canvas exactly as the pass would draw it: whole, flat, at the canvas's box
+/// (to a hundredth of a pixel), and stretched or of the canvas's aspect ratio, turned
+/// by 0 or 180 degrees and flipped or not. A picture shown mirrored is placed so by the
+/// items that place the layer ([`mirror_layer`]), and so only when nothing else reads
+/// the layer: a transition's track, an item's effects or a model's texture. Returns
+/// whether it did; when it didn't, the caller draws the pass.
 fn share_pass(
     cache: &mut ResourceCache<GpuKey>,
-    chains: &Chains,
+    chains: &mut Chains,
     (shot, pass): (&Shot, &Pass),
     (at, canvas): (MediaTime, FrameSize),
     (live, captures): (&LiveParams, &dyn Captures),
@@ -9654,54 +9657,148 @@ fn share_pass(
     let [layer] = pass.layers.as_slice() else {
         return false;
     };
-    let fills = {
+    let mirror = {
         let mut items = Vec::new();
         let camera = fill_items(
             &mut items,
-            (&*cache, chains),
+            (&*cache, &*chains),
             (shot, pass),
             (at, canvas),
             (live, captures),
         );
-        camera.is_none()
-            && match items.as_slice() {
-                [item] => {
-                    item.visible
-                        && item.opacity == OPAQUE
-                        && item.blend == BlendMode::Normal
-                        && item.crop == Crop::NONE
-                        && item.camera.is_none()
-                        && item.depth.is_none()
-                        && fills_canvas(item.placement, item.image.extent(), canvas)
-                }
-                _ => false,
+        match items.as_slice() {
+            [item]
+                if camera.is_none()
+                    && item.visible
+                    && item.opacity == OPAQUE
+                    && item.blend == BlendMode::Normal
+                    && item.crop == Crop::NONE
+                    && item.camera.is_none()
+                    && item.depth.is_none() =>
+            {
+                fills_canvas(item.placement, item.image.extent(), canvas)
             }
+            _ => None,
+        }
     };
-    fills && cache.share(&pass.key, &layer.image, canvas)
+    let Some(mirror) =
+        mirror.filter(|&mirror| mirror == (false, false) || only_items_read(shot, &pass.key))
+    else {
+        return false;
+    };
+    if !cache.share(&pass.key, &layer.image, canvas) {
+        return false;
+    }
+    if mirror != (false, false) {
+        chains.mirrored.insert(pass.key.clone(), mirror);
+    }
+    true
+}
+
+/// Whether only scenes' items read layer `key`: no running transition's track, no
+/// item's effects (whose box reads a nested scene's layer) and no model's texture.
+fn only_items_read(shot: &Shot, key: &GpuKey) -> bool {
+    let reads = |source: &SourceRef| matches!(source, SourceRef::Scene(id) if GpuKey::reference(id) == *key);
+    !shot
+        .transition
+        .as_ref()
+        .is_some_and(|transition| transition.tracks.iter().any(|(shown, ..)| shown == key))
+        && !shot.boxes.values().any(|boxed| reads(&boxed.source))
+        && !shot
+            .maps
+            .values()
+            .filter_map(|maps| maps.texture.as_ref())
+            .any(reads)
 }
 
 /// Whether `placement` draws an image of `extent` over exactly the whole of a canvas of
-/// `canvas`, with nothing cut off or left out.
-fn fills_canvas(placement: Placement, (width, height): (u32, u32), canvas: FrameSize) -> bool {
+/// `canvas`, with nothing cut off or left out, and if so whether it shows it mirrored
+/// across and down: a geometry turned by 180 degrees is mirrored both ways, and each
+/// flip mirrors its own way again. Positions and sizes count within a hundredth of a
+/// pixel, angles within a thousandth of a degree.
+fn fills_canvas(
+    placement: Placement,
+    (width, height): (u32, u32),
+    canvas: FrameSize,
+) -> Option<(bool, bool)> {
     let (cw, ch) = (canvas.width(), canvas.height());
     match placement {
-        Placement::Legacy(transform) => {
-            transform == LegacyTransform::IDENTITY && (width, height) == (cw, ch)
-        }
+        Placement::Legacy(transform) => (transform == LegacyTransform::IDENTITY
+            && (width, height) == (cw, ch))
+            .then_some((false, false)),
         Placement::Geometry(geometry) => {
+            let whole = ItemGeometry::covering_canvas(cw, ch).ok()?;
+            let near = |a: jstream_protocol::Finite32, b: jstream_protocol::Finite32| {
+                (a.get() - b.get()).abs() <= 0.01
+            };
             let aspect = u64::from(width) * u64::from(ch) == u64::from(height) * u64::from(cw);
-            ItemGeometry::covering_canvas(cw, ch).is_ok_and(|whole| {
-                geometry.center == whole.center
-                    && geometry.size == whole.size
-                    && geometry.rotation_deg.get() == 0.0
-                    && geometry.is_neutral_3d()
-                    && !geometry.flip_h
-                    && !geometry.flip_v
-                    && (geometry.fit_mode == jstream_protocol::FitMode::Stretch || aspect)
-            })
+            let turn = geometry.rotation_deg.get().rem_euclid(360.0);
+            let turned = if turn <= 1e-3 || turn >= 360.0 - 1e-3 {
+                false
+            } else if (turn - 180.0).abs() <= 1e-3 {
+                true
+            } else {
+                return None;
+            };
+            (near(geometry.center.x, whole.center.x)
+                && near(geometry.center.y, whole.center.y)
+                && near(geometry.size.width, whole.size.width)
+                && near(geometry.size.height, whole.size.height)
+                && geometry.is_neutral_3d()
+                && (geometry.fit_mode == jstream_protocol::FitMode::Stretch || aspect))
+                .then_some((geometry.flip_h != turned, geometry.flip_v != turned))
         }
-        Placement::Layer(_) => false,
+        Placement::Layer(_) => None,
     }
+}
+
+/// `placement` and `crop` of an image of `extent`, mirrored across and down as `mirror`
+/// says within where they draw it: a layer placed as a picture it shows mirrored
+/// ([`share_pass`]). A geometry flips its content and the crop swaps its sides; a legacy
+/// transform runs the other way from the far edge. `None` for a layer drawn in the
+/// canvas's own pixels, which no such layer is.
+fn mirror_layer(
+    (placement, crop): (Placement, Crop),
+    (width, height): (u32, u32),
+    (across, down): (bool, bool),
+) -> Option<(Placement, Crop)> {
+    let mut crop = crop;
+    if across {
+        std::mem::swap(&mut crop.left, &mut crop.right);
+    }
+    if down {
+        std::mem::swap(&mut crop.top, &mut crop.bottom);
+    }
+    let placement = match placement {
+        Placement::Geometry(mut geometry) => {
+            geometry.flip_h ^= across;
+            geometry.flip_v ^= down;
+            Placement::Geometry(geometry)
+        }
+        Placement::Legacy(mut transform) => {
+            // The cropped picture's far corner along each mirrored axis, in canvas
+            // pixels from the position, turned with it.
+            let shown = [
+                width.saturating_sub(crop.left.saturating_add(crop.right)) as f32,
+                height.saturating_sub(crop.top.saturating_add(crop.bottom)) as f32,
+            ];
+            let (sin, cos) = transform.rotation_deg.to_radians().sin_cos();
+            let mut by = [0.0_f32; 2];
+            if across {
+                by[0] += transform.scale[0] * shown[0];
+                transform.scale[0] = -transform.scale[0];
+            }
+            if down {
+                by[1] += transform.scale[1] * shown[1];
+                transform.scale[1] = -transform.scale[1];
+            }
+            transform.position[0] += by[0] * cos - by[1] * sin;
+            transform.position[1] += by[0] * sin + by[1] * cos;
+            Placement::Legacy(transform)
+        }
+        Placement::Layer(_) => return None,
+    };
+    Some((placement, crop))
 }
 
 /// How much of the canvas's resolution the placements of layer `key` say it needs,
@@ -9923,10 +10020,15 @@ fn layer_item<'a>(
         (live, Some(image.extent())),
         camera,
     )?;
+    // A nested scene placed as the picture it shows mirrored (ADR-0249).
+    let (placement, crop) = match chains.mirrored.get(&layer.image) {
+        Some(&mirror) => mirror_layer((posed.placement, posed.crop), image.extent(), mirror)?,
+        None => (posed.placement, posed.crop),
+    };
     Some(Item {
         image,
-        placement: posed.placement,
-        crop: posed.crop,
+        placement,
+        crop,
         opacity: posed.opacity,
         blend: posed.blend,
         visible: true,
@@ -13515,6 +13617,110 @@ pub(crate) mod tests {
             placed.texture() != captured.texture(),
             "drawn into a layer again"
         );
+    }
+
+    /// A nested scene that shows a capture turned upside down over its canvas, its
+    /// centre a rounding off, is placed as the capture too (ADR-0249), mirrored both
+    /// ways where it is placed: its right half shows on the left, as drawn.
+    #[test]
+    fn a_scene_of_one_whole_capture_turned_over_is_placed_as_the_capture() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let canvas = FrameSize::new(1920, 1080).expect("invariant: non-zero");
+        let size = FrameSize::new(32, 18).expect("invariant: non-zero");
+        // Blue on the left half, green on the right.
+        let halves: Vec<u8> = (0..32 * 18)
+            .flat_map(|i| if i % 32 < 16 { [0, 0, 255, 255] } else { GREEN })
+            .collect();
+        let capture = CaptureFrame {
+            version: 1,
+            image: CaptureImage::Rgba {
+                size,
+                rgba: &halves,
+            },
+        };
+        let whole = jstream_protocol::ItemGeometry::covering_canvas(1920, 1080).expect("positive");
+        let turned = jstream_protocol::ItemGeometry {
+            center: jstream_protocol::Vec2::new(959.999_94, 539.999_94).expect("finite"),
+            rotation_deg: jstream_protocol::Finite32::new(180.0).expect("finite"),
+            ..whole
+        };
+        let small = |geometry: jstream_protocol::ItemGeometry| {
+            Placement::Geometry(jstream_protocol::ItemGeometry {
+                size: jstream_protocol::Size::try_new(240.0, 135.0).expect("positive"),
+                ..geometry
+            })
+        };
+        let key = layer("webcam", 1);
+        for shown in [
+            Placement::Geometry(turned),
+            Placement::Geometry(jstream_protocol::ItemGeometry {
+                flip_h: true,
+                flip_v: true,
+                ..whole
+            }),
+        ] {
+            let shot = shot(vec![
+                ("program", vec![fill("red"), nest("webcam", small(whole))]),
+                ("webcam", vec![placed(primary(), shown)]),
+            ]);
+            let mut cache = ResourceCache::new();
+            cache.draw_uploads_small(true);
+            for _ in 0..2 {
+                let out = frame_at(&mut compositor, &mut cache, &shot, Some(&capture), canvas);
+                assert_eq!(
+                    out.pixel(960 - 60, 540),
+                    Some(GREEN),
+                    "its right half on the left"
+                );
+                assert_eq!(
+                    out.pixel(960 + 60, 540),
+                    Some([0, 0, 255, 255]),
+                    "and its left on the right"
+                );
+                let placed = cache.get(&key).expect("shared");
+                let captured = cache
+                    .get(&GpuKey::Capture(CaptureKey::primary()))
+                    .expect("uploaded");
+                assert!(
+                    placed.texture() == captured.texture(),
+                    "no layer of its own"
+                );
+            }
+        }
+    }
+
+    /// A placement and crop mirrored for a layer that shows its picture mirrored: a
+    /// legacy transform runs back from the far edge of the cropped picture, so it covers
+    /// the same quad.
+    #[test]
+    fn a_mirrored_legacy_placement_covers_the_same_quad() {
+        let transform = LegacyTransform {
+            position: [100.0, 50.0],
+            scale: [2.0, 3.0],
+            rotation_deg: 90.0,
+        };
+        let crop = Crop {
+            left: 2,
+            top: 1,
+            right: 0,
+            bottom: 3,
+        };
+        let (placement, mirrored) =
+            super::mirror_layer((Placement::Legacy(transform), crop), (16, 9), (true, true))
+                .expect("mirrored");
+        assert_eq!(
+            (mirrored.left, mirrored.right, mirrored.top, mirrored.bottom),
+            (0, 2, 3, 1)
+        );
+        let Placement::Legacy(turned) = placement else {
+            panic!("still legacy");
+        };
+        // Cropped to 14x5, scaled to 28x15, turned a quarter: the far corner is at
+        // (100 - 15, 50 + 28), where the mirrored one starts.
+        assert!((turned.position[0] - 85.0).abs() < 1e-3, "{turned:?}");
+        assert!((turned.position[1] - 78.0).abs() < 1e-3, "{turned:?}");
+        assert_eq!(turned.scale, [-2.0, -3.0]);
     }
 
     /// A program scene with a video chain (a 1-pixel blur) showing scene `monitor` in a
