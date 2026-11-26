@@ -7941,7 +7941,7 @@ stamp = { hash = "b3:bd6b1e63aa1b86d2", by = "agent:a13-train", note = "Re-read:
 stamp = { hash = "b3:aaf7fc7be9160d3f", by = "agent:mappings-panel", note = "mappings.spec.js's Triggers test now waits for the key capture's focus before F8, as keys-and-midi.spec does; the section's description holds | merge: Merged #1697's head 9b0b36f0 (item targets, map_target, channel_reader) with #1708 and the Mappings panel: specs only; harness unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
-stamp = { hash = "b3:479f0922ccc1fa3f", by = "agent:claude", note = "menus, filters, scene-filters and tool-bars specs changed tests only, no harness or fixture change; holds" }
+stamp = { hash = "b3:9ac5600b01e1d70a", by = "agent:preview-toggle", note = "Re-read the harness: the new spec uses only connect, page.reload and the existing fixtures; the mock daemon, setup and browser notes still hold." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/mixer.spec.js"]
 stamp = { hash = "b3:b6d1bba66bcd3a81", by = "agent:issues-thread", note = "Specs gained live-drag tests only; harness (daemon, mock, fixtures) unchanged, holds" }
