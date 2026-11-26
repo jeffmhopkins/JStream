@@ -519,7 +519,14 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
           fi
+          # GitHub's generated list starts from the latest full release, and every release
+          # so far is a pre-release, so on its own it lists every PR since the first. Start
+          # it from the newest release published before this one instead.
+          since=()
+          previous=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1 \
+            --json tagName --jq '.[0].tagName // empty')
+          if [ -n "$previous" ]; then since=(--notes-start-tag "$previous"); fi
           gh release create "$TAG" release/*.zip release/*.dmg release/*.deb release/*.AppImage \
             release/*.streamDeckPlugin release/*.sha256 \
             --repo "$GITHUB_REPOSITORY" --verify-tag "${prerelease[@]}" \
-            --title "JStream $VERSION" --notes-file notes.md --generate-notes
+            --title "JStream $VERSION" --notes-file notes.md --generate-notes "${since[@]}"

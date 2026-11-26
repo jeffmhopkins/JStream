@@ -92,7 +92,9 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
    - `publish`, the only job allowed to write to the repository, waits for all four and
      creates the GitHub release for the tag with every package and its `.sha256`, the
      notes (a line on the release, then Windows, macOS, Linux and the Stream Deck plugin) and GitHub's generated
-     list of merged PRs. A version with a pre-release part is marked as a pre-release. On
+     list of the PRs merged since the newest release before it. That release is named
+     as the list's start tag, since GitHub would otherwise start from the newest full
+     release and every release so far is a pre-release. A version with a pre-release part is marked as a pre-release. On
      a run started by hand it first creates the tag, and fails if the tag appeared since
      `ui` checked, so a release never lands on another commit's tag. If any platform's
      job or the plugin's fails, nothing is published.
