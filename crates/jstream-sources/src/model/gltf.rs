@@ -347,7 +347,18 @@ fn split_glb(bytes: &[u8]) -> Result<Option<Chunks<'_>>> {
 }
 
 /// Builds a model from the bytes of a `.glb` or `.gltf` file.
+#[cfg(test)]
 pub(crate) fn load(bytes: &[u8], resources: &mut dyn Resources) -> Result<(Model, Ignored)> {
+    load_within(bytes, resources, MAX_TEXTURE_SIDE)
+}
+
+/// [`load`], each texture halved until neither side is past `max_side` (at most
+/// [`MAX_TEXTURE_SIDE`]), as the source's `texture_size` asks.
+pub(crate) fn load_within(
+    bytes: &[u8],
+    resources: &mut dyn Resources,
+    max_side: u32,
+) -> Result<(Model, Ignored)> {
     let (json, bin) = match split_glb(bytes)? {
         Some((json, bin)) => (json, bin),
         None => (bytes, None),
@@ -395,6 +406,7 @@ pub(crate) fn load(bytes: &[u8], resources: &mut dyn Resources) -> Result<(Model
         resources,
         textures: Vec::new(),
         texture_of: BTreeMap::new(),
+        max_side: max_side.clamp(1, MAX_TEXTURE_SIDE),
         materials: BTreeMap::new(),
         material_list: Vec::new(),
         primitives: Vec::new(),
@@ -760,6 +772,8 @@ struct Builder<'a> {
     textures: Vec<ModelTexture>,
     /// Each image already decoded, by its index and how it is read.
     texture_of: BTreeMap<(usize, bool), usize>,
+    /// The longest side a texture keeps: one longer is halved until it fits.
+    max_side: u32,
     /// Each glTF material already built (`None` for the default material).
     materials: BTreeMap<Option<usize>, usize>,
     material_list: Vec<Material>,
@@ -1446,7 +1460,7 @@ impl Builder<'_> {
             (None, None) => return Err(LoadError::new(format!("image {image} has no data"))),
         };
         let (width, height, rgba) = self.resources.decode(&bytes, &format!("image {image}"))?;
-        let (width, height, rgba) = shrink(width, height, rgba);
+        let (width, height, rgba) = shrink(width, height, rgba, self.max_side);
         let color = if srgb {
             TextureColor::Srgb
         } else {
@@ -1510,9 +1524,14 @@ fn flat(vertices: Vec<ModelVertex>, indices: &[u32]) -> (Vec<ModelVertex>, Vec<u
     (out, (0..count).collect())
 }
 
-/// Halves a texture until neither side is past [`MAX_TEXTURE_SIDE`].
-fn shrink(mut width: u32, mut height: u32, mut rgba: Vec<u8>) -> (u32, u32, Vec<u8>) {
-    while width > MAX_TEXTURE_SIDE || height > MAX_TEXTURE_SIDE {
+/// Halves a texture until neither side is past `max_side`.
+fn shrink(
+    mut width: u32,
+    mut height: u32,
+    mut rgba: Vec<u8>,
+    max_side: u32,
+) -> (u32, u32, Vec<u8>) {
+    while width > max_side || height > max_side {
         let (nw, nh) = ((width / 2).max(1), (height / 2).max(1));
         let mut out = Vec::with_capacity((nw * nh * 4) as usize);
         for y in 0..nh {

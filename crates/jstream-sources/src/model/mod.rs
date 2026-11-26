@@ -79,6 +79,22 @@ impl ModelKind {
                     param("file", "Model file", asset(&["glb", "gltf"]), Value::Null),
                     "A glTF 2.0 file (.glb, or .gltf with its files beside it), for the shape `file`.",
                 ),
+                described(
+                    param(
+                        "texture_size",
+                        "Texture size",
+                        options(&[
+                            ("full", "As in the file"),
+                            ("2048", "At most 2048 px"),
+                            ("1024", "At most 1024 px"),
+                            ("512", "At most 512 px"),
+                        ]),
+                        json!("full"),
+                    ),
+                    "The longest side a file's textures keep: one longer is halved until it \
+                     fits, a quarter of its memory each time. Smaller textures save GPU \
+                     memory and load faster, at a softer look up close.",
+                ),
                 live(described(
                     param(
                         "color",
@@ -491,6 +507,24 @@ impl std::ops::Deref for Base {
 
 /// The model the `shape` and `file` settings name: `None` for the shape `file` with no
 /// file chosen.
+/// The longest side the `texture_size` setting lets a file's textures keep. Settings
+/// saved before it existed have none: as in the file.
+fn texture_side(settings: &Settings) -> Result<u32, SourceError> {
+    match settings.get("texture_size") {
+        None => Ok(jstream_media::model::MAX_TEXTURE_SIDE),
+        Some(value) => match value.as_str() {
+            Some("full") => Ok(jstream_media::model::MAX_TEXTURE_SIDE),
+            Some("2048") => Ok(2048),
+            Some("1024") => Ok(1024),
+            Some("512") => Ok(512),
+            _ => Err(SourceError::Setting {
+                param: "texture_size".into(),
+                reason: "must be `full`, `2048`, `1024` or `512`".into(),
+            }),
+        },
+    }
+}
+
 fn build(settings: &Settings, ctx: &Context) -> Result<Option<Base>, SourceError> {
     let shape = setting(settings, "shape")?
         .as_str()
@@ -521,7 +555,7 @@ fn build(settings: &Settings, ctx: &Context) -> Result<Option<Base>, SourceError
         path: &path,
         error: None,
     };
-    let loaded = gltf::load(&bytes, &mut files);
+    let loaded = gltf::load_within(&bytes, &mut files, texture_side(settings)?);
     // A failed read or decode keeps its own error, which names the file it was about.
     if let Some(err) = files.error {
         return Err(err);

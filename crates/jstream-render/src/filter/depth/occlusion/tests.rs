@@ -193,3 +193,26 @@ fn a_step_shades_the_farther_side_beside_it() {
     let shot = apply(&mut opened, &mut none, &input);
     near(&shot, 45, H / 2, WHITE, 1);
 }
+
+/// While the GPU is short of time (`ViewDepth::economy`) it takes quality Low's samples,
+/// whatever its quality: High shades the step as Low does.
+#[test]
+fn economy_takes_quality_lows_samples() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let input = solid(&opened.compositor, W, H, WHITE);
+    let step = |x: u32| if x < 48 { 2000.0 } else { 1960.0 };
+    let mut shot = |quality: &str, economy: bool| {
+        let mut ao = filter(KIND, json!({"strength": 2.0, "quality": quality}));
+        let mut at = depth(&opened, step);
+        at.economy = economy;
+        ao.set_depth(Some(at));
+        apply(&mut opened, &mut ao, &input)
+    };
+    let low = shot("low", false);
+    let high = shot("high", false);
+    let saving = shot("high", true);
+    assert_ne!(high.rgba(), low.rgba(), "the quality shows");
+    assert_eq!(saving.rgba(), low.rgba());
+}

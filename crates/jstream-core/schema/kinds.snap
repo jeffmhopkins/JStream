@@ -4017,6 +4017,32 @@ source: crates/jstream-core/src/kinds.rs
         "live": false
       },
       {
+        "id": "texture_size",
+        "type": "enum",
+        "options": [
+          {
+            "value": "full",
+            "label": "As in the file"
+          },
+          {
+            "value": "2048",
+            "label": "At most 2048 px"
+          },
+          {
+            "value": "1024",
+            "label": "At most 1024 px"
+          },
+          {
+            "value": "512",
+            "label": "At most 512 px"
+          }
+        ],
+        "default": "full",
+        "label": "Texture size",
+        "description": "The longest side a file's textures keep: one longer is halved until it fits, a quarter of its memory each time. Smaller textures save GPU memory and load faster, at a softer look up close.",
+        "live": false
+      },
+      {
         "id": "color",
         "type": "color",
         "alpha": true,
@@ -5789,7 +5815,7 @@ source: crates/jstream-core/src/kinds.rs
         ],
         "default": "medium",
         "label": "Quality",
-        "description": "Steps along each ray: Low 24, Medium 48, High 96. More is smoother and costs more.",
+        "description": "Steps along each ray: Low 24, Medium 48, High 96. More is smoother and costs more. Low and Medium march one ray per two by two pixels and spread it over them, keeping to pixels at about its distance; High marches every pixel.",
         "live": true
       }
     ]

@@ -686,7 +686,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
   (`runtime/vcam.rs`). The render thread's GPU-time guard quarantines an effect-pack
-  kind whose pass runs too long (`runtime/pass_guard.rs`, #349; see *Runtime*).
+  kind whose pass runs too long (`runtime/pass_guard.rs`, #349; see *Runtime*), and
+  holds the 3D extras at their cheapest when one of theirs does (ADR-0247).
 - **Camera controls** (`camera_controls.rs`, #1196): each `webcam` source's
   `camera_controls` setting set on its device. After each change the control side
   compares what the drawn collection asks, live values included, with what it last
@@ -817,8 +818,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   and the times that come back a frame or two later go into the unit's `gpu_frames` and
   `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
   `gpu_timing` is on once any unit carries one. Inside a unit, the draw names the part of
-  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw and its view
-  depth (`draw_model`), a scene's shadow maps (around `draw_shadows`), its view depth and
+  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw, with its
+  view depth read from the depth its pass tested (`draw_model`), a scene's shadow maps (around `draw_shadows`), its view depth and
   its surface buffer (the scene pass), and each filter of a chain by its place
   (`Chains::run_one`, the first `GPU_PART_FILTERS`; a model source's filters, counted
   with its item's effects, are no part). A part's spans come back under the
@@ -2248,7 +2249,8 @@ compositor on the engine's context shares them
 compiles no shader on its first frame of a scene it never showed: on Direct3D 12 a 3D
 scene's shaders take seconds, which was a stall at the output's start or at the switch.
 A scene with a camera also has what a 3D scene alone draws with made
-(`Compositor::warm_3d`), whether or not anything in it draws yet. A primed draw has
+(`Compositor::warm_3d`, after setting the samples its models draw with, so their
+multisampled pipelines are made too), whether or not anything in it draws yet. A primed draw has
 images and filters of its own, dropped after it, so it leaves the snapshots' cache and
 GPU memory as they were. It runs only with a GPU context to share (`SharedGpu::lends`,
 and the snapshot thread skips the job when the context won't open, so nothing is drawn
@@ -2834,7 +2836,9 @@ stand-in) always has a canvas-sized layer, effects or not. The layer is drawn wi
 `Chains::model_percent` of the canvas's width and of its height in pixels, rounded up
 (`Boxed::pixels`, [ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)):
 100 everywhere but on the program stage's render thread while its GPU is short of time
-(see [Runtime](#runtime)). A smaller layer, its `GpuKey::ModelDepth` and its
+(see [Runtime](#runtime)), which first, at full size, draws it with one sample a pixel
+and hands its scene's view depth `Chains::economy` for the depth-aware filters
+(ADR-0245). A smaller layer, its `GpuKey::ModelDepth` and its
 `GpuKey::ModelSurface` layers are given the canvas as their extent, so the model is
 placed on the canvas and the pass places the layer over it
 (`golden_a_model_is_seen_through_the_scene_camera`); the scene's surface buffer merges
@@ -2897,8 +2901,12 @@ map that reaches a scene showing the model as it refuses any reference cycle
 (`golden_a_model_shows_another_sources_picture_as_its_texture`,
 `a_models_texture_reaching_its_own_scene_is_a_cycle`).
 A model in a scene with a camera also gets a depth layer (`GpuKey::ModelDepth`, decision 7):
-`draw_model` clears it and draws the model's view depth into it with
-`Compositor::draw_model_depth`, and `layer_item` hands it to the scene pass as the
+`draw_model` draws the model's view depth into it with its layer
+(`Compositor::draw_model_and_depth`, which reads it from the depth the layer's pass
+tested, so the model's geometry is drawn once for both; with its surface too, when its
+scene reads one, and a model drawn so is drawn through the scene's camera once a frame,
+`Chains::scene_model_draws` counting it in tests, `a_metal_floor_reflects_a_card_on_screen`),
+and `layer_item` hands it to the scene pass as the
 model's `Item::depth` while the model is at least half opaque, so a card that stacks in
 front of the model but sits behind it is hidden where the model is nearer
 (`golden_a_card_behind_a_model_is_hidden_where_the_model_is_nearer`). A floor
@@ -5318,10 +5326,21 @@ smaller than `min_model_resolution` (`Shot::min_model_resolution`, given each ti
 so a floor between two steps (90) is the last step down and 100 keeps models whole
 ([ADR-0241](../../docs/adr/0241-a-floor-for-the-model-size-and-any-whole-percentage.md)). A
 floor raised past the size drawn lifts it to the floor at once, and a fixed size below
-the floor is drawn as set. Every frame draws its models with the switches'
-`model_antialiasing` samples (`Compositor::set_model_antialiasing`, set with the
-blending space as the frame starts), and a probe's capture draws them with one, setting
-the frame's back after it
+the floor is drawn as set. Before its first step down in size the program's governor
+(`Governor::with_economy`) takes one step into economy at full size
+([ADR-0245](../../docs/adr/0245-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md)):
+a rung of the same ladder, full size again, every smaller size staying in it, stepped
+into and out of by the same rules, economy last on the way up; what it saved is learned
+from the frame timed after it, taken until then to be at most half
+(`ECONOMY_WORST`). A floor of 100 still lets it take that step, and a fixed size is
+never in economy, unless the GPU-time guard holds it (*Runtime*, ADR-0247). While it lasts `Chains::economy` is set: the frame's models are drawn
+with one sample a pixel, and each scene's view depth carries it to its depth-aware
+filters (`ViewDepth::economy`), where `ambient_occlusion` takes Low's samples and
+`volumetric_fog` marches as Low does (`economy_comes_before_the_first_step_down_and_goes_last`,
+`in_economy_models_are_drawn_with_one_sample`). Every frame draws its models with the
+switches' `model_antialiasing` samples otherwise (`Compositor::set_model_antialiasing`,
+set with the blending space as the frame starts), and a probe's capture draws them with
+one, setting the frame's back after it
 ([ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)). A drawer whose meter has no budget
 (not the program's) never lowers it itself. The size goes to the meter each tick
 (`DrawMeter::model_percent`), and `profile.get` reports it as the drawer's
@@ -5508,8 +5527,15 @@ the guard the times that came back, a tick or two late and without waiting
 budget in 30 ticks running (a tick within the limit starts the count again, one with
 no time back for it leaves it) goes to `jstream-device-losses` as `GpuEvent::Slow`,
 beside the losses (`GpuEvent::Lost`). The engine quarantines it there, as above, and
-sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. A GPU
-without timestamp queries times nothing, and only a device loss guards it.
+sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. The
+built-in 3D extras (`ambient_occlusion`, `volumetric_fog`, `screen_space_reflections`)
+are timed and counted the same way, under their own kinds; one reported (a kind ID with
+no `/`, `PassGuard::take_built_in`) is not sent to the engine but makes the governor
+hold economy for the rest of the stage's run, whatever the load or a fixed size
+(`Governor::hold_economy`,
+[ADR-0247](../../docs/adr/0247-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md),
+`a_built_in_kind_is_taken_apart_from_a_packs`, `a_held_economy_stays_whatever_the_load_and_size`).
+A GPU without timestamp queries times nothing, and only a device loss guards it.
 Each tick then takes the units' GPU times that came back and, one tick in four, times
 its own (`DrawMeter::begin_gpu`, closed with `end_gpu` once the tick has drawn), for
 `profile.get`'s `gpu_ms` (the Profile paragraph in [Contents](#contents-media)).

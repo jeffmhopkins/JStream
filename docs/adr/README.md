@@ -248,4 +248,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0242](0242-3d-models-are-drawn-multisampled.md) | 3D models are drawn multisampled | accepted | agent |  |
 | [ADR-0243](0243-the-macos-gpu-spike-runs-on-ci-macos-runners.md) | The macOS GPU interop spike runs on CI's macOS runners | accepted | agent |  |
 | [ADR-0244](0244-a-camera-only-glide-moves-only-the-scene-it-goes-to.md) | A camera-only glide moves only the scene the Move goes to | accepted | agent |  |
+| [ADR-0245](0245-the-gpu-short-of-time-draws-3d-extras-cheaper-before-fewer-pixels.md) | A GPU short of time draws 3D extras cheaper before it draws fewer pixels | accepted | agent |  |
+| [ADR-0246](0246-a-models-layer-is-drawn-again-only-when-its-draw-has-changed.md) | A model's layer is drawn again only when its draw has changed | accepted | agent |  |
+| [ADR-0247](0247-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md) | A 3D extra that runs too long holds the extras at their cheapest | accepted | agent |  |
 <!-- @generated end adr-index -->

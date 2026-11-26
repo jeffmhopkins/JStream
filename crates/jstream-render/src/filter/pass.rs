@@ -87,7 +87,10 @@ pub(crate) trait Pass: Send {
 
     /// The kind to time this filter's GPU work under, for an effect pack's filter or
     /// shader source (#349): the guard turns a pack effect off when it runs too long.
-    /// `None`, the default, for the built-in kinds, which are not timed.
+    /// The built-in 3D extras (`ambient_occlusion`, `volumetric_fog`,
+    /// `screen_space_reflections`) are timed under their kind too, which has no `/`:
+    /// the guard draws them cheaper instead (ADR-0247). `None`, the default, for the
+    /// other built-in kinds, which are not timed.
     fn timed(&self) -> Option<&str> {
         None
     }

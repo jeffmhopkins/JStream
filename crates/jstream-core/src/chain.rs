@@ -1055,6 +1055,11 @@ pub(crate) struct Chains {
     /// canvas's width and of its height (ADR-0197): 100 unless the program stage's
     /// render thread lowered it to keep its frames in time.
     pub(crate) model_percent: crate::resolution::Percent,
+    /// Whether this frame's 3D extras are drawn cheaper while the GPU is short of time
+    /// ([`crate::resolution::Governor::economy`]): its models with one sample a pixel,
+    /// and its ambient occlusion and volumetric fog at their lowest quality
+    /// (`ViewDepth::economy`).
+    pub(crate) economy: bool,
     /// Whether a model's layer was drawn since this was last cleared: the render thread
     /// lowers [`Self::model_percent`] only while there is one to gain from it.
     pub(crate) model_drawn: bool,
@@ -1096,6 +1101,10 @@ pub(crate) struct Chains {
     /// How many shadow maps were drawn, for tests.
     #[cfg(test)]
     pub(crate) shadow_draws: std::cell::Cell<u64>,
+    /// How many times a model was drawn through its scene's own camera, into its layer,
+    /// its view depth or its surface, for tests.
+    #[cfg(test)]
+    pub(crate) scene_model_draws: std::cell::Cell<u64>,
     /// The shadowed lights of the scene a model is drawn in this frame, by index into
     /// [`Self::lights`] with their softness, kept to reuse its allocation.
     pub(crate) shadowed: Vec<(usize, f32)>,
@@ -1454,10 +1463,12 @@ impl Chains {
             }
             depth.reflection = reflection;
             depth.surface = surface;
+            depth.economy = self.economy;
             return;
         }
         let fresh = jstream_render::ViewDepth {
             view: Some(view),
+            economy: self.economy,
             lights: Arc::from(lights),
             shadows: owned(cache),
             reflection,
@@ -6149,6 +6160,13 @@ mod tests {
                 (&shot, &LiveParams::default()),
                 &[(32, 35)],
             )[0];
+            // One model, drawn once through the scene's camera: its layer, view depth
+            // and surface come from that one draw, whatever reads them.
+            assert_eq!(
+                chains.scene_model_draws.get(),
+                1,
+                "the model is drawn once at {percent}%"
+            );
             Some((point, !chains.surfaced.is_empty()))
         };
         let under = |graph: &Graph, features| under_at(graph, features, 100);
@@ -6496,8 +6514,9 @@ mod tests {
     }
 
     /// `profile.get`'s GPU parts: a model that receives shadows, under an effect, comes
-    /// back with its shadow maps, its draw, its view depth and its effect timed apart,
-    /// each inside its item's GPU time, on a device that times the GPU.
+    /// back with its shadow maps, its draw and its effect timed apart, each inside its
+    /// item's GPU time, on a device that times the GPU. Its view depth is read from its
+    /// draw's tested depth, so it is in the draw's part, and no part of its own.
     #[test]
     fn a_models_gpu_time_comes_back_in_parts() {
         use crate::profile::{InputTotals, Profiler, SourceMeters};
@@ -6562,11 +6581,14 @@ mod tests {
         for part in [
             GpuPart::ShadowMaps,
             GpuPart::Model,
-            GpuPart::ViewDepth,
             GpuPart::Filter { index: 0 },
         ] {
             assert!(parts.contains(&&part), "{part:?} is timed: {unit:?}");
         }
+        assert!(
+            !parts.contains(&&GpuPart::ViewDepth),
+            "the view depth is the draw's: {unit:?}"
+        );
         let whole = unit.gpu_ms.expect("timed").get();
         let sum: f32 = unit.gpu_parts.iter().map(|part| part.gpu_ms.get()).sum();
         assert!(
@@ -6922,6 +6944,50 @@ mod tests {
             luma(switching) > 150,
             "lit while switching: {switching:?} (landed {landed:?})"
         );
+    }
+
+    /// While the GPU is short of time (`Chains::economy`) a frame's models are drawn with
+    /// one sample a pixel, whatever the rendering switches ask, and with the samples
+    /// they ask again after it.
+    #[test]
+    fn in_economy_models_are_drawn_with_one_sample() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+            ],
+        );
+        let shot = model_shot(&graph, "plane");
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains {
+            economy: true,
+            ..Chains::default()
+        };
+        let mut samples = |chains: &mut Chains| {
+            draw_points(
+                &mut compositor,
+                (&mut cache, chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 18)],
+            );
+            compositor.model_antialiasing()
+        };
+        assert_eq!(samples(&mut chains), 1);
+        chains.economy = false;
+        // The default (ADR-0242).
+        assert_eq!(samples(&mut chains), 4);
     }
 
     /// In a 3D scene a model is seen through the scene's camera (ADR-0107 decision 6): a

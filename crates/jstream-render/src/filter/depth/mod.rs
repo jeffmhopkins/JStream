@@ -53,6 +53,9 @@ pub struct ViewDepth {
     /// What the scene's models show to a screen-space reflection, for the kinds that
     /// [`reads_surface`]; `None` when none was drawn.
     pub surface: Option<DepthSurface>,
+    /// Whether the GPU is short of time: `ambient_occlusion` and `volumetric_fog` draw
+    /// at their lowest quality, whatever their settings ask.
+    pub economy: bool,
 }
 
 /// A scene's surface buffer (ADR-0170 decision 4), drawn of its models with its view
@@ -107,6 +110,7 @@ impl ViewDepth {
             shadows: Arc::from([]),
             reflection: None,
             surface: None,
+            economy: false,
         }
     }
 }

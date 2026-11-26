@@ -92,14 +92,16 @@ pub(crate) struct Panoramas<'a> {
 }
 
 impl<'a> Panoramas<'a> {
-    /// `chain`'s whole view when it was built from `image`.
+    /// The blurred levels of `chain` (`panorama_blur.rs`) when it was built from
+    /// `image`.
     fn of(
         chain: Option<(&'a Image, &'a Mips)>,
         image: &Image,
     ) -> Option<&'a (wgpu::Texture, wgpu::TextureView)> {
         chain
             .filter(|(built, _)| built.texture() == image.texture())
-            .map(|(_, mips)| &mips.whole)
+            .and_then(|(_, mips)| mips.blurred.get())
+            .map(|blurred| &blurred.whole)
     }
 }
 /// Bytes of a material's uniform: five `vec4`.
@@ -129,10 +131,127 @@ struct Uploaded {
     /// A rigged model's palette (ADR-0151 decision 7): its buffer, which
     /// [`crate::Compositor::pose_model`] writes, its bind group and its slot count.
     pose: Option<(wgpu::Buffer, wgpu::BindGroup, usize)>,
+    /// The palette last written to `pose`, and how many times it has changed: a draw
+    /// of the same pose can leave a layer as it is (ADR-0246).
+    posed: Mutex<(Vec<u8>, u64)>,
     /// The material bind groups of its last draw with a live texture (ADR-0107
     /// decision 5), kept while that texture and the material it replaces stay the same,
     /// so a steady frame makes none.
     live: Mutex<Option<LiveBinds>>,
+    /// Each texture's format and size as uploaded, for tests.
+    #[cfg(test)]
+    formats: Vec<(wgpu::TextureFormat, (u32, u32))>,
+}
+
+/// What a model's layer was drawn of (ADR-0246): everything its pixels depend on, so a
+/// draw asked for again of the same is left as the layer holds it. Compared as it is,
+/// not hashed, so two different draws never compare equal.
+#[derive(Default)]
+struct Kept {
+    /// The layer, by the counter it and its clones share.
+    target: std::sync::Weak<std::sync::atomic::AtomicU64>,
+    /// What the layer, its view depth and its surface layers held: once drawn, its
+    /// texels, which any later write moves on.
+    held: Vec<crate::image::Seen>,
+    /// Whether it had a view depth, and surface layers.
+    beside: (bool, bool),
+    /// The model, by identity, and how many times its pose had changed.
+    model: std::sync::Weak<Uploaded>,
+    posed: u64,
+    samples: u32,
+    /// The frame's uniform: its placement, camera, lighting, shadow views, sky, floor
+    /// and probe.
+    frame: Vec<u8>,
+    /// The shadow maps, sky and probe pictures it read, with their texels, and which it
+    /// read through a mip chain.
+    maps: [Option<crate::image::Seen>; FRAME_TEXTURES],
+    chained: [bool; FRAME_TEXTURES],
+    /// Each material's drive: none, or the values it drew with.
+    drives: Vec<u8>,
+    /// Its live texture: the picture with its texels, and the material it replaces.
+    live: Option<(Option<crate::image::Seen>, Option<String>)>,
+}
+
+impl Kept {
+    /// Fills in what a draw of `model` as `draw` asks for, reusing the allocations.
+    fn fill(
+        &mut self,
+        (model, draw, owner): (&Arc<Uploaded>, &ModelDraw<'_>, &Owner),
+        (frame, maps, chained): (
+            &[u8],
+            [Option<&Image>; FRAME_TEXTURES],
+            [bool; FRAME_TEXTURES],
+        ),
+        samples: u32,
+    ) {
+        self.model = Arc::downgrade(model);
+        self.posed = model.posed.lock().unwrap_or_else(PoisonError::into_inner).1;
+        self.samples = samples;
+        self.frame.clear();
+        self.frame.extend_from_slice(frame);
+        self.maps = maps.map(|map| map.map(Image::seen));
+        self.chained = chained;
+        self.drives.clear();
+        for m in &model.materials {
+            match driven_values(&m.values, &m.name, draw.materials) {
+                Some(values) => {
+                    self.drives.push(1);
+                    self.drives.extend_from_slice(&material_bytes(&values));
+                }
+                None => self.drives.push(0),
+            }
+        }
+        match draw.texture {
+            Some(texture) => {
+                let seen = texture
+                    .image
+                    .filter(|image| image.owner().is(owner))
+                    .map(Image::seen);
+                let (picture, material) = self.live.get_or_insert((None, None));
+                *picture = seen;
+                match (texture.material, material.as_mut()) {
+                    (Some(name), Some(kept)) => {
+                        kept.clear();
+                        kept.push_str(name);
+                    }
+                    (name, _) => *material = name.map(str::to_owned),
+                }
+            }
+            None => self.live = None,
+        }
+    }
+
+    /// Fills in the layers the draw is into, as they hold now.
+    fn hold(&mut self, target: &Image, view_depth: Option<&Image>, how: &DrawAs<'_>) {
+        self.target = Arc::downgrade(target.identity());
+        self.held.clear();
+        self.held.push(target.seen());
+        self.held.extend(view_depth.map(Image::seen));
+        let surface = match how {
+            DrawAs::LayerWithSurface(layers) => Some(layers),
+            _ => None,
+        };
+        if let Some(layers) = surface {
+            self.held.extend(layers.iter().map(|layer| layer.seen()));
+        }
+        self.beside = (view_depth.is_some(), surface.is_some());
+    }
+}
+
+impl PartialEq for Kept {
+    fn eq(&self, other: &Self) -> bool {
+        self.target.ptr_eq(&other.target)
+            && self.held == other.held
+            && self.beside == other.beside
+            && self.model.ptr_eq(&other.model)
+            && self.posed == other.posed
+            && self.samples == other.samples
+            && self.frame == other.frame
+            && self.maps == other.maps
+            && self.chained == other.chained
+            && self.drives == other.drives
+            && self.live == other.live
+    }
 }
 
 /// Material bind groups with a live texture in place of their base colour's.
@@ -354,6 +473,22 @@ impl PartialEq for SeenModel {
 }
 
 impl GpuModel {
+    /// Each texture's format as uploaded.
+    #[cfg(test)]
+    pub(crate) fn texture_formats(&self) -> Vec<wgpu::TextureFormat> {
+        self.inner
+            .formats
+            .iter()
+            .map(|(format, _)| *format)
+            .collect()
+    }
+
+    /// Each texture's size as uploaded.
+    #[cfg(test)]
+    pub(crate) fn texture_sizes(&self) -> Vec<(u32, u32)> {
+        self.inner.formats.iter().map(|(_, size)| *size).collect()
+    }
+
     /// Which upload this is, to tell later whether a model is still the same one.
     pub fn seen(&self) -> SeenModel {
         SeenModel(Arc::downgrade(&self.inner))
@@ -631,6 +766,8 @@ pub(crate) struct ModelRuntime {
     surface_resolve: msaa::SurfaceResolve,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
     depth_only: wgpu::RenderPipeline,
+    /// The view depth read from a layer's own tested depth instead.
+    depth_resolve: depth_resolve::DepthResolve,
     /// What a screen-space reflection reads of each model (ADR-0170 decision 4), for a
     /// model whose layer was drawn without it.
     surface: wgpu::RenderPipeline,
@@ -654,6 +791,11 @@ pub(crate) struct ModelRuntime {
     depth: Vec<(u32, u32, wgpu::TextureView)>,
     /// Blended primitives in the order they draw, kept to reuse the allocation.
     order: Vec<(f64, usize)>,
+    /// What each layer a model was last drawn into was drawn of, to leave it as it is
+    /// when asked for the same draw again (ADR-0246).
+    kept: Vec<Kept>,
+    /// The draw being asked for, filled in place each draw.
+    asked: Kept,
     /// The quad a lit card is shaded on ([`Self::light_card`]), once made.
     card: Option<(wgpu::Buffer, wgpu::Buffer)>,
 }
@@ -942,6 +1084,7 @@ impl ModelRuntime {
             msaa: msaa::Targets::default(),
             surface_resolve: msaa::SurfaceResolve::new(gpu),
             depth_only,
+            depth_resolve: depth_resolve::DepthResolve::new(gpu),
             surface,
             with_surface,
             surface_depth: None,
@@ -954,6 +1097,8 @@ impl ModelRuntime {
             clear: (clear_texture, clear_view),
             depth: Vec::with_capacity(KEPT_DEPTHS),
             order: Vec::new(),
+            kept: Vec::new(),
+            asked: Kept::default(),
             card: None,
         }
     }
@@ -972,6 +1117,10 @@ impl ModelRuntime {
             detail_sampler: self.detail_sampler.clone(),
             white: self.white.clone(),
             flat_normal: self.flat_normal.clone(),
+            compress: gpu
+                .device
+                .features()
+                .contains(wgpu::Features::TEXTURE_COMPRESSION_BC),
         }
     }
 }
@@ -993,6 +1142,9 @@ pub(crate) struct UploadKit {
     detail_sampler: wgpu::Sampler,
     white: wgpu::TextureView,
     flat_normal: wgpu::TextureView,
+    /// Whether the device samples BC textures, so a model's textures are block
+    /// compressed on upload (`bc.rs`).
+    compress: bool,
 }
 
 impl UploadKit {
@@ -1023,9 +1175,22 @@ impl UploadKit {
                 });
             }
         }
+        // A normal map stays as it is: BC1's four colours a block would bend its normals
+        // into steps the light shows.
+        let normals: std::collections::BTreeSet<usize> = model
+            .materials()
+            .iter()
+            .filter_map(|m| m.normal_texture.map(|t| t.texture))
+            .collect();
         let mut textures = Vec::with_capacity(model.textures().len());
-        for texture in model.textures() {
-            textures.push(upload_texture(self, texture)?);
+        #[cfg(test)]
+        let mut formats = Vec::with_capacity(model.textures().len());
+        for (index, texture) in model.textures().iter().enumerate() {
+            let compress = self.compress && !normals.contains(&index);
+            let (view, _format, _size) = upload_texture(self, texture, compress)?;
+            #[cfg(test)]
+            formats.push((_format, _size));
+            textures.push(view);
         }
         let view =
             |texture: Option<TextureRef>, fallback: &wgpu::TextureView| -> wgpu::TextureView {
@@ -1183,7 +1348,10 @@ impl UploadKit {
                     let (buffer, bind) = pose_bind(device, &self.pose_layout, &rest);
                     (buffer, bind, rest.len())
                 }),
+                posed: Mutex::new((Vec::new(), 0)),
                 live: Mutex::new(None),
+                #[cfg(test)]
+                formats,
             }),
         })
     }
@@ -1196,12 +1364,25 @@ impl ModelRuntime {
         if let Some((buffer, _, slots)) = &model.inner.pose
             && *slots == palette.len()
         {
-            let bytes: Vec<u8> = palette
-                .iter()
-                .flatten()
-                .flat_map(|v| v.to_le_bytes())
-                .collect();
-            gpu.queue.write_buffer(buffer, 0, &bytes);
+            let mut posed = model
+                .inner
+                .posed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let (bytes, changes) = &mut *posed;
+            // The same pose again writes nothing, so a layer drawn of it can be kept
+            // (ADR-0246).
+            let same = bytes.len() == palette.len() * 64
+                && bytes
+                    .chunks_exact(4)
+                    .zip(palette.iter().flatten())
+                    .all(|(was, v)| was == v.to_le_bytes());
+            if !same {
+                bytes.clear();
+                bytes.extend(palette.iter().flatten().flat_map(|v| v.to_le_bytes()));
+                *changes += 1;
+                gpu.queue.write_buffer(buffer, 0, bytes);
+            }
         }
     }
 
@@ -1258,10 +1439,17 @@ impl ModelRuntime {
         draw: &ModelDraw<'_>,
         target: &Image,
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
-        surface: Option<[&Image; 3]>,
+        (surface, view_depth): (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         let how = surface.map_or(DrawAs::Layer, DrawAs::LayerWithSurface);
-        self.draw_as(gpu, owner, draw, target, (live, panoramas), how)
+        self.draw_as(
+            gpu,
+            owner,
+            draw,
+            (target, view_depth),
+            (live, panoramas),
+            how,
+        )
     }
 
     /// Merges a model's surface, drawn with its layer into `layers`, into `targets`, its
@@ -1542,7 +1730,10 @@ impl ModelRuntime {
                     views,
                 }],
                 pose: None,
+                posed: Mutex::new((Vec::new(), 0)),
                 live: Mutex::new(None),
+                #[cfg(test)]
+                formats: Vec::new(),
             }),
         };
         let draw = ModelDraw {
@@ -1568,7 +1759,7 @@ impl ModelRuntime {
             gpu,
             owner,
             &draw,
-            target,
+            (target, None),
             (None, panoramas),
             DrawAs::InTexture,
         )
@@ -1638,7 +1829,7 @@ impl ModelRuntime {
         gpu: &Gpu,
         owner: &Owner,
         draw: &ModelDraw<'_>,
-        target: &Image,
+        (target, view_depth): (&Image, Option<&Image>),
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
         how: DrawAs<'_>,
     ) -> Result<(), RenderError> {
@@ -1657,6 +1848,26 @@ impl ModelRuntime {
             });
         };
         let (width, height) = (target.width(), target.height());
+        // Its view depth, read from the depth the layer's pass tests rather than drawn
+        // again: a depth layer this compositor made, of the layer's size.
+        let view_depth = match view_depth {
+            Some(depth) => Some(
+                depth
+                    .depth_target()
+                    .filter(|_| {
+                        depth.owner().is(owner)
+                            && (depth.width(), depth.height()) == (width, height)
+                    })
+                    .map(|view| (depth, view))
+                    .ok_or_else(|| RenderError::Invalid {
+                        what: "layer",
+                        detail: "the view depth is not a depth layer this compositor made \
+                                 of the model's layer's size"
+                            .into(),
+                    })?,
+            ),
+            None => None,
+        };
         // The canvas the model is placed on is the target's extent: a layer drawn with
         // fewer pixels than its canvas (ADR-0197) holds the same picture, less sharp.
         let canvas = canvas_of(target);
@@ -1777,6 +1988,25 @@ impl ModelRuntime {
                 probe.as_ref(),
             ),
         );
+        // A layer that still holds this very draw is left as it is (ADR-0246).
+        let keeps = matches!(how, DrawAs::Layer | DrawAs::LayerWithSurface(_));
+        if keeps {
+            let mut asked = std::mem::take(&mut self.asked);
+            asked.fill(
+                (model, draw, owner),
+                (&frame, maps, chains.map(|chain| chain.is_some())),
+                self.samples,
+            );
+            asked.hold(target, view_depth.map(|(depth, _)| depth), &how);
+            let held = self
+                .kept
+                .iter()
+                .any(|kept| kept.target.ptr_eq(&asked.target) && *kept == asked);
+            self.asked = asked;
+            if held {
+                return Ok(());
+            }
+        }
         let frame_bind = self.frame_bind_for(gpu, maps, chains);
         let live_binds = draw
             .texture
@@ -1930,7 +2160,12 @@ impl ModelRuntime {
                     view: &depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Discard,
+                        // Kept only for the view depth to be read from.
+                        store: if view_depth.is_some() && camera.is_some() {
+                            wgpu::StoreOp::Store
+                        } else {
+                            wgpu::StoreOp::Discard
+                        },
                     }),
                     stencil_ops: None,
                 }),
@@ -1991,6 +2226,15 @@ impl ModelRuntime {
         {
             self.surface_resolve.record(&mut encoder, bind, *views);
         }
+        if let Some((_, depth_view)) = view_depth {
+            self.record_view_depth(
+                gpu,
+                &mut encoder,
+                (model, camera.is_some()),
+                (&depth, samples),
+                depth_view,
+            );
+        }
         gpu.submit_work(encoder.finish());
         target.mark_changed();
         // Outside the model's box on the target the layer is transparent: what places
@@ -2005,8 +2249,106 @@ impl ModelRuntime {
                 layer.set_content(content);
             }
         }
+        // Its view depth holds the model where the layer does, and nothing elsewhere.
+        if let Some((depth, _)) = view_depth {
+            depth.mark_changed();
+            depth.set_content(content);
+        }
         drop(submitting);
+        if keeps {
+            self.keep(target, view_depth.map(|(depth, _)| depth), &how);
+        }
         Ok(())
+    }
+
+    /// Remembers that `target`, with its view depth and the surface layers of `how`,
+    /// now holds the draw [`Self::asked`] describes (ADR-0246).
+    fn keep(&mut self, target: &Image, view_depth: Option<&Image>, how: &DrawAs<'_>) {
+        self.kept.retain(|kept| kept.target.strong_count() > 0);
+        let mut asked = std::mem::take(&mut self.asked);
+        asked.hold(target, view_depth, how);
+        match self
+            .kept
+            .iter_mut()
+            .find(|kept| kept.target.ptr_eq(&asked.target))
+        {
+            Some(kept) => std::mem::swap(kept, &mut asked),
+            None => self.kept.push(std::mem::take(&mut asked)),
+        }
+        self.asked = asked;
+    }
+
+    /// Records the view depth of the model whose layer's pass just tested `depth` into
+    /// `target` (ADR-0143 decision 4), as [`Self::draw_depth`] would draw it: the
+    /// opaque primitives' nearest depth read from the tested one, then the blended
+    /// primitives at least half opaque drawn over it, the nearest kept, since the layer's
+    /// pass tests them but writes no depth for them. Seen without a camera it holds
+    /// nothing, as `draw_depth` draws nothing.
+    fn record_view_depth(
+        &self,
+        gpu: &Gpu,
+        encoder: &mut wgpu::CommandEncoder,
+        (model, seen): (&Uploaded, bool),
+        (depth, samples): (&wgpu::TextureView, u32),
+        target: &wgpu::TextureView,
+    ) {
+        if !seen {
+            let _cleared = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-model-view-depth-clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            return;
+        }
+        self.depth_resolve
+            .record(gpu, encoder, (depth, samples), target);
+        if self.order.is_empty() {
+            return;
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("jstream-render-model-view-depth-blended"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.depth_only);
+        pass.set_bind_group(0, &self.frame_bind, &[]);
+        pass.set_bind_group(
+            2,
+            model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1),
+            &[],
+        );
+        for &(_, index) in &self.order {
+            let p = &model.primitives[index];
+            let Some(material) = model.materials.get(p.material) else {
+                continue;
+            };
+            pass.set_bind_group(1, &material.bind, &[]);
+            pass.set_vertex_buffer(0, p.vertices.slice(..));
+            pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..p.index_count, 0, 0..1);
+        }
     }
 
     /// Adds `draw`'s view depth to `target` (ADR-0143 decision 4), keeping what is there
@@ -2180,7 +2522,7 @@ impl ModelRuntime {
             gpu,
             owner,
             draw,
-            targets[0],
+            (targets[0], None),
             (live, panoramas),
             DrawAs::Surface(targets),
         )
@@ -2298,6 +2640,13 @@ impl ModelRuntime {
         self.samples
     }
 
+    /// Makes the layer's pipelines at the sample count set and at one sample, which a
+    /// GPU short of time draws with (ADR-0245), ahead of the first draw that needs them.
+    pub(crate) fn warm(&mut self, gpu: &Gpu) {
+        self.pipelines_at(gpu, 1);
+        self.pipelines_at(gpu, self.samples);
+    }
+
     /// Where [`Self::layer`] holds the pipelines drawn with `samples`, made first if
     /// they aren't yet.
     fn pipelines_at(&mut self, gpu: &Gpu, samples: u32) -> usize {
@@ -2335,7 +2684,8 @@ impl ModelRuntime {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            // Read for the model's view depth ([`Self::record_view_depth`]).
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -3091,10 +3441,13 @@ fn pose_bind(
     (buffer, bind)
 }
 
+/// Uploads `texture` with its mips, and says in what format: block compressed when `compress` and its sides are
+/// whole blocks (`bc.rs`, BC1 when every texel is opaque, else BC3), else as RGBA8.
 fn upload_texture(
     kit: &UploadKit,
     texture: &ModelTexture,
-) -> Result<wgpu::TextureView, RenderError> {
+    compress: bool,
+) -> Result<(wgpu::TextureView, wgpu::TextureFormat, (u32, u32)), RenderError> {
     let limit = kit.max_texture_dimension_2d;
     if texture.width() > limit || texture.height() > limit {
         return Err(RenderError::TooLarge {
@@ -3104,33 +3457,88 @@ fn upload_texture(
             limit,
         });
     }
-    let format = match texture.color() {
-        TextureColor::Srgb => wgpu::TextureFormat::Rgba8UnormSrgb,
-        TextureColor::Linear => wgpu::TextureFormat::Rgba8Unorm,
+    let srgb = texture.color() == TextureColor::Srgb;
+    let levels = texture.levels();
+    // Short of GPU memory, the texture is made without its largest level, then without
+    // the next, until it fits: a model drawn a little softer, rather than not at all.
+    let mut skip = 0;
+    let (uploaded, format, block, alpha) = loop {
+        let (width, height) = (
+            (texture.width() >> skip).max(1),
+            (texture.height() >> skip).max(1),
+        );
+        // wgpu takes a compressed texture only in whole blocks at level 0.
+        let compress = compress && width.is_multiple_of(4) && height.is_multiple_of(4);
+        let alpha = compress && !levels[skip..].iter().all(|level| bc::opaque(level));
+        let (format, block) = match (compress, alpha, srgb) {
+            (false, _, true) => (wgpu::TextureFormat::Rgba8UnormSrgb, None),
+            (false, _, false) => (wgpu::TextureFormat::Rgba8Unorm, None),
+            (true, false, true) => (wgpu::TextureFormat::Bc1RgbaUnormSrgb, Some(bc::BC1_BLOCK)),
+            (true, false, false) => (wgpu::TextureFormat::Bc1RgbaUnorm, Some(bc::BC1_BLOCK)),
+            (true, true, true) => (wgpu::TextureFormat::Bc3RgbaUnormSrgb, Some(bc::BC3_BLOCK)),
+            (true, true, false) => (wgpu::TextureFormat::Bc3RgbaUnorm, Some(bc::BC3_BLOCK)),
+        };
+        let scope = kit.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let made = kit.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-render-model-texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: (levels.len() - skip) as u32,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let short = crate::gpu::scope_error(scope).or_else(|| refused_in_test(width, height));
+        match short {
+            None => {
+                if skip > 0 {
+                    tracing::warn!(
+                        width = texture.width(),
+                        height = texture.height(),
+                        uploaded_width = width,
+                        uploaded_height = height,
+                        "the GPU is short of memory: a model texture is uploaded without its largest levels"
+                    );
+                }
+                break (made, format, block, alpha);
+            }
+            Some(detail) if skip + 1 == levels.len() => {
+                return Err(RenderError::Uncaptured { detail });
+            }
+            Some(_) => {
+                made.destroy();
+                skip += 1;
+            }
+        }
     };
-    let uploaded = kit.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("jstream-render-model-texture"),
-        size: wgpu::Extent3d {
-            width: texture.width(),
-            height: texture.height(),
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: texture.levels().len() as u32,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
     // Each level is written from where it is, a band of rows at a time: the queue is
     // locked for one band's copy, not a level's, so a thread that submits meanwhile
-    // waits for little (ADR-0177).
-    for (level, texels) in texture.levels().iter().enumerate() {
-        let width = (texture.width() >> level).max(1);
-        let height = (texture.height() >> level).max(1);
-        let row = width as usize * 4;
+    // waits for little (ADR-0177). A compressed level's rows are rows of blocks, each
+    // four texels high.
+    for (level, texels) in levels[skip..].iter().enumerate() {
+        let width = (texture.width() >> (level + skip)).max(1);
+        let height = (texture.height() >> (level + skip)).max(1);
+        let (bytes, row, texel_rows, copy_width) = match block {
+            None => (
+                std::borrow::Cow::Borrowed(texels.as_slice()),
+                width as usize * 4,
+                1,
+                width,
+            ),
+            Some(size) => (
+                std::borrow::Cow::Owned(bc::compress(texels, width, height, alpha)),
+                width.div_ceil(4) as usize * size,
+                4,
+                width.div_ceil(4) * 4,
+            ),
+        };
         let band = (TEXTURE_BAND_BYTES / row).max(1);
-        for (at, rows) in texels.chunks(row * band).enumerate() {
+        for (at, rows) in bytes.chunks(row * band).enumerate() {
             let rows_here = (rows.len() / row) as u32;
             kit.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
@@ -3138,7 +3546,7 @@ fn upload_texture(
                     mip_level: level as u32,
                     origin: wgpu::Origin3d {
                         x: 0,
-                        y: (at * band) as u32,
+                        y: (at * band) as u32 * texel_rows,
                         z: 0,
                     },
                     aspect: wgpu::TextureAspect::All,
@@ -3146,21 +3554,47 @@ fn upload_texture(
                 rows,
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some(width * 4),
+                    bytes_per_row: Some(row as u32),
                     rows_per_image: Some(rows_here),
                 },
                 wgpu::Extent3d {
-                    width,
-                    height: rows_here,
+                    width: copy_width,
+                    height: rows_here * texel_rows,
                     depth_or_array_layers: 1,
                 },
             );
         }
-        debug_assert_eq!(texels.len(), row * height as usize);
     }
-    Ok(uploaded.create_view(&wgpu::TextureViewDescriptor::default()))
+    Ok((
+        uploaded.create_view(&wgpu::TextureViewDescriptor::default()),
+        format,
+        (uploaded.width(), uploaded.height()),
+    ))
 }
 
+#[cfg(test)]
+thread_local! {
+    /// In tests, the most texels a model texture's level 0 may have before it is refused
+    /// as if the GPU were short of memory ([`upload_texture`]); unlimited when `None`.
+    pub(crate) static TEXTURE_MEMORY_TEXELS: std::cell::Cell<Option<u64>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// A texture of `width` by `height` refused as a test asked ([`TEXTURE_MEMORY_TEXELS`]).
+fn refused_in_test(width: u32, height: u32) -> Option<String> {
+    #[cfg(test)]
+    {
+        let most = TEXTURE_MEMORY_TEXELS.with(std::cell::Cell::get);
+        if most.is_some_and(|most| u64::from(width) * u64::from(height) > most) {
+            return Some(String::from("out of memory (in a test)"));
+        }
+    }
+    let _ = (width, height);
+    None
+}
+
+mod bc;
+mod depth_resolve;
 pub(crate) mod focus;
 mod msaa;
 

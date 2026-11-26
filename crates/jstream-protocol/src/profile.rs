@@ -498,10 +498,10 @@ pub struct GpuPartProfile {
 #[non_exhaustive]
 pub enum GpuPart {
     /// Drawing a 3D model into its layer: shaded, with its depth prepass and its
-    /// multisampled resolve.
+    /// multisampled resolve, and its view depth, read from the depth that pass tested.
     Model,
-    /// Drawing a 3D model's view depth, or a 3D scene's, for the items after it and the
-    /// depth-aware filters to read.
+    /// Drawing a 3D scene's view depth, for the items after it and the depth-aware
+    /// filters to read, with the models it draws there on their own.
     ViewDepth,
     /// Drawing a 3D scene's surface buffer for screen-space reflections: its models
     /// whose layers didn't draw their surface, and merging those that did.

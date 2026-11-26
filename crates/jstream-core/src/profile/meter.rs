@@ -100,7 +100,7 @@ pub(crate) struct UnitTotals {
 pub(crate) enum GpuPart {
     /// A 3D model's draw into its layer.
     Model,
-    /// A 3D model's view depth.
+    /// A 3D scene's view depth, with the models drawn into it on their own.
     ViewDepth,
     /// A 3D model's surface, drawn into its scene's surface buffer on its own.
     Surface,

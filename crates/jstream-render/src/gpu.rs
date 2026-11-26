@@ -311,7 +311,9 @@ impl Gpu {
             // draws models with every sample count it can (ADR-0242).
             required_features: adapter.features()
                 & (wgpu::Features::TIMESTAMP_QUERY
-                    | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES),
+                    | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+                    // A model's textures are block compressed where it can (`model/bc.rs`).
+                    | wgpu::Features::TEXTURE_COMPRESSION_BC),
             ..Default::default()
         }))
         .ok_or_else(|| RenderError::Device {

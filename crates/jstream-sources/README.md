@@ -299,8 +299,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   scales up with no visible loss.
 - `fog_card`: a generated card of fog, `width` by `height` pixels (at most 4096 a
   side): the `color` everywhere, straight, and the fog in its alpha. It is the cheap
-  stand-in for `volumetric_fog`, which marches every pixel through the scene each
-  frame: a card costs what a still picture does. Placed as an item in a 3D scene in
+  stand-in for `volumetric_fog`, which marches rays through the scene for every pixel
+  (or every block of two by two) each frame: a card costs what a still picture does. Placed as an item in a 3D scene in
   front of what it should veil, it is a plane at a depth, so it shifts against what is
   behind it as the camera moves, and a few at different depths read as fog with volume.
   The clouds are the backdrop's seeded gradient noise, domain-warped, on a grid 4 pixels
@@ -433,7 +433,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   times stops early even when its primitives are empty (those are skipped). Buffers that
   name the same file (once percent-decoded) share one read, and all buffers together, a
   `.glb`'s binary chunk included, hold at most 512 MiB. Images decode as the `image` kind decodes them, within the same
-  `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
+  `Limits`, and over 4096 px are shrunk, or over the side `texture_size` asks
+  (`full`, the default, `2048`, `1024` or `512`; not live, so a change loads the file
+  again): halved, each texel the mean of four, until it fits
+  (`a_texture_past_the_side_asked_is_halved_until_it_fits`). `color` (multiplying a file's own), `metallic`, `roughness`,
   `double_sided` (the last three for a shape only), `lighting` (`studio`, `unlit`,
   or `scene`, lit by the `light` sources of its 3D scene), and `casts_shadows` and
   `receives_shadows` (both default on,
