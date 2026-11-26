@@ -2224,8 +2224,16 @@ impl Compositor {
                 shape.minification(texels)
             };
             // How much of its frame's resolution the image needed, for an upload drawn
-            // at the size it is shown (`ResourceCache::upload_drawn`, #1139).
-            item.image.record_draw(least);
+            // at the size it is shown (`ResourceCache::upload_drawn`, #1139). A layer
+            // seen in 3D needs what its polygon shows of it where it is largest, so a
+            // nested scene on a small card is drawn small too (ADR-0249); an upload
+            // seen in 3D still needs all of its frame.
+            item.image
+                .record_draw(match (shape.is_3d(), item.image.target()) {
+                    (false, _) => least,
+                    (true, Some(_)) => shape.projected_minification(texels),
+                    (true, None) => 0.0,
+                });
             // A layer that is transparent outside what its scene drew is drawn only over
             // that (#1070): the rest adds nothing in the modes that leave what is below
             // a transparent texel as it was. Not with a chain, whose levels spread the

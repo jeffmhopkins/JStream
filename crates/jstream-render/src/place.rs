@@ -169,6 +169,38 @@ impl Shape {
         (across.min(down), across.max(down))
     }
 
+    /// How many texels of a `texels`-sized texture a canvas pixel of the polygon spans
+    /// where it is drawn largest: the least, over each edge and each of its two ends,
+    /// of the edge's texels against its pixels, made local at that end by the ratio of
+    /// the two ends' `w` (a projected line's speed at an end is its mean speed times
+    /// the far end's `w` over the near end's). A plane's scale is largest at its
+    /// nearest vertex, so this is where it is largest. 0 when it can't be measured: a
+    /// degenerate polygon, or a `w` that is not positive. Meaningful for any shape; a
+    /// 2D one's `w` is 1 everywhere.
+    pub(crate) fn projected_minification(&self, texels: (u32, u32)) -> f32 {
+        let vertices = self.vertices();
+        let (tw, th) = (texels.0 as f32, texels.1 as f32);
+        let mut least = f32::INFINITY;
+        for (index, &from) in vertices.iter().enumerate() {
+            let to = vertices[(index + 1) % vertices.len()];
+            let du = (to.uv[0] - from.uv[0]) * tw;
+            let dv = (to.uv[1] - from.uv[1]) * th;
+            let dx = to.canvas[0] - from.canvas[0];
+            let dy = to.canvas[1] - from.canvas[1];
+            let pixels = (dx * dx + dy * dy).sqrt();
+            let spanned = (du * du + dv * dv).sqrt();
+            if !(pixels > 0.0 && spanned > 0.0) {
+                continue;
+            }
+            if !(from.w > 0.0 && to.w > 0.0) {
+                return 0.0;
+            }
+            let ratio = spanned / pixels;
+            least = least.min(ratio * (from.w / to.w).min(to.w / from.w));
+        }
+        if least.is_finite() { least } else { 0.0 }
+    }
+
     /// A 2D quad: `w = 1` and no edge coverage.
     fn flat(corners: [[f32; 2]; 4], uvs: [[f32; 2]; 4]) -> Self {
         let mut vertices = [UNUSED; MAX_VERTICES];
@@ -1259,6 +1291,37 @@ mod tests {
         .expect("finite")
         .expect("draws");
         close(dense.minification((800, 400)), (2.0, 2.0));
+    }
+
+    /// A 2D quad's projected minification is its minification along its less minified
+    /// axis. A tilted one in perspective is drawn largest at its near edge: fewer texels
+    /// per pixel there than its mean over the quad, and fewer than the same quad flat
+    /// would have.
+    #[test]
+    fn a_projected_minification_is_where_the_shape_is_largest() {
+        let flat = shape(
+            400,
+            200,
+            boxed(100.0, 100.0, FitMode::Stretch, 0.0),
+            Crop::NONE,
+        )
+        .expect("finite")
+        .expect("draws");
+        assert!((flat.projected_minification((400, 200)) - 2.0).abs() < 1e-3);
+        let tilted = |tilt: f32| {
+            shape(
+                40,
+                30,
+                Placement::Geometry(in_3d(tilt, 0.0, 0.0, Some(60.0))),
+                Crop::NONE,
+            )
+            .expect("finite")
+            .expect("draws")
+            .projected_minification((40, 30))
+        };
+        let (level, steep) = (tilted(0.0), tilted(50.0));
+        assert!(level > 0.0 && steep > 0.0, "{level} {steep}");
+        assert!(steep < level, "nearer at its edge: {steep} vs {level}");
     }
 
     /// A rotated, scaled quad trimmed to a quarter of its texture keeps that quarter's

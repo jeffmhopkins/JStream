@@ -585,6 +585,100 @@ impl<K: Ord + Clone> ResourceCache<K> {
         Ok(self.replace(key, image, 0))
     }
 
+    /// [`Self::layer`] for a picture of `canvas`, held at the size the items that place
+    /// it drew it at over the frames before, once [`Self::draw_uploads_small`] allows it
+    /// (ADR-0249): a nested scene shown as a small picture is drawn into a layer with
+    /// that many pixels, not the canvas's.
+    ///
+    /// The size is chosen as [`Self::upload_drawn`] chooses an upload's, once a frame:
+    /// from the most of the canvas's resolution its draws needed last time and
+    /// `planned`, what the caller's placements say they need (0 or less when unknown),
+    /// as a power-of-two fraction of the canvas each way with a quarter of headroom, no
+    /// smaller than a sixteenth. A new entry is held at `planned`, or whole when that is
+    /// unknown. The layer is placed at the canvas's size whatever its texels
+    /// ([`Image::set_extent`]), so a scene that places it is unchanged; the caller draws
+    /// into it at its own size. A layer of the size chosen is reused, as [`Self::layer`]
+    /// reuses one.
+    ///
+    /// # Errors
+    /// As for [`Compositor::layer`].
+    pub fn layer_drawn(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        canvas: FrameSize,
+        planned: f32,
+    ) -> Result<&Image, RenderError> {
+        let full = (canvas.width(), canvas.height());
+        if !self.holds_small(full) {
+            return self.layer(compositor, key, full.0, full.1);
+        }
+        let frame = self.frame;
+        let held = self.live.get(key).and_then(|entry| {
+            (entry.image.target().is_some() && entry.image.full() == full).then_some(entry.scale)
+        });
+        let scale = match held {
+            None if planned > 0.0 => drawn_scale(planned),
+            None => 1.0,
+            Some(held) => {
+                let entry = self.live.get_mut(key).ok_or_else(|| missing("a layer"))?;
+                // Once a frame, as for an upload: every mix of the frame draws into the
+                // same layer, and a mix not due on a tick must not shrink it.
+                let need = if entry.used == frame {
+                    0.0
+                } else {
+                    entry.image.take_need().max(planned.max(0.0))
+                };
+                let wanted = drawn_scale(need);
+                if need == 0.0 || (need <= held && wanted > held / 2.0) {
+                    held
+                } else {
+                    wanted
+                }
+            }
+        };
+        if held == Some(scale) {
+            let entry = self.live.get_mut(key).ok_or_else(|| missing("a layer"))?;
+            entry.used = frame;
+            return Ok(&entry.image);
+        }
+        let mut image = compositor.layer(scaled(full.0, scale), scaled(full.1, scale))?;
+        image.set_extent(canvas);
+        image.set_full(full);
+        self.replace(key, image, 0);
+        let entry = self.live.get_mut(key).ok_or_else(|| missing("a layer"))?;
+        entry.scale = scale;
+        Ok(&entry.image)
+    }
+
+    /// Puts the image under `from` under `key` too, placed at `extent`, and marks both
+    /// used this frame: for a nested scene that only shows one picture over all of its
+    /// canvas, which is then placed as that picture, with no layer drawn (ADR-0249).
+    /// The two share the texture, its count of writes and what its draws need, and
+    /// [`Self::end_frame`] lets go of the shared frame hold as it does the original's.
+    /// A layer `key` held before is retired. Returns `false`, and changes nothing, when
+    /// there is nothing under `from`.
+    pub fn share(&mut self, key: &K, from: &K, extent: FrameSize) -> bool {
+        let frame = self.frame;
+        let Some(source) = self.live.get_mut(from) else {
+            return false;
+        };
+        source.used = frame;
+        let mut image = source.image.clone();
+        image.set_extent(extent);
+        match self.live.get_mut(key) {
+            // The same texture shared again: nothing to free.
+            Some(entry) if entry.image.texture() == image.texture() => {
+                entry.image = image;
+                entry.used = frame;
+            }
+            _ => {
+                self.replace(key, image, 0);
+            }
+        }
+        true
+    }
+
     /// The depth layer for `key` at `width` by `height`, for
     /// [`Compositor::render_view_depth`] and [`Compositor::draw_model_depth`], and marks
     /// it used this frame. A depth layer of the same size is reused, as [`Self::layer`]

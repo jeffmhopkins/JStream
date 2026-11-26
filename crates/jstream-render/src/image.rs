@@ -129,7 +129,8 @@ pub struct Image {
     /// `None` for every other image.
     ingest: Option<wgpu::BindGroup>,
     /// The size of the frame an upload holds, which its texture can be smaller than
-    /// (#1139); the texture's own size for every other image.
+    /// (#1139), or of the picture a layer drawn smaller stands for (ADR-0249); the
+    /// texture's own size for every other image.
     full: (u32, u32),
     /// The most of the frame's resolution a draw needed since [`Self::take_need`] last
     /// read it, as `f32` bits: 1 is every texel of [`Self::full`], 0.25 a quarter each
@@ -312,9 +313,17 @@ impl Image {
     }
 
     /// The size of the frame an upload holds: its texture's, or larger when it was
-    /// uploaded smaller than its frame ([`crate::ResourceCache::upload_drawn`]).
+    /// uploaded smaller than its frame ([`crate::ResourceCache::upload_drawn`]), or a
+    /// layer drawn smaller than its picture ([`crate::ResourceCache::layer_drawn`]).
     pub(crate) fn full(&self) -> (u32, u32) {
         self.full
+    }
+
+    /// Sets [`Self::full`], for a layer drawn with fewer texels than the picture it
+    /// stands for ([`crate::ResourceCache::layer_drawn`]), so its draws' needs count in
+    /// that picture's resolution.
+    pub(crate) fn set_full(&mut self, full: (u32, u32)) {
+        self.full = full;
     }
 
     /// Notes that a draw sampled `texels_per_pixel` of the texture's texels per canvas
