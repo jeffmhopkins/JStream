@@ -244,13 +244,69 @@ impl ModelKind {
     }
 }
 
-/// The id of texture slot `n` (from 1) and of what it is on: slot 1 is `texture` and
-/// `texture_material`, as before there were more (ADR-0250).
-fn slot_ids(n: usize) -> (String, String) {
+/// The ids of texture slot `n` (from 1), of what it is on and of its region: slot 1 is
+/// `texture`, `texture_material` and `texture_region` (ADR-0250).
+fn slot_ids(n: usize) -> (String, String, String) {
     match n {
-        1 => ("texture".into(), "texture_material".into()),
-        n => (format!("texture_{n}"), format!("texture_material_{n}")),
+        1 => (
+            "texture".into(),
+            "texture_material".into(),
+            "texture_region".into(),
+        ),
+        n => (
+            format!("texture_{n}"),
+            format!("texture_material_{n}"),
+            format!("texture_region_{n}"),
+        ),
     }
+}
+
+/// The region parameter of texture slot `n`, labelled `label`.
+fn region_param(id: &str, label: &str) -> ParamDescriptor {
+    ParamDescriptor {
+        description: Some(
+            "The part of what the texture is on that the whole picture covers, for a file \
+             whose screens share one texture's coordinates: `x y width height`, each from \
+             0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). \
+             Empty covers all of them."
+                .into(),
+        ),
+        live: true,
+        group: Some("Textures".to_owned()),
+        ..param(
+            id,
+            label,
+            ParamType::String {
+                multiline: false,
+                max_len: 64,
+            },
+            json!(""),
+        )
+    }
+}
+
+/// A region setting's value: four numbers, `x y width height`, each from 0 to 1, the
+/// width and height more than 0 and the region inside the square, apart by spaces or
+/// commas; `None` for an empty one.
+fn parse_region(text: &str) -> Option<Option<[f32; 4]>> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Some(None);
+    }
+    let numbers: Vec<f32> = text
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|part| !part.is_empty())
+        .map(str::parse)
+        .collect::<Result<_, _>>()
+        .ok()?;
+    let [x, y, width, height] = <[f32; 4]>::try_from(numbers).ok()?;
+    let unit = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
+    let fits = [x, y, width, height].into_iter().all(unit)
+        && width > 0.0
+        && height > 0.0
+        && x + width <= 1.0 + 1e-6
+        && y + height <= 1.0 + 1e-6;
+    fits.then_some(Some([x, y, width, height]))
 }
 
 /// `params` with texture slots 2 to [`MAX_LIVE_TEXTURES`] after the first's, all in the
@@ -262,7 +318,7 @@ fn with_texture_slots(mut params: Vec<ParamDescriptor>) -> Vec<ParamDescriptor> 
     };
     let mut slots = Vec::new();
     for n in 2..=MAX_LIVE_TEXTURES {
-        let (texture, on) = slot_ids(n);
+        let (texture, on, region) = slot_ids(n);
         slots.push(ParamDescriptor {
             description: Some(format!(
                 "Another source whose picture replaces a base-colour texture, as Texture \
@@ -297,11 +353,13 @@ fn with_texture_slots(mut params: Vec<ParamDescriptor>) -> Vec<ParamDescriptor> 
                 json!(""),
             )
         });
+        slots.push(region_param(&region, &format!("Texture {n} region")));
     }
     params[first].group = group();
     if let Some(on) = params.get_mut(first + 1) {
         on.group = group();
     }
+    slots.insert(0, region_param("texture_region", "Texture region"));
     params.splice(first + 2..first + 2, slots);
     params
 }
@@ -407,7 +465,16 @@ impl Look {
         // Settings saved before a slot existed have none.
         let mut textures = Vec::new();
         for n in 1..=MAX_LIVE_TEXTURES {
-            let (texture, on) = slot_ids(n);
+            let (texture, on, region) = slot_ids(n);
+            let region = match settings.get(&region) {
+                None => None,
+                Some(value) => value.as_str().and_then(parse_region).ok_or_else(|| {
+                    bad(
+                        &region,
+                        "must be `x y width height`, each from 0 to 1, inside the square",
+                    )
+                })?,
+            };
             let on = match settings.get(&on) {
                 None => None,
                 Some(value) => {
@@ -418,7 +485,7 @@ impl Look {
                 }
             };
             if let Some(source) = named_source(settings, &texture)? {
-                textures.push(ShownTexture { source, on });
+                textures.push(ShownTexture { source, on, region });
             }
         }
         // The colour setting is sRGB; a material's base colour is linear.

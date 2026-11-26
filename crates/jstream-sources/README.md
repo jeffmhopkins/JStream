@@ -76,7 +76,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   shadows, whether it reflects its scene through the scene's reflection probes
   (`reflections`, ADR-0170 decision 2), and the sources its texture slots (`texture`
   with `texture_material`, then `texture_2` to `texture_16`, each with what it is on: a
-  material's, a node's or a mesh's name, `ShownTexture`, ADR-0250) and `reflection` name
+  material's, a node's or a mesh's name, and the region of their texture coordinates the
+  picture covers, `texture_region` and `texture_region_N`, `ShownTexture`, ADR-0250) and
+  `reflection` name
   (decision 5). Only the `model` kind has one.
   `light()` (default `None`) is a `ShownLight` for the `light` kind: its `LightType`,
   colour, intensity, range, cone and softness, and whether it casts shadows and how

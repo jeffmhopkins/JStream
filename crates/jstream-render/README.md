@@ -1061,8 +1061,9 @@ under the studio rig, fixed to the viewing frame, or unlit.
 replaces the base-colour texture of the parts it is on with another image
 ([ADR-0250](../../docs/adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md)):
 a part (a primitive) takes the first whose `on` is its material's glTF name or its node's
-or mesh's (`Primitive::names`), else the first with no `on` (`slot_of`). `draw_model`
-samples each through a mip chain of the whole
+or mesh's (`Primitive::names`), else the first with no `on` (`slot_of`), read over its
+`region` of the part's texture coordinates (the material uniform's sixth `vec4`,
+`live_values`, `a_live_texture_spans_its_region`). `draw_model` samples each through a mip chain of the whole
 image (`Region::whole`, kept on the image like a 3D item's and rebuilt only when the
 image changed), bound with the material's own repeating anisotropic sampler (16× for the
 base colour; the normal, surface, occlusion and emissive maps are read through a second

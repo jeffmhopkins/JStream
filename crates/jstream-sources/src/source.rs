@@ -272,7 +272,7 @@ pub const MAX_LIVE_TEXTURES: usize = 16;
 
 /// One live texture of a model (ADR-0107 decision 5, ADR-0250): a source's picture in
 /// place of the base-colour texture of the parts it is on.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ShownTexture {
     /// The source whose picture it is.
     pub source: jstream_protocol::SourceId,
@@ -280,6 +280,9 @@ pub struct ShownTexture {
     /// the first texture that names its material, its node or its mesh, else the first
     /// that names nothing; `None` names nothing.
     pub on: Option<String>,
+    /// The part of those parts' texture coordinates the whole picture covers, as
+    /// `[x, y, width, height]` of the 0 to 1 square; `None` for all of them.
+    pub region: Option<[f32; 4]>,
 }
 
 /// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.

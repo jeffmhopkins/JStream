@@ -1844,7 +1844,7 @@ fn golden_model_a_draw_drives_its_materials_by_name_and_only_for_itself() {
 fn a_material_drive_adds_within_ranges_and_nothing_when_it_adds_nothing() {
     let values = [
         0.5, 0.5, 0.5, 1.0, 2.0, 1.0, 0.0, 0.0, 0.3, 0.6, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0,
+        0.0, 0.0, 1.0, 1.0, 0.0, 0.0,
     ];
     assert_eq!(super::driven_values(&values, "a", &[]), None);
     let drive = |d: super::MaterialDrive<'static>| {
@@ -2380,6 +2380,7 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
     let live = |on| super::LiveTexture {
         image: Some(&picture),
         on,
+        region: None,
     };
     let shot = textured_plane(compositor, Some(live(None)));
     assert_near(rgb(&shot, 80, 30), [255, 0, 0], (80, 30));
@@ -2393,6 +2394,7 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
         Some(super::LiveTexture {
             image: None,
             on: None,
+            region: None,
         }),
     );
     assert_near(rgb(&missing, 80, 50), [0, 0, 0], (80, 50));
@@ -2424,6 +2426,7 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
             Some(super::LiveTexture {
                 image: Some(&layer),
                 on: None,
+                region: None,
             }),
         );
         let want = if colour.g > 0.5 {
@@ -2479,10 +2482,12 @@ fn a_model_shows_a_live_texture_on_each_part_it_names() {
         super::LiveTexture {
             image: Some(&red),
             on: Some("right"),
+            region: None,
         },
         super::LiveTexture {
             image: Some(&blue),
             on: None,
+            region: None,
         },
     ];
     compositor
@@ -2520,6 +2525,54 @@ fn a_model_shows_a_live_texture_on_each_part_it_names() {
     }
 }
 
+/// ADR-0250: a live texture with a region spans only that part of its parts' texture
+/// coordinates: over the plane's lower half, its picture's top half shows above its
+/// bottom half; and its need counts the picture spread over less.
+#[test]
+fn a_live_texture_spans_its_region() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    // 8x8 texels: red over its top half, blue under it.
+    let rgba: Vec<u8> = (0..8)
+        .flat_map(|y| {
+            (0..8).flat_map(move |_| {
+                if y < 4 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 255, 255]
+                }
+            })
+        })
+        .collect();
+    let picture = compositor
+        .upload_rgba8(8, 8, &rgba)
+        .expect("the picture uploads");
+    let shot = textured_plane(
+        compositor,
+        Some(super::LiveTexture {
+            image: Some(&picture),
+            on: None,
+            region: Some([0.0, 0.5, 1.0, 0.5]),
+        }),
+    );
+    // The plane spans rows 10 to 90: its lower half, rows 50 to 90, is the picture.
+    assert_near(rgb(&shot, 80, 60), [255, 0, 0], (80, 60));
+    assert_near(rgb(&shot, 80, 85), [0, 0, 255], (80, 85));
+    let spread = picture.take_need();
+    textured_plane(
+        compositor,
+        Some(super::LiveTexture {
+            image: Some(&picture),
+            on: None,
+            region: None,
+        }),
+    );
+    let whole = picture.take_need();
+    assert!(spread < whole, "{spread} over its region, {whole} over all");
+}
+
 /// ADR-0249: a live texture's draw records how much of its picture's resolution the
 /// model needs where it is drawn largest: a 512² picture over a unit plane drawn 80
 /// pixels wide needs 80 of its 512 texels each way.
@@ -2539,6 +2592,7 @@ fn a_live_texture_records_the_resolution_its_model_needs() {
         Some(super::LiveTexture {
             image: Some(&picture),
             on: None,
+            region: None,
         }),
     );
     let need = picture.take_need();
@@ -3142,6 +3196,7 @@ fn a_surface_reads_the_live_texture_its_layer_shows() {
         textures: &[super::LiveTexture {
             image: Some(&red),
             on: None,
+            region: None,
         }],
         reflection: None,
         probe: None,

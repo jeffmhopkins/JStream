@@ -2352,6 +2352,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "texture_region",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
+        "group": "Textures",
+        "live": true
+      },
+      {
         "id": "texture_2",
         "type": "source",
         "media": "video",
@@ -2369,6 +2380,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "",
         "label": "Texture 2 on",
         "description": "What Texture 2 is on, by its name in the file: a material, a node or a mesh. A part takes the first texture that names it; the first with this empty takes the rest.",
+        "group": "Textures",
+        "live": true
+      },
+      {
+        "id": "texture_region_2",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 2 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
         "group": "Textures",
         "live": true
       },
@@ -2394,6 +2416,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "texture_region_3",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 3 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
+        "group": "Textures",
+        "live": true
+      },
+      {
         "id": "texture_4",
         "type": "source",
         "media": "video",
@@ -2411,6 +2444,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "",
         "label": "Texture 4 on",
         "description": "What Texture 4 is on, by its name in the file: a material, a node or a mesh. A part takes the first texture that names it; the first with this empty takes the rest.",
+        "group": "Textures",
+        "live": true
+      },
+      {
+        "id": "texture_region_4",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 4 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
         "group": "Textures",
         "live": true
       },
@@ -2436,6 +2480,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "texture_region_5",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 5 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
+        "group": "Textures",
+        "live": true
+      },
+      {
         "id": "texture_6",
         "type": "source",
         "media": "video",
@@ -2453,6 +2508,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "",
         "label": "Texture 6 on",
         "description": "What Texture 6 is on, by its name in the file: a material, a node or a mesh. A part takes the first texture that names it; the first with this empty takes the rest.",
+        "group": "Textures",
+        "live": true
+      },
+      {
+        "id": "texture_region_6",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 6 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
         "group": "Textures",
         "live": true
       },
@@ -2478,6 +2544,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "texture_region_7",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 7 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
+        "group": "Textures",
+        "live": true
+      },
+      {
         "id": "texture_8",
         "type": "source",
         "media": "video",
@@ -2495,6 +2572,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "",
         "label": "Texture 8 on",
         "description": "What Texture 8 is on, by its name in the file: a material, a node or a mesh. A part takes the first texture that names it; the first with this empty takes the rest.",
+        "group": "Textures",
+        "live": true
+      },
+      {
+        "id": "texture_region_8",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 8 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
         "group": "Textures",
         "live": true
       },
@@ -2520,6 +2608,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "texture_region_9",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 9 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
+        "group": "Textures",
+        "live": true
+      },
+      {
         "id": "texture_10",
         "type": "source",
         "media": "video",
@@ -2537,6 +2636,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "",
         "label": "Texture 10 on",
         "description": "What Texture 10 is on, by its name in the file: a material, a node or a mesh. A part takes the first texture that names it; the first with this empty takes the rest.",
+        "group": "Textures",
+        "live": true
+      },
+      {
+        "id": "texture_region_10",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 10 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
         "group": "Textures",
         "live": true
       },
@@ -2562,6 +2672,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "texture_region_11",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 11 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
+        "group": "Textures",
+        "live": true
+      },
+      {
         "id": "texture_12",
         "type": "source",
         "media": "video",
@@ -2579,6 +2700,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "",
         "label": "Texture 12 on",
         "description": "What Texture 12 is on, by its name in the file: a material, a node or a mesh. A part takes the first texture that names it; the first with this empty takes the rest.",
+        "group": "Textures",
+        "live": true
+      },
+      {
+        "id": "texture_region_12",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 12 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
         "group": "Textures",
         "live": true
       },
@@ -2604,6 +2736,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "texture_region_13",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 13 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
+        "group": "Textures",
+        "live": true
+      },
+      {
         "id": "texture_14",
         "type": "source",
         "media": "video",
@@ -2621,6 +2764,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "",
         "label": "Texture 14 on",
         "description": "What Texture 14 is on, by its name in the file: a material, a node or a mesh. A part takes the first texture that names it; the first with this empty takes the rest.",
+        "group": "Textures",
+        "live": true
+      },
+      {
+        "id": "texture_region_14",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 14 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
         "group": "Textures",
         "live": true
       },
@@ -2646,6 +2800,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "texture_region_15",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 15 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
+        "group": "Textures",
+        "live": true
+      },
+      {
         "id": "texture_16",
         "type": "source",
         "media": "video",
@@ -2663,6 +2828,17 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "",
         "label": "Texture 16 on",
         "description": "What Texture 16 is on, by its name in the file: a material, a node or a mesh. A part takes the first texture that names it; the first with this empty takes the rest.",
+        "group": "Textures",
+        "live": true
+      },
+      {
+        "id": "texture_region_16",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "Texture 16 region",
+        "description": "The part of what the texture is on that the whole picture covers, for a file whose screens share one texture's coordinates: `x y width height`, each from 0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). Empty covers all of them.",
         "group": "Textures",
         "live": true
       },

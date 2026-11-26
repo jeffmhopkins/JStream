@@ -142,21 +142,31 @@ fn texture_and_reflection_name_sources_live() {
         "texture_3": source_ref("page"),
         "texture_material_3": "",
         "texture_material_2": "left",
+        "texture_region_3": "0.5, 0 0.5 0.25",
         "reflection": source_ref("sky"),
     }));
     source.update(&named).expect("the maps are live");
     let shown = source.model().expect("a model");
-    let textures: Vec<(&str, Option<&str>)> = shown
+    let textures: Vec<String> = shown
         .textures
         .iter()
-        .map(|t| (t.source.as_str(), t.on.as_deref()))
+        .map(|t| format!("{} {:?} {:?}", t.source.as_str(), t.on, t.region))
         .collect();
-    assert_eq!(textures, [("cam", Some("screen")), ("page", None)]);
+    assert_eq!(
+        textures,
+        [
+            r#"cam Some("screen") None"#,
+            "page None Some([0.5, 0.0, 0.5, 0.25])"
+        ]
+    );
     assert_eq!(shown.reflection.as_ref().map(|id| id.as_str()), Some("sky"));
     for (id, value) in [
         ("texture", json!("cam")),
         ("texture_16", json!("cam")),
         ("texture_material_2", json!(2)),
+        ("texture_region", json!("0 0 1")),
+        ("texture_region_4", json!("0.5 0 0.6 1")),
+        ("texture_region_5", json!("0 0 0 1")),
         ("reflection", json!(3)),
     ] {
         let err = create(json!({ "shape": "cube", id: value }), &Context::default())
@@ -169,8 +179,8 @@ fn texture_and_reflection_name_sources_live() {
     }
 }
 
-/// ADR-0250: the kind offers sixteen texture slots, each a live source and what it is
-/// on, all in the group `Textures`, the first two as before.
+/// ADR-0250: the kind offers sixteen texture slots, each a live source, what it is on
+/// and its region, all in the group `Textures`, the first two as before.
 #[test]
 fn the_kind_offers_sixteen_texture_slots() {
     let kind = super::ModelKind::new();
@@ -181,11 +191,12 @@ fn the_kind_offers_sixteen_texture_slots() {
         .position(|id| *id == "texture")
         .expect("a texture");
     assert_eq!(ids[first + 1], "texture_material");
-    assert_eq!(ids[first + 2], "texture_2");
-    assert_eq!(ids[first + 31], "texture_material_16");
-    assert_eq!(ids[first + 32], "reflection");
+    assert_eq!(ids[first + 2], "texture_region");
+    assert_eq!(ids[first + 3], "texture_2");
+    assert_eq!(ids[first + 47], "texture_region_16");
+    assert_eq!(ids[first + 48], "reflection");
     assert!(
-        params[first..first + 32]
+        params[first..first + 48]
             .iter()
             .all(|p| p.live && p.group.as_deref() == Some("Textures"))
     );

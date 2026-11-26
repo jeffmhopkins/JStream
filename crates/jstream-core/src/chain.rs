@@ -3737,6 +3737,7 @@ mod tests {
                 textures: vec![jstream_sources::ShownTexture {
                     source: SourceId::new(source),
                     on: material.map(str::to_owned),
+                    region: None,
                 }],
                 ..shown
             }

@@ -104,8 +104,8 @@ impl<'a> Panoramas<'a> {
             .map(|blurred| &blurred.whole)
     }
 }
-/// Bytes of a material's uniform: five `vec4`.
-const MATERIAL_BYTES: u64 = 80;
+/// Bytes of a material's uniform: six `vec4`.
+const MATERIAL_BYTES: u64 = (MATERIAL_VALUES * 4) as u64;
 /// The most bytes of a texture level one queue write copies ([`upload_texture`]).
 const TEXTURE_BAND_BYTES: usize = 4 << 20;
 
@@ -143,6 +143,10 @@ struct Uploaded {
     formats: Vec<(wgpu::TextureFormat, (u32, u32))>,
 }
 
+/// A live texture a kept draw read: its picture with its texels, what it is on and its
+/// region.
+type KeptLive = (Option<crate::image::Seen>, Option<String>, Option<[f32; 4]>);
+
 /// What a model's layer was drawn of (ADR-0246): everything its pixels depend on, so a
 /// draw asked for again of the same is left as the layer holds it. Compared as it is,
 /// not hashed, so two different draws never compare equal.
@@ -169,7 +173,7 @@ struct Kept {
     /// Each material's drive: none, or the values it drew with.
     drives: Vec<u8>,
     /// Its live textures: each picture with its texels, and what it is on.
-    live: Vec<(Option<crate::image::Seen>, Option<String>)>,
+    live: Vec<KeptLive>,
 }
 
 impl Kept {
@@ -207,7 +211,7 @@ impl Kept {
                 .image
                 .filter(|image| image.owner().is(owner))
                 .map(Image::seen);
-            (seen, texture.on.map(str::to_owned))
+            (seen, texture.on.map(str::to_owned), texture.region)
         }));
     }
 
@@ -259,6 +263,8 @@ pub(crate) struct LiveSet {
     /// What each texture is on, by slot: a material's, a node's or a mesh's name, or
     /// `None` for every part no other names.
     on: Vec<Option<String>>,
+    /// The region of its parts' texture coordinates each spans, by slot.
+    regions: Vec<Option<[f32; 4]>>,
     /// One per material and slot some part takes: that material's group with the
     /// slot's texture as its base colour's, and the uniform it binds, which a draw
     /// that drives the material writes (ADR-0171).
@@ -276,13 +282,28 @@ impl LiveSet {
             .map(|(_, _, bind, _)| bind)
     }
 
-    /// The uniforms of material `material`'s groups.
-    fn uniforms(&self, material: usize) -> impl Iterator<Item = &wgpu::Buffer> {
+    /// The uniforms of material `material`'s groups, with their slots.
+    fn uniforms(&self, material: usize) -> impl Iterator<Item = (usize, &wgpu::Buffer)> {
         self.binds
             .iter()
             .filter(move |(m, ..)| *m == material)
-            .map(|(.., uniform)| uniform)
+            .map(|(_, slot, _, uniform)| (*slot, uniform))
     }
+}
+
+/// A material's uniform `values` with a live texture as its base colour's: a picture in
+/// premultiplied linear light, read over `region` of the texture coordinates
+/// (`[x, y, width, height]`, ADR-0250), or all of them for `None`.
+fn live_values(
+    mut values: [f32; MATERIAL_VALUES],
+    region: Option<[f32; 4]>,
+) -> [f32; MATERIAL_VALUES] {
+    values[17] = 1.0;
+    let [x, y, width, height] = region
+        .filter(|r| r.iter().all(|v| v.is_finite()) && r[2] > 0.0 && r[3] > 0.0)
+        .unwrap_or([0.0, 0.0, 1.0, 1.0]);
+    values[20..24].copy_from_slice(&[1.0 / width, 1.0 / height, -x / width, -y / height]);
+    values
 }
 
 /// The slot of the live texture a part with `material`'s name and `names` (its node's
@@ -334,7 +355,7 @@ struct GpuMaterial {
 }
 
 /// How many `f32`s a material's uniform holds.
-const MATERIAL_VALUES: usize = 20;
+const MATERIAL_VALUES: usize = 24;
 
 /// How one placement of a model changes some of its materials as it draws them, by
 /// motion modifiers on its source's settings (ADR-0171 decision 4). Nothing is stored:
@@ -545,7 +566,7 @@ fn texel_density(primitive: &jstream_media::model::Primitive) -> f32 {
 /// needed whole.
 fn live_minification(
     model: &Uploaded,
-    (on, slot): (&[Option<String>], usize),
+    (on, slot, region): (&[Option<String>], usize, Option<[f32; 4]>),
     clip: &[[f32; 4]; 4],
     canvas: Canvas,
     texels: (u32, u32),
@@ -555,6 +576,8 @@ fn live_minification(
     let (rx, ry, rw) = (row(0), row(1), row(3));
     let length = |r: &[f64; 4]| (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt();
     let side = (f64::from(texels.0) * f64::from(texels.1)).sqrt();
+    // A picture over a region of the coordinates is spread that much thinner.
+    let spanned = region.map_or(1.0, |[_, _, w, h]| (f64::from(w) * f64::from(h)).sqrt());
     let mut least = f64::INFINITY;
     for p in &model.primitives {
         let taken = model
@@ -590,7 +613,7 @@ fn live_minification(
             let down = (length(&ry) + y.abs() * length(&rw)) / w * height / 2.0;
             pixels = pixels.max(across).max(down);
         }
-        least = least.min(f64::from(p.texel_density) * side / pixels);
+        least = least.min(f64::from(p.texel_density) * side / spanned / pixels);
     }
     if least.is_finite() && least > 0.0 {
         least as f32
@@ -779,6 +802,10 @@ pub struct LiveTexture<'a> {
     /// base-colour texture it replaces (ADR-0250). `None` is on every part no other
     /// texture of the draw names.
     pub on: Option<&'a str>,
+    /// The part of those parts' texture coordinates the whole picture spans, as
+    /// `[x, y, width, height]` of the 0 to 1 square, for a file whose screens share one
+    /// texture's coordinates (an atlas); `None` spans all of them (ADR-0250).
+    pub region: Option<[f32; 4]>,
 }
 
 /// The bounds of the quad a lit card is shaded on: a unit square, flat.
@@ -1417,6 +1444,11 @@ impl UploadKit {
                 0.0,
                 0.0,
                 0.0,
+                // A live texture's region (ADR-0250): the whole picture.
+                1.0,
+                1.0,
+                0.0,
+                0.0,
             ];
             let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("jstream-render-model-material"),
@@ -1752,9 +1784,11 @@ impl ModelRuntime {
             .iter()
             .map(|texture| texture.on.map(str::to_owned))
             .collect();
+        let regions: Vec<Option<[f32; 4]>> = textures.iter().map(|t| t.region).collect();
         let mut kept = model.live.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(binds) = kept.as_ref()
             && binds.set.on == on
+            && binds.set.regions == regions
             && binds.textures.len() == views.len()
             && binds
                 .textures
@@ -1780,9 +1814,7 @@ impl ModelRuntime {
             .filter_map(|(material, slot)| {
                 let m = model.materials.get(material)?;
                 let (_, view) = views.get(slot)?;
-                let mut values = m.values;
-                // The material's base colour texture is a source's picture.
-                values[17] = 1.0;
+                let values = live_values(m.values, regions.get(slot).copied().flatten());
                 let uniform = gpu
                     .device
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1822,7 +1854,7 @@ impl ModelRuntime {
                 Some((material, slot, bind, uniform))
             })
             .collect();
-        let set = Arc::new(LiveSet { on, binds });
+        let set = Arc::new(LiveSet { on, regions, binds });
         *kept = Some(LiveBinds {
             textures: views
                 .iter()
@@ -1860,7 +1892,7 @@ impl ModelRuntime {
             }
         };
         let emissive = finite(card.emissive, 0.0, 4.0);
-        let values: [f32; 20] = [
+        let values: [f32; MATERIAL_VALUES] = [
             1.0,
             1.0,
             1.0,
@@ -1881,6 +1913,11 @@ impl ModelRuntime {
             // Its picture is premultiplied linear light, and emits as itself.
             1.0,
             0.0,
+            0.0,
+            0.0,
+            // Its picture is its whole quad.
+            1.0,
+            1.0,
             0.0,
             0.0,
         ];
@@ -2156,7 +2193,7 @@ impl ModelRuntime {
                 if let Some(image) = texture.image {
                     image.record_draw(live_minification(
                         model,
-                        (&on, slot),
+                        (&on, slot, texture.region),
                         &clip,
                         canvas_of(target),
                         (image.width(), image.height()),
@@ -2330,10 +2367,9 @@ impl ModelRuntime {
             };
             let was = m.live_driven.swap(driven.is_some(), Ordering::Relaxed);
             if driven.is_some() || was {
-                let mut values = driven.unwrap_or(m.values);
-                // The base colour texture is a source's picture, as `live_binds` marks it.
-                values[17] = 1.0;
-                for uniform in live.uniforms(index) {
+                for (slot, uniform) in live.uniforms(index) {
+                    let region = live.regions.get(slot).copied().flatten();
+                    let values = live_values(driven.unwrap_or(m.values), region);
                     gpu.queue.write_buffer(uniform, 0, &material_bytes(&values));
                 }
             }

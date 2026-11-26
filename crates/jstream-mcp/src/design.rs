@@ -285,7 +285,9 @@ assets; `scene` lights it with the scene's light sources. To put a live picture 
 source; `texture_material` names what of a file it goes on: a material, or a node or \
 mesh by its name, such as its screen. A model with several screens takes a picture on \
 each: `texture_2` to `texture_16`, each with its `texture_material_2` (and so on) \
-naming its screen, every one drawn at the resolution it is seen at. `reflection` gives it surroundings to reflect: a sky or studio still, a shader, \
+naming its screen, every one drawn at the resolution it is seen at; where the screens \
+share one texture's coordinates (an atlas), `texture_region` (`texture_region_2` and \
+so on) gives the part a screen covers, as `x y width height` from 0 to 1. `reflection` gives it surroundings to reflect: a sky or studio still, a shader, \
 or a `scene` source of a separate scene built as its surroundings so a glossy model \
 mirrors a room (not the scene the model is in, which shows the model itself and is \
 refused as a cycle). Pair a low `roughness` with `metallic` 1 for \

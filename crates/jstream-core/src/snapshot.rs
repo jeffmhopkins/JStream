@@ -8238,6 +8238,7 @@ fn model_maps<'c>(
         .map(|(slot, texture)| jstream_render::LiveTexture {
             image: picture(maps.and_then(|maps| maps.textures.get(slot)?.as_ref())),
             on: texture.on.as_deref(),
+            region: texture.region,
         })
         .collect();
     let reflection = picture(maps.and_then(|maps| maps.reflection.as_ref()));
