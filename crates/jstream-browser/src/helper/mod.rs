@@ -65,6 +65,8 @@
 //! page at `warn` and later ones at `debug`, with the count only.
 
 #[cfg(windows)]
+mod copies;
+#[cfg(windows)]
 mod d3d11;
 mod handlers;
 #[cfg(target_os = "macos")]
@@ -211,6 +213,8 @@ fn browser_process(
         gpu: Mutex::new(None),
         #[cfg(windows)]
         generation: AtomicU64::new(0),
+        #[cfg(windows)]
+        copies: Mutex::new(copies::start()),
         frames,
         open: AtomicUsize::new(0),
         started: AtomicBool::new(false),
@@ -341,6 +345,10 @@ pub(crate) struct Host {
     /// Bumped with each device, so pages remake their textures (Windows).
     #[cfg(windows)]
     generation: AtomicU64,
+    /// The thread that waits for each paint's copy and then tells the engine, in the
+    /// order they were sent ([`copies`], Windows).
+    #[cfg(windows)]
+    copies: Mutex<std::sync::mpsc::Sender<copies::Job>>,
     /// The folder paints are written into (Linux and macOS); nothing on Windows.
     #[cfg_attr(windows, expect(dead_code, reason = "Windows needs no folder"))]
     frames: Frames,
@@ -364,6 +372,26 @@ impl Host {
             // stopping takes to close the page.
             let host = Arc::clone(self);
             post(move || host.stop());
+        }
+    }
+
+    /// Sends `message` once every paint's copy submitted before it has been sent (on
+    /// Windows, from the copy thread; elsewhere at once, as paints are sent as made).
+    fn send_after_copies(self: &Arc<Self>, message: ToEngine) {
+        #[cfg(windows)]
+        {
+            let host = Arc::clone(self);
+            self.after_copies(copies::Job::Run(Box::new(move || host.send(&message))));
+        }
+        #[cfg(not(windows))]
+        self.send(&message);
+    }
+
+    /// Queues `job` on the copy thread; runs it here if that thread is gone.
+    #[cfg(windows)]
+    fn after_copies(&self, job: copies::Job) {
+        if let Err(std::sync::mpsc::SendError(job)) = lock(&self.copies).send(job) {
+            job.run(None);
         }
     }
 
@@ -818,17 +846,36 @@ impl PageShared {
         let Some(reloading) = self.paint_through(reloading) else {
             return;
         };
-        let painted = {
-            let gpu = lock(&self.host.gpu);
-            let Some(gpu) = gpu.as_ref() else {
+        let submitted = {
+            let mut gpu = lock(&self.host.gpu);
+            let Some(gpu) = gpu.as_mut() else {
                 return;
             };
             let started = std::time::Instant::now();
-            let painted = self.textures.paint(gpu, handle);
-            self.count(&painted, started.elapsed());
-            painted
+            let submitted = self.textures.paint(gpu, handle);
+            self.count(&submitted, started.elapsed());
+            submitted
         };
-        self.painted(painted);
+        match submitted {
+            // Waited for, and sent, on the copy thread, in order with anything else this
+            // page sends there; the reload hold is let go now, as a reload's
+            // `Reloading` goes the same way, after this frame.
+            Ok(Some(copy)) => {
+                let page = Arc::clone(self);
+                self.host.after_copies(copies::Job::Wait(
+                    copy,
+                    Box::new(move |copy, waited| match waited {
+                        Ok(()) => page.painted(Ok(Some(copy.painted))),
+                        Err(reason) => {
+                            page.textures.release(copy.painted.slot);
+                            page.painted(Err(reason));
+                        }
+                    }),
+                ));
+            }
+            Ok(None) => self.painted(Ok(None)),
+            Err(reason) => self.painted(Err(reason)),
+        }
         drop(reloading);
     }
 
@@ -895,7 +942,7 @@ impl PageShared {
     /// Counts a paint that reached the engine's slots and `took` this long to copy (on
     /// CEF's UI thread, which every page's paints share), and sends the page's counts
     /// since the last if [`PAINTS_EVERY`] has passed.
-    fn count(&self, painted: &Result<Option<Painted>, String>, took: Duration) {
+    fn count<T>(&self, painted: &Result<Option<T>, String>, took: Duration) {
         let mut counts = lock(&self.paints);
         counts.painted += 1;
         match painted {
@@ -993,7 +1040,9 @@ impl PageShared {
         if let Some(browser) = browser.as_ref() {
             let mut reloading = lock(&self.reloading);
             reloading.reload();
-            self.host.send(&ToEngine::Reloading { page: self.id });
+            // After every frame of the old document still being copied (Windows).
+            self.host
+                .send_after_copies(ToEngine::Reloading { page: self.id });
             drop(reloading);
             // The reload's main-frame load, of the page's current URL, is the helper's
             // own (#1069).
