@@ -857,7 +857,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `device` captures the first device listed. `resolution` (`<width>x<height>`), `fps`
   and `pixel_format` (`capture_format` parameters, in the Format group) ask for a format
   the device lists; empty or 0 leaves that part to the engine, and a device that offers
-  no format matching them opens in the engine's choice. Like `display` and `window`, it
+  no format matching them opens in the engine's choice. An `fps` of 0 carries the
+  program's base rate (`Context::program_fps`) as `DeviceFormatWant::canvas_fps`, which
+  the engine's choice of rate follows. Like `display` and `window`, it
   only says what to capture (`CaptureSpec::Device`, with a `DeviceFormatWant`), and the
   engine opens the device. A new device or format needs a new source. `camera_controls`
   (the Camera group, live, protocol 0.105, #1196) sets the device's controls: an object

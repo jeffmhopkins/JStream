@@ -697,10 +697,19 @@ fn capture_sources_capture_their_targets() {
             CaptureSpec::Display(None),
             CaptureSpec::Display(Some("monitor:2".into())),
             CaptureSpec::Window(Some("hwnd:0x2a".into())),
-            CaptureSpec::Device(None, DeviceFormatWant::default()),
+            CaptureSpec::Device(
+                None,
+                DeviceFormatWant {
+                    canvas_fps: Some(30),
+                    ..DeviceFormatWant::default()
+                }
+            ),
             CaptureSpec::Device(
                 Some("fake-capture-card-0".into()),
-                DeviceFormatWant::default()
+                DeviceFormatWant {
+                    canvas_fps: Some(30),
+                    ..DeviceFormatWant::default()
+                }
             ),
         ])
     );

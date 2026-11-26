@@ -338,19 +338,21 @@ fn open_device(
 /// The format a webcam or capture card is opened in for a source that asks `want`, and
 /// whether it is one `want` asked for: the [`device_format`] among the formats with
 /// each part `want` names, else, when none has them all, the [`device_format`] of all.
-/// `None` when no format is a candidate.
+/// The rate follows `want`'s canvas rate ([`DeviceFormatWant::canvas_fps`]). `None` when
+/// no format is a candidate.
 pub(crate) fn device_format_for(
     formats: &[VideoDeviceFormat],
     mjpeg: bool,
     want: &DeviceFormatWant,
 ) -> Option<(VideoDeviceFormat, bool)> {
+    let canvas = want.canvas_fps;
     if want.is_any() {
-        return device_format(formats, mjpeg).map(|f| (f, true));
+        return device_format(formats, mjpeg, canvas).map(|f| (f, true));
     }
     let wanted: Vec<_> = formats.iter().copied().filter(|f| wants(want, f)).collect();
-    match device_format(&wanted, mjpeg) {
+    match device_format(&wanted, mjpeg, canvas) {
         Some(format) => Some((format, true)),
-        None => device_format(formats, mjpeg).map(|f| (f, false)),
+        None => device_format(formats, mjpeg, canvas).map(|f| (f, false)),
     }
 }
 
@@ -398,13 +400,16 @@ pub(crate) fn readable(format: &VideoDeviceFormat, mjpeg: bool) -> bool {
 /// The format a webcam or capture card is opened in, from those it lists.
 ///
 /// The candidates are the formats whose frames arrive uncompressed in a format the
-/// compositor uploads ([`readable_cpu_frame`]: RGBA, BGRA, or NV12, which YUY2 is
-/// delivered as), and MJPEG when `mjpeg` says a decoder is there. Of those it picks the largest of at most
-/// [`MAX_DEVICE_PIXELS`] (else the smallest), then the fastest, then an uncompressed one
-/// (no decoding), then the first listed. `None` when no format is a candidate.
+/// compositor uploads ([`readable`]: RGBA, BGRA, or NV12, which YUY2 is delivered as),
+/// and MJPEG when `mjpeg` says a decoder is there. Of those it picks the largest of at
+/// most [`MAX_DEVICE_PIXELS`] (else the smallest), then the rate [`rate_rank`] ranks
+/// first for the canvas rate `canvas` (the fastest when `None`), then the encoding
+/// [`encoding_rank`] ranks first (NV12, which needs no conversion), then the first
+/// listed. `None` when no format is a candidate.
 pub(crate) fn device_format(
     formats: &[VideoDeviceFormat],
     mjpeg: bool,
+    canvas: Option<u32>,
 ) -> Option<VideoDeviceFormat> {
     let pixels = |f: &VideoDeviceFormat| u64::from(f.size.width()) * u64::from(f.size.height());
     let fits = |pixels: u64| pixels <= MAX_DEVICE_PIXELS;
@@ -416,25 +421,57 @@ pub(crate) fn device_format(
             continue;
         };
         let (p, c) = (pixels(format), pixels(current));
-        // The shorter frame period, num/den, is faster.
-        let (a, b) = (format.frame_period, current.frame_period);
-        let (fa, fb) = (
-            u64::from(a.num()) * u64::from(b.den()),
-            u64::from(b.num()) * u64::from(a.den()),
-        );
+        let (ra, rb) = (rate_rank(format, canvas), rate_rank(current, canvas));
         let better = match (fits(p), fits(c)) {
             (true, false) => true,
             (false, true) => false,
             (true, true) if p != c => p > c,
             (false, false) if p != c => p < c,
-            _ if fa != fb => fa < fb,
-            _ => current.encoding.is_compressed() && !format.encoding.is_compressed(),
+            _ if ra != rb => ra < rb,
+            _ => encoding_rank(format.encoding) < encoding_rank(current.encoding),
         };
         if better {
             best = Some(format);
         }
     }
     best.copied()
+}
+
+/// How well a format's rate suits a canvas running at `canvas` frames a second: the
+/// lowest ranks first. A rate the canvas shows every frame of, and no more, is best: the
+/// canvas rate itself (29.97 counts as 30), then its smallest whole multiple, whose
+/// frames the canvas takes evenly. Then the slowest rate above the canvas rate, then the
+/// fastest below it, which shows some frames twice. Rates are compared in hundredths of
+/// a frame a second ([`fps_centi`]). With no canvas rate, the fastest ranks first.
+pub(crate) fn rate_rank(format: &VideoDeviceFormat, canvas: Option<u32>) -> (u8, u64, u64) {
+    let rate = u64::from(fps_centi(format_fps(format)));
+    let Some(canvas) = canvas.filter(|&c| c > 0) else {
+        return (0, u64::MAX - rate, 0);
+    };
+    let canvas = u64::from(canvas) * 100;
+    // The nearest whole multiple of the canvas rate, at least the rate itself.
+    let k = ((rate + canvas / 2) / canvas).max(1);
+    let off = rate.abs_diff(k * canvas);
+    // Within half a percent: 29.97 and 59.94 are 30 and 60.
+    if off * 200 <= k * canvas {
+        (0, k, off)
+    } else if rate > canvas {
+        (1, rate, 0)
+    } else {
+        (2, u64::MAX - rate, 0)
+    }
+}
+
+/// How cheap an encoding is to read: the lowest ranks first. NV12 is uploaded as it
+/// is; RGBA and BGRA are four bytes a pixel; YUY2 is converted to NV12 on the capture
+/// thread; MJPEG is decoded.
+fn encoding_rank(encoding: CaptureEncoding) -> u8 {
+    match encoding {
+        CaptureEncoding::Raw(PixelFormat::Nv12) => 0,
+        CaptureEncoding::Raw(_) => 1,
+        CaptureEncoding::Yuy2 => 2,
+        _ => 3,
+    }
 }
 
 /// How `spec`'s capture asks for the pointer: drawn into the frames by the OS when it
@@ -1160,6 +1197,7 @@ mod tests {
                 size,
                 fps_centi: fps.map(|f| f * 100),
                 pixel_format: pf.map(str::to_owned),
+                canvas_fps: None,
             };
         let pick = |want: &DeviceFormatWant, mjpeg| device_format_for(&all, mjpeg, want);
         // Nothing asked: the engine's choice.
@@ -1207,7 +1245,7 @@ mod tests {
         let hd60 = format(1280, 720, 60, nv12);
         let full = format(1920, 1080, 30, nv12);
         let uhd = format(3840, 2160, 30, nv12);
-        let pick = |formats: &[VideoDeviceFormat], decoder| device_format(formats, decoder);
+        let pick = |formats: &[VideoDeviceFormat], decoder| device_format(formats, decoder, None);
         assert_eq!(pick(&[small, hd, mjpeg], false), Some(hd), "no decoder");
         assert_eq!(
             pick(&[small, hd, mjpeg], true),
@@ -1235,6 +1273,77 @@ mod tests {
         assert_eq!(pick(&[mjpeg], true), Some(mjpeg), "MJPEG only, decoded");
         assert_eq!(pick(&[], true), None);
         assert_eq!(MAX_DEVICE_PIXELS, 1920 * 1080);
+    }
+
+    /// A source that leaves the rate to the engine opens its device at the canvas rate
+    /// when offered, else its smallest whole multiple, else the slowest rate above it,
+    /// else the fastest below it; and at the same size and rate in NV12 over YUY2.
+    #[test]
+    fn the_engine_chooses_the_canvas_rate_and_nv12() {
+        let nv12 = CaptureEncoding::Raw(PixelFormat::Nv12);
+        let yuy2 = CaptureEncoding::Yuy2;
+        let at = |fps, encoding| format(1920, 1080, fps, encoding);
+        let ntsc = VideoDeviceFormat {
+            frame_period: Timebase::new(1001, 30000).expect("period"),
+            ..at(30, nv12)
+        };
+        let pick =
+            |formats: &[VideoDeviceFormat], canvas| device_format(formats, false, Some(canvas));
+        // A capture card offering 30, 60 and 120 on a 30 fps canvas.
+        let card = [at(120, nv12), at(60, nv12), at(30, yuy2), at(30, nv12)];
+        assert_eq!(pick(&card, 30), Some(at(30, nv12)), "the canvas rate, NV12");
+        assert_eq!(pick(&card, 60), Some(at(60, nv12)));
+        assert_eq!(
+            pick(&[at(120, nv12), at(60, nv12)], 30),
+            Some(at(60, nv12)),
+            "the smaller multiple"
+        );
+        assert_eq!(
+            pick(&[at(120, nv12), at(50, nv12)], 30),
+            Some(at(120, nv12)),
+            "a multiple over a faster fit"
+        );
+        assert_eq!(
+            pick(&[at(50, nv12), at(25, nv12)], 30),
+            Some(at(50, nv12)),
+            "the rate above"
+        );
+        assert_eq!(
+            pick(&[at(15, nv12), at(25, nv12)], 30),
+            Some(at(25, nv12)),
+            "the fastest below"
+        );
+        assert_eq!(pick(&[at(60, nv12), ntsc], 30), Some(ntsc), "29.97 is 30");
+        assert_eq!(
+            pick(&[at(30, yuy2), at(30, nv12)], 30),
+            Some(at(30, nv12)),
+            "NV12 over YUY2"
+        );
+        // The size still comes first, and with no canvas rate the fastest.
+        assert_eq!(
+            pick(&[format(1280, 720, 30, nv12), at(60, nv12)], 30),
+            Some(at(60, nv12))
+        );
+        assert_eq!(device_format(&card, false, None), Some(at(120, nv12)));
+        // A source's own rate still wins; the canvas rate only guides the rest.
+        let want = DeviceFormatWant {
+            canvas_fps: Some(30),
+            ..DeviceFormatWant::default()
+        };
+        assert!(want.is_any());
+        assert_eq!(
+            device_format_for(&card, false, &want),
+            Some((at(30, nv12), true))
+        );
+        let want = DeviceFormatWant {
+            fps_centi: Some(6000),
+            canvas_fps: None,
+            ..DeviceFormatWant::default()
+        };
+        assert_eq!(
+            device_format_for(&card, false, &want),
+            Some((at(60, nv12), true))
+        );
     }
 
     fn backends(

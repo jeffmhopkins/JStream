@@ -68,12 +68,17 @@ pub struct DeviceFormatWant {
     pub fps_centi: Option<u32>,
     /// The pixel format, as `capture.targets` names it (`mjpeg`, `nv12`, …).
     pub pixel_format: Option<String>,
+    /// The program's frame rate, which the engine's choice of rate follows while
+    /// `fps_centi` is `None`: a device faster than the canvas captures frames the program
+    /// never shows. `None` when the source names a rate.
+    pub canvas_fps: Option<u32>,
 }
 
 impl DeviceFormatWant {
-    /// Whether it asks nothing.
+    /// Whether it asks nothing of the format itself: no size, rate or pixel format.
+    /// [`canvas_fps`](Self::canvas_fps) only guides the engine's choice.
     pub fn is_any(&self) -> bool {
-        *self == Self::default()
+        self.size.is_none() && self.fps_centi.is_none() && self.pixel_format.is_none()
     }
 }
 
@@ -175,13 +180,14 @@ impl CaptureKind {
         }
     }
 
-    /// What the settings say to capture.
-    fn spec(&self, settings: &Settings) -> Result<CaptureSpec, SourceError> {
+    /// What the settings say to capture. A device whose rate is the engine's choice
+    /// follows `program_fps`, the program's frame rate.
+    fn spec(&self, settings: &Settings, program_fps: u32) -> Result<CaptureSpec, SourceError> {
         let target = self.target(settings)?;
         Ok(match self.flavor {
             Flavor::Display => CaptureSpec::Display(target),
             Flavor::Window => CaptureSpec::Window(target),
-            Flavor::Device => CaptureSpec::Device(target, format_want(settings)?),
+            Flavor::Device => CaptureSpec::Device(target, format_want(settings, program_fps)?),
         })
     }
 
@@ -230,7 +236,8 @@ fn format_params(target: &str) -> Vec<jstream_protocol::ParamDescriptor> {
             CaptureFormatPart::Fps,
             json!(0),
             "The frames per second to capture, one the device lists for the resolution. \
-             0 lets the engine choose: the fastest.",
+             0 lets the engine choose: the program's frame rate, else the smallest \
+             whole multiple of it, else the nearest faster rate, else the fastest.",
         ),
         part(
             "pixel_format",
@@ -239,7 +246,7 @@ fn format_params(target: &str) -> Vec<jstream_protocol::ParamDescriptor> {
             json!(""),
             "How the device sends its frames: `mjpeg` (compressed, decoded by the \
              engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine \
-             choose: uncompressed when it can.",
+             choose: uncompressed when it can, NV12 first.",
         ),
     ]
 }
@@ -312,9 +319,10 @@ pub fn webcam_controls(
     Some((device, controls))
 }
 
-/// What a `webcam`'s format settings ask. A device that offers no format matching them
-/// opens in the engine's choice, so they never stop a capture.
-fn format_want(settings: &Settings) -> Result<DeviceFormatWant, SourceError> {
+/// What a `webcam`'s format settings ask, its rate following `program_fps` when the
+/// `fps` setting is 0. A device that offers no format matching them opens in the
+/// engine's choice, so they never stop a capture.
+fn format_want(settings: &Settings, program_fps: u32) -> Result<DeviceFormatWant, SourceError> {
     let bad = |param: &str, reason: &str| SourceError::Setting {
         param: param.into(),
         reason: reason.into(),
@@ -335,6 +343,7 @@ fn format_want(settings: &Settings) -> Result<DeviceFormatWant, SourceError> {
         size,
         fps_centi: (fps > 0.0).then(|| fps_centi(fps)),
         pixel_format: (!pixel_format.is_empty()).then(|| pixel_format.to_owned()),
+        canvas_fps: (fps == 0.0).then_some(program_fps),
     })
 }
 
@@ -343,7 +352,7 @@ impl SourceKind for CaptureKind {
         &self.descriptor
     }
 
-    fn create(&self, settings: &Settings, _: &Context) -> Result<Box<dyn Source>, SourceError> {
+    fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
         let show_cursor = match self.flavor {
             Flavor::Device => true,
             Flavor::Display | Flavor::Window => setting(settings, "show_cursor")?
@@ -357,7 +366,7 @@ impl SourceKind for CaptureKind {
             kind_id: self.descriptor.kind_id.clone(),
             descriptor: self.descriptor.clone(),
             settings: settings.clone(),
-            spec: self.spec(settings)?,
+            spec: self.spec(settings, ctx.program_fps())?,
             show_cursor,
         }))
     }
