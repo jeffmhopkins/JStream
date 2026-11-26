@@ -29,7 +29,8 @@ const SOURCE: &str = "preview-draft";
 const SCENE: &str = "preview-draft-scene";
 const ITEM: &str = "preview-draft-item";
 
-/// Plans `draft` on `canvas` with the engine's `kinds`, as the snapshot its stream draws.
+/// Plans `draft` on `canvas` at the base rate `base_fps` with the engine's `kinds`, as
+/// the snapshot its stream draws.
 /// The engine reads the kinds and the canvas under its lock and calls this after.
 ///
 /// # Errors
@@ -39,6 +40,7 @@ const ITEM: &str = "preview-draft-item";
 pub(crate) fn plan(
     kinds: Vec<KindDescriptor>,
     canvas: Canvas,
+    base_fps: u32,
     draft: &PreviewDraft,
 ) -> Result<Arc<RenderSnapshot>, ProtocolError> {
     let not_capture = || {
@@ -103,8 +105,14 @@ pub(crate) fn plan(
             reason: "the draft source was not created".into(),
         })?;
     // A capture source's instance only says what it captures; creating one opens nothing.
+    // At the collection's frame rate, a webcam asks the format the program's source of it
+    // would, so the two share the device's open without switching its format.
+    let context = Context {
+        frame_rate: base_fps,
+        ..Context::default()
+    };
     let instance = Registry::builtin()
-        .create(&draft.kind, &settings, &Context::default())
+        .create(&draft.kind, &settings, &context)
         .map_err(|_| not_capture())?;
     let spec = instance.capture().cloned().ok_or_else(not_capture)?;
     let key = (spec != jstream_sources::CaptureSpec::Window(None)).then(|| {

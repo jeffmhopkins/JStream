@@ -2921,7 +2921,7 @@ impl Engine {
                         "a preview stream shows a scene or a source, not both",
                     ));
                 }
-                let (rev, kinds, canvas) = {
+                let (rev, kinds, canvas, base_fps) = {
                     let state = lock(&self.shared.state);
                     if let Some(scene_id) = &scene_id
                         && state.graph.state().scene(scene_id).is_none()
@@ -2946,11 +2946,17 @@ impl Engine {
                     let kinds = source
                         .as_ref()
                         .map(|_| state.graph.kinds().cloned().collect::<Vec<_>>());
-                    (state.graph.rev(), kinds, state.graph.state().canvas())
+                    let base_fps = state.graph.state().base_fps();
+                    (
+                        state.graph.rev(),
+                        kinds,
+                        state.graph.state().canvas(),
+                        base_fps,
+                    )
                 };
                 let draft = match (&source, kinds) {
                     (Some(source), Some(kinds)) => {
-                        Some(crate::preview::plan_draft(kinds, canvas, source)?)
+                        Some(crate::preview::plan_draft(kinds, canvas, base_fps, source)?)
                     }
                     _ => None,
                 };

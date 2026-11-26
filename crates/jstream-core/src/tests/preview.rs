@@ -585,7 +585,13 @@ fn the_preview_captures_what_the_program_shows() {
         &seen,
         &[
             CaptureSpec::Display(None),
-            CaptureSpec::Device(None, DeviceFormatWant::default()),
+            CaptureSpec::Device(
+                None,
+                DeviceFormatWant {
+                    canvas_fps: Some(30),
+                    ..DeviceFormatWant::default()
+                },
+            ),
         ],
     );
     assert_eq!(devices.open_streams(), 1, "the webcam opens once");
@@ -664,7 +670,13 @@ fn a_draft_stream_shows_a_webcam_before_it_is_a_source() {
     until_drawn(
         &mut frames,
         &seen,
-        &[CaptureSpec::Device(None, DeviceFormatWant::default())],
+        &[CaptureSpec::Device(
+            None,
+            DeviceFormatWant {
+                canvas_fps: Some(30),
+                ..DeviceFormatWant::default()
+            },
+        )],
     );
     assert_eq!(devices.open_streams(), 1, "the draft opened the webcam");
     assert!(
@@ -717,7 +729,13 @@ fn a_draft_shares_the_webcam_the_program_shows() {
         &mut frames,
         &seen,
         &[
-            CaptureSpec::Device(None, DeviceFormatWant::default()),
+            CaptureSpec::Device(
+                None,
+                DeviceFormatWant {
+                    canvas_fps: Some(30),
+                    ..DeviceFormatWant::default()
+                },
+            ),
             CaptureSpec::Display(None),
         ],
     );

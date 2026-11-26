@@ -1998,15 +1998,21 @@ impl MediaClock for SystemClock {
     }
 }
 
+/// Whether a source of `kind` built from `settings` follows the program's frame rate: a
+/// `browser` page with an `fps` of 0 paints at it, and a `webcam` with an `fps` of 0 (or
+/// none) opens its device at a rate chosen for it.
+fn follows_program_rate(kind: &str, settings: &Settings) -> bool {
+    let fps = settings.get("fps");
+    match kind {
+        "browser" => fps.and_then(serde_json::Value::as_u64) == Some(0),
+        "webcam" => fps.is_none_or(|v| v.as_f64() == Some(0.0)),
+        _ => false,
+    }
+}
+
 /// The settings a source of `kind` is built from, which a change to builds it again: all of
 /// them, but a pack source's stand-in is built from its size alone, as its program takes
 /// the other settings live.
-/// Whether a source of `kind` built from `settings` paints at the program's frame rate:
-/// a `browser` page with an `fps` of 0.
-fn follows_program_rate(kind: &str, settings: &Settings) -> bool {
-    kind == "browser" && settings.get("fps").and_then(serde_json::Value::as_u64) == Some(0)
-}
-
 fn built_from(kind: &str, settings: &Settings) -> Settings {
     if pack_source::is_pack_kind(kind) {
         pack_source::stand_in_settings(settings)
@@ -2017,9 +2023,25 @@ fn built_from(kind: &str, settings: &Settings) -> Settings {
 
 #[cfg(test)]
 mod tests {
-    use super::{built_from, density_for};
+    use super::{built_from, density_for, follows_program_rate};
     use jstream_protocol::Settings;
     use serde_json::json;
+
+    /// A page painting at 0 fps and a webcam whose rate the engine chooses are built
+    /// again when the program's rate changes; one with a rate of its own is not.
+    #[test]
+    fn auto_rates_follow_the_program_rate() {
+        let with = |fps: serde_json::Value| -> Settings {
+            [("fps".to_owned(), fps)].into_iter().collect()
+        };
+        assert!(follows_program_rate("browser", &with(json!(0))));
+        assert!(!follows_program_rate("browser", &with(json!(30))));
+        assert!(follows_program_rate("webcam", &with(json!(0))));
+        assert!(follows_program_rate("webcam", &with(json!(0.0))));
+        assert!(follows_program_rate("webcam", &Settings::new()));
+        assert!(!follows_program_rate("webcam", &with(json!(59.94))));
+        assert!(!follows_program_rate("display", &with(json!(0))));
+    }
 
     /// A shader source's stand-in is built again for a new size only; any other kind for
     /// any change.

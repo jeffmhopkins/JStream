@@ -263,14 +263,46 @@ fn display_window_and_webcam_sources_say_what_to_capture() {
         );
         source.capture().cloned().expect("a capture source")
     };
+    // A rate left to the engine follows the program's (the default 30 until set).
+    let auto = DeviceFormatWant {
+        canvas_fps: Some(30),
+        ..DeviceFormatWant::default()
+    };
     assert_eq!(
         device(""),
-        CaptureSpec::Device(None, DeviceFormatWant::default()),
+        CaptureSpec::Device(None, auto.clone()),
         "the first device"
     );
     assert_eq!(
         device("fake-webcam-0"),
-        CaptureSpec::Device(Some("fake-webcam-0".into()), DeviceFormatWant::default())
+        CaptureSpec::Device(Some("fake-webcam-0".into()), auto)
+    );
+    let at_60 = registry
+        .create(
+            "webcam",
+            &complete("webcam", &[]),
+            &Context {
+                frame_rate: 60,
+                ..Context::default()
+            },
+        )
+        .expect("a source");
+    assert_eq!(
+        at_60.capture(),
+        Some(&CaptureSpec::Device(
+            None,
+            DeviceFormatWant {
+                canvas_fps: Some(60),
+                ..DeviceFormatWant::default()
+            }
+        ))
+    );
+    let own_rate = registry
+        .create("webcam", &complete("webcam", &[("fps", json!(60))]), &ctx)
+        .expect("a source");
+    assert!(
+        matches!(own_rate.capture(), Some(CaptureSpec::Device(None, want)) if want.canvas_fps.is_none() && want.fps_centi == Some(6000)),
+        "a rate the source names doesn't follow the program's"
     );
     // A webcam's sound is its device's paired audio (#716); the engine records it.
     let webcam = registry.descriptor("webcam").expect("webcam");
