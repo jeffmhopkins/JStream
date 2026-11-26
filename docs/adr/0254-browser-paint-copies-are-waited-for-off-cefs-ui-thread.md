@@ -49,9 +49,10 @@ This amends ADR-0048 §3 on where the helper waits.
 4. A slot's shared texture, and its handle, stay open until the copy thread has told the
    engine of it, even if a new size or device remakes the page's textures meanwhile.
 5. Each page keeps up to eight of CEF's textures open on the helper's device, so a
-   texture CEF's pool hands over again isn't opened again. Each is recognised by a
-   duplicate of CEF's handle, compared with the one CEF passes (`CompareObjectHandles`),
-   so a handle value reused for another texture is opened afresh. They are dropped with
+   texture CEF's pool hands over again isn't opened again. Each is recognised by the
+   object a duplicate of CEF's handle names, compared with the handle CEF passes
+   (`CompareObjectHandles`), so a new handle to a pooled texture finds it and a handle
+   value reused for another texture doesn't. They are dropped with
    the device.
 
 <a id="consequences"></a>

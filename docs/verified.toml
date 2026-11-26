@@ -1686,7 +1686,7 @@ stamp = { hash = "b3:eb9beb009cd62865", by = "agent:page-api-thread", note = "Re
 stamp = { hash = "b3:73f2d6cdaffa7f32", by = "agent:claude-browser-paints", note = "Helper row now names the Windows copy thread (helper/copies.rs, ADR-0254); the debug paint counts and the rest of the map still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/d3d11.rs"]
-stamp = { hash = "b3:48bfea6c4ded8231", by = "agent:claude-browser-paints", note = "d3d11.rs now keeps CEF's pooled textures open per page and the paint counts carry open time; the helper row's copy-thread note and the rest of the map still hold" }
+stamp = { hash = "b3:84db2e630d4b883a", by = "agent:claude-browser-paints", note = "d3d11.rs matches cached CEF textures by object rather than handle value; map unchanged" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/handlers.rs"]
 stamp = { hash = "b3:7ea3249d6cdc1fae", by = "agent:mac-browser", note = "Adds --use-mock-keychain on macOS so the profile key stays out of the login Keychain; the software-paint path widens to macOS. Linux-only switches stay Linux. The run_helper row's description still holds. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }

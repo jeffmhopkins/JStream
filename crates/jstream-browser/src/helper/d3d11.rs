@@ -17,8 +17,8 @@
 //! page. A thread of the helper's waits for the fence, up to 2 s, before the engine is
 //! told of the frame. A slot the engine hasn't released isn't painted into: with all
 //! three held, the paint is skipped. Up to eight of CEF's pooled textures stay open per
-//! page, each matched by a duplicate of CEF's handle, so a texture handed over again
-//! isn't opened again. Popup-widget paints are ignored.
+//! page, each matched by the object a duplicate of CEF's handle names, so a texture
+//! handed over again, under any handle, isn't opened again. Popup-widget paints are ignored.
 
 use std::ffi::c_void;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
@@ -165,15 +165,14 @@ struct Ring {
     next: usize,
     /// CEF's textures opened on this device, most recent last, so a texture CEF's pool
     /// hands over again isn't opened again (opening one costs milliseconds of CEF's UI
-    /// thread). Each keeps a duplicate of CEF's handle, which keeps the texture's
-    /// identity: a handle value CEF reuses for another texture doesn't match.
+    /// thread). Each keeps a duplicate of CEF's handle, matched by the object it names
+    /// (`CompareObjectHandles`), so a new handle to a pooled texture finds it and a
+    /// handle value reused for another texture doesn't.
     sources: Vec<Source>,
 }
 
 /// One of CEF's textures, opened.
 struct Source {
-    /// CEF's handle value when it was opened.
-    value: usize,
     /// Our duplicate of that handle, compared with each later one.
     handle: OwnedHandle,
     texture: ID3D11Texture2D,
@@ -192,14 +191,12 @@ impl Ring {
     /// CEF's texture `cef`, opened on `gpu`'s device: the one opened before if CEF's
     /// pool hands it over again.
     fn source(&mut self, gpu: &Gpu, cef: *mut c_void) -> Result<ID3D11Texture2D, String> {
-        let value = cef as usize;
-        let known = self.sources.iter().position(|source| {
+        // By object, not by handle value: CEF may pass a new handle to the same pooled
+        // texture each time.
+        let known = self.sources.iter().rposition(|source| {
             // SAFETY: both are live handles: CEF's for the callback this runs inside, and
             // our duplicate, owned by the entry.
-            source.value == value
-                && unsafe {
-                    CompareObjectHandles(HANDLE(cef), HANDLE(source.handle.as_raw_handle()))
-                }
+            unsafe { CompareObjectHandles(HANDLE(cef), HANDLE(source.handle.as_raw_handle())) }
                 .as_bool()
         });
         if let Some(at) = known {
@@ -239,7 +236,6 @@ impl Ring {
                 self.sources.remove(0);
             }
             self.sources.push(Source {
-                value,
                 handle,
                 texture: texture.clone(),
             });
