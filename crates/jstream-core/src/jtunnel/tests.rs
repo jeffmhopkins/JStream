@@ -601,21 +601,30 @@ fn an_opus_stream_plays_and_feeds_its_midi() {
     // A controller, not a note: a held note is let go once the sender falls silent
     // (ADR-0207), which may be before the check below.
     let cc: &[u8] = &[0xB0, 20, 77];
-    let mut coded: Vec<Vec<u8>> = Vec::new();
+    // Coded before any is sent, and sent on JTunnel's own 5 ms schedule: a debug-build
+    // encoder in the loop runs slower than real time on a slow runner, and a sender that
+    // falls behind its clock has its frames dropped as late, events and all.
+    let coded: Vec<Vec<u8>> = (0..200)
+        .map(|f| {
+            let pcm: Vec<f32> = (0..N)
+                .flat_map(|i| {
+                    let t = (f * N + i) as f32 / 48_000.0;
+                    let v = 0.5 * (std::f32::consts::TAU * 1_000.0 * t).sin();
+                    [v, v]
+                })
+                .collect();
+            let mut packet = vec![0_u8; 1_000];
+            let n = encoder.encode(&pcm, N, &mut packet).expect("encoded");
+            packet.truncate(n);
+            packet
+        })
+        .collect();
+    // Well into the stream, once the decoder and the clock estimate have settled.
+    const EVENT_AT: u32 = 100;
     let (tx, rx) = channel();
     let mut stream = None;
+    let begun = Instant::now();
     for seq in 0..200_u32 {
-        let pcm: Vec<f32> = (0..N)
-            .flat_map(|i| {
-                let t = (seq as usize * N + i) as f32 / 48_000.0;
-                let v = 0.5 * (std::f32::consts::TAU * 1_000.0 * t).sin();
-                [v, v]
-            })
-            .collect();
-        let mut packet = vec![0_u8; 1_000];
-        let n = encoder.encode(&pcm, N, &mut packet).expect("encoded");
-        packet.truncate(n);
-        coded.push(packet);
         let header = AudioHeader {
             stream_id: 9,
             seq,
@@ -626,14 +635,18 @@ fn an_opus_stream_plays_and_feeds_its_midi() {
         let events = [(5_u16, cc)];
         let i = seq as usize;
         let mut frames = vec![FrameOut {
-            events: if seq == 3 { &events } else { &[] },
+            events: if seq == EVENT_AT { &events } else { &[] },
             audio: &coded[i],
         }];
         if i > 0 {
             frames.push(FrameOut {
-                events: if seq == 4 { &events } else { &[] },
+                events: if seq == EVENT_AT + 1 { &events } else { &[] },
                 audio: &coded[i - 1],
             });
+        }
+        let due = begun + Duration::from_millis(5) * seq;
+        if let Some(wait) = due.checked_duration_since(Instant::now()) {
+            thread::sleep(wait);
         }
         let mut out = [0; wire::MAX_PACKET_BYTES];
         let n = wire::write_audio(&mut out, &header, &frames).expect("a packet");
@@ -645,7 +658,6 @@ fn an_opus_stream_plays_and_feeds_its_midi() {
                     .expect("opened"),
             );
         }
-        thread::sleep(Duration::from_millis(2));
     }
     assert!(
         stream.is_some(),
