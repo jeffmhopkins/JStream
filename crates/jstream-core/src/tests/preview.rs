@@ -1518,9 +1518,12 @@ fn preview_show_moves_a_stream_to_another_scene_on_its_encoder() {
     keyframe(&mut frames, &mut kept, 1);
     let program = until_encodes(&engine, &mut frames, &[None], &mut kept);
 
-    // To a scene: the same session, now showing it.
+    // To a scene: the same session, now showing it, though something reading the open
+    // sessions holds them meanwhile (#1807).
+    let held = engine.hold_preview_encodes();
     act(&control, show(1, Some("other"))).expect("shown");
     let moved = until_encodes(&engine, &mut frames, &[Some("other")], &mut kept);
+    drop(held);
     assert_eq!(moved, program, "the stream kept its encoder session");
     let first = keyframe(&mut frames, &mut kept, 1);
     assert_eq!(first.header.codec, Some(PreviewCodec::H264));

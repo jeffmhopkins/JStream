@@ -21,8 +21,9 @@ use jstream_control::protocol::{
     MIN_FOV_DEG, SceneCamera, SceneId, Size, SolidBounds, Vec2, Vec3,
 };
 
-/// The camera an orbit or dolly shows until the collection has it, kept with the scene it
-/// moves, so another scene is never seen through it.
+/// The camera a move of a 3D scene's camera shows while it is unsaved ([`Unsaved`]), and
+/// after Save until the collection has it, kept with the scene it moves, so another scene
+/// is never seen through it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Preview {
     /// The scene the camera is that scene's.
@@ -45,23 +46,6 @@ impl Preview {
         }
     }
 
-    /// What an orbit of `drag`'s camera from `start` commits when it ends: the preview's
-    /// camera, when the drop is kept, the canvas still shows `drag` and the camera moved.
-    /// `None` drops the drag, as when another scene is shown now (the first deleted mid-
-    /// drag, say), so a camera is never committed to a scene it wasn't dragged in.
-    pub fn to_commit(
-        preview: Option<&Preview>,
-        drag: &SceneId,
-        shown: Option<&SceneId>,
-        keep: bool,
-        start: SceneCamera,
-    ) -> Option<SceneCamera> {
-        if !keep || shown != Some(drag) {
-            return None;
-        }
-        Preview::camera_in(preview, Some(drag), None).filter(|c| *c != start)
-    }
-
     /// Whether to stop showing it now that the canvas shows `scene` with `stored`: the
     /// collection has its camera, or the scene's camera was removed, or another scene
     /// (or none) is shown.
@@ -72,6 +56,44 @@ impl Preview {
             }
             _ => true,
         }
+    }
+}
+
+/// A 3D scene's camera moved on the canvas and not saved yet (#1809). Moving the camera
+/// is a look around, not an edit: the canvas shows the moved camera (a [`Preview`]) and
+/// the engine draws it through one live gesture held open, until Save stores it as the
+/// scene's camera (on a keyframe scene, its override) or the canvas drops it, and the
+/// saved camera shows again.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Unsaved {
+    /// The scene whose camera moved.
+    pub scene: SceneId,
+    /// The scene's stored camera when the first move started.
+    pub base: Option<SceneCamera>,
+}
+
+impl Unsaved {
+    /// Whether to drop it now that the canvas shows `shown`, a scene with its stored
+    /// camera: another scene (or none) is shown, so leaving a scene puts its saved camera
+    /// back; or the scene's stored camera is no longer `base`, as when Properties, an undo
+    /// or another client set it, which wins over a move nobody saved.
+    pub fn stale(&self, shown: Option<(Option<&SceneId>, Option<SceneCamera>)>) -> bool {
+        match shown {
+            Some((Some(scene), stored)) if *scene == self.scene => stored != self.base,
+            _ => true,
+        }
+    }
+
+    /// What Save stores: the camera `preview` shows in this scene, when it differs from
+    /// the one stored. `None` has nothing to save.
+    pub fn to_save(&self, preview: Option<&Preview>) -> Option<SceneCamera> {
+        Preview::camera_in(preview, Some(&self.scene), None).filter(|c| Some(*c) != self.base)
+    }
+
+    /// Whether a drag cancelled with Esc, back at `start`, leaves nothing unsaved: it
+    /// started from the stored camera, so the move is dropped rather than shown.
+    pub fn back_to_base(&self, start: SceneCamera) -> bool {
+        self.base == Some(start)
     }
 }
 
@@ -899,25 +921,6 @@ mod tests {
         assert_eq!(Preview::camera_in(None, Some(&a), None), None);
         // Nor is a 2D scene shown mid-drag seen through it.
         assert_eq!(Preview::camera_in(Some(&p), Some(&b), None), None);
-        // A drag on A commits A's moved camera, and nothing once B is shown, cancelled,
-        // or unmoved (#1110 round 1, B1).
-        assert_eq!(
-            Preview::to_commit(Some(&p), &a, Some(&a), true, stored),
-            Some(moved)
-        );
-        assert_eq!(
-            Preview::to_commit(Some(&p), &a, Some(&b), true, stored),
-            None
-        );
-        assert_eq!(Preview::to_commit(Some(&p), &a, None, true, stored), None);
-        assert_eq!(
-            Preview::to_commit(Some(&p), &a, Some(&a), false, stored),
-            None
-        );
-        assert_eq!(
-            Preview::to_commit(Some(&p), &a, Some(&a), true, moved),
-            None
-        );
         // It is dropped once A has the camera, once A's camera is removed, or once
         // another scene is shown; A with its old camera still keeps it.
         assert!(p.caught_up(Some((Some(&a), Some(moved)))));
@@ -925,6 +928,50 @@ mod tests {
         assert!(p.caught_up(Some((Some(&b), Some(stored)))));
         assert!(p.caught_up(None));
         assert!(!p.caught_up(Some((Some(&a), Some(stored)))));
+    }
+
+    #[test]
+    fn a_moved_camera_is_saved_only_by_save_and_dropped_on_leaving_the_scene() {
+        // #1809: a move of A's camera stays unsaved until Save, which stores the moved
+        // camera, and leaving A, or A's camera changing elsewhere, drops it.
+        let a = SceneId::new("a");
+        let b = SceneId::new("b");
+        let stored = SceneCamera::framing(CANVAS);
+        let moved = orbit(stored, 40.0, 0.0);
+        let unsaved = Unsaved {
+            scene: a.clone(),
+            base: Some(stored),
+        };
+        let p = Preview {
+            scene: a.clone(),
+            camera: moved,
+        };
+        assert_eq!(unsaved.to_save(Some(&p)), Some(moved));
+        // Moved back to where it was, or shown in another scene, there is nothing to save.
+        let back = Preview {
+            scene: a.clone(),
+            camera: stored,
+        };
+        assert_eq!(unsaved.to_save(Some(&back)), None);
+        let elsewhere = Preview {
+            scene: b.clone(),
+            camera: moved,
+        };
+        assert_eq!(unsaved.to_save(Some(&elsewhere)), None);
+        assert_eq!(unsaved.to_save(None), None);
+        // It stays while A is shown with the camera it started from, however long.
+        assert!(!unsaved.stale(Some((Some(&a), Some(stored)))));
+        // Leaving A, or showing nothing, drops it: coming back shows the saved camera.
+        assert!(unsaved.stale(Some((Some(&b), Some(stored)))));
+        assert!(unsaved.stale(Some((None, None))));
+        assert!(unsaved.stale(None));
+        // A's camera set elsewhere, or removed, wins over the unsaved move.
+        assert!(unsaved.stale(Some((Some(&a), Some(moved)))));
+        assert!(unsaved.stale(Some((Some(&a), None))));
+        // Esc on a drag that started at the stored camera drops the move; one that
+        // started from an unsaved camera goes back to it.
+        assert!(unsaved.back_to_base(stored));
+        assert!(!unsaved.back_to_base(moved));
     }
 
     #[test]

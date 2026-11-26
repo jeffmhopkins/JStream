@@ -2742,11 +2742,14 @@ and coming back the same, or one whose effects cover the canvas going and coming
 at all, no effect blend, no camera riding
 a group: `Planner::moves_only_the_camera`,
 [ADR-0226](../../docs/adr/0226-a-camera-only-move-keeps-its-scenes-chain.md)), no
-transition is planned: the program scene is planned at rest, chain and all, and each
-camera of its family carries a `CameraGlide` (`PassCamera::glide`, set through
-`Planner::glide`) that `moved_camera` draws in place of the committed camera until the
-Move ends, so the chain runs through the glide
-(`a_camera_only_move_in_a_3d_family_keeps_its_chain`). An item of the scene itself
+transition is planned: the program scene is planned at rest, chain and all, and its
+camera carries a `CameraGlide` (`PassCamera::glide`, set through `Planner::glide`) that
+`moved_camera` draws in place of the committed camera until the Move ends, so the chain
+runs through the glide (`a_camera_only_move_in_a_3d_family_keeps_its_chain`). Only the
+scene the Move goes to glides, which a mix of it shares: a mix of another scene of the
+family keeps that scene's camera
+([ADR-0244](../../docs/adr/0244-a-camera-only-glide-moves-only-the-scene-it-goes-to.md),
+`a_camera_only_glide_moves_only_the_scene_it_goes_to`). An item of the scene itself
 that only appears or goes in such a Move, where the scene places it (an item shown or
 hidden on a 3D scene), doesn't stop the glide
 ([ADR-0237](../../docs/adr/0237-an-item-shown-or-hidden-on-a-3d-scene-keeps-its-chain.md)):
@@ -3804,8 +3807,10 @@ its keyframe flag, wakes the hub, and re-plans when what the streams show change
 subscription does (a channel not open, or a source's or draft's stream, is
 `invalid_argument` naming `channel`; a scene the collection doesn't have, `not_found`).
 The hub moves it on its first pass once the new scene is planned, sending the old one
-until then. A staged H.264 stream that has its `SharedEncode` alone, when no open
-session already encodes the new picture, keeps that session (`Staged::show`,
+until then. A staged H.264 stream that has its `SharedEncode` alone (its `streams`
+count, the `Staged`s holding it, is 1; not the `Arc`'s strong count, which anything
+reading the open sessions raises for a moment, #1807), when no open session already
+encodes the new picture, keeps that session (`Staged::show`,
 `SharedEncode::show`): the tap the render thread feeds it is cut (`VideoTap::cut`, set
 before the new tap is sent, so no tick pushes both; `Frames::prune` hands a cut tap to
 the collector even if its mix isn't due), a tap of the new picture is attached in its

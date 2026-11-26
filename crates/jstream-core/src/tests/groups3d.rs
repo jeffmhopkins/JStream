@@ -480,6 +480,117 @@ fn a_camera_only_move_in_a_3d_family_keeps_its_chain() {
     assert!(shot.scene_chain(&k).is_some(), "the chain stays");
 }
 
+/// #1801 (ADR-0244): while a camera-only Move glides program from `main` to its keyframe
+/// `k`, only `k` glides. A mix showing `k` shares its gliding camera, but a mix showing
+/// `main` itself, or the sibling keyframe `k2`, keeps that scene's own camera.
+#[test]
+fn a_camera_only_glide_moves_only_the_scene_it_goes_to() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{
+        Action, Call, Easing, MixInput, MixResolution, Settings, TransitionPresetId, VideoMix,
+        VideoMixId,
+    };
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    let start = SceneCamera::framing(Canvas::DEFAULT);
+    let stepped = |dz: f32| {
+        let mut camera = start;
+        camera.position.z = finite(camera.position.z.get() + dz);
+        camera
+    };
+    let mix = |id: &str, scene: &str| Edit::VideoMixCreate {
+        mix_id: VideoMixId::new(id),
+        name: id.into(),
+        mix: VideoMix {
+            input: MixInput::Scene {
+                scene_id: SceneId::new(scene),
+            },
+            resolution: MixResolution {
+                width: 64,
+                height: 36,
+            },
+            fps_divisor: 1,
+        },
+    };
+    batch(
+        &control,
+        edits(vec![
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k2"),
+                variant_of: SceneId::new("main"),
+                name: "K2".into(),
+            },
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(stepped(300.0)),
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k2"),
+                camera: Some(stepped(-200.0)),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("move"),
+                name: "Move".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+            mix("km", "k"),
+            mix("mainm", "main"),
+            mix("k2m", "k2"),
+        ]),
+    )
+    .expect("two keyframes, mixes of each scene and a move");
+    let action = Action::SceneSwitch {
+        scene_id: SceneId::new("k"),
+        preset_id: Some(TransitionPresetId::new("move")),
+        via: Vec::new(),
+    };
+    super::block_on(control.call(Call::Action { action })).expect("switch");
+    clock.advance(200_000);
+    engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
+    let (main, k, k2) = (SceneId::new("main"), SceneId::new("k"), SceneId::new("k2"));
+    assert!(!shot.transitioning(), "a camera-only glide");
+    assert_eq!(shot.root_of(Some(&VideoMixId::new("km"))), Some(&k));
+    assert_eq!(shot.root_of(Some(&VideoMixId::new("mainm"))), Some(&main));
+    assert_eq!(shot.root_of(Some(&VideoMixId::new("k2m"))), Some(&k2));
+    assert!(
+        shot.gliding_camera(&k, 200.0).is_some(),
+        "program, and the mix of it, glide"
+    );
+    assert!(
+        shot.gliding_camera(&main, 200.0).is_none(),
+        "a mix of the family's own scene keeps its camera"
+    );
+    assert!(
+        shot.gliding_camera(&k2, 200.0).is_none(),
+        "a mix of a sibling keyframe keeps its camera"
+    );
+}
+
 /// An item with an effect shown with a Fade on a keyframe scene of a 3D scene is drawn
 /// through the keyframe's camera while it appears: the red card, 400 px square, fades in
 /// at its place, and the wall around it stays as it is. The scene has a chain, which
