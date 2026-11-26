@@ -7,8 +7,12 @@
 //! with timestamp queries, where the GPU has them, and hands the times to a
 //! [`PassGuard`] once per tick. A kind whose pass takes more than half the frame budget
 //! in [`SLOW_FRAMES`] ticks running is reported as a [`SlowPass`], which the engine
-//! quarantines as it does a kind blamed for a device loss (ADR-0087). On a GPU without
-//! timestamp queries nothing is timed, and a device loss is the only guard.
+//! quarantines as it does a kind blamed for a device loss (ADR-0087). A built-in 3D
+//! extra (`ambient_occlusion`, `volumetric_fog`, `screen_space_reflections`) is timed
+//! too, under its kind, which has no `/`: one reported is not quarantined, but taken by
+//! the render thread ([`PassGuard::take_built_in`]), which holds the 3D extras at their
+//! cheapest for the rest of the run (ADR-0247). On a GPU without timestamp queries
+//! nothing is timed, and a device loss is the only guard.
 
 use std::time::Duration;
 
@@ -110,6 +114,19 @@ impl PassGuard {
     pub(crate) fn take(&mut self) -> Option<SlowPass> {
         self.slow.take()
     }
+
+    /// The kind that ran too long, once, when it is a built-in one (no `/` in its ID);
+    /// a pack's is left for [`Self::take`].
+    pub(crate) fn take_built_in(&mut self) -> Option<SlowPass> {
+        if self
+            .slow
+            .as_ref()
+            .is_some_and(|slow| !slow.kind_id.contains('/'))
+        {
+            return self.slow.take();
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -179,6 +196,31 @@ mod tests {
         let reported = tick(&mut guard, &[("fx/tint", FAST), ("fx/loop", SLOW)]);
         assert_eq!(
             reported.map(|slow| slow.kind_id),
+            Some("fx/loop".to_owned())
+        );
+    }
+
+    /// ADR-0247: a built-in kind that ran too long is taken by `take_built_in`, not
+    /// `take`, which the engine quarantines by; a pack's is the other way round.
+    #[test]
+    fn a_built_in_kind_is_taken_apart_from_a_packs() {
+        let mut guard = PassGuard::new(BUDGET);
+        for _ in 0..SLOW_FRAMES {
+            guard.measured("volumetric_fog", SLOW);
+            guard.end_tick();
+        }
+        assert_eq!(
+            guard.take_built_in().map(|slow| slow.kind_id),
+            Some("volumetric_fog".to_owned())
+        );
+        assert_eq!(guard.take(), None, "taken once");
+        for _ in 0..SLOW_FRAMES {
+            guard.measured("fx/loop", SLOW);
+            guard.end_tick();
+        }
+        assert_eq!(guard.take_built_in(), None, "a pack's is not");
+        assert_eq!(
+            guard.take().map(|slow| slow.kind_id),
             Some("fx/loop".to_owned())
         );
     }

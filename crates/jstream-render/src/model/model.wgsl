@@ -261,7 +261,9 @@ fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
         f32(textureDimensions(sky_tex).x),
         textureNumLevels(sky_tex),
     );
-    if spread <= 0.01 {
+    // A picture bound with levels holds them blurred already (`panorama_blur.wgsl`):
+    // one read at the ring's level stands for its nine.
+    if spread <= 0.01 || textureNumLevels(sky_tex) > 1u {
         return panorama(d, level);
     }
     var side = vec3<f32>(0.0, 1.0, 0.0);
@@ -280,7 +282,8 @@ fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
 
 // The scene's sky as a matte surface facing `dir` (in the viewing frame) takes it: one
 // read of the panorama one level above the one `sky` reads its widest ring at, where a
-// filtered texel spans about what that ring's nine reads did together.
+// filtered texel spans about what that ring's nine reads did together. Bound with its
+// blurred levels, that level holds the widest ring again, a level coarser.
 fn sky_matte(dir: vec3<f32>) -> vec3<f32> {
     let e = frame.environment;
     if e.ground.w < 0.0 {
@@ -308,7 +311,7 @@ fn probe_light(d: vec3<f32>, spread: f32) -> vec4<f32> {
         f32(textureDimensions(probe_tex).x),
         textureNumLevels(probe_tex),
     );
-    if spread <= 0.01 {
+    if spread <= 0.01 || textureNumLevels(probe_tex) > 1u {
         return probe_panorama(d, level);
     }
     var side = vec3<f32>(0.0, 1.0, 0.0);

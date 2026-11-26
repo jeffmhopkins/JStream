@@ -21,6 +21,7 @@ mod image;
 mod ingest;
 mod mips;
 mod model;
+mod panorama_blur;
 mod pipelines;
 mod place;
 mod probe;

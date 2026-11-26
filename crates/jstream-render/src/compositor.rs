@@ -14,6 +14,7 @@ use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
 use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime, Panoramas};
+use crate::panorama_blur::{BlurPipeline, Blurred};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Placement, Scene, Snapshot};
 use crate::wipe::Wipe;
@@ -305,6 +306,8 @@ pub struct Compositor {
     /// Writes transparent over part of a layer, in place of clearing all of it (#1449).
     wipe: Wipe,
     mip_pipelines: MipPipelines,
+    /// What makes a panorama's blurred reflections, made with the first one.
+    panorama_blur: std::sync::OnceLock<BlurPipeline>,
     models: ModelRuntime,
     /// Depth of field on models (ADR-0165): its passes and the layers a model with depth
     /// of field is drawn into first, made on first use.
@@ -1169,7 +1172,30 @@ impl Compositor {
     /// of their own, made the same way, so a rough surface blurs them smoothly
     /// (ADR-0170 decision 3).
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
-        self.draw_model_beside(draw, target, None)
+        self.draw_model_beside(draw, target, (None, None))
+    }
+
+    /// Draws `draw` into `target` as [`Self::draw_model`] does, with what a
+    /// screen-space reflection reads of it into `surface` as
+    /// [`Self::draw_model_with_surface`] does when given, and its view depth into
+    /// `depth`, a [`Self::depth_layer`] of `target`'s size, replacing what it held: what
+    /// [`Self::draw_model_depth`] would add to it once emptied, read from the depth the
+    /// layer's own pass tested instead of drawing the model a second time. The
+    /// differences: a back face of a surface drawn one-sided, which shows nothing in the
+    /// layer, holds no depth either, and multisampled, a texel at the model's edge that
+    /// it covers under three quarters of holds none.
+    ///
+    /// # Errors
+    /// As for [`Self::draw_model`] and [`Self::draw_model_with_surface`], and when
+    /// `depth` isn't a depth layer this compositor made of `target`'s size.
+    pub fn draw_model_and_depth(
+        &mut self,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+        surface: Option<[&Image; 3]>,
+        depth: &Image,
+    ) -> Result<(), RenderError> {
+        self.draw_model_beside(draw, target, (surface, Some(depth)))
     }
 
     /// Draws `draw` into `target` as [`Self::draw_model`] does, and what a screen-space
@@ -1191,7 +1217,7 @@ impl Compositor {
         target: &Image,
         surface: [&Image; 3],
     ) -> Result<(), RenderError> {
-        self.draw_model_beside(draw, target, Some(surface))
+        self.draw_model_beside(draw, target, (Some(surface), None))
     }
 
     /// Merges a model's surface that [`Self::draw_model_with_surface`] drew into
@@ -1220,7 +1246,7 @@ impl Compositor {
         &mut self,
         draw: &ModelDraw<'_>,
         target: &Image,
-        surface: Option<[&Image; 3]>,
+        beside: (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         let errors = self.errors();
         let chain = draw
@@ -1244,7 +1270,7 @@ impl Compositor {
             sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
             probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
         };
-        let drawn = self.draw_model_focused(draw, target, (live, panoramas), surface);
+        let drawn = self.draw_model_focused(draw, target, (live, panoramas), beside);
         errors.close(drawn)
     }
 
@@ -1267,13 +1293,34 @@ impl Compositor {
     }
 
     /// The mip chain a blurred reflection reads of `image`, a sky picture or a probe's
-    /// capture this compositor made, with the image.
-    fn panorama_chain<'a>(&self, image: Option<&'a Image>) -> Option<(&'a Image, Arc<Mips>)> {
+    /// capture this compositor made, with the image, its blurred levels made from it
+    /// (`panorama_blur.rs`) since its last build.
+    pub(crate) fn panorama_chain<'a>(
+        &self,
+        image: Option<&'a Image>,
+    ) -> Option<(&'a Image, Arc<Mips>)> {
         let image = image.filter(|image| image.owner().is(&self.owner))?;
-        Some((
-            image,
-            self.built_chain(image, "jstream-render-panorama-mips"),
-        ))
+        let chain = self.built_chain(image, "jstream-render-panorama-mips");
+        let pipeline = self
+            .panorama_blur
+            .get_or_init(|| BlurPipeline::new(&self.gpu.device));
+        let blurred = chain
+            .blurred
+            .get_or_init(|| Blurred::new(&self.gpu.device, &self.gpu.queue, pipeline, &chain));
+        if blurred.claim(&chain) {
+            let lock = self.gpu.submit.clone();
+            let submitting = lock.lock();
+            let mut encoder =
+                self.gpu
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("jstream-render-panorama-blur"),
+                    });
+            blurred.record(&mut encoder, pipeline);
+            self.gpu.submit_work(encoder.finish());
+            drop(submitting);
+        }
+        Some((image, chain))
     }
 
     /// [`Self::draw_model`], its errors not yet collected. When the model's camera has
@@ -1286,7 +1333,7 @@ impl Compositor {
         draw: &ModelDraw<'_>,
         target: &Image,
         live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
-        surface: Option<[&Image; 3]>,
+        (surface, view_depth): (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         // The canvas the model is placed on, which the target may hold with fewer
         // pixels (ADR-0197): the layers the passes read are the target's size, and stand
@@ -1297,9 +1344,14 @@ impl Compositor {
             .and_then(|camera| camera.view(canvas).ok())
             .filter(|view| view.focus().is_some());
         let Some(view) = view else {
-            return self
-                .models
-                .draw(&self.gpu, &self.owner, draw, target, live, surface);
+            return self.models.draw(
+                &self.gpu,
+                &self.owner,
+                draw,
+                target,
+                live,
+                (surface, view_depth),
+            );
         };
         let (width, height) = (target.width(), target.height());
         let (mut colour, mut depth) = self.model_focus_layers(width, height)?;
@@ -1307,21 +1359,17 @@ impl Compositor {
             colour.set_extent(extent);
             depth.set_extent(extent);
         }
-        self.models
-            .draw(&self.gpu, &self.owner, draw, &colour, live, surface)?;
-        let empty = Scene {
-            canvas: jstream_media::FrameSize::new(width, height).map_err(|_| {
-                RenderError::Invalid {
-                    what: "layer",
-                    detail: "the target has no pixels".into(),
-                }
-            })?,
-            background: crate::scene::Color::rgb(0.0, 0.0, 0.0),
-            items: &[],
-        };
-        self.draw_view_depth(&empty, &depth)?;
-        self.models
-            .draw_depth(&self.gpu, &self.owner, draw, &depth)?;
+        // The depth the focus reads is the caller's view depth when it asked for one,
+        // so neither is drawn apart from the layer.
+        let depth = view_depth.cloned().unwrap_or(depth);
+        self.models.draw(
+            &self.gpu,
+            &self.owner,
+            draw,
+            &colour,
+            live,
+            (surface, Some(&depth)),
+        )?;
         let slot = self
             .model_focus
             .filter
@@ -1708,7 +1756,9 @@ impl Compositor {
     }
 
     /// Hands `measured` the GPU time of each effect-pack filter or shader source applied
-    /// since the last call whose time has come back, with its kind ID (#349). A time
+    /// since the last call whose time has come back, with its kind ID (#349), and of each
+    /// built-in 3D extra (ambient occlusion, volumetric fog, screen-space reflections),
+    /// with its kind (ADR-0247). A time
     /// comes back a frame or two after its draw, read without waiting, and allocates
     /// nothing. Nothing before [`Self::time_passes`], or on a device without timestamp
     /// queries.
@@ -2051,6 +2101,7 @@ impl Compositor {
             filters,
             wipe,
             mip_pipelines,
+            panorama_blur: std::sync::OnceLock::new(),
             models,
             model_focus: ModelFocusRun::default(),
             sky: None,
@@ -2653,7 +2704,9 @@ impl Compositor {
 
     /// Makes what a 3D scene draws with and a 2D one never needs, which is otherwise made
     /// at the first draw that needs it: the sky's pipeline, its bake's, and the scene
-    /// passes' depth pipelines. The models' are made with the compositor. Each is found if a
+    /// passes' depth pipelines, the pipeline that blurs a reflected panorama, and a
+    /// model layer's pipelines at the samples [`Self::set_model_antialiasing`] set and
+    /// at one. The models' others are made with the compositor. Each is found if a
     /// compositor on the device made it already (`pipelines.rs`), so a caller on a
     /// thread of its own makes them for every compositor on its device ahead of the
     /// first 3D frame, which would otherwise wait for their shaders to compile.
@@ -2662,6 +2715,9 @@ impl Compositor {
             .get_or_insert_with(|| crate::sky::SkyRuntime::new(&self.gpu))
             .warm(&self.gpu);
         self.ensure_depth_pipelines();
+        self.panorama_blur
+            .get_or_init(|| BlurPipeline::new(&self.gpu.device));
+        self.models.warm(&self.gpu);
     }
 
     /// Makes the depth pipelines once, and a depth target of `width` by `height`.

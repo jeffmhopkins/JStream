@@ -1645,6 +1645,34 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
     // A palette of another length is ignored.
     compositor.pose_model(&uploaded, &[identity_f32(), identity_f32()]);
     assert_near(rgb(&shoot(compositor), 80, 50), BACK, (80, 50));
+    // One layer drawn again of the same pose is kept; of a new pose, drawn (ADR-0246).
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera: None,
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let draw_again = |compositor: &mut Compositor| {
+        let was = layer.generation();
+        compositor
+            .draw_model(&draw, &layer)
+            .expect("the model draws");
+        layer.generation() != was
+    };
+    assert!(draw_again(compositor), "first drawn");
+    compositor.pose_model(&uploaded, &[half_turn]);
+    assert!(!draw_again(compositor), "the same pose written again");
+    compositor.pose_model(&uploaded, &[identity_f32()]);
+    assert!(draw_again(compositor), "a new pose");
 }
 
 fn identity_f32() -> [f32; 16] {
@@ -3188,5 +3216,400 @@ fn a_multisampled_surface_matches_the_single_sampled_one_inside() {
                 "layer {n} at ({x}, {y}): {one:?} single-sampled, {four:?} with 4"
             );
         }
+    }
+}
+
+/// A model's view depth read from its layer's own tested depth
+/// (`Compositor::draw_model_and_depth`) is the one `draw_model_depth` draws into an
+/// emptied depth layer: for a turned cube seen at a distance, and for a blended plane
+/// at least half opaque, which the layer's pass tests but writes no depth for; drawn
+/// single-sampled the same texel for texel, multisampled within a level inside (the
+/// mean of its samples) and differing more only along edges, where a texel the model
+/// covers under three quarters of holds none. Its box is the layer's.
+#[test]
+fn a_view_depth_read_from_the_layer_is_the_one_drawn_again() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let plane = Shape::Plane
+        .model(Material {
+            base_color: [1.0, 1.0, 1.0, 0.75],
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            ..Material::default()
+        })
+        .expect("the plane builds");
+    let camera = SceneCamera::framing(canvas());
+    let mut geometry = boxed(80.0, 50.0, 50.0);
+    geometry.depth_px = finite(-150.0);
+    geometry.turn_deg = finite(35.0);
+    geometry.tilt_deg = finite(20.0);
+    let empty = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &[],
+    };
+    let read = |compositor: &mut Compositor, depth: &crate::Image| {
+        let items = [crate::tests::item(
+            depth,
+            Placement::IDENTITY,
+            Crop::NONE,
+            1.0,
+        )];
+        render(compositor, &items)
+    };
+    for (name, model) in [("cube", coloured_cube()), ("blended plane", plane)] {
+        let uploaded = compositor.upload_model(&model).expect("the model uploads");
+        let draw = ModelDraw {
+            model: &uploaded,
+            geometry,
+            camera: Some(camera),
+            lighting: Lighting::Unlit,
+            lights: None,
+            shadows: &[],
+            environment: None,
+            floor: None,
+            materials: &[],
+            texture: None,
+            reflection: None,
+            probe: None,
+        };
+        for samples in [1, 4] {
+            let samples = compositor.set_model_antialiasing(samples);
+            let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+            let drawn_again = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+            compositor
+                .draw_model(&draw, &layer)
+                .expect("the model draws");
+            compositor
+                .render_view_depth(&empty, &drawn_again)
+                .expect("it clears");
+            compositor
+                .draw_model_depth(&draw, &drawn_again)
+                .expect("the depth draws");
+            let read_back = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+            compositor
+                .draw_model_and_depth(&draw, &layer, None, &read_back)
+                .expect("the model and its depth draw");
+            assert_eq!(read_back.content(), layer.content(), "{name}: its box");
+            let (want, got) = (read(compositor, &drawn_again), read(compositor, &read_back));
+            let centre = rgb(&want, 80, 50);
+            assert!(centre[0] > 40, "{name}: the depth is drawn: {centre:?}");
+            // Multisampled, a texel holds the mean of its samples, its centre's depth on
+            // a plane: a level apart at most.
+            let near = rgb(&got, 80, 50)[0].abs_diff(centre[0]);
+            assert!(
+                near <= u8::from(samples > 1),
+                "{name} at {samples}x: the centre, {centre:?} against {:?}",
+                rgb(&got, 80, 50)
+            );
+            let mut differing = 0;
+            for y in 0..HEIGHT {
+                for x in 0..WIDTH {
+                    let (a, b) = (rgb(&want, x, y)[0], rgb(&got, x, y)[0]);
+                    if a.abs_diff(b) > 1 {
+                        differing += 1;
+                    }
+                }
+            }
+            let allowed = if samples == 1 {
+                0
+            } else {
+                2 * (WIDTH + HEIGHT)
+            };
+            assert!(
+                differing <= allowed,
+                "{name} at {samples}x: {differing} texels differ"
+            );
+        }
+    }
+}
+
+/// A model's textures are block compressed on upload where the device samples BC
+/// textures: an opaque colour texture as BC1, one with alpha as BC3, a linear one too;
+/// a normal map, whose normals four colours a block would bend into steps, and a texture
+/// whose sides aren't whole blocks of 4 stay RGBA8. A device without BC keeps them all
+/// RGBA8. A compressed texture draws as its texels: a plane of one colour per quadrant
+/// reads each.
+#[test]
+fn golden_model_textures_are_block_compressed_but_normal_maps() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let quadrants = |side: u32, alpha: u8| -> Vec<u8> {
+        (0..side)
+            .flat_map(|y| {
+                (0..side).flat_map(move |x| match (x < side / 2, y < side / 2) {
+                    (true, true) => [255, 0, 0, alpha],
+                    (false, true) => [0, 255, 0, alpha],
+                    (true, false) => [0, 0, 255, alpha],
+                    (false, false) => [255, 255, 255, alpha],
+                })
+            })
+            .collect()
+    };
+    let textures = vec![
+        ModelTexture::new(16, 16, quadrants(16, 255), TextureColor::Srgb).expect("a texture"),
+        ModelTexture::new(16, 16, quadrants(16, 128), TextureColor::Srgb).expect("a texture"),
+        ModelTexture::new(16, 16, quadrants(16, 255), TextureColor::Linear).expect("a texture"),
+        ModelTexture::new(
+            16,
+            16,
+            [128, 128, 255, 255].repeat(256),
+            TextureColor::Linear,
+        )
+        .expect("a texture"),
+        ModelTexture::new(6, 6, quadrants(6, 255), TextureColor::Srgb).expect("a texture"),
+    ];
+    let plane = Shape::Plane
+        .model(Material::default())
+        .expect("the plane builds");
+    let textured = |base: usize| Material {
+        base_color_texture: Some(TextureRef { texture: base }),
+        unlit: true,
+        ..plane.materials()[0].clone()
+    };
+    let materials = vec![
+        Material {
+            metallic_roughness_texture: Some(TextureRef { texture: 2 }),
+            normal_texture: Some(TextureRef { texture: 3 }),
+            ..textured(0)
+        },
+        textured(1),
+        textured(4),
+    ];
+    let model =
+        Model::new(plane.primitives().to_vec(), materials, textures).expect("the plane builds");
+    let uploaded = opened
+        .compositor
+        .upload_model(&model)
+        .expect("the model uploads");
+    use wgpu::TextureFormat as F;
+    let bc = opened
+        .compositor
+        .device()
+        .features()
+        .contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
+    let expected = if bc {
+        [
+            F::Bc1RgbaUnormSrgb,
+            F::Bc3RgbaUnormSrgb,
+            F::Bc1RgbaUnorm,
+            F::Rgba8Unorm,
+            F::Rgba8UnormSrgb,
+        ]
+    } else {
+        [
+            F::Rgba8UnormSrgb,
+            F::Rgba8UnormSrgb,
+            F::Rgba8Unorm,
+            F::Rgba8Unorm,
+            F::Rgba8UnormSrgb,
+        ]
+    };
+    assert_eq!(uploaded.texture_formats(), expected, "BC sampled: {bc}");
+    let single = Model::new(
+        plane.primitives().to_vec(),
+        vec![textured(0)],
+        vec![ModelTexture::new(16, 16, quadrants(16, 255), TextureColor::Srgb).expect("a texture")],
+    )
+    .expect("the plane builds");
+    let shot = draw(
+        &mut opened.compositor,
+        &single,
+        boxed(80.0, 50.0, 80.0),
+        None,
+        Lighting::Studio,
+    );
+    assert_near(rgb(&shot, 60, 30), [255, 0, 0], (60, 30));
+    assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
+    assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
+    assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+}
+
+/// A model texture the GPU has no memory for is uploaded without its largest level,
+/// then the next, until it fits, and draws as its texels, softer; one with no level that
+/// fits fails the upload. Here the GPU takes at most 8 × 8 texels, then none.
+#[test]
+fn a_texture_short_of_memory_is_uploaded_without_its_largest_levels() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let quadrants = |side: u32| -> Vec<u8> {
+        (0..side)
+            .flat_map(|y| {
+                (0..side).flat_map(move |x| match (x < side / 2, y < side / 2) {
+                    (true, true) => [255, 0, 0, 255],
+                    (false, true) => [0, 255, 0, 255],
+                    (true, false) => [0, 0, 255, 255],
+                    (false, false) => [255, 255, 255, 255],
+                })
+            })
+            .collect()
+    };
+    let plane = Shape::Plane
+        .model(Material::default())
+        .expect("the plane builds");
+    let textured = Material {
+        base_color_texture: Some(TextureRef { texture: 0 }),
+        unlit: true,
+        ..plane.materials()[0].clone()
+    };
+    let with = |texture: ModelTexture| {
+        Model::new(
+            plane.primitives().to_vec(),
+            vec![textured.clone()],
+            vec![texture],
+        )
+        .expect("the plane builds")
+    };
+    let mipped =
+        with(ModelTexture::new(32, 32, quadrants(32), TextureColor::Srgb).expect("a texture"));
+    super::TEXTURE_MEMORY_TEXELS.with(|most| most.set(Some(64)));
+    let uploaded = opened.compositor.upload_model(&mipped);
+    let shot = draw(
+        &mut opened.compositor,
+        &mipped,
+        boxed(80.0, 50.0, 80.0),
+        None,
+        Lighting::Studio,
+    );
+    super::TEXTURE_MEMORY_TEXELS.with(|most| most.set(Some(0)));
+    let unfit = opened.compositor.upload_model(&mipped);
+    super::TEXTURE_MEMORY_TEXELS.with(|most| most.set(None));
+    let uploaded = uploaded.expect("the model uploads");
+    assert_eq!(uploaded.texture_sizes(), [(8, 8)], "two levels left out");
+    assert_near(rgb(&shot, 60, 30), [255, 0, 0], (60, 30));
+    assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
+    assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
+    assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+    assert!(unfit.is_err(), "no level fits");
+}
+
+/// A model's layer drawn again of the same draw is left as it is, its view depth too,
+/// and holds the same pixels (ADR-0246): neither is marked as changed. A new placement,
+/// a material's drive, another sample count, or a write into the layer since, draws it
+/// again.
+#[test]
+fn a_layer_still_holding_the_same_model_draw_is_kept() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    compositor.set_model_antialiasing(1);
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+    let camera = SceneCamera::framing(canvas());
+    let mut turned = boxed(80.0, 50.0, 50.0);
+    turned.turn_deg = finite(30.0);
+    let brighter = [super::MaterialDrive {
+        color: 0.5,
+        ..super::MaterialDrive::default()
+    }];
+    let draw = |geometry, materials| ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera: Some(camera),
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials,
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    // Whether drawing `draw` wrote the layer and its view depth: both or neither.
+    let drawn = |compositor: &mut Compositor, draw: &ModelDraw<'_>| {
+        let was = (layer.generation(), depth.generation());
+        compositor
+            .draw_model_and_depth(draw, &layer, None, &depth)
+            .expect("the model draws");
+        let wrote = (layer.generation() != was.0, depth.generation() != was.1);
+        assert_eq!(wrote.0, wrote.1, "the layer and its depth go together");
+        wrote.0
+    };
+    let shown = |compositor: &mut Compositor| {
+        let items = [crate::tests::item(
+            &layer,
+            Placement::IDENTITY,
+            Crop::NONE,
+            1.0,
+        )];
+        rgb(&render(compositor, &items), 80, 50)
+    };
+    let still = draw(boxed(80.0, 50.0, 50.0), &[]);
+    assert!(drawn(compositor, &still), "first drawn");
+    let first = shown(compositor);
+    assert!(!drawn(compositor, &still), "the same draw again");
+    assert_eq!(shown(compositor), first, "it holds the same pixels");
+    assert!(drawn(compositor, &draw(turned, &[])), "turned");
+    assert!(!drawn(compositor, &draw(turned, &[])), "turned again");
+    assert!(drawn(compositor, &draw(turned, &brighter)), "driven");
+    assert!(!drawn(compositor, &draw(turned, &brighter)), "driven again");
+    layer.mark_changed();
+    assert!(drawn(compositor, &draw(turned, &brighter)), "written since");
+    if compositor.set_model_antialiasing(4) == 4 {
+        assert!(drawn(compositor, &draw(turned, &brighter)), "multisampled");
+        assert!(
+            !drawn(compositor, &draw(turned, &brighter)),
+            "multisampled again"
+        );
+    }
+    // Without its view depth it is another draw.
+    let was = layer.generation();
+    compositor
+        .draw_model(&draw(turned, &brighter), &layer)
+        .expect("the model draws");
+    assert_ne!(layer.generation(), was, "drawn without its depth");
+}
+
+/// `warm_3d` makes a model layer's pipelines at the samples set and at one, so a first
+/// draw at either compiles nothing, multisampled or not, with its view depth.
+#[test]
+fn warming_3d_makes_the_model_layers_pipelines_at_its_samples() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    if compositor.set_model_antialiasing(4) != 4 {
+        return;
+    }
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+    compositor.warm_3d();
+    let made = compositor.pipelines_made();
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry: boxed(80.0, 50.0, 50.0),
+        camera: Some(SceneCamera::framing(canvas())),
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    for samples in [4, 1] {
+        compositor.set_model_antialiasing(samples);
+        compositor
+            .draw_model_and_depth(&draw, &layer, None, &depth)
+            .expect("the model draws");
+        assert_eq!(
+            compositor.pipelines_made(),
+            made,
+            "drawn at {samples}x, nothing more made"
+        );
     }
 }
