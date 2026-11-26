@@ -9084,7 +9084,7 @@ stamp = { hash = "b3:22388ddce6b35fcd", by = "agent:release-alpha14", note = "pu
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:9862578c5095c81d", by = "agent:release-alpha14", note = "Bumped the workspace version to 0.1.0-alpha.14 with cargo update -w; re-read: the section names no specific version, the apps still take version.workspace and libraries stay 0.0.0, so it holds. | merge: #1814 changed only dependency versions in Cargo.toml (wgpu/naga, cef, libloading, jiff); the workspace version stays 0.1.0-alpha.14 and the section names no version or dependency, so it holds. | kept from the merged side: Cargo.toml change is dependency pins (wgpu/naga 30.0.2, cef 156.7.0, jiff 1.0); workspace.package version and its rules are unchanged" }
+stamp = { hash = "b3:6750393c177844bf", by = "agent:release-alpha15", note = "Bumped the workspace version to 0.1.0-alpha.15 with cargo update -w; re-read: the section names no specific version, the apps still take version.workspace and libraries stay 0.0.0, so it holds." }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
