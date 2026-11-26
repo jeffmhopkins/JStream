@@ -2301,7 +2301,8 @@ its canvas this frame (to a hundredth of a pixel, unturned or turned a half turn
 no layer at all: its key holds that picture's image, placed at the canvas's size
 (`passes_through`, `share_pass`, `ResourceCache::share`). A flipped or turned-over one
 is placed mirrored by the items that show it (`fills_canvas`, `Chains::mirrored`,
-`mirror_layer`), and is drawn into a layer while a transition, a box or a model shows it. The graph already rejects cycles at every
+`mirror_layer`), and is drawn into a layer while a transition, a box or a model shows it
+([ADR-0255](../../docs/adr/0255-a-whole-picture-turned-over-or-flipped-has-no-layer-either.md)). The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
 draws nothing. A group that shares its 3D scene's space
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)) is the exception:

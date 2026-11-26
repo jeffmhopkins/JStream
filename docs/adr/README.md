@@ -257,4 +257,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0251](0251-a-models-layer-holds-only-its-part-of-the-canvas.md) | A model's layer holds only its part of the canvas | accepted | agent |  |
 | [ADR-0253](0253-jtunnel-opus-streams-decode-through-rusty-opus.md) | JTunnel's Opus streams decode through rusty-opus | accepted | agent |  |
 | [ADR-0254](0254-browser-paint-copies-are-waited-for-off-cefs-ui-thread.md) | The browser helper waits for its paint copies off CEF's UI thread | accepted | agent |  |
+| [ADR-0255](0255-a-whole-picture-turned-over-or-flipped-has-no-layer-either.md) | A whole picture turned over or flipped has no layer either | accepted | agent |  |
 <!-- @generated end adr-index -->
