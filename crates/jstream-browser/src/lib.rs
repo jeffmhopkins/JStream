@@ -57,14 +57,6 @@ mod page_api;
         feature = "helper"
     )
 ))]
-mod paint_slots;
-#[cfg(any(
-    test,
-    all(
-        any(windows, target_os = "linux", target_os = "macos"),
-        feature = "helper"
-    )
-))]
 mod permission;
 #[cfg(any(
     test,

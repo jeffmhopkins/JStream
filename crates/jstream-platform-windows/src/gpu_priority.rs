@@ -23,10 +23,84 @@
 //! makes no call. A value that names no class is warned about and the default kept.
 //! Where Windows refuses, the process stays in the class it had and the log says so:
 //! nothing fails. Each line in the log names the class that was set.
-//!
-//! The classes, and how the variables name them, are `jstream_platform::priority`'s,
-//! where they are tested: the browser helper reads `JSTREAM_GPU_PRIORITY` the same way
-//! and asks for the same GPU class for its copies (ADR-0252).
+
+/// The environment variable that names the GPU scheduling class to ask for.
+#[cfg(windows)]
+pub(crate) const GPU_VARIABLE: &str = "JSTREAM_GPU_PRIORITY";
+
+/// The environment variable that names the CPU priority class to ask for.
+#[cfg(windows)]
+pub(crate) const CPU_VARIABLE: &str = "JSTREAM_CPU_PRIORITY";
+
+/// A scheduling priority class the engine may ask for, on the GPU or the CPU.
+#[cfg(any(windows, test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Class {
+    /// The class every process starts in: nothing is asked for.
+    Normal,
+    /// Ahead of normal processes by a little.
+    AboveNormal,
+    /// Ahead of normal processes. The CPU's default.
+    High,
+    /// Ahead of everything else. The GPU's default; never asked for on the CPU.
+    Realtime,
+}
+
+#[cfg(any(windows, test))]
+impl Class {
+    /// The GPU class when `JSTREAM_GPU_PRIORITY` names none.
+    pub(crate) const GPU_DEFAULT: Self = Self::Realtime;
+    /// The CPU class when `JSTREAM_CPU_PRIORITY` names none, and the highest it may name.
+    pub(crate) const CPU_DEFAULT: Self = Self::High;
+
+    /// The class a variable's `value` names, none above `highest`: `default` when it is
+    /// unset or empty, and when it names no class or one above `highest` (the second
+    /// field then says so, for the log).
+    pub(crate) fn named(value: Option<&str>, default: Self, highest: Self) -> (Self, bool) {
+        let name = match value.map(str::trim) {
+            None | Some("") => return (default, true),
+            Some(name) => name,
+        };
+        let class = [Self::Normal, Self::AboveNormal, Self::High, Self::Realtime]
+            .into_iter()
+            .find(|class| name.eq_ignore_ascii_case(class.name()));
+        match class {
+            Some(class) if class.rank() <= highest.rank() => (class, true),
+            _ => (default, false),
+        }
+    }
+
+    /// Its name, as the variables spell it.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::AboveNormal => "above_normal",
+            Self::High => "high",
+            Self::Realtime => "realtime",
+        }
+    }
+
+    fn rank(self) -> u8 {
+        match self {
+            Self::Normal => 0,
+            Self::AboveNormal => 1,
+            Self::High => 2,
+            Self::Realtime => 3,
+        }
+    }
+
+    /// The classes to ask for in turn until Windows grants one: itself, then `high`
+    /// after `realtime`, which Windows may keep for privileged processes. None for
+    /// `normal`, which needs no call.
+    pub(crate) fn tries(self) -> &'static [Self] {
+        match self {
+            Self::Normal => &[],
+            Self::AboveNormal => &[Self::AboveNormal],
+            Self::High => &[Self::High],
+            Self::Realtime => &[Self::Realtime, Self::High],
+        }
+    }
+}
 
 #[cfg(windows)]
 pub(crate) use os::raise_once;
@@ -43,7 +117,7 @@ mod os {
         ABOVE_NORMAL_PRIORITY_CLASS, GetCurrentProcess, HIGH_PRIORITY_CLASS, SetPriorityClass,
     };
 
-    use jstream_platform::priority::{CPU_VARIABLE, Class, GPU_VARIABLE};
+    use super::{CPU_VARIABLE, Class, GPU_VARIABLE};
 
     /// Asks Windows for the process's GPU scheduling class and CPU priority class, the
     /// first time it is called in the process; later calls do nothing. Never fails: a
@@ -123,5 +197,69 @@ mod os {
         // SAFETY: `GetCurrentProcess` returns a pseudo-handle that is always valid and
         // needs no closing, and the class is passed by value.
         unsafe { SetPriorityClass(GetCurrentProcess(), asked) }.map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Class;
+
+    fn gpu(value: Option<&str>) -> (Class, bool) {
+        Class::named(value, Class::GPU_DEFAULT, Class::Realtime)
+    }
+
+    fn cpu(value: Option<&str>) -> (Class, bool) {
+        Class::named(value, Class::CPU_DEFAULT, Class::High)
+    }
+
+    #[test]
+    fn the_defaults_are_the_gpus_realtime_and_the_cpus_high() {
+        assert_eq!(gpu(None), (Class::Realtime, true));
+        assert_eq!(gpu(Some("")), (Class::Realtime, true));
+        assert_eq!(cpu(None), (Class::High, true));
+        assert_eq!(cpu(Some(" ")), (Class::High, true));
+    }
+
+    #[test]
+    fn a_variable_lowers_the_class() {
+        assert_eq!(gpu(Some(" HIGH ")), (Class::High, true));
+        assert_eq!(gpu(Some("above_normal")), (Class::AboveNormal, true));
+        assert_eq!(gpu(Some("Normal")), (Class::Normal, true));
+        assert_eq!(gpu(Some("realtime")), (Class::Realtime, true));
+        assert_eq!(cpu(Some("normal")), (Class::Normal, true));
+        assert_eq!(cpu(Some("above_normal")), (Class::AboveNormal, true));
+    }
+
+    #[test]
+    fn a_value_that_names_no_class_keeps_the_default_and_says_so() {
+        assert_eq!(gpu(Some("fastest")), (Class::Realtime, false));
+        assert_eq!(cpu(Some("fastest")), (Class::High, false));
+    }
+
+    /// The CPU's realtime class can stop the machine's own threads, so the variable
+    /// can't ask for it.
+    #[test]
+    fn the_cpu_class_is_never_realtime() {
+        assert_eq!(cpu(Some("realtime")), (Class::High, false));
+    }
+
+    #[test]
+    fn realtime_falls_back_to_high_and_normal_asks_for_nothing() {
+        assert_eq!(Class::Realtime.tries(), [Class::Realtime, Class::High]);
+        assert_eq!(Class::High.tries(), [Class::High]);
+        assert_eq!(Class::AboveNormal.tries(), [Class::AboveNormal]);
+        assert!(Class::Normal.tries().is_empty());
+    }
+
+    #[test]
+    fn a_class_is_named_as_the_variables_spell_it() {
+        for class in [
+            Class::Normal,
+            Class::AboveNormal,
+            Class::High,
+            Class::Realtime,
+        ] {
+            assert_eq!(gpu(Some(class.name())), (class, true));
+        }
     }
 }

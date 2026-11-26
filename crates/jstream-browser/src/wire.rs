@@ -102,6 +102,15 @@ pub(crate) enum ToEngine {
     /// Something went wrong in the helper that the engine should log: the helper has no
     /// log of its own. The text names no page URL or path.
     Warning { message: String },
+    /// A page's paints so far, sent at most every few seconds while it paints, for the
+    /// engine's `debug` log: how many CEF delivered, how many were skipped because the
+    /// engine held every slot, and how many couldn't be copied.
+    Paints {
+        page: u32,
+        painted: u64,
+        skipped: u64,
+        failed: u64,
+    },
 }
 
 /// Why a message couldn't be read.
@@ -515,6 +524,18 @@ impl ToEngine {
                 out.u8(10);
                 out.u32(*page);
             }
+            Self::Paints {
+                page,
+                painted,
+                skipped,
+                failed,
+            } => {
+                out.u8(11);
+                out.u32(*page);
+                out.u64(*painted);
+                out.u64(*skipped);
+                out.u64(*failed);
+            }
         }
         Ok(())
     }
@@ -563,6 +584,12 @@ impl ToEngine {
                 message: body.string()?,
             },
             10 => Self::Reloading { page: body.u32()? },
+            11 => Self::Paints {
+                page: body.u32()?,
+                painted: body.u64()?,
+                skipped: body.u64()?,
+                failed: body.u64()?,
+            },
             _ => return Err(WireError::Malformed("an unknown message to the engine")),
         };
         body.end()?;
@@ -797,6 +824,12 @@ mod tests {
             },
             ToEngine::Closed { page: 1 },
             ToEngine::Reloading { page: 2 },
+            ToEngine::Paints {
+                page: 3,
+                painted: 40,
+                skipped: 7,
+                failed: u64::MAX,
+            },
             ToEngine::Warning {
                 message: "a paint could not be copied".into(),
             },

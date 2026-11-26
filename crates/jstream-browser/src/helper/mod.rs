@@ -113,10 +113,8 @@ const FRAMES_SWITCH: &str = "--jstream-frames=";
 /// The most stereo frames one audio message carries.
 const AUDIO_FRAMES: usize = wire::MAX_AUDIO_SAMPLES / 2;
 
-/// How long after a paint that couldn't be copied the page is asked to paint again: a
-/// page that only paints on change would otherwise keep showing the frame before it
-/// until its next change. Not at once, so a GPU that is briefly too busy can catch up.
-const RETRY_AFTER: Duration = Duration::from_millis(100);
+/// The least time between a page's [`ToEngine::Paints`] counts.
+const PAINTS_EVERY: Duration = Duration::from_secs(5);
 
 /// Runs the helper's process for CEF's bootstrap exe, which calls it from the DLL's
 /// `RunWinMain` export, and returns the process's exit code.
@@ -422,10 +420,8 @@ impl Host {
             }
             ToHelper::Released { page, slot } => {
                 let page = self.pages().get(&page).cloned();
-                if let Some(page) = page
-                    && page.textures.release(slot)
-                {
-                    post(move || page.repaint());
+                if let Some(page) = page {
+                    page.textures.release(slot);
                 }
             }
             #[cfg(windows)]
@@ -446,11 +442,6 @@ impl Host {
     /// page, which paints nothing more on its own, would otherwise show nothing there.
     #[cfg(windows)]
     fn use_adapter(self: &Arc<Self>, luid: Option<u64>) {
-        if luid.is_some()
-            && let Some(warning) = d3d11::raise_gpu_class_once()
-        {
-            self.warn(&warning);
-        }
         let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
         let gpu = luid.and_then(|luid| match Gpu::on_adapter(luid, generation) {
             Ok(gpu) => Some(gpu),
@@ -488,7 +479,7 @@ impl Host {
             hidden: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
-            retrying: AtomicBool::new(false),
+            paints: Mutex::new(PaintCounts::new()),
             // Held from the start, so the first load's white paint is skipped (#1155).
             reloading: Mutex::new(ReloadHold::opening()),
             channels: AtomicUsize::new(0),
@@ -611,6 +602,25 @@ fn post(f: impl Fn() + Send + Sync + 'static) {
     ::cef::post_task(::cef::ThreadId::UI, Some(&mut handlers::task(f)));
 }
 
+/// A page's paints since it opened ([`ToEngine::Paints`]).
+struct PaintCounts {
+    painted: u64,
+    skipped: u64,
+    failed: u64,
+    sent: std::time::Instant,
+}
+
+impl PaintCounts {
+    fn new() -> Self {
+        Self {
+            painted: 0,
+            skipped: 0,
+            failed: 0,
+            sent: std::time::Instant::now(),
+        }
+    }
+}
+
 /// One page's state, shared by the helper's threads and CEF's callbacks for its browser.
 pub(crate) struct PageShared {
     /// The engine's number for the page.
@@ -628,8 +638,8 @@ pub(crate) struct PageShared {
     textures: PageTextures,
     /// Whether a failed paint was reported since the last good one.
     paint_warned: AtomicBool,
-    /// A repaint after a failed paint is on its way ([`RETRY_AFTER`]).
-    retrying: AtomicBool,
+    /// The page's paint counts, sent to the engine's log ([`ToEngine::Paints`]).
+    paints: Mutex<PaintCounts>,
     /// Held from the page's opening (#1155) or a reload until the document has loaded and
     /// its first paint was skipped (`reload_hold.rs`): the old document's paints and the
     /// new one's first, which can be opaque white (#1151), are skipped, so the engine
@@ -849,7 +859,8 @@ impl PageShared {
         }
     }
 
-    fn painted(self: &Arc<Self>, painted: Result<Option<Painted>, String>) {
+    fn painted(&self, painted: Result<Option<Painted>, String>) {
+        self.count(&painted);
         match painted {
             Ok(Some(painted)) => {
                 self.paint_warned.store(false, Ordering::Relaxed);
@@ -868,35 +879,28 @@ impl PageShared {
                         "a browser page's paint could not be copied: {reason}"
                     ));
                 }
-                self.retry_later();
             }
         }
     }
 
-    /// Asks CEF to paint the whole view again [`RETRY_AFTER`] from now, once however many
-    /// paints fail before then (UI thread).
-    fn retry_later(self: &Arc<Self>) {
-        if self.retrying.swap(true, Ordering::Relaxed) {
-            return;
+    /// Counts a paint that reached the engine's slots, and sends the page's counts if
+    /// [`PAINTS_EVERY`] has passed since the last.
+    fn count(&self, painted: &Result<Option<Painted>, String>) {
+        let mut counts = lock(&self.paints);
+        counts.painted += 1;
+        match painted {
+            Ok(Some(_)) => {}
+            Ok(None) => counts.skipped += 1,
+            Err(_) => counts.failed += 1,
         }
-        let page = Arc::clone(self);
-        ::cef::post_delayed_task(
-            ::cef::ThreadId::UI,
-            Some(&mut handlers::task(move || {
-                page.retrying.store(false, Ordering::Relaxed);
-                page.repaint();
-            })),
-            i64::try_from(RETRY_AFTER.as_millis()).unwrap_or(i64::MAX),
-        );
-    }
-
-    /// Asks CEF to paint the whole view again (UI thread), unless the page is closing.
-    fn repaint(&self) {
-        if self.is_closing() {
-            return;
-        }
-        if let Some(host) = lock(&self.browser).as_ref().and_then(|b| b.0.host()) {
-            host.invalidate(::cef::PaintElementType::VIEW);
+        if counts.sent.elapsed() >= PAINTS_EVERY {
+            counts.sent = std::time::Instant::now();
+            self.host.send(&ToEngine::Paints {
+                page: self.id,
+                painted: counts.painted,
+                skipped: counts.skipped,
+                failed: counts.failed,
+            });
         }
     }
 
