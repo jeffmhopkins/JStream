@@ -16,7 +16,8 @@
 //! thread, which also paces their frames, so waiting there for each copy held back every
 //! page. A thread of the helper's waits for the fence, up to 2 s, before the engine is
 //! told of the frame. A slot the engine hasn't released isn't painted into: with all
-//! three held, the paint is skipped. Up to eight of CEF's pooled textures stay open per
+//! three held, the paint is skipped, and the page is asked to paint again once the engine
+//! frees one. Up to eight of CEF's pooled textures stay open per
 //! page, each matched by the object a duplicate of CEF's handle names, so a texture
 //! handed over again, under any handle, isn't opened again. Popup-widget paints are ignored.
 
@@ -163,6 +164,9 @@ struct Ring {
     /// may still be reading the slot's old texture.
     busy: [bool; SLOTS],
     next: usize,
+    /// A paint was skipped as the engine held every slot, and none was taken since:
+    /// the next release asks the page to paint again.
+    skipped: bool,
     /// CEF's textures opened on this device, most recent last, so a texture CEF's pool
     /// hands over again isn't opened again (opening one costs milliseconds of CEF's UI
     /// thread). Each keeps a duplicate of CEF's handle, matched by the object it names
@@ -310,12 +314,15 @@ pub(crate) struct Painted {
 }
 
 impl PageTextures {
-    /// The engine is done with `slot`.
-    pub(crate) fn release(&self, slot: u8) {
+    /// The engine is done with `slot`. True when a paint was skipped for want of a free
+    /// slot since the last one taken: the page should paint again, as a page that only
+    /// paints on change would otherwise keep the frame before the skipped one.
+    pub(crate) fn release(&self, slot: u8) -> bool {
         let mut ring = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(busy) = ring.busy.get_mut(usize::from(slot)) {
             *busy = false;
         }
+        std::mem::take(&mut ring.skipped)
     }
 
     /// Submits the copy of CEF's texture `cef` into the next free slot, which is held
@@ -365,6 +372,7 @@ impl PageTextures {
             .map(|i| (ring.next + i) % SLOTS)
             .find(|&slot| !ring.busy[slot])
         else {
+            ring.skipped = true;
             return Ok(None);
         };
         if ring.slots[slot].is_none() {
@@ -384,6 +392,7 @@ impl PageTextures {
         }
         ring.busy[slot] = true;
         ring.next = slot + 1;
+        ring.skipped = false;
         Ok(Some(Copy {
             _shared: shared,
             fence: gpu.fence.clone(),

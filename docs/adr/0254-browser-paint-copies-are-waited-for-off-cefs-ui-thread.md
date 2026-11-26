@@ -54,6 +54,10 @@ This amends ADR-0048 §3 on where the helper waits.
    (`CompareObjectHandles`), so a new handle to a pooled texture finds it and a handle
    value reused for another texture doesn't. They are dropped with
    the device.
+6. A slot is now held from the copy's submission, a little longer than before, so a
+   paint can find all three held. When the engine then frees one, the helper asks CEF to
+   paint the page again (on every platform), so a page that only paints when its data
+   changes doesn't keep the frame before the skipped paint.
 
 <a id="consequences"></a>
 ## Consequences
@@ -70,5 +74,9 @@ This amends ADR-0048 §3 on where the helper waits.
   change or after it; the copy is flushed before the texture goes back to the pool, as it
   was.
 - Linux and macOS paint in software, written within the callback, and are unchanged.
-- Not measured when decided ([R-RT-005](../RULES.md#R-RT-005)): the Windows hardware run
-  that follows compares each page's paints a second with the numbers above.
+- Measured on the same Windows machine and pages, with the engine at about 31 fps and no
+  frame over budget ([R-RT-005](../RULES.md#R-RT-005)): each paint now holds CEF's UI
+  thread 0.3 to 0.7 ms on average, opening CEF's texture 0 to 0.4 ms of it, and the six
+  data-driven pages paint 25 to 27 times a second, up from 19 to 22, with none failed. The
+  lightest page stays at 30. What keeps the rest below 30 is upstream of the helper
+  (Chromium's own pacing of those pages and their scripts), not the copies.

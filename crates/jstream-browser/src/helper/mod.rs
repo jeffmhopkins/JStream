@@ -448,8 +448,10 @@ impl Host {
             }
             ToHelper::Released { page, slot } => {
                 let page = self.pages().get(&page).cloned();
-                if let Some(page) = page {
-                    page.textures.release(slot);
+                if let Some(page) = page
+                    && page.textures.release(slot)
+                {
+                    post(move || page.repaint());
                 }
             }
             #[cfg(windows)]
@@ -834,6 +836,17 @@ impl PageShared {
         run_script(frame, &css_script(&css));
     }
 
+    /// Asks CEF to paint the whole view again (UI thread), unless the page is closing:
+    /// after a paint was skipped for want of a free slot.
+    fn repaint(&self) {
+        if self.is_closing() {
+            return;
+        }
+        if let Some(host) = lock(&self.browser).as_ref().and_then(|b| b.0.host()) {
+            host.invalidate(::cef::PaintElementType::VIEW);
+        }
+    }
+
     /// Whether the engine closed the page and its browser is closing.
     pub(crate) fn is_closing(&self) -> bool {
         self.closing.load(Ordering::Acquire)
@@ -871,8 +884,11 @@ impl PageShared {
                     Box::new(move |copy, waited| match waited {
                         Ok(()) => page.painted(Ok(Some(copy.painted))),
                         Err(reason) => {
-                            page.textures.release(copy.painted.slot);
+                            let skipped = page.textures.release(copy.painted.slot);
                             page.painted(Err(reason));
+                            if skipped {
+                                post(move || page.repaint());
+                            }
                         }
                     }),
                 ));
