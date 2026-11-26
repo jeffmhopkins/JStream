@@ -248,4 +248,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0242](0242-3d-models-are-drawn-multisampled.md) | 3D models are drawn multisampled | accepted | agent |  |
 | [ADR-0243](0243-the-macos-gpu-spike-runs-on-ci-macos-runners.md) | The macOS GPU interop spike runs on CI's macOS runners | accepted | agent |  |
 | [ADR-0244](0244-a-camera-only-glide-moves-only-the-scene-it-goes-to.md) | A camera-only glide moves only the scene the Move goes to | accepted | agent |  |
+| [ADR-0248](0248-windows-tests-in-shards-and-carried-passes.md) | The Windows tests run in shards, and a Windows pass carries to a head with the same build inputs | accepted | agent |  |
 <!-- @generated end adr-index -->
