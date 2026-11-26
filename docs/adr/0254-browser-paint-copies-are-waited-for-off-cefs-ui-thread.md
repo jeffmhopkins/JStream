@@ -29,9 +29,12 @@ about 1 ms. So the pages were held back by the helper's own waits, which grow wi
 number of pages and their size, not by the engine.
 
 CEF hands the texture back to its pool when the callback returns, with no fence and no
-keyed mutex, so the copy must be submitted before then. Waiting for it there isn't
-needed for that: once flushed, the copy is queued on the GPU ahead of any frame Chromium
-draws into that pooled texture later.
+keyed mutex. Waiting there for the copy to finish is what guaranteed it read the frame
+CEF painted: once the callback returned, the copy was done, before Chromium could draw
+into that texture again. Returning before the copy has run gives that guarantee up. The
+copy is still submitted and flushed before the callback returns, so it is on the GPU
+before Chromium learns the texture is free, but nothing orders it against Chromium's
+later work in another process.
 
 <a id="decision"></a>
 ## Decision
@@ -68,11 +71,18 @@ This amends ADR-0048 §3 on where the helper waits.
   open is for.
 - A frame reaches the engine a little later than before by the hand-off to the copy
   thread, which is far less than a frame.
-- Chromium could, in principle, draw a later frame into a pooled texture before the GPU
-  has run a copy queued earlier from another process, which would show that page's next
-  frame early for one frame. Nothing orders the two processes' GPU work, before this
-  change or after it; the copy is flushed before the texture goes back to the pool, as it
-  was.
+- The copy is no longer guaranteed to read the frame CEF painted. If Chromium draws into
+  the same pooled texture again before the GPU has run the copy, the engine gets that
+  page's frame torn between two paints, or a later frame early, for one frame. This is
+  accepted because the window is small: the copy is flushed before the texture goes back
+  to the pool, it takes well under a millisecond on the GPU, and Chromium only reuses the
+  texture after drawing into the pool's other textures first, a frame or more later.
+  On the streaming PC no torn or out-of-order frame was seen with seven pages at 25 to
+  30 paints a second. If one shows, the copy thread can hand the texture back late
+  instead (CEF has no hook for that today), or the wait can move back for that page.
+- The helper's D3D11 device now needs fences (`ID3D11Device5`, Windows 10 1703 or
+  later). On an older Windows, making the device fails and pages deliver no frames, with
+  the reason in the engine's log.
 - Linux and macOS paint in software, written within the callback, and are unchanged.
 - Measured on the same Windows machine and pages, with the engine at about 31 fps and no
   frame over budget ([R-RT-005](../RULES.md#R-RT-005)): each paint now holds CEF's UI

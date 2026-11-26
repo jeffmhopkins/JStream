@@ -364,6 +364,12 @@ impl PageTextures {
         }
         let size = (desc.Width, desc.Height);
         if ring.generation != gpu.generation || ring.size != size {
+            if ring.size != size {
+                // CEF's pool was remade at the new size: of the textures kept, only the
+                // one just used (kept last) can be handed over again.
+                let stale = ring.sources.len().saturating_sub(1);
+                ring.sources.drain(..stale);
+            }
             ring.generation = gpu.generation;
             ring.size = size;
             ring.slots = Default::default();
