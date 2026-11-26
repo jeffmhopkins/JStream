@@ -102,14 +102,18 @@ pub(crate) enum ToEngine {
     /// Something went wrong in the helper that the engine should log: the helper has no
     /// log of its own. The text names no page URL or path.
     Warning { message: String },
-    /// A page's paints so far, sent at most every few seconds while it paints, for the
-    /// engine's `debug` log: how many CEF delivered, how many were skipped because the
-    /// engine held every slot, and how many couldn't be copied.
+    /// A page's paints over the last `millis`, sent at most every few seconds while it
+    /// paints, for the engine's `debug` log: how many CEF delivered, how many were
+    /// skipped because the engine held every slot, how many couldn't be copied, and the
+    /// time the helper spent copying them, in all and at most (microseconds).
     Paints {
         page: u32,
+        millis: u64,
         painted: u64,
         skipped: u64,
         failed: u64,
+        took_us: u64,
+        took_max_us: u64,
     },
 }
 
@@ -526,15 +530,18 @@ impl ToEngine {
             }
             Self::Paints {
                 page,
+                millis,
                 painted,
                 skipped,
                 failed,
+                took_us,
+                took_max_us,
             } => {
                 out.u8(11);
                 out.u32(*page);
-                out.u64(*painted);
-                out.u64(*skipped);
-                out.u64(*failed);
+                for n in [millis, painted, skipped, failed, took_us, took_max_us] {
+                    out.u64(*n);
+                }
             }
         }
         Ok(())
@@ -586,9 +593,12 @@ impl ToEngine {
             10 => Self::Reloading { page: body.u32()? },
             11 => Self::Paints {
                 page: body.u32()?,
+                millis: body.u64()?,
                 painted: body.u64()?,
                 skipped: body.u64()?,
                 failed: body.u64()?,
+                took_us: body.u64()?,
+                took_max_us: body.u64()?,
             },
             _ => return Err(WireError::Malformed("an unknown message to the engine")),
         };
@@ -826,9 +836,12 @@ mod tests {
             ToEngine::Reloading { page: 2 },
             ToEngine::Paints {
                 page: 3,
+                millis: 5000,
                 painted: 40,
                 skipped: 7,
                 failed: u64::MAX,
+                took_us: 123_456,
+                took_max_us: 9_000,
             },
             ToEngine::Warning {
                 message: "a paint could not be copied".into(),

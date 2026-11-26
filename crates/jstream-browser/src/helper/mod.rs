@@ -602,21 +602,26 @@ fn post(f: impl Fn() + Send + Sync + 'static) {
     ::cef::post_task(::cef::ThreadId::UI, Some(&mut handlers::task(f)));
 }
 
-/// A page's paints since it opened ([`ToEngine::Paints`]).
+/// A page's paints since its last [`ToEngine::Paints`].
 struct PaintCounts {
+    since: std::time::Instant,
     painted: u64,
     skipped: u64,
     failed: u64,
-    sent: std::time::Instant,
+    /// Time spent copying them, in all and at most.
+    took: Duration,
+    took_max: Duration,
 }
 
 impl PaintCounts {
     fn new() -> Self {
         Self {
+            since: std::time::Instant::now(),
             painted: 0,
             skipped: 0,
             failed: 0,
-            sent: std::time::Instant::now(),
+            took: Duration::ZERO,
+            took_max: Duration::ZERO,
         }
     }
 }
@@ -818,7 +823,10 @@ impl PageShared {
             let Some(gpu) = gpu.as_ref() else {
                 return;
             };
-            self.textures.paint(gpu, handle)
+            let started = std::time::Instant::now();
+            let painted = self.textures.paint(gpu, handle);
+            self.count(&painted, started.elapsed());
+            painted
         };
         self.painted(painted);
         drop(reloading);
@@ -834,9 +842,11 @@ impl PageShared {
         let Some(reloading) = self.paint_through(reloading) else {
             return;
         };
+        let started = std::time::Instant::now();
         let painted = self
             .textures
             .paint(&self.host.frames, self.id, bgra, (width, height));
+        self.count(&painted, started.elapsed());
         self.painted(painted);
         drop(reloading);
     }
@@ -860,7 +870,6 @@ impl PageShared {
     }
 
     fn painted(&self, painted: Result<Option<Painted>, String>) {
-        self.count(&painted);
         match painted {
             Ok(Some(painted)) => {
                 self.paint_warned.store(false, Ordering::Relaxed);
@@ -883,9 +892,10 @@ impl PageShared {
         }
     }
 
-    /// Counts a paint that reached the engine's slots, and sends the page's counts if
-    /// [`PAINTS_EVERY`] has passed since the last.
-    fn count(&self, painted: &Result<Option<Painted>, String>) {
+    /// Counts a paint that reached the engine's slots and `took` this long to copy (on
+    /// CEF's UI thread, which every page's paints share), and sends the page's counts
+    /// since the last if [`PAINTS_EVERY`] has passed.
+    fn count(&self, painted: &Result<Option<Painted>, String>, took: Duration) {
         let mut counts = lock(&self.paints);
         counts.painted += 1;
         match painted {
@@ -893,14 +903,21 @@ impl PageShared {
             Ok(None) => counts.skipped += 1,
             Err(_) => counts.failed += 1,
         }
-        if counts.sent.elapsed() >= PAINTS_EVERY {
-            counts.sent = std::time::Instant::now();
+        counts.took += took;
+        counts.took_max = counts.took_max.max(took);
+        let elapsed = counts.since.elapsed();
+        if elapsed >= PAINTS_EVERY {
+            let micros = |d: Duration| u64::try_from(d.as_micros()).unwrap_or(u64::MAX);
             self.host.send(&ToEngine::Paints {
                 page: self.id,
+                millis: micros(elapsed) / 1000,
                 painted: counts.painted,
                 skipped: counts.skipped,
                 failed: counts.failed,
+                took_us: micros(counts.took),
+                took_max_us: micros(counts.took_max),
             });
+            *counts = PaintCounts::new();
         }
     }
 

@@ -44,7 +44,7 @@
 //! already split to fit. The helper sends
 //! frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs), warnings for
 //! the engine's log, and each painting page's paint counts every 5 s (delivered, skipped
-//! for want of a free slot, failed), which the engine logs at `debug` beside its own
+//! for want of a free slot, failed, and the time its copies held CEF's UI thread), which the engine logs at `debug` beside its own
 //! counts of the frames it received and took and how long each waited for the release
 //! thread and for its import, for finding where a page's frames are lost. A reader thread hands each to its page, stamping frames and audio on
 //! the media clock as they arrive. When the helper's pipe ends, every page's audio fails
@@ -590,15 +590,23 @@ impl Link {
             }
             ToEngine::Paints {
                 page,
+                millis,
                 painted,
                 skipped,
                 failed,
+                took_us,
+                took_max_us,
             } => {
+                let seconds = (millis as f64 / 1e3).max(1e-3);
+                let per_s = |n: u64| format!("{:.1}", n as f64 / seconds);
                 tracing::debug!(
                     page,
-                    painted,
-                    skipped,
-                    failed,
+                    painted_per_s = per_s(painted),
+                    skipped_per_s = per_s(skipped),
+                    failed_per_s = per_s(failed),
+                    copy_mean_ms =
+                        format_args!("{:.1}", took_us as f64 / 1e3 / painted.max(1) as f64),
+                    copy_max_ms = format_args!("{:.1}", took_max_us as f64 / 1e3),
                     "browser page paints in the helper"
                 );
             }
