@@ -2923,6 +2923,7 @@ dependencies = [
  "jstream-visca",
  "jstream-youtube",
  "png",
+ "rusty-opus",
  "serde",
  "serde_json",
  "socket2",
@@ -3041,6 +3042,7 @@ version = "0.0.0"
 dependencies = [
  "assert_no_alloc",
  "jstream-midi",
+ "rusty-opus",
 ]
 
 [[package]]

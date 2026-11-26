@@ -794,10 +794,15 @@ somewhere it shouldn't.
   parses one.
 - It drops and counts every datagram from outside those ranges, from an address it
   didn't subscribe to, longer than a packet may be, or that `jstream-jtunnel`'s parser
-  refuses (fuzzed on its own). The socket is IPv4: an accepted sender's address is IPv4
+  refuses (fuzzed on its own). An Opus frame's bytes go to `rusty-opus`, pure Rust,
+  which documents that a malformed packet is an error and never a panic; a frame it
+  refuses is held as silence and counted
+  ([ADR-0253](../adr/0253-jtunnel-opus-streams-decode-through-rusty-opus.md)). The socket is IPv4: an accepted sender's address is IPv4
   (or IPv4 mapped into IPv6, taken as itself), and no two accepted senders share an
   address and port, since datagrams are told apart by where they come from.
-  Parsing and playout allocate nothing, nor does reading an mDNS answer about anything
+  Parsing and playout allocate nothing (the Opus decoder only when a stream starts and
+  while its first frames warm it up, so a sender restarting its stream costs one
+  decoder each time, as it already costs a playout reset), nor does reading an mDNS answer about anything
   but a JTunnel instance, however its records repeat a long name (only a JTunnel
   instance's name is copied, once it matches; a message declaring more than 256 records
   is refused unread, so one costs at most a few tens of thousands of steps); a sender's audio goes only to the

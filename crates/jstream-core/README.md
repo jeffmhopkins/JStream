@@ -324,9 +324,12 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   changes rate fails its input, which reopens at the new rate. One source records a
   sender at a time: a second one's open is refused, so it shows as unavailable, until
   the first closes. Every input fails when the receiver stops or is replaced, so no
-  source keeps recording silence without saying why. 24-bit PCM and MIDI-only
-  streams are taken (a MIDI-only stream feeds no input); Opus packets are counted as
-  unsupported until a decoder is picked. A frame's MIDI events, due with it, are pushed
+  source keeps recording silence without saying why. 24-bit PCM, Opus and MIDI-only
+  streams are taken (a MIDI-only stream feeds no input). Opus frames decode through
+  `jstream-jtunnel`'s `OpusFrames`, once each and in order, redundant copies skipped
+  ([ADR-0253](../../docs/adr/0253-jtunnel-opus-streams-decode-through-rusty-opus.md)); a
+  frame the decoder refuses is held as silence with its events and counted as
+  `unsupported`. A frame's MIDI events, due with it, are pushed
   through the sender's `MidiFeed` to the engine's `MidiInputs` under the sender's name
   and to its every-input state
   ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §2), stamped on the
@@ -352,7 +355,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   keepalive, the frames in order with their positions and times, the bye, an
   unaccepted sender, a datagram that isn't JTunnel, one too long and a receiver's packet
   dropped and counted, a rate change failing the input, a second source for a sender
-  refused until the first closes, a stopped receiver's input told why, Opus refused, the profile's playout readings, the
+  refused until the first closes, a stopped receiver's input told why, an Opus stream playing and feeding each MIDI message once, the profile's playout readings, the
   accepted-sender and setup checks, and through the engine a
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
@@ -1388,7 +1391,8 @@ the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. D
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
-(`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
+(`src/tests/youtube.rs`), `rusty-opus` (the JTunnel receiver's Opus test codes its
+stream with its encoder), `jstream-browser`'s `fake` feature (the browser pages in
 `src/tests/audio.rs`, and the page API's updates in `src/tests/page_api.rs`: a granted
 page's visibility on program and preview, directly and through a nested scene, the two
 scenes, only the values its grant covers and a removal, an update held to the next

@@ -184,7 +184,7 @@ pub struct NetworkProfile {
     pub unaccepted: u64,
     /// Datagrams that aren't a JTunnel packet it accepts, or longer than one may be.
     pub malformed: u64,
-    /// Audio packets in a codec it can't decode yet (Opus).
+    /// Opus frames the decoder refused, held as silence.
     pub unsupported: u64,
     /// MIDI messages it handed to the MIDI inputs.
     pub midi: u64,

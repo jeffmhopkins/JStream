@@ -12,6 +12,8 @@
 //! - [`wire`]: audio, subscribe, bye and state packets (version 2), their frames and events
 //!   (MIDI messages as [`jstream_midi::Message`], SysEx pieces, note expressions), and
 //!   24-bit PCM.
+//! - [`OpusFrames`]: a stream's Opus frames decoded once each, in order, redundant copies
+//!   skipped.
 //! - [`SysexAssembler`]: whole SysEx messages from their pieces, all or nothing.
 //! - [`StateAssembler`]: a sender's whole state messages from their pieces, per key, all
 //!   or nothing, with a resend told apart and a new stream ID seen (ADR-0171).
@@ -36,6 +38,7 @@
 
 mod clock;
 pub mod dnssd;
+mod opus;
 mod playout;
 mod seq;
 mod state;
@@ -43,6 +46,7 @@ mod sysex;
 pub mod wire;
 
 pub use clock::{DRIFT_AFTER_S, SenderClock};
+pub use opus::{Decoded, OpusFrames};
 pub use playout::{Due, MAX_JUMP_NS, Playout, PlayoutStats, Pushed, SLEW, SLOTS, SNAP_NS};
 pub use seq::{SEQ_WINDOW, SeqTracker, SeqVerdict};
 pub use state::{MAX_PARTIAL_STATE, MAX_STATE_KEYS, StateAssembler, StatePush, StateStep};
