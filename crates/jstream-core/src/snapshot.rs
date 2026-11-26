@@ -7219,7 +7219,14 @@ pub(crate) fn compose_metered(
             );
             meter.drew_camera(&pass.scene, camera);
             under_sky(&mut items, (cache, chains), pass, canvas, camera);
-            compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
+            // A layer with fewer pixels than the canvas, for a nested scene shown small
+            // (ADR-0249), is drawn at its own size.
+            let layer = image(&pass.key)?;
+            let drawn = FrameSize::new(layer.width(), layer.height()).unwrap_or(canvas);
+            if drawn != canvas {
+                scale_items(&mut items, canvas, drawn);
+            }
+            compositor.render_into(&scene(drawn, pass.background, &items), layer)?;
             let took = meter.phase_since(Phase::Passes, started);
             meter.pass(&pass.scene, took);
         }
@@ -9478,12 +9485,12 @@ pub(crate) fn claim_layers(
         None => return Ok(()),
     };
     for pass in nested {
-        cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+        claim_pass_layer(compositor, cache, shot, pass, canvas)?;
     }
     // The show scene over program: the scenes its items nest, and program under it.
     if let Some((_, show)) = shot.show_of(mix) {
         for pass in show {
-            cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+            claim_pass_layer(compositor, cache, shot, pass, canvas)?;
         }
         cache.layer(
             compositor,
@@ -9501,6 +9508,140 @@ pub(crate) fn claim_layers(
         )?;
     }
     Ok(())
+}
+
+/// Marks the layer nested pass `pass` draws into used, allocating it when it is
+/// missing: at the canvas size, or, for a pass [`drawn_small`] allows, at the size the
+/// items that place it draw it at (ADR-0249, [`ResourceCache::layer_drawn`]).
+///
+/// # Errors
+/// What the compositor reports for a layer it allocates.
+fn claim_pass_layer(
+    compositor: &Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    shot: &Shot,
+    pass: &Pass,
+    canvas: FrameSize,
+) -> Result<(), RenderError> {
+    if drawn_small(shot, pass) {
+        let planned = layer_need(shot, &pass.key, MAX_NESTING);
+        cache.layer_drawn(compositor, &pass.key, canvas, planned)?;
+    } else {
+        cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+    }
+    Ok(())
+}
+
+/// Whether nested pass `pass` may draw into a layer with fewer pixels than the canvas
+/// (ADR-0249): a 2D scene's, below the program, whose layer only other scenes' items
+/// and a transition's tracks place. A pass a video chain or a model's map reads (the
+/// chains draw it, [`ChainStep::Pass`]) keeps the canvas's pixels, as filters work in
+/// them, and so does a 3D scene's, and one that places a layer drawn in the canvas's
+/// own pixels ([`Placement::Layer`]).
+fn drawn_small(shot: &Shot, pass: &Pass) -> bool {
+    matches!(pass.key, GpuKey::Layer(_, depth) if depth > 0)
+        && pass.camera.is_none()
+        && pass.view_depth.is_none()
+        && pass.reflection.is_none()
+        && !pass.surface
+        && !pass.reads_shadows
+        && !pass
+            .layers
+            .iter()
+            .any(|layer| matches!(layer.placement, Placement::Layer(_)))
+        && !shot
+            .chain_steps
+            .iter()
+            .any(|step| matches!(step, ChainStep::Pass(read) if read.key == pass.key))
+}
+
+/// How much of the canvas's resolution the placements of layer `key` say it needs,
+/// over every pass of the shot, as [`Shot::scales`] measures a source: the most it is
+/// enlarged where a 2D scene shows it, times what that scene's own layer needs when it
+/// is drawn small too (up to `levels` scenes up), and all of it where a running
+/// transition's track shows it. A 3D scene's placements say nothing here: what its
+/// camera makes of them is measured as they are drawn. 0 when nothing says.
+fn layer_need(shot: &Shot, key: &GpuKey, levels: usize) -> f32 {
+    if shot
+        .transition
+        .as_ref()
+        .is_some_and(|transition| transition.tracks.iter().any(|(shown, ..)| shown == key))
+    {
+        return 1.0;
+    }
+    let extent = [shot.canvas.width, shot.canvas.height];
+    let mut most = 0.0_f32;
+    for pass in shot.drawn_passes().filter(|pass| pass.camera.is_none()) {
+        let placed = pass
+            .layers
+            .iter()
+            .filter(|layer| layer.image == *key)
+            .map(|layer| magnification(layer.placement, layer.crop, extent))
+            .fold(0.0, f32::max);
+        if placed == 0.0 {
+            continue;
+        }
+        let parent = if levels > 0 && drawn_small(shot, pass) {
+            layer_need(shot, &pass.key, levels - 1)
+        } else {
+            0.0
+        };
+        // A parent nothing measured is counted whole.
+        let parent = if parent > 0.0 { parent.min(1.0) } else { 1.0 };
+        most = most.max(placed * parent);
+    }
+    most
+}
+
+/// Places `items`, laid out on a canvas of `canvas`, on one of `drawn` instead: a
+/// nested scene drawn into a layer with fewer pixels (ADR-0249). Each axis is scaled by
+/// its own ratio; lengths along neither (an item's depth and perspective) by their
+/// mean. A layer rounds its size up, so the two ratios differ by less than a texel's
+/// worth, and a rotated item is drawn as at their mean.
+fn scale_items(items: &mut [Item<'_>], canvas: FrameSize, drawn: FrameSize) {
+    let sx = drawn.width() as f32 / canvas.width() as f32;
+    let sy = drawn.height() as f32 / canvas.height() as f32;
+    let mean = (sx + sy) / 2.0;
+    for item in items {
+        item.placement = match item.placement {
+            Placement::Legacy(transform) => Placement::Legacy(LegacyTransform {
+                position: [transform.position[0] * sx, transform.position[1] * sy],
+                scale: [transform.scale[0] * sx, transform.scale[1] * sy],
+                rotation_deg: transform.rotation_deg,
+            }),
+            Placement::Geometry(geometry) => {
+                Placement::Geometry(scaled_geometry(geometry, [sx, sy], mean))
+            }
+            // `drawn_small` leaves out a pass that places one.
+            Placement::Layer(geometry) => Placement::Layer(geometry),
+        };
+    }
+}
+
+/// `geometry` with its centre and size scaled by `[sx, sy]` and its depth and
+/// perspective by `mean`, or as it was where a scaled value would not be finite.
+fn scaled_geometry(
+    geometry: jstream_protocol::ItemGeometry,
+    [sx, sy]: [f32; 2],
+    mean: f32,
+) -> jstream_protocol::ItemGeometry {
+    use jstream_protocol::{Finite32, Size, Vec2};
+    let finite = |value: Finite32, by: f32| Finite32::new(value.get() * by).unwrap_or(value);
+    let mut scaled = geometry;
+    if let Some(center) = Vec2::new(geometry.center.x.get() * sx, geometry.center.y.get() * sy) {
+        scaled.center = center;
+    }
+    if let Ok(size) = Size::try_new(
+        geometry.size.width.get() * sx,
+        geometry.size.height.get() * sy,
+    ) {
+        scaled.size = size;
+    }
+    scaled.depth_px = finite(geometry.depth_px, mean);
+    scaled.perspective_px = geometry
+        .perspective_px
+        .map(|perspective| finite(perspective, mean));
+    scaled
 }
 
 /// Replaces `items` with the layers of `pass`, with the live values in `live` applied,
@@ -13144,6 +13285,75 @@ pub(crate) mod tests {
         let mut cache = ResourceCache::new();
         let out = frame_at(&mut other, &mut cache, &page_shot, None, canvas);
         assert_eq!(out.pixel(960, 540), Some(GREEN), "the page draws nothing");
+    }
+
+    /// A nested 2D scene shown small is drawn into a layer with that many pixels, on a
+    /// cache that draws small (ADR-0249), and looks as it does drawn whole: an eighth of
+    /// the canvas each way is held at a quarter, placed at the canvas's size. A scene a
+    /// video chain reads, and every layer on a cache that doesn't draw small, keeps the
+    /// canvas's size.
+    #[test]
+    fn a_nested_scene_shown_small_is_drawn_small() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let canvas = FrameSize::new(1920, 1080).expect("invariant: non-zero");
+        let small = Placement::Geometry(jstream_protocol::ItemGeometry {
+            size: jstream_protocol::Size::try_new(240.0, 135.0).expect("positive"),
+            ..jstream_protocol::ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+        });
+        // Red over the monitor's left half, green over the rest.
+        let left = Placement::Legacy(LegacyTransform {
+            scale: [60.0, 120.0],
+            ..LegacyTransform::IDENTITY
+        });
+        let shown = shot(vec![
+            ("program", vec![nest("monitor", small)]),
+            (
+                "monitor",
+                vec![
+                    fill("green"),
+                    placed(SourceRef::Frame(SourceId::new("red")), left),
+                ],
+            ),
+        ]);
+        let key = layer("monitor", 1);
+        let pass = shown
+            .passes
+            .iter()
+            .find(|pass| pass.key == key)
+            .expect("nested");
+        assert!(super::drawn_small(&shown, pass));
+        assert!((super::layer_need(&shown, &key, MAX_NESTING) - 0.125).abs() < 1e-6);
+        let mut cache = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        for _ in 0..3 {
+            let out = frame_at(&mut compositor, &mut cache, &shown, None, canvas);
+            assert_eq!(out.pixel(960 - 60, 540), Some(RED), "the monitor's left");
+            assert_eq!(out.pixel(960 + 60, 540), Some(GREEN), "the monitor's right");
+            let image = cache.get(&key).expect("a layer");
+            assert_eq!(
+                (image.width(), image.height(), image.extent()),
+                (480, 270, (1920, 1080))
+            );
+        }
+        let mut whole = ResourceCache::new();
+        let out = frame_at(&mut compositor, &mut whole, &shown, None, canvas);
+        assert_eq!(out.pixel(960 - 60, 540), Some(RED));
+        let image = whole.get(&key).expect("a layer");
+        assert_eq!((image.width(), image.height()), (1920, 1080));
+
+        let mut read = shown;
+        let index = read
+            .passes
+            .iter()
+            .position(|pass| pass.key == key)
+            .expect("nested");
+        let pass = read.passes.remove(index);
+        read.chain_steps = vec![super::ChainStep::Pass(Box::new(pass))];
+        let super::ChainStep::Pass(pass) = &read.chain_steps[0] else {
+            unreachable!("a pass");
+        };
+        assert!(!super::drawn_small(&read, pass), "a chain reads it");
     }
 
     /// Frame after frame of the same shot reuses every texture: the nested-scene layers

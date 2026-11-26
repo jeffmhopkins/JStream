@@ -2280,8 +2280,13 @@ levels below it draws nothing (logged at `debug`). A scene with a scene filter
 restarts below it, and a scene a `scene_mask` reads restarts it at 1. It is one limit,
 `snapshot::MAX_NESTING`, for the render thread and `video.snapshot` alike, and ARCH ›
 Data model states it for clients. Width is not bounded: each distinct `(scene, depth)`
-keeps its own canvas-sized FP16 layer, so a program with *k* distinct nested scene
-sources holds *k* such textures. The graph already rejects cycles at every
+keeps its own FP16 layer, so a program with *k* distinct nested scene
+sources holds *k* such textures. Each is the canvas's size, except a 2D scene's that
+only other scenes' items and a transition's tracks place, which the program stage and
+the preview hold at the size those items draw it, down to a sixteenth of the canvas each way
+and up, placed at the canvas's size: its items are laid out on the canvas and scaled
+onto the layer (`snapshot::drawn_small`, `layer_need`, `scale_items`;
+[ADR-0249](../../docs/adr/0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md)). The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
 draws nothing. A group that shares its 3D scene's space
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)) is the exception:

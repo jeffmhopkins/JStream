@@ -218,7 +218,9 @@ and calls this crate.
   one showed allocates no texture. `upload_drawn`, on a cache that
   `draw_uploads_small` allows it, holds an upload only items draw at the size they draw
   it, not its frame's (#1139), and `upload_frame_drawn` does the same for a CPU video
-  frame (a capture's). An import keeps its frame's `FrameSync` hold only
+  frame (a capture's). `layer_drawn` holds a layer for a picture only items place (a
+  nested 2D scene) at the size they draw it, placed at the picture's size
+  ([ADR-0249](../../docs/adr/0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md)). An import keeps its frame's `FrameSync` hold only
   for the frame that draws it, so the platform can reuse the texture afterwards. An image no frame references is freed only after the GPU has finished the
   last frame that used it, and the cache hands it back as `Reclaimed` so the caller
   picks the thread that drops it
@@ -625,7 +627,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    compositor, so a later `render` cannot overwrite it. **`render_into`** is the same
    pass into a layer the caller already has (`layer` makes one; the `Image` keeps its
    render-target view, so a redraw creates no view either). The layer must be this
-   compositor's, the canvas size, and not placed by the scene being drawn into it,
+   compositor's, the canvas size (a caller drawing a picture into a smaller layer from
+   `layer_drawn` passes a canvas of the layer's size, ADR-0249), and not placed by the scene being drawn into it,
    or the call is `RenderError::Invalid` before any GPU work. Submits that placed the
    layer earlier are ordered before the redraw, so they keep the old contents.
    A layer that still holds the very draw it is asked for is left as it is
@@ -823,7 +826,9 @@ texels need be no finer than its draws sample them. `upload_frame_drawn` is the 
 small (a webcam in a small box) is converted from NV12 straight into the small texture. Each `render` notes on the image how
 much of its frame's resolution each item needed (`Image::record_draw`: the texture's
 share of the frame over the texels per canvas pixel along the item's less minified axis,
-and all of it for a 3D placement). On a cache where `draw_uploads_small` is on (off by
+and all of it for a 3D placement of an upload; a layer placed in 3D records the texels
+per pixel where its polygon is drawn largest, at the near end of each edge from the
+ratio of the ends' `w`, `Shape::projected_minification`). On a cache where `draw_uploads_small` is on (off by
 default, so a deterministic render such as a snapshot draws every upload whole), the
 first frame of a key holds the upload at what the caller's `planned` need says (whole
 when it is 0), and each later frame reads what the draws needed over the frames since
@@ -838,6 +843,11 @@ texture otherwise, so a small change in size uploads nothing. A frame under 256 
 texels is always whole. On lavapipe, ten 1080p stills drawn at about 250 × 140 held
 about 21 MB each whole (the `Rgba16Float` texture and the mip chain a small draw
 samples) and about 3.5 MB each held at a quarter.
+`layer_drawn` (ADR-0249) chooses a layer's size the same way, from the need its draws
+recorded and the caller's `planned`, with `Image::full` the picture's size and its
+extent set to it, so the scene that places it is unchanged; the caller lays its scene
+out on the picture and scales it onto the layer's pixels
+(`the_cache_holds_a_layer_at_the_size_it_is_drawn`).
 `retire_filter` hands the cache a `VideoFilter` no frame runs any more: it may hold
 textures of its own (a video delay's ring), so it waits for the same fence and comes
 back in `Reclaimed` (`Reclaimed::filters` counts them) to be dropped with the images.

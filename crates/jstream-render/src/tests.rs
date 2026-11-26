@@ -1314,6 +1314,99 @@ fn the_cache_holds_an_upload_at_the_size_it_is_drawn() {
     );
 }
 
+/// A layer for a picture only items place is held at the size they drew it at the
+/// frame before (ADR-0249), as an upload is: whole at first, a quarter each way once
+/// drawn at an eighth, smaller too once drawn small in 3D (unlike an upload), whole
+/// again once drawn large. It is placed at its picture's size throughout, and looks as
+/// the whole picture does. A new entry starts at what its placement was planned to
+/// need, and a cache that doesn't draw small holds it whole.
+#[test]
+fn the_cache_holds_a_layer_at_the_size_it_is_drawn() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    cache.draw_uploads_small(true);
+    let picture = FrameSize::new(512, 512).expect("a size");
+    let rgba = halves();
+    let source = compositor.upload_rgba8(512, 512, &rgba).expect("uploads");
+    let frame = |cache: &mut ResourceCache<&str>, compositor: &mut Compositor, side, three_d| {
+        cache.begin_frame();
+        let image = cache
+            .layer_drawn(compositor, &"nested", picture, 0.0)
+            .expect("a layer")
+            .clone();
+        // The picture drawn into the layer at its own size, as a nested scene is.
+        let (width, height) = (image.width(), image.height());
+        let placed = [item(
+            &source,
+            Placement::Legacy(LegacyTransform {
+                scale: [width as f32 / 512.0, height as f32 / 512.0],
+                ..LegacyTransform::IDENTITY
+            }),
+            Crop::NONE,
+            1.0,
+        )];
+        let canvas = FrameSize::new(width, height).expect("a size");
+        compositor
+            .render_into(
+                &Scene {
+                    canvas,
+                    background: Color::TRANSPARENT,
+                    items: &placed,
+                },
+                &image,
+            )
+            .expect("draws");
+        let centre = draw_square(compositor, &image, side, three_d);
+        drop(cache.end_frame(compositor));
+        ((width, height), image.extent(), centre)
+    };
+    let (size, extent, _) = frame(&mut cache, compositor, 64.0, false);
+    assert_eq!((size, extent), ((512, 512), (512, 512)), "whole at first");
+    let (size, extent, centre) = frame(&mut cache, compositor, 64.0, false);
+    assert_eq!(
+        (size, extent),
+        ((128, 128), (512, 512)),
+        "a quarter once drawn at an eighth"
+    );
+    assert!(
+        centre[3] == 255 && centre[1] == 0 && centre[0] + centre[2] > 200,
+        "{centre:?}"
+    );
+    let (size, _, _) = frame(&mut cache, compositor, 80.0, false);
+    assert_eq!(size, (128, 128), "drawn a little larger: the same layer");
+    frame(&mut cache, compositor, 400.0, false);
+    let (size, _, _) = frame(&mut cache, compositor, 400.0, false);
+    assert_eq!(size, (512, 512), "whole again once drawn large");
+    frame(&mut cache, compositor, 48.0, true);
+    let (size, extent, centre) = frame(&mut cache, compositor, 48.0, true);
+    assert!(
+        size.0 < 512 && size == (size.1, size.1) && extent == (512, 512),
+        "small in 3D: {size:?}"
+    );
+    assert!(
+        centre[3] == 255 && u16::from(centre[0]) + u16::from(centre[2]) > 200,
+        "{centre:?}"
+    );
+    // A new entry starts at what its placement was planned to need.
+    cache.begin_frame();
+    let planned = cache
+        .layer_drawn(compositor, &"planned", picture, 0.1)
+        .expect("a layer");
+    assert_eq!(
+        (planned.width(), planned.height(), planned.extent()),
+        (64, 64, (512, 512))
+    );
+    let mut whole: ResourceCache<&str> = ResourceCache::new();
+    whole.begin_frame();
+    let held = whole
+        .layer_drawn(compositor, &"planned", picture, 0.1)
+        .expect("a layer");
+    assert_eq!((held.width(), held.height()), (512, 512), "not drawn small");
+}
+
 /// A 512² NV12 frame (BT.709, limited range) of one grey: `luma` everywhere.
 fn grey_nv12(luma: u8) -> jstream_media::VideoFrame {
     let info = VideoFrameInfo {
