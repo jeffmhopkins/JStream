@@ -2307,7 +2307,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   the buffer's fill), `lead_ms` (the recording source's `latency_ms`), `drift_ppm` once
   enough stream has arrived, and its frames `played`, `concealed`, `late`, `repeats` and
   `restarts`; and the receiver's drops, `outside_lan`, `unaccepted`, `malformed` and
-  `unsupported`, with the `midi` messages it handed on and, since 0.140, the `state`
+  `unsupported` (Opus frames the decoder refused, held as silence), with the `midi` messages it handed on and, since 0.140, the `state`
   messages it put in the live data, the state packets it dropped as `state_off` (from
   a sender whose state isn't used) and the messages it refused as `state_dropped`
   (ADR-0171). Unlike the rest of the profile,

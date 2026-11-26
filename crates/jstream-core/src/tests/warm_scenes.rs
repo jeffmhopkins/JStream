@@ -71,7 +71,13 @@ fn the_preview_and_recent_scenes_keep_their_captures_warm() {
     };
     let b: BTreeSet<CaptureSpec> = [
         CaptureSpec::Display(None),
-        CaptureSpec::Device(None, DeviceFormatWant::default()),
+        CaptureSpec::Device(
+            None,
+            DeviceFormatWant {
+                canvas_fps: Some(30),
+                ..DeviceFormatWant::default()
+            },
+        ),
     ]
     .into();
     assert_eq!(warm(), BTreeSet::new(), "b is neither preview nor shown");

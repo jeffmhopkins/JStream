@@ -19,7 +19,7 @@ Layer-1 crate for JTunnel, the plugin that sends a DAW track's audio and MIDI ov
 LAN, which JStream receives natively
 ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)). It is
 the format only: no sockets and no threads, so the engine's receive thread, the tests and
-the `jtunnel` fuzz target drive the same code. It depends on `jstream-midi` alone.
+the `jtunnel` fuzz target drive the same code. It depends on `jstream-midi`, and on `rusty-opus` for Opus streams.
 
 Contents:
 - `wire`: version 2 of JTunnel's packets, the state packet (type 4, JTunnel 0.13's side
@@ -45,6 +45,13 @@ Contents:
   decodes 24-bit PCM at JTunnel's scale. A test checks the parser and writer against
   bytes JTunnel's C++ writer wrote, a state piece's included, and the names packet
   against JTunnel's layout.
+- `OpusFrames`: one sender's Opus decoder (`rusty-opus`,
+  [ADR-0253](../../docs/adr/0253-jtunnel-opus-streams-decode-through-rusty-opus.md)).
+  It decodes each frame once, in sequence order, into interleaved stereo: a redundant
+  copy of a frame already decoded, or a frame older than the last decoded, is `Skipped`;
+  a lost frame is left out; a new stream ID, rate or frame length makes a new decoder; a
+  frame the decoder refuses is `Refused`, never a panic. It allocates on the receive
+  thread when a stream starts.
 - `SysexAssembler`: joins SysEx pieces into whole messages in a buffer allocated once,
   dropping a message whole when a piece is missing or out of order, or when the caller
   abandons it after a lost frame.

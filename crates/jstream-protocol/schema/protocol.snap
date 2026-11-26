@@ -12376,7 +12376,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "unsupported": {
           "default": 0,
-          "description": "Audio packets in a codec it can't decode yet (Opus).",
+          "description": "Opus frames the decoder refused, held as silence.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
