@@ -28,6 +28,9 @@ struct Ring {
     /// Slots the engine hasn't released.
     busy: [bool; SLOTS],
     next: usize,
+    /// A paint was skipped as the engine held every slot, and none was taken since:
+    /// the next release asks the page to paint again.
+    skipped: bool,
     /// The converted paint, kept for the next.
     rgba: Vec<u8>,
 }
@@ -41,12 +44,15 @@ pub(crate) struct Painted {
 }
 
 impl PageTextures {
-    /// The engine is done with `slot`.
-    pub(crate) fn release(&self, slot: u8) {
+    /// The engine is done with `slot`. True when a paint was skipped for want of a free
+    /// slot since the last one taken: the page should paint again, as a page that only
+    /// paints on change would otherwise keep the frame before the skipped one.
+    pub(crate) fn release(&self, slot: u8) -> bool {
         let mut ring = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(busy) = ring.busy.get_mut(usize::from(slot)) {
             *busy = false;
         }
+        std::mem::take(&mut ring.skipped)
     }
 
     /// Writes CEF's paint `bgra` (premultiplied BGRA8 of `size`) into page `page`'s next
@@ -74,6 +80,7 @@ impl PageTextures {
             .map(|i| (ring.next + i) % SLOTS)
             .find(|&slot| !ring.busy[slot])
         else {
+            ring.skipped = true;
             return Ok(None);
         };
         let Ring { files, rgba, .. } = &mut *ring;
@@ -96,6 +103,7 @@ impl PageTextures {
             .map_err(|e| format!("writing a slot file: {e}"))?;
         ring.busy[slot] = true;
         ring.next = slot + 1;
+        ring.skipped = false;
         Ok(Some(Painted {
             slot: slot_u8,
             handle,

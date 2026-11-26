@@ -1784,8 +1784,10 @@ bundle, CEF's framework and the helper apps its subprocesses run from beside it 
 Each `OnAcceleratedPaint`
 hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
 and no fence. CEF takes the texture back into its pool when the callback returns. So the
-helper copies it, inside the callback, into one of three textures it shares with the
-engine and waits for that copy. The engine opens that texture on its wgpu D3D12 device,
+helper submits a copy of it, inside the callback, into one of three textures it shares
+with the engine, and waits for that copy on a thread of its own, so CEF's UI thread, which
+every page's paints share, is never held by it
+([ADR-0254](adr/0254-browser-paint-copies-are-waited-for-off-cefs-ui-thread.md)). The engine opens that texture on its wgpu D3D12 device,
 imports it through hal as in the GPU pipeline's step 2, copies it into a texture the
 source owns, waits for that copy, and hands the shared texture back. The wait is on a
 release thread of its own, holding no lock that reading the page's frame takes, since the
