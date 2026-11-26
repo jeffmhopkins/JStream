@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0250"
+id = "ADR-0253"
 title = "JTunnel's Opus streams decode through rusty-opus"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0250: JTunnel's Opus streams decode through rusty-opus
+# ADR-0253: JTunnel's Opus streams decode through rusty-opus
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

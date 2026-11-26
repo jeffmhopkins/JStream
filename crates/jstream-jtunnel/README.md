@@ -46,7 +46,7 @@ Contents:
   bytes JTunnel's C++ writer wrote, a state piece's included, and the names packet
   against JTunnel's layout.
 - `OpusFrames`: one sender's Opus decoder (`rusty-opus`,
-  [ADR-0250](../../docs/adr/0250-jtunnel-opus-streams-decode-through-rusty-opus.md)).
+  [ADR-0253](../../docs/adr/0253-jtunnel-opus-streams-decode-through-rusty-opus.md)).
   It decodes each frame once, in sequence order, into interleaved stereo: a redundant
   copy of a frame already decoded, or a frame older than the last decoded, is `Skipped`;
   a lost frame is left out; a new stream ID, rate or frame length makes a new decoder; a

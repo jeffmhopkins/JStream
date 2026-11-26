@@ -253,5 +253,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0247](0247-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md) | A 3D extra that runs too long holds the extras at their cheapest | accepted | agent |  |
 | [ADR-0248](0248-windows-tests-in-shards-and-carried-passes.md) | The Windows tests run in shards, and a Windows pass carries to a head with the same build inputs | accepted | agent |  |
 | [ADR-0249](0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md) | A nested 2D scene is drawn with the pixels it is shown at | accepted | agent |  |
-| [ADR-0250](0250-jtunnel-opus-streams-decode-through-rusty-opus.md) | JTunnel's Opus streams decode through rusty-opus | accepted | agent |  |
+| [ADR-0253](0253-jtunnel-opus-streams-decode-through-rusty-opus.md) | JTunnel's Opus streams decode through rusty-opus | accepted | agent |  |
 <!-- @generated end adr-index -->

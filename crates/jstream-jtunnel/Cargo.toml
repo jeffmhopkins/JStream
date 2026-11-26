@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 1
-summary = "JTunnel's wire format, version 2 (ADR-0122): audio packets with their per-frame MIDI, SysEx pieces and note expressions, subscribe and bye, state pieces and their reassembly per key (ADR-0171), 24-bit PCM, Opus decoding (ADR-0250), SysEx reassembly, sequence tracking (new, redundant, lost, late, restarted), and the mDNS / DNS-SD query and answers that find senders; no sockets, no threads"
+summary = "JTunnel's wire format, version 2 (ADR-0122): audio packets with their per-frame MIDI, SysEx pieces and note expressions, subscribe and bye, state pieces and their reassembly per key (ADR-0171), 24-bit PCM, Opus decoding (ADR-0253), SysEx reassembly, sequence tracking (new, redundant, lost, late, restarted), and the mDNS / DNS-SD query and answers that find senders; no sockets, no threads"
 unsafe_allowed = false
 
 [lints]
@@ -17,7 +17,7 @@ workspace = true
 
 [dependencies]
 jstream-midi.workspace = true
-# Decodes JTunnel's default Opus streams (ADR-0250). Pure Rust, no dependencies.
+# Decodes JTunnel's default Opus streams (ADR-0253). Pure Rust, no dependencies.
 rusty-opus.workspace = true
 
 [dev-dependencies]

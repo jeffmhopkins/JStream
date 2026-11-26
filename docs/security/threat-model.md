@@ -797,7 +797,7 @@ somewhere it shouldn't.
   refuses (fuzzed on its own). An Opus frame's bytes go to `rusty-opus`, pure Rust,
   which documents that a malformed packet is an error and never a panic; a frame it
   refuses is held as silence and counted
-  ([ADR-0250](../adr/0250-jtunnel-opus-streams-decode-through-rusty-opus.md)). The socket is IPv4: an accepted sender's address is IPv4
+  ([ADR-0253](../adr/0253-jtunnel-opus-streams-decode-through-rusty-opus.md)). The socket is IPv4: an accepted sender's address is IPv4
   (or IPv4 mapped into IPv6, taken as itself), and no two accepted senders share an
   address and port, since datagrams are told apart by where they come from.
   Parsing and playout allocate nothing (the Opus decoder only when a stream starts and

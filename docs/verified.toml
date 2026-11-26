@@ -21,7 +21,7 @@ stamp = { hash = "b3:bc43dee67b83cb62", by = "agent:claude", note = "Added a par
 stamp = { hash = "b3:91baf30b25242110", by = "agent:mac-browser", note = "New dependency: ADR-0157 decides browser sources on macOS through the Linux CPU-frame design, in the app bundle only. The section's macOS sentence says exactly that and nothing more; the Windows text after it is unaffected. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:89a7d8f1aa59562b", by = "agent:claude", note = "jstream-jtunnel row and its Cargo summary now include Opus decoding through rusty-opus (ADR-0250); layer 1 unchanged, lint-deps ok" }
+stamp = { hash = "b3:f110a260715542de", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -75,7 +75,7 @@ stamp = { hash = "b3:8b934df550ca875e" }
 stamp = { hash = "b3:a10d2ab6f0bf727b", by = "agent:claude", note = "K1: jstream-graph's Cargo.toml adds jstream-anim (layer 0) under layer 2, allowed by R-ARCH-002 and passing lint-deps; the graph's metadata row and summary are unchanged; holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing, which this branch already held up to 68d86b0; #738 reached wave/m1-4 squashed before the sync and adds only core Runtime's GpuGate beyond that wave) changed none of this section's inputs beyond what the branch had (graph's Cargo.toml jstream-meta came in unchanged); holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-jtunnel/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:568fa3d28b707415", by = "agent:claude", note = "jstream-jtunnel row and its Cargo summary now include Opus decoding through rusty-opus (ADR-0250); layer 1 unchanged, lint-deps ok" }
+stamp = { hash = "b3:6c5454cdd4297997", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["ARCH#crate-map"."file:crates/jstream-mcp/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:be88d569064d966b" }
@@ -1287,7 +1287,7 @@ stamp = { hash = "b3:7b29924362b09367" }
 stamp = { hash = "b3:2e6b22f1e1ad5561", by = "agent:claude-cleanup", note = "New section: checked each command against ci.yml's fmt, clippy, test, docs, lint-deps and deny jobs, every link and anchor (README#build, ARCH#repo-layout, ARCH#crate-map, CLAUDE#docs-duty, DOCS#verification, the three runbooks), and the lavapipe note against ci.yml's test job" }
 
 ["CONTRIBUTING#working-on-the-code"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:89a7d8f1aa59562b", by = "agent:claude", note = "the crate map row for jstream-jtunnel gained Opus decoding and its rusty-opus dependency; this section's guidance on working in the code is unaffected" }
+stamp = { hash = "b3:f110a260715542de", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["CONTRIBUTING#working-on-the-code"."dep:docs/ARCHITECTURE.md#repo-layout"]
 stamp = { hash = "b3:2ebc16becad64af0", by = "agent:ui-design", note = "Re-read: points to the repo-layout section by link and lists the CI commands; adding UI-DESIGN.md to the layout tree changes nothing here." }
@@ -2187,7 +2187,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:2444176bd6e23cc9", by = "agent:claude", note = "the JTunnel receiver paragraph now says Opus streams play through OpusFrames once per frame, refused frames held silent with events and counted unsupported, and the tests list names the Opus stream test that replaced the Opus-refused one" }
+stamp = { hash = "b3:dec81e3b690b2788", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:b0dde17f176fcfac", by = "agent:claude", note = "ST5: snapshot.rs plans the program through plan_program with the studio's show fades, transition.rs adds ShowFade, activity.rs adds the show scene as an audio root; the Snapshot bullet's description of plan, compose and keyframe drawing holds, and the details sit in Snapshots, Program scene and Audio routing." }
@@ -2202,13 +2202,13 @@ stamp = { hash = "b3:f03522a249ff7662", by = "agent:cockpit-demo", note = "re-re
 stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "merge: #1293 split this out of Purpose. Re-read it against this branch: live.rs, snapshot.rs and frames.rs gain frame slots and sheet pinning, which the Live sources, Snapshots and Frame sheets design sections describe. This summary still holds. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/mod.rs"]
-stamp = { hash = "b3:1af2f37f21e0fe64", by = "agent:claude", note = "the JTunnel receiver paragraph now says Opus streams play through OpusFrames once per frame, refused frames held silent with events and counted unsupported, and the tests list names the Opus stream test that replaced the Opus-refused one" }
+stamp = { hash = "b3:fd0aedee56fc2adc", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/names.rs"]
 stamp = { hash = "b3:8f74417d2e85aef0", by = "agent:release-alpha13", note = "Re-read after the train merge: the jtunnel names text lists both the train's PTZ axis (Wide Zoom) and the mute/visibility names (Mic Mute, Logo Visible), and MidiFeed::alive marking a sender alive, matching jtunnel/names.rs and the receiver. | merge: Merge of #1784 at e8df220 (JTunnel mDNS listener and one live sender, ADR-0221) into the alpha.13 train, after #1711/#1772's per-sender MIDI switch: jtunnel.json's example now carries both midi and live, the desktop Settings list shows both the MIDI tick and Make live, and the setting test gains live: None; re-read, the live-sender text concerns data and audio readers and agrees with ADR-0220's MIDI gate | kept from the merged side: names.rs's target_label now names a PTZ axis as camera and axis; added that to the names packet bullet. The rest is untouched by this change. | kept from the merged side: Receiver: the mDNS listener text holds; alias text replaced by: an empty network_audio sender records the first accepted (Receiver::sender), unnamed readers already read it; state put under the sender's name only; checked against jtunnel/mod.rs, names.rs back to the train's" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/tests.rs"]
-stamp = { hash = "b3:28e149e4580d4b65", by = "agent:claude", note = "the JTunnel receiver paragraph now says Opus streams play through OpusFrames once per frame, refused frames held silent with events and counted unsupported, and the tests list names the Opus stream test that replaced the Opus-refused one" }
+stamp = { hash = "b3:e8a095d9cd221ba9", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:63718a8c34101c1f", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): Re-read: the only live.rs change counts a browser page's new GPU frame as a paint in look_timed; no other sources-thread behaviour changed." }
@@ -3387,10 +3387,10 @@ stamp = { hash = "b3:bc365c27a1f12a16", by = "agent:claude", note = "Edited: sch
 stamp = { hash = "b3:c961c451e3f3cef9", by = "agent:claude", note = "Re-read in full after the train merge: hotkey/binding take with several actions (ADR-0208), value binding switch targets (ADR-0207) beside ptz_axis (ADR-0209), shows and the show scene match the merged graph; fixed SCHEMA_VERSION to 22 and named versions 20 to 22. | kept from the merged side: Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | merge: Train merge of #1701 at c5d5258 (add or replace mappings, audio inputs): re-read; #1701's added lines are present, its protocol bump renumbered 0.177 to 0.186 (version paragraph, since notes), and the core and graph value-binding text keeps #1709's PTZ axis sentences beside #1701's add/replace text. | kept from the merged side: Added Graph::stored_value and the mode-to-replace mapping in motion.rs (ADR-0203); test literals gained mode/enabled" }
 
 ["CRATE-jstream-jtunnel#purpose"."body"]
-stamp = { hash = "b3:50ad8e8925ff6fb1", by = "agent:claude", note = "added OpusFrames to the contents and rusty-opus to what the crate depends on; checked against opus.rs (decode once in order, Skipped/Refused, new decoder on new stream/rate/frame length)" }
+stamp = { hash = "b3:9350357550f79df8", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["CRATE-jstream-jtunnel#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-jtunnel"]
-stamp = { hash = "b3:5c4b9b210077b5f0", by = "agent:claude", note = "added OpusFrames to the contents and rusty-opus to what the crate depends on; checked against opus.rs (decode once in order, Skipped/Refused, new decoder on new stream/rate/frame length)" }
+stamp = { hash = "b3:ed40f35412ec5b8f", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/clock.rs"]
 stamp = { hash = "b3:c3c44f5fb509a86d", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and the link and no_alloc tests: SenderClock, Playout (slew, snap, 2 s restart, replaced stream), and the tests' claims hold; main brought #1272's identical base" }
@@ -3681,7 +3681,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe", by = "agent:a5c0c5084d9af49ea", note = "
 stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "macOS paragraph now covers the planar IOSurface encode targets and the VideoToolbox encoder from Codecs::on_context waiting for the write; merged with #1767's planar-target text, which reads consistently | merge: Re-read the macOS paragraph after merging #1767: encode targets are GpuFrame::planar over NV12 IOSurfaces, which is the planar API #1767 adds to this crate; text holds | merge: The train merge brought only #1767, already merged here; re-read the macOS paragraph: encode targets are GpuFrame::planar over NV12 IOSurfaces, encoded by VideoToolbox, text holds | merge: Conflict resolved: macOS paragraph names SCK and webcams (#1765) as IOSurface producers and this PR's planar encode targets VideoToolbox encodes; re-read, consistent | kept from the merged side: encode_target described as native NV12 or GpuFrame::planar (R8Unorm Y + half-size Rg8Unorm CbCr over one surface, one FrameSync), texture() is the Y plane then, planes() gives both, equality covers both; ARCH step-4 edit agrees | kept from the merged side: #1767: encode_target is a native NV12 texture or GpuFrame::planar (R8Unorm Y + half-size Rg8Unorm CbCr over one surface, one hold), texture() the Y plane, planes() both, equality both planes, as ARCH step 4 and its On macOS paragraph now say; merged the train's #1761 (MetalGpu paragraph: no encode targets yet, the Metal adapter's AdapterId), which agrees | kept from the merged side: added the macOS paragraph (MetalGpu, ScreenCaptureKit on_context, FrameSync signals the shared event, no encode targets yet) and the macOS media-adapter line | merge: Train merge of #1767 (db1e07a, two-plane NV12 encode targets): re-read; #1767's added lines are present, no text conflicts. | kept from the merged side: The macOS paragraph names AvFoundationVideoDevices::on_context (BGRA) beside ScreenCaptureKit as wrapping each frame's IOSurface with no copy; the FrameSync and encode-target statements still hold | merge: Train merge added GpuFrame::planar to this section's types; re-read the macOS paragraph: SCK and webcams wrap IOSurfaces, no encode targets yet on macOS, which is still true here" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:89a7d8f1aa59562b", by = "agent:claude", note = "only the jstream-jtunnel crate-map row changed; nothing here refers to it" }
+stamp = { hash = "b3:f110a260715542de", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:fef317fa53636f75", by = "agent:claude", note = "Re-read: frame lifetime holds; a shared capture image's FrameSync hold is cleared at end_frame like the original's" }
@@ -9213,7 +9213,7 @@ stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cf
 stamp = { hash = "b3:3fa709a62e0e60ae", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): No change to what a page is granted or sent: only when a granted page's next look is scheduled (a page frame after the last look)." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:9c88432d0eed29e4", by = "agent:claude", note = "added that Opus bytes now reach rusty-opus (errors, never panics; refused frames silent and counted) and that the decoder allocates at stream start and warm-up, unlike parsing and playout" }
+stamp = { hash = "b3:4868b9ded8915bdd", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:b37f83f15f9a48ed", by = "agent:claude", note = "the JTunnel mDNS listener text says the announcement is a separate socket on 5353 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -9222,13 +9222,13 @@ stamp = { hash = "b3:b37f83f15f9a48ed", by = "agent:claude", note = "the JTunnel
 stamp = { hash = "b3:566e43a3335da375", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/mod.rs"]
-stamp = { hash = "b3:1af2f37f21e0fe64", by = "agent:claude", note = "added that Opus bytes now reach rusty-opus (errors, never panics; refused frames silent and counted) and that the decoder allocates at stream start and warm-up, unlike parsing and playout" }
+stamp = { hash = "b3:fd0aedee56fc2adc", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/names.rs"]
 stamp = { hash = "b3:8f74417d2e85aef0", by = "agent:release-alpha13", note = "Re-read in full after merging the train. Checked the claims this PR adds: MidiInputs::bindable and set_bindable exist in jstream-sources' midi module, and action_bindings.rs lets a held press go after SILENT_MS (500 ms) of silence. The train's names.rs change (a PTZ camera's name and axis in a names packet) is already described. | merge: Merge of #1784 at e8df220 (JTunnel mDNS listener and one live sender, ADR-0221) into the alpha.13 train, after #1711/#1772's per-sender MIDI switch: jtunnel.json's example now carries both midi and live, the desktop Settings list shows both the MIDI tick and Make live, and the setting test gains live: None; re-read, the live-sender text concerns data and audio readers and agrees with ADR-0220's MIDI gate | kept from the merged side: Names packets may now carry a PTZ camera's name and axis (names.rs target_label), and ptz_axis bindings send only to listed heads; edited both. | kept from the merged side: Re-read against jtunnel/mod.rs after the rework: listener text holds; one live sender, so an unnamed reader reads only its data; no alias, no data held twice" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/tests.rs"]
-stamp = { hash = "b3:28e149e4580d4b65", by = "agent:claude", note = "added that Opus bytes now reach rusty-opus (errors, never panics; refused frames silent and counted) and that the decoder allocates at stream start and warm-up, unlike parsing and playout" }
+stamp = { hash = "b3:e8a095d9cd221ba9", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
 
 ["THREAT-MODEL#mcp"."body"]
 stamp = { hash = "b3:98df5fd57774c8a1", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, people-only MCP nouns, server parts or gate credentials)" }

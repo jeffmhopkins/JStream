@@ -580,7 +580,7 @@ fn a_second_input_is_refused_and_a_stopped_one_told_why() {
     assert!(failed(&third), "the stopped receiver's input reports it");
 }
 
-/// ADR-0250: an Opus stream, JTunnel's default, plays its audio and feeds its MIDI, each
+/// ADR-0253: an Opus stream, JTunnel's default, plays its audio and feeds its MIDI, each
 /// frame decoded once though every packet carries the one before it again.
 #[test]
 fn an_opus_stream_plays_and_feeds_its_midi() {

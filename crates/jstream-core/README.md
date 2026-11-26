@@ -326,7 +326,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   source keeps recording silence without saying why. 24-bit PCM, Opus and MIDI-only
   streams are taken (a MIDI-only stream feeds no input). Opus frames decode through
   `jstream-jtunnel`'s `OpusFrames`, once each and in order, redundant copies skipped
-  ([ADR-0250](../../docs/adr/0250-jtunnel-opus-streams-decode-through-rusty-opus.md)); a
+  ([ADR-0253](../../docs/adr/0253-jtunnel-opus-streams-decode-through-rusty-opus.md)); a
   frame the decoder refuses is held as silence with its events and counted as
   `unsupported`. A frame's MIDI events, due with it, are pushed
   through the sender's `MidiFeed` to the engine's `MidiInputs` under the sender's name

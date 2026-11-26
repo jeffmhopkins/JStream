@@ -50,7 +50,7 @@
 //! A source opens only once its sender has been heard, since the stream's rate is only
 //! known then; until then it is unavailable and tried again on every tick, like an
 //! unplugged device. A stream that changes rate fails the input, which reopens at the
-//! new rate. 24-bit PCM, Opus ([`OpusFrames`], ADR-0250) and MIDI-only streams play; an
+//! new rate. 24-bit PCM, Opus ([`OpusFrames`], ADR-0253) and MIDI-only streams play; an
 //! Opus frame the decoder refuses is held as silence, its MIDI kept, and counted.
 //!
 //! **State** (ADR-0171 decisions 1 and 2). A sender's state packets (JTunnel's side
@@ -759,7 +759,7 @@ struct Stream {
     /// Where its MIDI goes: its own input's state and the every-input one, looked up
     /// once so the thread takes no lock per message, and its clock's tempo (ADR-0142).
     midi: Option<MidiFeed>,
-    /// Its Opus decoder (ADR-0250).
+    /// Its Opus decoder (ADR-0253).
     opus: OpusFrames,
     /// Its state messages part-way (ADR-0171).
     state: StateAssembler,
