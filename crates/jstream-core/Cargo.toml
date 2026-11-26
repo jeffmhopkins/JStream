@@ -82,6 +82,8 @@ tracing.workspace = true
 jstream-platform-windows.workspace = true
 
 [dev-dependencies]
+# The JTunnel receiver's Opus test codes its stream with the decoder's own encoder.
+rusty-opus.workspace = true
 # The mock engine, for a differential test: the same calls must get the same answers.
 jstream-control = { workspace = true, features = ["mock"] }
 # `tests/scenarios.rs` and the output pipeline test: overload drops and fakes.

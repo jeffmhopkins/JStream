@@ -50,8 +50,8 @@
 //! A source opens only once its sender has been heard, since the stream's rate is only
 //! known then; until then it is unavailable and tried again on every tick, like an
 //! unplugged device. A stream that changes rate fails the input, which reopens at the
-//! new rate. 24-bit PCM and MIDI-only streams play; Opus is refused and counted until a
-//! decoder is picked (ADR-0122 §6).
+//! new rate. 24-bit PCM, Opus ([`OpusFrames`], ADR-0250) and MIDI-only streams play; an
+//! Opus frame the decoder refuses is held as silence, its MIDI kept, and counted.
 //!
 //! **State** (ADR-0171 decisions 1 and 2). A sender's state packets (JTunnel's side
 //! channel: JSON messages under keys) are taken only from a sender whose "Use this
@@ -78,7 +78,7 @@ use std::time::{Duration, Instant};
 use crate::lan::is_lan;
 use jstream_jtunnel::dnssd::{self, Directory};
 use jstream_jtunnel::wire::{self, Codec, Packet};
-use jstream_jtunnel::{Playout, StateAssembler, StateStep};
+use jstream_jtunnel::{Decoded, OpusFrames, Playout, StateAssembler, StateStep};
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, Rounding, SampleFormat, Timebase};
 use jstream_platform::{
     AudioInputHandler, AudioPacket, AudioPacketFlags, AudioStream, MediaClock, PlatformError,
@@ -298,7 +298,7 @@ pub struct JtunnelStats {
     pub unaccepted: u64,
     /// Datagrams that aren't a JTunnel packet it accepts, or an mDNS answer it can read.
     pub malformed: u64,
-    /// Audio packets in a codec it can't decode yet (Opus).
+    /// Opus frames the decoder refused, held as silence.
     pub unsupported: u64,
     /// Frames handed to a source's input.
     pub played: u64,
@@ -759,6 +759,8 @@ struct Stream {
     /// Where its MIDI goes: its own input's state and the every-input one, looked up
     /// once so the thread takes no lock per message, and its clock's tempo (ADR-0142).
     midi: Option<MidiFeed>,
+    /// Its Opus decoder (ADR-0250).
+    opus: OpusFrames,
     /// Its state messages part-way (ADR-0171).
     state: StateAssembler,
     /// How many of `state`'s part-way messages were forgotten, as last counted.
@@ -777,6 +779,7 @@ impl Stream {
             playout: Playout::new(u64::from(jstream_sources::LATENCY_MS.2) * 1_000_000),
             handler: None,
             midi: midi.map(|inputs| inputs.feed(name)),
+            opus: OpusFrames::new(),
             state: StateAssembler::new(),
             evicted: 0,
         }
@@ -1099,10 +1102,6 @@ impl Run {
                 return;
             }
         };
-        if header.codec == Codec::Opus {
-            counters.unsupported.fetch_add(1, Ordering::Relaxed);
-            return;
-        }
         self.senders[index]
             .rate
             .store(header.sample_rate, Ordering::Release);
@@ -1112,7 +1111,18 @@ impl Run {
         for frame in frames.iter().rev().flatten() {
             let decoded = match header.codec {
                 Codec::Pcm24 => wire::decode_pcm24(frame.audio, samples),
-                Codec::None | Codec::Opus => 0,
+                // A redundant copy of a frame already decoded is pushed with no samples:
+                // the playout holds the decoded one, and takes the copy as a repeat. A
+                // refused frame is held as silence, its events kept.
+                Codec::Opus => match stream.opus.decode(&header, frame, samples) {
+                    Decoded::Samples(n) => n,
+                    Decoded::Skipped => 0,
+                    Decoded::Refused => {
+                        counters.unsupported.fetch_add(1, Ordering::Relaxed);
+                        0
+                    }
+                },
+                Codec::None => 0,
             };
             stream
                 .playout
