@@ -9063,7 +9063,7 @@ stamp = { hash = "b3:dd692a456ed83dfe", by = "agent:mac-browser", note = "The te
 stamp = { hash = "b3:201fec83217818e7", by = "agent:claude-ci-load", note = "mac-testing#script only gained when mac-install CI runs; the tester's install command and steps are unaffected" }
 
 ["RUNBOOK-RELEASE#cut"."body"]
-stamp = { hash = "b3:84740c747a268889", by = "agent:claude", note = "Re-read against the new streamdeck job: Node pinned by hash, npm ci/typecheck/build/unit tests, set-version.ts mapping, pack name, notes order and publish now waiting on four jobs and attaching *.streamDeckPlugin; step 5 asks to check the plugin installs" }
+stamp = { hash = "b3:fc7b2953144222ba", by = "agent:release-alpha14", note = "publish now passes the newest earlier release as --notes-start-tag, so GitHub's generated list covers only PRs since then; added that to the publish bullet and re-read the rest of the cut steps against release.yml (four build jobs, tag creation on a dispatched run, pre-release marking), which hold." }
 
 ["RUNBOOK-RELEASE#cut"."dep:docs/ARCHITECTURE.md#packaging"]
 stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = 'The zip step now downloads DXC and checks its SHA-256, and the Windows notes name the DXC release from dxc\DXC-VERSION.txt, matching release.yml' }
@@ -9072,7 +9072,7 @@ stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = 'The 
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New section, checked against the new release.yml: ui checks out with fetch-depth 0 and fails unless the tagged commit is on main (git merge-base --is-ancestor HEAD origin/main) and the tag is v plus the single version of the five shipped apps, then builds the UI with after-review dist-ui's pins; zip runs cargo xtask dist --revision <tag> on windows-latest without a cache, writes the .sha256 and the notes (guide link, unsigned SmartScreen note, CEF build from browser/CEF-VERSION.txt, checksum); publish alone has contents: write and runs gh release create --verify-tag, --prerelease for a hyphenated version, --notes-file with --generate-notes; signing deferred per ADR-0066 and the helper exe/DLL share a certificate per ADR-0048; the deps ARCH Packaging (browser folder, dist) and ADR-0066 match" }
 
 ["RUNBOOK-RELEASE#cut"."file:.github/workflows/release.yml"]
-stamp = { hash = "b3:fc6ed464fafa12c0", by = "agent:claude", note = "Re-read against the new streamdeck job: Node pinned by hash, npm ci/typecheck/build/unit tests, set-version.ts mapping, pack name, notes order and publish now waiting on four jobs and attaching *.streamDeckPlugin; step 5 asks to check the plugin installs" }
+stamp = { hash = "b3:22388ddce6b35fcd", by = "agent:release-alpha14", note = "publish now passes the newest earlier release as --notes-start-tag, so GitHub's generated list covers only PRs since then; added that to the publish bullet and re-read the rest of the cut steps against release.yml (four build jobs, tag creation on a dispatched run, pre-release marking), which hold." }
 
 ["RUNBOOK-RELEASE#version"."body"]
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
