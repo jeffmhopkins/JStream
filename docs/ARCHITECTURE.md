@@ -140,7 +140,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-visca` | VISCA format for PTZ control in both directions ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): commands, inquiries and replies encoded and parsed, and Sony-style VISCA-over-IP framing; no sockets, no allocation, no dependencies | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0066). The **single owner** of the encoder and decoder traits. | no |
-| 1 | `jstream-jtunnel` | JTunnel's wire format, version 2 ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): audio packets with their MIDI, SysEx and note expressions, subscribe and bye, state pieces and their reassembly ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md)), 24-bit PCM, SysEx reassembly, sequence tracking, the sender-clock and drift estimate, the jitter buffer that plays frames out, and the mDNS records that find senders; on `jstream-midi`, no sockets or threads | no |
+| 1 | `jstream-jtunnel` | JTunnel's wire format, version 2 ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): audio packets with their MIDI, SysEx and note expressions, subscribe and bye, state pieces and their reassembly ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md)), 24-bit PCM, Opus decoding through `rusty-opus` ([ADR-0253](adr/0253-jtunnel-opus-streams-decode-through-rusty-opus.md)), SysEx reassembly, sequence tracking, the sender-clock and drift estimate, the jitter buffer that plays frames out, and the mDNS records that find senders; on `jstream-midi` and `rusty-opus`, no sockets or threads | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -1785,8 +1785,10 @@ bundle, CEF's framework and the helper apps its subprocesses run from beside it 
 Each `OnAcceleratedPaint`
 hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
 and no fence. CEF takes the texture back into its pool when the callback returns. So the
-helper copies it, inside the callback, into one of three textures it shares with the
-engine and waits for that copy. The engine opens that texture on its wgpu D3D12 device,
+helper submits a copy of it, inside the callback, into one of three textures it shares
+with the engine, and waits for that copy on a thread of its own, so CEF's UI thread, which
+every page's paints share, is never held by it
+([ADR-0254](adr/0254-browser-paint-copies-are-waited-for-off-cefs-ui-thread.md)). The engine opens that texture on its wgpu D3D12 device,
 imports it through hal as in the GPU pipeline's step 2, copies it into a texture the
 source owns, waits for that copy, and hands the shared texture back. The wait is on a
 release thread of its own, holding no lock that reading the page's frame takes, since the

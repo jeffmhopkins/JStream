@@ -209,7 +209,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   dropped when it is deleted, on the engine's `jstream-sources` thread. Sources are
   built with the program's base rate (`Context.frame_rate`), and a `browser` page with
   an `fps` of 0, which follows it, is built again when `canvas.set_frame_rate` changes
-  it (#1405). The program
+  it (#1405), as is a `webcam` whose `fps` is 0, whose device opens at a rate chosen for
+  the base rate (see [Runtime](#runtime)). The program
   mix shows their frames and advances animations and videos on the media clock, and
   tells a source when it shows it again, unless `source.seek` played it on from a point
   since (`LiveSources::seek`, see *Timelines*); a `timer` countdown or stopwatch
@@ -323,9 +324,12 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   changes rate fails its input, which reopens at the new rate. One source records a
   sender at a time: a second one's open is refused, so it shows as unavailable, until
   the first closes. Every input fails when the receiver stops or is replaced, so no
-  source keeps recording silence without saying why. 24-bit PCM and MIDI-only
-  streams are taken (a MIDI-only stream feeds no input); Opus packets are counted as
-  unsupported until a decoder is picked. A frame's MIDI events, due with it, are pushed
+  source keeps recording silence without saying why. 24-bit PCM, Opus and MIDI-only
+  streams are taken (a MIDI-only stream feeds no input). Opus frames decode through
+  `jstream-jtunnel`'s `OpusFrames`, once each and in order, redundant copies skipped
+  ([ADR-0253](../../docs/adr/0253-jtunnel-opus-streams-decode-through-rusty-opus.md)); a
+  frame the decoder refuses is held as silence with its events and counted as
+  `unsupported`. A frame's MIDI events, due with it, are pushed
   through the sender's `MidiFeed` to the engine's `MidiInputs` under the sender's name
   and to its every-input state
   ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §2), stamped on the
@@ -351,7 +355,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   keepalive, the frames in order with their positions and times, the bye, an
   unaccepted sender, a datagram that isn't JTunnel, one too long and a receiver's packet
   dropped and counted, a rate change failing the input, a second source for a sender
-  refused until the first closes, a stopped receiver's input told why, Opus refused, the profile's playout readings, the
+  refused until the first closes, a stopped receiver's input told why, an Opus stream playing and feeding each MIDI message once, the profile's playout readings, the
   accepted-sender and setup checks, and through the engine a
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
@@ -978,7 +982,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   (#1265) (`runtime/devices.rs`), the format a webcam opens in, with and
   without an MJPEG decoder, and with the resolution, frame rate and pixel format its
   settings ask for, falling back to the engine's choice when the device offers none
-  that matches, its frames, decoded or not, read as RGBA, a webcam
+  that matches, the engine's choice of rate following the canvas rate and NV12 winning
+  over YUY2 at the same size and rate, its frames, decoded or not, read as RGBA, a webcam
   opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
   refused format on the CPU path, a webcam on the CPU path left running, and not opened
   twice, when the GPU path is left, and one on the GPU path, running or still starting,
@@ -1386,7 +1391,8 @@ the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. D
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
-(`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
+(`src/tests/youtube.rs`), `rusty-opus` (the JTunnel receiver's Opus test codes its
+stream with its encoder), `jstream-browser`'s `fake` feature (the browser pages in
 `src/tests/audio.rs`, and the page API's updates in `src/tests/page_api.rs`: a granted
 page's visibility on program and preview, directly and through a nested scene, the two
 scenes, only the values its grant covers and a removal, an update held to the next
@@ -3704,7 +3710,9 @@ streams is deleted the re-plan ends them with the end frame "the scene was delet
 A stream with a `source` shows a source the collection doesn't hold (0.49): the
 Properties dialog's picture of the display, window or webcam being picked, before the
 source exists or its new settings are saved (`preview/draft.rs`). `preview.subscribe`
-reads the kinds and the canvas under the lock and plans the draft once, after it, on a
+reads the kinds, the canvas and the base rate under the lock and plans the draft once,
+after it (the source built at the base rate, as the collection's are, so a draft webcam
+asks its device for the format a source of it in the collection would), on a
 collection of its own: the one source, checked as `source.create` checks it (a refused
 setting is `invalid_argument` naming `source.settings.<param>`), and one scene whose
 item covers the canvas. Only a kind whose source captures something can be drawn this
@@ -5619,11 +5627,17 @@ capture asking a format other than the one its device is open in switches the sh
 device to it for every reader (#1265; see *Preview streams*). The
 candidates are frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
-1920x1080 (else the smallest), then the fastest. An empty `device` is the first device
+1920x1080 (else the smallest). Then, while the source leaves the rate to the engine, the
+rate that suits the program's base rate (`DeviceFormatWant::canvas_fps`, from the source
+`Context`'s frame rate, so a change of base rate builds the source again): the base rate
+itself (29.97 counts as 30), else its smallest whole multiple, else the slowest rate above
+it, else the fastest below it. A device faster than the canvas only captures frames the
+program never shows: a 120 fps capture card on a 30 fps canvas cost about a third more
+CPU than at 30. Then NV12, which needs no conversion, over RGBA or BGRA, then YUY2, then
+MJPEG. An empty `device` is the first device
 listed, looked up when it starts. MJPEG is a candidate when the device offers it and the
 platform's codecs make a decoder (`Codecs::capture_decoder`, Media Foundation's on
-Windows): one decoder per stream, passed to `VideoDevices::open`. At the same size and
-rate an uncompressed format wins. Without a decoder (the default, and Linux and macOS
+Windows): one decoder per stream, passed to `VideoDevices::open`. Without a decoder (the default, and Linux and macOS
 for now), only uncompressed formats are chosen, so a device that offers only MJPEG
 doesn't start. Its paired audio input is recorded by the audio sources' thread (see
 *Audio sources* in Design), not here. A

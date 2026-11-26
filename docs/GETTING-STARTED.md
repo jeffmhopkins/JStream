@@ -91,6 +91,9 @@ depends_on = ["docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#docking", "docs
 A new JStream starts empty, but for four sample labels (Intro / outro, Gameplay, Overlay
 and Sponsor) to rename, use or delete. What the program shows (and every output sends) is the scene
 on **program**, drawn on the canvas in the middle.
+On a machine whose graphics are short of time, right-click the canvas and choose
+**Disable live preview**: the canvas then shows only its item boxes, and the time the
+picture took goes to your outputs. **Enable live preview** brings it back.
 The canvas starts at 1920×1080 and 30 fps. **File › Video settings…** opens Settings on **Video**, which changes its
 resolution (a preset such as 1280×720 or 3840×2160, a vertical 1080×1920, or any size
 you type) and its frame rate, 30 or 60 fps. A new resolution scales every scene with it,

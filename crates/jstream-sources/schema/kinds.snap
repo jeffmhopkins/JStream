@@ -3739,7 +3739,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "target": "device",
         "default": 0,
         "label": "Frame rate",
-        "description": "The frames per second to capture, one the device lists for the resolution. 0 lets the engine choose: the fastest.",
+        "description": "The frames per second to capture, one the device lists for the resolution. 0 lets the engine choose: the program's frame rate, else the smallest whole multiple of it, else the nearest faster rate, else the fastest.",
         "group": "Format",
         "live": false
       },
@@ -3750,7 +3750,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "target": "device",
         "default": "",
         "label": "Video format",
-        "description": "How the device sends its frames: `mjpeg` (compressed, decoded by the engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine choose: uncompressed when it can.",
+        "description": "How the device sends its frames: `mjpeg` (compressed, decoded by the engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine choose: uncompressed when it can, NV12 first.",
         "group": "Format",
         "live": false
       },

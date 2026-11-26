@@ -42,8 +42,11 @@
 //! it reloads, never the end of its last run nor a white frame. An `Open` carries the
 //! page API grant in one flags byte, and a granted page's updates go as `PageData`,
 //! already split to fit. The helper sends
-//! frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs) and warnings for
-//! the engine's log. A reader thread hands each to its page, stamping frames and audio on
+//! frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs), warnings for
+//! the engine's log, and each painting page's paint counts every 5 s (delivered, skipped
+//! for want of a free slot, failed, and the time its copies held CEF's UI thread), which the engine logs at `debug` beside its own
+//! counts of the frames it received and took and how long each waited for the release
+//! thread and for its import, for finding where a page's frames are lost. A reader thread hands each to its page, stamping frames and audio on
 //! the media clock as they arrive. When the helper's pipe ends, every page's audio fails
 //! (`DeviceLost`), unless the engine was shutting it down.
 
@@ -53,7 +56,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use jstream_media::{FrameSize, MediaTime, VideoFrame};
 use jstream_platform::{GpuFrame, MediaClock, PlatformError};
@@ -128,8 +131,79 @@ impl Import for Skipped {
 struct Pending {
     page: u32,
     slot: u8,
+    /// When the helper's frame message was read.
+    arrived: Instant,
     /// The page's, unless it was closed or is reloading.
     import: Option<(Arc<PageLink>, u64, Box<dyn Import>)>,
+}
+
+/// How often the release thread logs each page's frame counts (at `debug`).
+const STATS_EVERY: Duration = Duration::from_secs(5);
+
+/// The release thread's per-page counts since its last log line: how many frames the
+/// helper sent, how many were taken, how long each waited for the release thread
+/// (behind other pages' imports) and for its own import (the engine's copy, which runs
+/// behind the frames render queued before it). Logged at `debug` every [`STATS_EVERY`],
+/// for finding where a page's frames are lost on a busy machine.
+struct ReleaseStats {
+    since: Instant,
+    pages: HashMap<u32, PageStats>,
+}
+
+#[derive(Default)]
+struct PageStats {
+    frames: u32,
+    taken: u32,
+    queued: Duration,
+    queued_max: Duration,
+    waited: Duration,
+    waited_max: Duration,
+}
+
+impl ReleaseStats {
+    fn new() -> Self {
+        Self {
+            since: Instant::now(),
+            pages: HashMap::new(),
+        }
+    }
+
+    fn add(&mut self, page: u32, queued: Duration, waited: Duration, taken: bool) {
+        let stats = self.pages.entry(page).or_default();
+        stats.frames += 1;
+        stats.taken += u32::from(taken);
+        stats.queued += queued;
+        stats.queued_max = stats.queued_max.max(queued);
+        stats.waited += waited;
+        stats.waited_max = stats.waited_max.max(waited);
+        let elapsed = self.since.elapsed();
+        if elapsed < STATS_EVERY {
+            return;
+        }
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let seconds = elapsed.as_secs_f64();
+            for (page, stats) in &self.pages {
+                let frames = f64::from(stats.frames.max(1));
+                tracing::debug!(
+                    page,
+                    frames_per_s = format_args!("{:.1}", f64::from(stats.frames) / seconds),
+                    taken_per_s = format_args!("{:.1}", f64::from(stats.taken) / seconds),
+                    queued_mean_ms =
+                        format_args!("{:.1}", stats.queued.as_secs_f64() * 1e3 / frames),
+                    queued_max_ms = format_args!("{:.1}", stats.queued_max.as_secs_f64() * 1e3),
+                    import_mean_ms =
+                        format_args!("{:.1}", stats.waited.as_secs_f64() * 1e3 / frames),
+                    import_max_ms = format_args!("{:.1}", stats.waited_max.as_secs_f64() * 1e3),
+                    "browser page frames"
+                );
+            }
+        }
+        // Pages keep their entries, so one whose frames stopped logs zeros.
+        for stats in self.pages.values_mut() {
+            *stats = PageStats::default();
+        }
+        self.since = Instant::now();
+    }
 }
 
 /// The engine's end of one helper's pipe.
@@ -433,12 +507,23 @@ impl Link {
     /// The release thread: finishes each import the reader started, in order, then
     /// hands the helper its texture back, until the reader ends.
     fn release(&self, pending: &Receiver<Pending>) {
-        for Pending { page, slot, import } in pending {
+        let mut stats = ReleaseStats::new();
+        for Pending {
+            page,
+            slot,
+            arrived,
+            import,
+        } in pending
+        {
+            let started = Instant::now();
+            let mut taken = false;
             if let Some((state, epoch, mut import)) = import
                 && import.wait()
             {
                 state.publish(epoch, import);
+                taken = true;
             }
+            stats.add(page, started - arrived, started.elapsed(), taken);
             // Even for a page closed meanwhile: the helper waits for every slot.
             self.send(&ToHelper::Released { page, slot });
         }
@@ -466,7 +551,12 @@ impl Link {
                     let (epoch, import) = state.import(&paint, pts)?;
                     Some((state, epoch, import))
                 });
-                let finish = Pending { page, slot, import };
+                let finish = Pending {
+                    page,
+                    slot,
+                    arrived: Instant::now(),
+                    import,
+                };
                 if let Err(mpsc::SendError(Pending { page, slot, .. })) = pending.send(finish) {
                     // No release thread: its slot goes back at once, as the helper waits
                     // for every slot.
@@ -497,6 +587,31 @@ impl Link {
             }
             ToEngine::Warning { message } => {
                 tracing::warn!(%message, "the browser helper");
+            }
+            ToEngine::Paints {
+                page,
+                millis,
+                painted,
+                skipped,
+                failed,
+                took_us,
+                took_max_us,
+                open_us,
+            } => {
+                let seconds = (millis as f64 / 1e3).max(1e-3);
+                let per_s = |n: u64| format!("{:.1}", n as f64 / seconds);
+                tracing::debug!(
+                    page,
+                    painted_per_s = per_s(painted),
+                    skipped_per_s = per_s(skipped),
+                    failed_per_s = per_s(failed),
+                    copy_mean_ms =
+                        format_args!("{:.1}", took_us as f64 / 1e3 / painted.max(1) as f64),
+                    copy_max_ms = format_args!("{:.1}", took_max_us as f64 / 1e3),
+                    open_mean_ms =
+                        format_args!("{:.1}", open_us as f64 / 1e3 / painted.max(1) as f64),
+                    "browser page paints in the helper"
+                );
             }
             ToEngine::Closed { page } => {
                 tracing::debug!(page, "a browser page closed in the helper");

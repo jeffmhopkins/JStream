@@ -580,27 +580,113 @@ fn a_second_input_is_refused_and_a_stopped_one_told_why() {
     assert!(failed(&third), "the stopped receiver's input reports it");
 }
 
+/// ADR-0253: an Opus stream, JTunnel's default, plays its audio and feeds its MIDI, each
+/// frame decoded once though every packet carries the one before it again.
 #[test]
-fn opus_is_refused_and_counted() {
+fn an_opus_stream_plays_and_feeds_its_midi() {
+    use rusty_opus::{Application, OpusEncoder};
+    const N: usize = wire::OPUS_FRAME_SAMPLES as usize;
     let sender = FakeSender::new();
-    let receiver = start(&setup("Studio", &sender));
+    let midi = Arc::new(MidiInputs::new());
+    let receiver = Receiver::start(
+        &setup("Studio", &sender),
+        Arc::new(Clock(Instant::now())),
+        Some(Arc::clone(&midi)),
+        LiveData::new(),
+        None,
+    )
+    .expect("a receiver");
     let (_, to) = sender.next();
-    let header = AudioHeader {
-        stream_id: 1,
-        seq: 0,
-        sample_rate: 48_000,
-        codec: Codec::Opus,
-        frame_samples: 240,
-    };
-    let frames = [FrameOut {
-        events: &[],
-        audio: &[0xFC, 0xFF, 0xFE],
-    }];
-    let mut out = [0; wire::MAX_PACKET_BYTES];
-    let n = wire::write_audio(&mut out, &header, &frames).expect("a packet");
-    sender.socket.send_to(&out[..n], to).expect("sent");
-    assert!(eventually(|| receiver.stats().unsupported == 1));
-    assert!(receiver.input_format("Studio").is_err());
+    let mut encoder = OpusEncoder::new(48_000, 2, Application::Audio).expect("an encoder");
+    // A controller, not a note: a held note is let go once the sender falls silent
+    // (ADR-0207), which may be before the check below.
+    let cc: &[u8] = &[0xB0, 20, 77];
+    // Coded before any is sent, and sent on JTunnel's own 5 ms schedule: a debug-build
+    // encoder in the loop runs slower than real time on a slow runner, and a sender that
+    // falls behind its clock has its frames dropped as late, events and all.
+    let coded: Vec<Vec<u8>> = (0..200)
+        .map(|f| {
+            let pcm: Vec<f32> = (0..N)
+                .flat_map(|i| {
+                    let t = (f * N + i) as f32 / 48_000.0;
+                    let v = 0.5 * (std::f32::consts::TAU * 1_000.0 * t).sin();
+                    [v, v]
+                })
+                .collect();
+            let mut packet = vec![0_u8; 1_000];
+            let n = encoder.encode(&pcm, N, &mut packet).expect("encoded");
+            packet.truncate(n);
+            packet
+        })
+        .collect();
+    // Well into the stream, once the decoder and the clock estimate have settled.
+    const EVENT_AT: u32 = 100;
+    let (tx, rx) = channel();
+    let mut stream = None;
+    let begun = Instant::now();
+    for seq in 0..200_u32 {
+        let header = AudioHeader {
+            stream_id: 9,
+            seq,
+            sample_rate: 48_000,
+            codec: Codec::Opus,
+            frame_samples: wire::OPUS_FRAME_SAMPLES,
+        };
+        let events = [(5_u16, cc)];
+        let i = seq as usize;
+        let mut frames = vec![FrameOut {
+            events: if seq == EVENT_AT { &events } else { &[] },
+            audio: &coded[i],
+        }];
+        if i > 0 {
+            frames.push(FrameOut {
+                events: if seq == EVENT_AT + 1 { &events } else { &[] },
+                audio: &coded[i - 1],
+            });
+        }
+        let due = begun + Duration::from_millis(5) * seq;
+        if let Some(wait) = due.checked_duration_since(Instant::now()) {
+            thread::sleep(wait);
+        }
+        let mut out = [0; wire::MAX_PACKET_BYTES];
+        let n = wire::write_audio(&mut out, &header, &frames).expect("a packet");
+        sender.socket.send_to(&out[..n], to).expect("sent");
+        if stream.is_none() && receiver.input_format("Studio").is_ok() {
+            stream = Some(
+                receiver
+                    .open("Studio", 10, Box::new(Collect(tx.clone())))
+                    .expect("opened"),
+            );
+        }
+    }
+    assert!(
+        stream.is_some(),
+        "the Opus stream's format is known once heard"
+    );
+    let format = receiver.input_format("Studio").expect("a format");
+    assert_eq!(format.sample_rate(), 48_000);
+    // Concealed frames follow once the sender stops, so it reads for a while, not to
+    // the end.
+    let mut peak = 0.0_f32;
+    let until = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < until {
+        if let Ok(Got::Packet {
+            samples,
+            silent: false,
+            ..
+        }) = rx.recv_timeout(Duration::from_millis(100))
+        {
+            peak = samples.iter().fold(peak, |p, v| p.max(v.abs()));
+        }
+    }
+    assert!(
+        (0.3..0.7).contains(&peak),
+        "the half-scale sine plays at about half scale: {peak}"
+    );
+    // The controller came twice (the frame and its redundant copy) and is drawn once.
+    assert!(eventually(|| midi.drawn("Studio").controller(0, 20) == 77));
+    assert_eq!(receiver.stats().midi, 1);
+    assert_eq!(receiver.stats().unsupported, 0);
 }
 
 #[test]
