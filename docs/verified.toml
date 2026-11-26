@@ -2187,7 +2187,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:c71b93da11681ed7", by = "agent:claude", note = "live.rs: a webcam with fps 0 now follows the program rate like a browser page; the Live sources bullet says so" }
+stamp = { hash = "b3:90fc136cabb7353b", by = "agent:claude", note = "Opus test now checks a controller drawn once (a held note is let go when the sender falls silent); tests list reworded to each MIDI message once | merge: #1828 rewrote the webcam capture text (auto frame rate, NV12 first) in this section; re-read, it doesn't touch the JTunnel receiver paragraph, which still holds | kept from the merged side: live.rs: a webcam with fps 0 now follows the program rate like a browser page; the Live sources bullet says so" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:b0dde17f176fcfac", by = "agent:claude", note = "ST5: snapshot.rs plans the program through plan_program with the studio's show fades, transition.rs adds ShowFade, activity.rs adds the show scene as an audio root; the Snapshot bullet's description of plan, compose and keyframe drawing holds, and the details sit in Snapshots, Program scene and Audio routing." }
