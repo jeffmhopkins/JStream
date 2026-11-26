@@ -404,6 +404,9 @@ impl<T> JpegSlot<T> {
     }
 }
 
+/// The text the canvas shows while its live preview is off.
+pub const OFF_MESSAGE: &str = "Live preview off · right-click to enable it";
+
 /// Where the preview stands, for the canvas's placeholder text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PreviewState {
@@ -414,6 +417,10 @@ pub enum PreviewState {
     /// No preview: the engine refused the stream, ended it, or the browser can't show
     /// it. Carries why.
     Unavailable(String),
+    /// The person turned the live preview off (the canvas menu's "Disable live
+    /// preview"): no stream is open, so the engine neither draws nor encodes a picture
+    /// for the canvas, and the item boxes are all the canvas shows.
+    Off,
 }
 
 impl PreviewState {
@@ -434,6 +441,7 @@ impl PreviewState {
             PreviewState::Starting => Some("Starting the preview…".to_owned()),
             PreviewState::Live => None,
             PreviewState::Unavailable(reason) => Some(format!("No preview: {reason}")),
+            PreviewState::Off => Some(OFF_MESSAGE.to_owned()),
         }
     }
 }
@@ -719,6 +727,7 @@ mod tests {
             Some("No preview: x")
         );
         assert_eq!(PreviewState::Live.message(), None);
+        assert_eq!(PreviewState::Off.message().as_deref(), Some(OFF_MESSAGE));
         // #1205: a re-subscribe keeps a live picture, and starts again otherwise.
         assert_eq!(PreviewState::Live.resubscribed(), PreviewState::Live);
         assert_eq!(

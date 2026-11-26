@@ -2077,6 +2077,15 @@ each time its scene changes.
   ([Views report back](#views)). WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
+- **Live preview off.** The canvas menu's "Disable live preview" (CV-19) closes the
+  canvas's stream (`preview.unsubscribe`) and moves `Stream` to the next channel, so
+  the engine draws and encodes nothing for the canvas and a late frame of the closed
+  stream is never drawn; the background says "Live preview off · right-click to enable
+  it" (`PreviewState::Off`). While off, a scene shown, a new rate or a new stage size
+  only updates the `Stream` the canvas would have (`switch` and `reshow` open nothing),
+  and "Enable live preview" subscribes it, starting as a new stream does. The choice is
+  kept in the browser's storage (`jstream.canvas.preview_off`), so a canvas that opens
+  with it off opens no stream; the binary channel is still read for the taps.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
   drags it, or, on a box already selected, drags every selected box. Shift-click adds
   a box to the selection (and drags them all) or takes a selected one out. A press on
