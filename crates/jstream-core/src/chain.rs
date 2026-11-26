@@ -566,6 +566,16 @@ impl Chain {
             .collect()
     }
 
+    /// Every image it reads as texels: its input and what its filters read
+    /// (`scene_mask`, a pack effect's slots). A layer among them is drawn at the canvas
+    /// size, as filters work in its pixels (ADR-0249).
+    pub(crate) fn reads(&self) -> impl Iterator<Item = &GpuKey> {
+        std::iter::once(&self.input).chain(self.filters.iter().flat_map(|filter| {
+            let slots = filter.program.iter().flat_map(|p| p.slots.iter().flatten());
+            filter.scene.iter().chain(slots)
+        }))
+    }
+
     /// The scenes its filters read, in filter order: what must be drawn before it runs.
     /// Each is read from its layer, or from its own chain's output when it has one.
     pub(crate) fn scenes(&self) -> impl Iterator<Item = &SceneId> {

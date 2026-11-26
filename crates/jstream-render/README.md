@@ -220,7 +220,9 @@ and calls this crate.
   it, not its frame's (#1139), and `upload_frame_drawn` does the same for a CPU video
   frame (a capture's). `layer_drawn` holds a layer for a picture only items place (a
   nested 2D scene) at the size they draw it, placed at the picture's size
-  ([ADR-0249](../../docs/adr/0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md)). An import keeps its frame's `FrameSync` hold only
+  ([ADR-0249](../../docs/adr/0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md)),
+  and `share` puts one key's image under another, placed at another extent, for a
+  nested scene that only shows that picture. An import keeps its frame's `FrameSync` hold only
   for the frame that draws it, so the platform can reuse the texture afterwards. An image no frame references is freed only after the GPU has finished the
   last frame that used it, and the cache hands it back as `Reclaimed` so the caller
   picks the thread that drops it
@@ -828,7 +830,10 @@ much of its frame's resolution each item needed (`Image::record_draw`: the textu
 share of the frame over the texels per canvas pixel along the item's less minified axis,
 and all of it for a 3D placement of an upload; a layer placed in 3D records the texels
 per pixel where its polygon is drawn largest, at the near end of each edge from the
-ratio of the ends' `w`, `Shape::projected_minification`). On a cache where `draw_uploads_small` is on (off by
+ratio of the ends' `w`, `Shape::projected_minification`; and a model's draw records
+for its live texture the densest texture coordinates of its textured triangles against
+the most pixels a unit of the model covers at a corner of its bounds,
+`model::live_minification`). On a cache where `draw_uploads_small` is on (off by
 default, so a deterministic render such as a snapshot draws every upload whole), the
 first frame of a key holds the upload at what the caller's `planned` need says (whole
 when it is 0), and each later frame reads what the draws needed over the frames since

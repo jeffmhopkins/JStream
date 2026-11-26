@@ -272,6 +272,11 @@ struct GpuPrimitive {
     material: usize,
     /// The middle of its vertices' bounds, which a blended primitive sorts by.
     center: [f32; 3],
+    /// The most texture coordinates (in units of a whole texture's side, by area) one
+    /// unit of the model's surface spans, over its triangles: how finely a live
+    /// texture is sampled where the model is drawn (ADR-0249). 0 for a primitive with
+    /// no surface or no texture coordinates.
+    texel_density: f32,
 }
 
 struct GpuMaterial {
@@ -441,6 +446,100 @@ fn drawn_box(clip: &[[f32; 4]; 4], bounds: SolidBounds, size: (u32, u32)) -> Opt
         width: x1.saturating_sub(x0),
         height: y1.saturating_sub(y0),
     })
+}
+
+/// The most texture coordinates, by area, one unit of `primitive`'s surface spans over
+/// its triangles: `sqrt(uv area / area)`, the largest of any triangle that has an area.
+fn texel_density(primitive: &jstream_media::model::Primitive) -> f32 {
+    let mut most = 0.0_f32;
+    for triangle in primitive.indices.chunks_exact(3) {
+        let at = |i: u32| primitive.vertices.get(i as usize);
+        let (Some(a), Some(b), Some(c)) = (at(triangle[0]), at(triangle[1]), at(triangle[2]))
+        else {
+            continue;
+        };
+        let e1 = [0, 1, 2].map(|k| f64::from(b.position[k] - a.position[k]));
+        let e2 = [0, 1, 2].map(|k| f64::from(c.position[k] - a.position[k]));
+        let cross = [
+            e1[1] * e2[2] - e1[2] * e2[1],
+            e1[2] * e2[0] - e1[0] * e2[2],
+            e1[0] * e2[1] - e1[1] * e2[0],
+        ];
+        let area = (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
+        let u1 = [0, 1].map(|k| f64::from(b.uv[k] - a.uv[k]));
+        let u2 = [0, 1].map(|k| f64::from(c.uv[k] - a.uv[k]));
+        let uv_area = (u1[0] * u2[1] - u1[1] * u2[0]).abs();
+        if area > 1e-12 && uv_area.is_finite() {
+            let density = (uv_area / area).sqrt() as f32;
+            if density.is_finite() {
+                most = most.max(density);
+            }
+        }
+    }
+    most
+}
+
+/// How many texels of a live texture of `texels` one pixel of `model`, drawn through
+/// `clip` on a canvas of `canvas`, spans where it is drawn largest (ADR-0249): the
+/// densest texture coordinates of the primitives whose material `material` replaces
+/// (every one for `None`), against the most pixels a unit of the model covers at any
+/// corner of its bounds. 0 when it can't be told (a corner at or behind the viewer, or
+/// no such primitive), so the texture is needed whole.
+fn live_minification(
+    model: &Uploaded,
+    material: Option<&str>,
+    clip: &[[f32; 4]; 4],
+    canvas: Canvas,
+    texels: (u32, u32),
+) -> f32 {
+    let density = model
+        .primitives
+        .iter()
+        .filter(|p| {
+            material.is_none_or(|name| {
+                model
+                    .materials
+                    .get(p.material)
+                    .is_some_and(|m| m.name == name)
+            })
+        })
+        .map(|p| p.texel_density)
+        .fold(0.0_f32, f32::max);
+    if density <= 0.0 {
+        return 0.0;
+    }
+    let (width, height) = (f64::from(canvas.width), f64::from(canvas.height));
+    let row = |r: usize| [0, 1, 2, 3].map(|c| f64::from(clip[c][r]));
+    let (rx, ry, rw) = (row(0), row(1), row(3));
+    let length = |r: &[f64; 4]| (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt();
+    let mut pixels = 0.0_f64;
+    for corner in 0..8 {
+        let pick = |bit: usize, axis: usize| {
+            f64::from(if corner & (1 << bit) == 0 {
+                model.bounds.min[axis]
+            } else {
+                model.bounds.max[axis]
+            })
+        };
+        let at = [pick(0, 0), pick(1, 1), pick(2, 2), 1.0];
+        let dot = |r: &[f64; 4]| r.iter().zip(&at).map(|(a, b)| a * b).sum::<f64>();
+        let w = dot(&rw);
+        if w.is_nan() || w <= 1e-6 {
+            return 0.0;
+        }
+        // A projected point moves by at most (|row| + |ndc| |w row|) / w per unit.
+        let (x, y) = (dot(&rx) / w, dot(&ry) / w);
+        let across = (length(&rx) + x.abs() * length(&rw)) / w * width / 2.0;
+        let down = (length(&ry) + y.abs() * length(&rw)) / w * height / 2.0;
+        pixels = pixels.max(across).max(down);
+    }
+    let spanned = f64::from(density) * (f64::from(texels.0) * f64::from(texels.1)).sqrt();
+    let least = spanned / pixels;
+    if least.is_finite() && least > 0.0 {
+        least as f32
+    } else {
+        0.0
+    }
 }
 
 /// The smallest region holding `a` and `b`; an empty one adds nothing.
@@ -1331,6 +1430,7 @@ impl UploadKit {
                 })?,
                 material: p.material,
                 center: [0, 1, 2].map(|c| (min[c] + max[c]) * 0.5),
+                texel_density: texel_density(p),
             });
         }
         let bounds = model.bounds();
@@ -1717,6 +1817,8 @@ impl ModelRuntime {
                     index_count: 6,
                     material: 0,
                     center: [0.0; 3],
+                    // A card's picture is its layer, which no need is recorded for.
+                    texel_density: 0.0,
                 }],
                 materials: vec![GpuMaterial {
                     bind,
@@ -1905,6 +2007,19 @@ impl ModelRuntime {
         } else {
             (solid.clip_matrix(canvas, 0.45 / reach), solid.mirrored())
         };
+        // How much of a live texture's resolution this draw needs, for a picture drawn
+        // only as large as it is seen (ADR-0249).
+        if let Some(texture) = draw.texture.filter(|_| !in_texture)
+            && let Some(image) = texture.image
+        {
+            image.record_draw(live_minification(
+                model,
+                texture.material,
+                &clip,
+                canvas,
+                (image.width(), image.height()),
+            ));
+        }
         let lights = match (draw.lights, camera.as_ref()) {
             (Some(lights), Some(view)) if draw.lighting != Lighting::Unlit => {
                 Some(SceneLighting::new(lights, view))

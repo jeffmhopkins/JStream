@@ -2368,6 +2368,31 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
     }
 }
 
+/// ADR-0249: a live texture's draw records how much of its picture's resolution the
+/// model needs where it is drawn largest: a 512² picture over a unit plane drawn 80
+/// pixels wide needs 80 of its 512 texels each way.
+#[test]
+fn a_live_texture_records_the_resolution_its_model_needs() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let rgba = vec![255u8; 512 * 512 * 4];
+    let picture = compositor
+        .upload_rgba8(512, 512, &rgba)
+        .expect("the picture uploads");
+    let _ = picture.take_need();
+    textured_plane(
+        compositor,
+        Some(super::LiveTexture {
+            image: Some(&picture),
+            material: None,
+        }),
+    );
+    let need = picture.take_need();
+    assert!((need - 80.0 / 512.0).abs() < 0.01, "{need}");
+}
+
 /// ADR-0107 decision 5: a studio-lit mirror reflects its `reflection` picture in place
 /// of the studio gradient, and an unlit model ignores it.
 #[test]

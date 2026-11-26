@@ -42,27 +42,43 @@ ADR-0197 decision 3 stands, with this change: **a nested 2D scene's layer has as
 pixels as the scenes that place it show it with**, on the render thread and the preview
 compositor, which already hold uploads at the size they are drawn.
 
-1. **Which layers.** A layer a mix draws for a scene below the program, in 2D (no
-   camera), that no video chain or model map reads (those draw it with the chains, in
-   the canvas's pixels, which their filters work in), and that places no layer drawn in
-   the canvas's own pixels. Every other layer, the program's, a stage's, a 3D scene's and
-   every one a still, a probe or a frame sheet draws, keeps the canvas's size.
+1. **Which layers.** A layer drawn for a scene below the program, in 2D (no camera),
+   whether a mix draws it or the chains do (a scene nested in one with a video chain,
+   or in one a model's map shows), that places no layer drawn in the canvas's own
+   pixels, and whose image no video chain or model reflection reads as texels: a
+   chain's input or a filter's scene, or the layer a model reflects as a panorama.
+   Those keep the canvas's pixels, which their filters work in; the scenes nested in
+   them are still drawn small. The layer a model shows as its texture is drawn small
+   like any other. Every other layer, the
+   program's, a stage's, a 3D scene's and every one a still, a probe or a frame sheet
+   draws, keeps the canvas's size.
 2. **The size.** As an upload's: a power-of-two fraction of the canvas each way, 1 down to
    1/16, with a quarter of headroom over the most of the canvas's resolution the layer's
    draws needed the frame before and what the placements plan, chosen once a frame. It
    grows the next frame when it is drawn larger, and shrinks only once drawn at less
    than half of it.
-   - **Planned:** the most a 2D scene enlarges it, times what that scene's own layer
-     needs when it is drawn small too; all of it while a transition's track shows it. A
+   - **Planned:** the most a 2D scene enlarges it, times the share of the canvas that
+     scene's own layer holds when it is drawn small too; all of it while a transition's track shows it. A
      new layer starts there, or at the canvas's size when nothing plans it.
    - **Measured:** each draw that places it records what it needed. Unlike an upload's,
      a layer seen in 3D records what its polygon shows where it is largest (the near
      end of each edge, from the ratio of the ends' `w`), so a scene on a small card is
-     drawn small. An upload seen in 3D still needs its whole frame.
+     drawn small. An upload seen in 3D still needs its whole frame. A model that shows
+     a layer as its texture records the most texels a pixel of it spans: the densest
+     texture coordinates of its textured triangles (by area, per unit of its surface)
+     against the most pixels a unit of the model covers at any corner of its bounds,
+     so a camera that closes in on the model raises its screens to full resolution.
 3. **How it is drawn.** The layer is placed at the canvas's size whatever its pixels.
    The scene's items are laid out on the canvas as before, then scaled onto the layer's
    pixels: each axis by its own ratio, an item's depth and perspective by their mean.
    Kept layers and redrawn boxes (ADR-0194, ADR-0201) work in the layer's pixels.
+4. **A scene of one whole picture has no layer.** A layer of decision 1 whose scene has
+   one item (no effects, move, fade, motion or groups, opaque, in the normal mode,
+   uncropped), a capture or a picture over no background, that this frame, with its
+   live values, covers the canvas's box exactly (unrotated, flat, unflipped, and
+   stretched or of the canvas's aspect ratio), is not drawn: its key holds that
+   picture's image, placed at the canvas's size, and the scenes that place it sample
+   the picture itself. A frame where it doesn't draws it into a layer as before.
 
 No setting, switch, protocol message or file changes.
 
@@ -78,5 +94,11 @@ No setting, switch, protocol message or file changes.
 - **Not exact.** A layer rounds its size up, so its two ratios differ by under a texel,
   and an item rotated in it is drawn as at their mean. Edges are filtered from fewer
   texels, as an upload drawn small is.
+- **A full-frame capture costs no pass.** A scene that only shows a 1080p webcam over
+  its canvas is the webcam's texture wherever it is placed.
+- **A model's texture is sized from an estimate.** The densest triangle and the
+  nearest corner of the bounds overstate what most of the model needs, so a textured
+  model may keep more texels than it shows; never fewer, short of a pose that moves
+  its surface past its rest bounds.
 - **What stays.** Snapshots, stills, frame sheets and probes draw every layer at the
   canvas's size, so their pixels are unchanged. A nested 3D scene's layer is unchanged.

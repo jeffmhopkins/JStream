@@ -186,7 +186,7 @@ stamp = { hash = "b3:c06c302493ca4828", by = "agent:claude", note = "The retarge
 stamp = { hash = "b3:737259c9f9481f49", by = "agent:scene-folders", note = "Edited: Folder gains scene?, each owner (the scene list, or one scene's keyframes and timelines) with its own tree (ADR-0222). The scenes line already lists timelines and folder?; holds. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:c3510eb1af533c8c", by = "agent:claude", note = "Added that a nested 2D scene only items place draws into a layer of its shown size (ADR-0249) beside #1139's uploads" }
+stamp = { hash = "b3:fef317fa53636f75", by = "agent:claude", note = "Sentence on nested 2D scenes now covers model textures, 3D cards as the camera sees them and the one-capture pass-through (ADR-0249)" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -216,7 +216,7 @@ stamp = { hash = "b3:813757b8f56afa0e", by = "agent:aa-thread", note = "Edited t
 stamp = { hash = "b3:d8980baa4f07826b", by = "agent:effects-perf", note = "Re-read against cheaper depth bloom, ambient occlusion and volumetric fog shaders and a per-filter bench: the pipeline's steps, the compositor's passes, the view depth a depth-reading scene filter gets (one more draw into a half-float 1/w layer) and how filters draw into Rgba16Float layers are as described; only the work inside three filters' fragment shaders changed." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:4796bf6075cd7524", by = "agent:claude", note = "Added that a nested 2D scene only items place draws into a layer of its shown size (ADR-0249) beside #1139's uploads" }
+stamp = { hash = "b3:8fbf788532ed0b6c", by = "agent:claude", note = "Sentence on nested 2D scenes now covers model textures, 3D cards as the camera sees them and the one-capture pass-through (ADR-0249)" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:282dd952573ee86e", by = "agent:claude", note = "Re-read against SceneCamera.fixed_aperture (0.191, ADR-0223) on the latest alpha.13 train: nothing here describes the camera's depth-of-field fields or the protocol number, so it holds." }
@@ -231,7 +231,7 @@ stamp = { hash = "b3:d8dcca97fe057313", by = "agent:hologram", note = "Re-read: 
 stamp = { hash = "b3:62c35a0b1e6ce1d3", by = "agent:claude", note = "Depth layers: the view depth is now described as a one-channel half-float depth layer, as a model's depth and a shadow map are; the rest re-read against the render crate's diff, which changes no other statement" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:898312bf8dbd7f40", by = "agent:claude", note = "Added that a nested 2D scene only items place draws into a layer of its shown size (ADR-0249) beside #1139's uploads" }
+stamp = { hash = "b3:d15c0d16ef29bfb7", by = "agent:claude", note = "Sentence on nested 2D scenes now covers model textures, 3D cards as the camera sees them and the one-capture pass-through (ADR-0249)" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: the background sentence says the fade between backgrounds is in the project's blending space, matching color.rs and scene.rs" }
@@ -612,7 +612,7 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Changed the
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: replaced 'a 3D model's layer isn't blurred' with ADR-0165's model depth of field: colour and view depth drawn first, four passes gathering neighbours whose blur reaches each pixel; the model draw, lights and placement text still hold" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:d0d031ef2716e152", by = "agent:claude", note = "Re-read after renumbering this branch's ADRs to avoid #1820's 0243/0244: economy is ADR-0245, the kept model layer ADR-0246, the 3D-extras guard ADR-0247; every link and ID in the section now names the new numbers, text otherwise unchanged" }
+stamp = { hash = "b3:e8714af1a19c100a", by = "agent:claude", note = "Sentence on nested 2D scenes now covers model textures, 3D cards as the camera sees them and the one-capture pass-through (ADR-0249)" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:2e0355f0482c2fe3", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -627,7 +627,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited the 3D model paragraph: drawn multisampled with the switches' samples, resolved before filters, 4 until set (ADR-0242); re-read the Windows path, model and depth parts against render's model/msaa.rs, gpu.rs and the platform device features change." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:f1229df21c291781", by = "agent:claude", note = "Re-read after renumbering this branch's ADRs to avoid #1820's 0243/0244: economy is ADR-0245, the kept model layer ADR-0246, the 3D-extras guard ADR-0247; every link and ID in the section now names the new numbers, text otherwise unchanged" }
+stamp = { hash = "b3:848e8c7b0bdd4193", by = "agent:claude", note = "Sentence on nested 2D scenes now covers model textures, 3D cards as the camera sees them and the one-capture pass-through (ADR-0249)" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -2214,7 +2214,7 @@ stamp = { hash = "b3:c0a1b5f469906d4c", by = "agent:release-alpha13", note = "B1
 stamp = { hash = "b3:63718a8c34101c1f", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): Re-read: the only live.rs change counts a browser page's new GPU frame as a paint in look_timed; no other sources-thread behaviour changed." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:605348751b445895", by = "agent:claude", note = "Re-read against nested 2D scenes drawn into layers of their shown size (ADR-0249); the section lists what snapshot.rs holds and points to Snapshots for nesting, still true" }
+stamp = { hash = "b3:c9af78fd07ced4f7", by = "agent:claude", note = "Re-read against nested scenes under chains drawn small, the capture pass-through and model-texture needs (ADR-0249); the section still points to Snapshots for nesting" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:21fd4f392d245f9c", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
@@ -2601,7 +2601,7 @@ stamp = { hash = "b3:dd9dbcda681737d4", by = "agent:claude", note = "Re-stamped 
 stamp = { hash = "b3:51909fec2e320851", by = "agent:claude", note = "Re-stamped after the train merges dropped this PR's stamp. Re-read the audio clip paragraph and test list against show_audio.rs, shows.rs and tests/shows.rs: opacity-0 show-audio items for when_shown or media sources, seeks, the floor, live values under gestures and bindings, hand takeover, the release on stop, a clip on a second track keeping its source up, and no faders moved in rehearsal. | kept from the merged side: Re-read: tests/shows.rs changed only by folder: None in a TimelineInfo literal; holds. | Merged the alpha.13 train at c616f3f (preview.show and request_keyframe at 0.188, ADR-0217 direct encoders, the fly camera and mapping panels): its text here is kept as the train stamped it, it touches no scene-folder code (scenes.rs, organise.rs, the mock), and the only combined text is the versions paragraph, 0.190 above the train's 0.188." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:26a99ed7b49dae92", by = "agent:claude", note = "Nested scenes paragraph now says a 2D scene's layer only items and tracks place is held at the size they draw it, placed at the canvas's size (drawn_small, layer_need, scale_items, ADR-0249)" }
+stamp = { hash = "b3:f5416f30b80be37e", by = "agent:claude", note = "Nested scenes: a layer the chains draw is drawn small too, reads_texels now names chain reads and model reflections only, and a scene of one whole capture is placed as it (passes_through, share_pass)" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2613,7 +2613,7 @@ stamp = { hash = "b3:c802a93fc0f13af0", by = "agent:3d-groups", note = "Dependen
 stamp = { hash = "b3:3a4b70d1f92163a7", by = "agent:claude-audio-picker", note = "Audio sources: an audio_input with a device records Input, desktop_audio with a device records OutputLoopback, without one DefaultOutputLoopback; edited" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/chain.rs"]
-stamp = { hash = "b3:52241a47b34845d9", by = "agent:claude", note = "Replayed on #1812: re-read for the test-only Chains::scene_model_draws and the drawn-once assertion; the section's text holds with the earlier items and the GPU parts beside it" }
+stamp = { hash = "b3:d1d3898eea5dbe94", by = "agent:claude", note = "Nested scenes: a layer the chains draw is drawn small too, reads_texels now names chain reads and model reflections only, and a scene of one whole capture is placed as it (passes_through, share_pass)" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/effect_packs.rs"]
 stamp = { hash = "b3:2dea51e38948ab0c", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Extended the upgrade paragraph to shader sources (Migration, ShaderSource::migrate, live sync after) and said a shader source loads before its pack verbatim; checked against effect_packs.rs, engine.rs and the new test; dropped the not-yet line for sources. | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Replaced 'not migrated yet' with the upgrade: older-version settings through Effect::migrate, fitted to the kind, newer ones kept, one revision with state.changed from client engine, saved, logged in undo history; checked against install_effects and Graph::upgrade_filters." }
@@ -2640,7 +2640,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:605348751b445895", by = "agent:claude", note = "Nested scenes paragraph now says a 2D scene's layer only items and tracks place is held at the size they draw it, placed at the canvas's size (drawn_small, layer_need, scale_items, ADR-0249)" }
+stamp = { hash = "b3:c9af78fd07ced4f7", by = "agent:claude", note = "Nested scenes: a layer the chains draw is drawn small too, reads_texels now names chain reads and model reflections only, and a scene of one whole capture is placed as it (passes_through, share_pass)" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:87769dc0a87ae618", by = "agent:aa-thread", note = "Edited the probe capture paragraph: a probe's models draw with one sample (ADR-0242 decision 4), matching probes.rs which sets 1 and restores the frame's count; re-read the blending paragraph, where snapshot.rs sets the model samples beside the blending space." }
@@ -2742,7 +2742,7 @@ stamp = { hash = "b3:50e82dc508a130ff", by = "agent:claude", note = "re-read aft
 stamp = { hash = "b3:359c75f4e17e4a0d", by = "agent:release-alpha13", note = "Re-read against F6b: core outputs now records HEVC and AV1 to MP4; the daemon's recording and receiver tests still describe an H.264 run, which stays true. Re-verified after merging the alpha.13 train (up to d3d82ca), whose stamps were kept; the train's encoder-session text sits beside this change. | merge: Train merges of #1753 r2 (c85053c, overlays come down when a running show is deleted), #1757 r2 (fcea255, seek on jump and rehearse) and #1766 (5569e22, shared preview encode): re-read; each PR's added lines are present, and core#shows' test list combines #1753's 'or the show is deleted' with #1757's upcoming-clip and rehearsal clauses. | kept from the merged side: Dependency change only: core outputs now says a new video session that got no hardware encoder takes a preview stream's session back; the daemon design says nothing about encoder sessions and holds. | kept from the merged side: Dependency change only: core outputs now speaks of several preview hardware sessions; the daemon design does not mention encoder sessions and holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:26a99ed7b49dae92", by = "agent:claude", note = "Re-read: the daemon's design doesn't describe nested-scene layer sizes; the Snapshots change (ADR-0249) doesn't touch what it says" }
+stamp = { hash = "b3:f5416f30b80be37e", by = "agent:claude", note = "Re-read: the daemon's design doesn't describe nested-scene layers; the Snapshots changes (ADR-0249) don't touch it" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:fb916fb4301acdcb", by = "agent:claude", note = "Re-read in full after the train merge. Its stale inputs were core's audit-log and logging sections (mute sentences, MIDI binding debug log), which change nothing it says; its option list names --jtunnel-midi and --ptz-camera, both parsed in args.rs." }
@@ -3681,7 +3681,7 @@ stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "macOS para
 stamp = { hash = "b3:b19140a198327cfa", by = "agent:f7-builder", note = "Windows' video encoders still take encode targets through Codecs::on_context; that NVENC/AMF now answer before the MFT (ADR-0217) changes nothing this section says" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:c3510eb1af533c8c", by = "agent:claude", note = "Re-read: GPU frame lifetime and interop are unchanged by nested 2D scenes drawn into smaller layers (ADR-0249)" }
+stamp = { hash = "b3:fef317fa53636f75", by = "agent:claude", note = "Re-read: frame lifetime holds; a shared capture image's FrameSync hold is cleared at end_frame like the original's" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map, against wave/m3, gains main's MediaDecoders and paths in the platform row, the jstream-browser row, platform-windows without the CEF backend, the outputs row, the ADR-0058 links and the apps row's desktop, daemon and browser-helper text, beside wave/m3's CLAP rows. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. The GPU-frame types and who may use unsafe with them still hold." }
@@ -5325,7 +5325,7 @@ stamp = { hash = "b3:83fd3bbd406c7796", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to youtube.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:d17d3a3feb133a95", by = "agent:claude", note = "Added layer_drawn to the ResourceCache list and its sizing next to upload_drawn, render_into's canvas-of-the-layer's-size note, and record_draw's 3D need for a layer (projected_minification)" }
+stamp = { hash = "b3:35974c7c99795b24", by = "agent:claude", note = "Added ResourceCache::share, and record_draw's need for a model's live texture (live_minification), beside layer_drawn" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -5337,7 +5337,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:62c35a0b1e6ce1d3", by = "agent:claude", note = "Depth layers: re-read Composite, render_into's bounds, the resources table, ResourceCache, depth of field on models and Shadows against the diff; added the depth_layer row, the depth wipe and content of a view depth, and that shadow maps and the focus depth are depth layers" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:898312bf8dbd7f40", by = "agent:claude", note = "Added layer_drawn to the ResourceCache list and its sizing next to upload_drawn, render_into's canvas-of-the-layer's-size note, and record_draw's 3D need for a layer (projected_minification)" }
+stamp = { hash = "b3:d15c0d16ef29bfb7", by = "agent:claude", note = "Added ResourceCache::share, and record_draw's need for a model's live texture (live_minification), beside layer_drawn" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: the Color bullet says over_black and mix blend in the Blending space given, encoded for srgb and linear light for linear, matching color.rs and scene.rs" }
@@ -5718,7 +5718,7 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: the depth of field paragraph now says models blur as their layer is drawn, and a new paragraph describes ModelFocus's four passes (tiles, reach, pack, gather) as built in model/focus.rs and focus/*.wgsl; the resource table lists its layers and scratch" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:d0d031ef2716e152", by = "agent:claude", note = "Re-read after renumbering this branch's ADRs to avoid #1820's 0243/0244: economy is ADR-0245, the kept model layer ADR-0246, the 3D-extras guard ADR-0247; every link and ID in the section now names the new numbers, text otherwise unchanged" }
+stamp = { hash = "b3:e8714af1a19c100a", by = "agent:claude", note = "Added ResourceCache::share, and record_draw's need for a model's live texture (live_minification), beside layer_drawn" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:2e0355f0482c2fe3", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -5733,7 +5733,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited: resources table gains the multisampled model targets and surface resolve pipeline (model/msaa.rs), Models says prepass and Equal shading are per sample with the colour resolved in-pass, and the surface buffer paragraph says the multisampled surface resolves to the nearest sample (ADR-0242); re-read the model, depth-of-field, surface and adapter parts against model/mod.rs, msaa.rs, compositor.rs and gpu.rs." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:f1229df21c291781", by = "agent:claude", note = "Re-read after renumbering this branch's ADRs to avoid #1820's 0243/0244: economy is ADR-0245, the kept model layer ADR-0246, the 3D-extras guard ADR-0247; every link and ID in the section now names the new numbers, text otherwise unchanged" }
+stamp = { hash = "b3:848e8c7b0bdd4193", by = "agent:claude", note = "Added ResourceCache::share, and record_draw's need for a model's live texture (live_minification), beside layer_drawn" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -6114,7 +6114,7 @@ stamp = { hash = "b3:ec9884ac2d146606", by = "agent:effects-perf", note = "Outli
 stamp = { hash = "b3:5ef676bebc254917", by = "agent:issues-thread", note = "Added Pixel units (ADR-0211, #1680): px and px/s settings of built-in kinds scaled by the input's texels per extent pixel in VideoFilter::fit before the pass draws, per axis or by the geometric mean, ints rounded, caps kept; border frame_slice, depth kinds and pack effects unscaled; reach in texels, video_filter_outset in extent pixels, pad in texels. Bounded filters now say reach is in input texels." }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:481d8efb621e09e6", by = "agent:claude", note = "Re-read: one scene, items, models drawn with fewer pixels; layer_drawn adds no new scene concept, still holds" }
+stamp = { hash = "b3:37cffd8ad0745578", by = "agent:claude", note = "Re-read: models' live textures and layers; the new need recording and cache share add no scene concept, still holds" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "upstream GPU-frames and pipeline text changed for macOS encode targets and the planar pair; render's purpose (from #1767) already names Nv12Target::plane_textures and gpu_frame | merge: #1767's merged step 4 says the NV12 pass writes GpuFrame::planar pairs too; render's purpose already says it renders into an encode target's plane views, which covers both, so it holds | merge: The train merge brought only #1767, already merged here; render's purpose says it renders into an encode target's plane views, which covers the planar pair, so it holds | merge: Train merge brought #1765 webcam GPU frames, sampled like capture frames; render's purpose covers them and the plane-view NV12 pass, holds | kept from the merged side: Nv12Converter bullet now lists Nv12Target::plane_textures and gpu_frame beside nv12_texture and Nv12Planes; matches convert/mod.rs and the platform's GPU frames section | kept from the merged side: #1767: Nv12Converter bullet lists Nv12Target::plane_textures and gpu_frame beside nv12_texture and Nv12Planes, matching convert/mod.rs; merged the train's #1761, whose ARCH On macOS paragraph (Metal interop, planar targets planned) agrees with it | kept from the merged side: ARCH gpu-pipeline gained a macOS paragraph only; render's purpose is unchanged by it | merge: Train merge of #1767 (db1e07a, two-plane NV12 encode targets): re-read; #1767's added lines are present, no text conflicts. | kept from the merged side: Re-read against the GPU-frames and GPU-pipeline edits, which only add macOS webcams as another IOSurface producer; render still imports Bgra8UnormSrgb frames as before, nothing here changes | merge: Train merge brought #1767: render's NV12 pass writes planar pairs too; the purpose text about sampling capture frames on the engine device covers webcam GPU frames, holds" }
@@ -6123,7 +6123,7 @@ stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "upstream G
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:c3510eb1af533c8c", by = "agent:claude", note = "Re-read: one scene, items, models drawn with fewer pixels; layer_drawn adds no new scene concept, still holds" }
+stamp = { hash = "b3:fef317fa53636f75", by = "agent:claude", note = "Re-read: models' live textures and layers; the new need recording and cache share add no scene concept, still holds" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -6141,7 +6141,7 @@ stamp = { hash = "b3:d8980baa4f07826b", by = "agent:effects-perf", note = "Re-re
 stamp = { hash = "b3:62c35a0b1e6ce1d3", by = "agent:claude", note = "Depth layers: added Compositor::depth_layer and ResourceCache::depth_layer to the view depth bullet and the cache bullet; re-read the bullets on layers, render_view_depth and draw_model_depth against image.rs, compositor.rs and cache.rs" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:898312bf8dbd7f40", by = "agent:claude", note = "Re-read: one scene, items, models drawn with fewer pixels; layer_drawn adds no new scene concept, still holds" }
+stamp = { hash = "b3:d15c0d16ef29bfb7", by = "agent:claude", note = "Re-read: models' live textures and layers; the new need recording and cache share add no scene concept, still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: Color::over_black and mix take a Blending; the purpose names no colour space for them, so it holds" }
@@ -6522,7 +6522,7 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Depth of fi
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: the 3D model bullet now says draw_model blurs a model by its own depth when the camera has depth of field (ADR-0165); view depth and placement bullets unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:d0d031ef2716e152", by = "agent:claude", note = "Re-read after renumbering this branch's ADRs to avoid #1820's 0243/0244: economy is ADR-0245, the kept model layer ADR-0246, the 3D-extras guard ADR-0247; every link and ID in the section now names the new numbers, text otherwise unchanged" }
+stamp = { hash = "b3:e8714af1a19c100a", by = "agent:claude", note = "Re-read: models' live textures and layers; the new need recording and cache share add no scene concept, still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:2e0355f0482c2fe3", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -6537,7 +6537,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited: the model paragraph says layers draw multisampled with set_model_antialiasing's count (1 until set, stepping down to what the device draws), colour resolved in-pass, surface resolved to the nearest sample, lit cards single-sampled (ADR-0242); checked against model/mod.rs, msaa.rs, surface_resolve.wgsl, compositor.rs, gpu.rs and the new tests." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:f1229df21c291781", by = "agent:claude", note = "Re-read after renumbering this branch's ADRs to avoid #1820's 0243/0244: economy is ADR-0245, the kept model layer ADR-0246, the 3D-extras guard ADR-0247; every link and ID in the section now names the new numbers, text otherwise unchanged" }
+stamp = { hash = "b3:848e8c7b0bdd4193", by = "agent:claude", note = "Re-read: models' live textures and layers; the new need recording and cache share add no scene concept, still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }

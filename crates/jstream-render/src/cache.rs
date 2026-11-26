@@ -651,6 +651,34 @@ impl<K: Ord + Clone> ResourceCache<K> {
         Ok(&entry.image)
     }
 
+    /// Puts the image under `from` under `key` too, placed at `extent`, and marks both
+    /// used this frame: for a nested scene that only shows one picture over all of its
+    /// canvas, which is then placed as that picture, with no layer drawn (ADR-0249).
+    /// The two share the texture, its count of writes and what its draws need, and
+    /// [`Self::end_frame`] lets go of the shared frame hold as it does the original's.
+    /// A layer `key` held before is retired. Returns `false`, and changes nothing, when
+    /// there is nothing under `from`.
+    pub fn share(&mut self, key: &K, from: &K, extent: FrameSize) -> bool {
+        let frame = self.frame;
+        let Some(source) = self.live.get_mut(from) else {
+            return false;
+        };
+        source.used = frame;
+        let mut image = source.image.clone();
+        image.set_extent(extent);
+        match self.live.get_mut(key) {
+            // The same texture shared again: nothing to free.
+            Some(entry) if entry.image.texture() == image.texture() => {
+                entry.image = image;
+                entry.used = frame;
+            }
+            _ => {
+                self.replace(key, image, 0);
+            }
+        }
+        true
+    }
+
     /// The depth layer for `key` at `width` by `height`, for
     /// [`Compositor::render_view_depth`] and [`Compositor::draw_model_depth`], and marks
     /// it used this frame. A depth layer of the same size is reused, as [`Self::layer`]

@@ -2282,11 +2282,17 @@ restarts below it, and a scene a `scene_mask` reads restarts it at 1. It is one 
 Data model states it for clients. Width is not bounded: each distinct `(scene, depth)`
 keeps its own FP16 layer, so a program with *k* distinct nested scene
 sources holds *k* such textures. Each is the canvas's size, except a 2D scene's that
-only other scenes' items and a transition's tracks place, which the program stage and
+only items (other scenes', an item's effects box) and a transition's tracks place,
+whether a mix or the chains draw it, and that no video chain or model reflection reads
+as texels (`Shot::reads_texels`; a model's texture records what it needs as an item
+does), which the program stage and
 the preview hold at the size those items draw it, down to a sixteenth of the canvas each way
 and up, placed at the canvas's size: its items are laid out on the canvas and scaled
 onto the layer (`snapshot::drawn_small`, `layer_need`, `scale_items`;
-[ADR-0249](../../docs/adr/0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md)). The graph already rejects cycles at every
+[ADR-0249](../../docs/adr/0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md)).
+Such a scene that only shows one capture, or one picture over no background, covering
+its canvas exactly this frame has no layer at all: its key holds that picture's image,
+placed at the canvas's size (`passes_through`, `share_pass`, `ResourceCache::share`). The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
 draws nothing. A group that shares its 3D scene's space
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)) is the exception:

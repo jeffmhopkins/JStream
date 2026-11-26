@@ -1589,7 +1589,9 @@ after the GPU has finished the last frame that used it (see
 a source's frame that only items draw at the size those items draw it, not the frame's
 (#1139), so a 1080p still in a small box keeps a small texture, as does a capture's CPU
 frame (a 1080p webcam shown as a small picture), and a nested 2D scene that only
-items place draws into a layer of the size they show it at
+items or a model's texture show draws into a layer of the size they show it at, on a
+3D card or a model as the camera sees it, and one that only shows one capture over its
+canvas is placed as that capture with no layer
 ([ADR-0249](adr/0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md)), and a still image keeps
 no decoded copy once the program stage has uploaded it: the `jstream-stills` thread lets
 go of it then and decodes the file again when a draw needs it, so a render tick never
