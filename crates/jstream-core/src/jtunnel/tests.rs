@@ -598,7 +598,9 @@ fn an_opus_stream_plays_and_feeds_its_midi() {
     .expect("a receiver");
     let (_, to) = sender.next();
     let mut encoder = OpusEncoder::new(48_000, 2, Application::Audio).expect("an encoder");
-    let note_on: &[u8] = &[0x90, 64, 90];
+    // A controller, not a note: a held note is let go once the sender falls silent
+    // (ADR-0207), which may be before the check below.
+    let cc: &[u8] = &[0xB0, 20, 77];
     let mut coded: Vec<Vec<u8>> = Vec::new();
     let (tx, rx) = channel();
     let mut stream = None;
@@ -621,7 +623,7 @@ fn an_opus_stream_plays_and_feeds_its_midi() {
             codec: Codec::Opus,
             frame_samples: wire::OPUS_FRAME_SAMPLES,
         };
-        let events = [(5_u16, note_on)];
+        let events = [(5_u16, cc)];
         let i = seq as usize;
         let mut frames = vec![FrameOut {
             events: if seq == 3 { &events } else { &[] },
@@ -669,8 +671,8 @@ fn an_opus_stream_plays_and_feeds_its_midi() {
         (0.3..0.7).contains(&peak),
         "the half-scale sine plays at about half scale: {peak}"
     );
-    // The note came twice (the frame and its redundant copy) and is drawn once.
-    assert!(eventually(|| midi.drawn("Studio").held(0, 64) == 90));
+    // The controller came twice (the frame and its redundant copy) and is drawn once.
+    assert!(eventually(|| midi.drawn("Studio").controller(0, 20) == 77));
     assert_eq!(receiver.stats().midi, 1);
     assert_eq!(receiver.stats().unsupported, 0);
 }

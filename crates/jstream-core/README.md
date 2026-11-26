@@ -354,7 +354,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   keepalive, the frames in order with their positions and times, the bye, an
   unaccepted sender, a datagram that isn't JTunnel, one too long and a receiver's packet
   dropped and counted, a rate change failing the input, a second source for a sender
-  refused until the first closes, a stopped receiver's input told why, an Opus stream playing and feeding its MIDI once per note, the profile's playout readings, the
+  refused until the first closes, a stopped receiver's input told why, an Opus stream playing and feeding each MIDI message once, the profile's playout readings, the
   accepted-sender and setup checks, and through the engine a
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
