@@ -262,6 +262,13 @@ Contents:
   `Os` error naming the caller's OS call. Windows' capture and H.264 CPU path, its Media
   Foundation webcams, and Linux's PipeWire capture, VA-API upload and V4L2 webcams use
   them.
+- **Priority classes** (`priority.rs`): `priority::Class`, the scheduling classes a
+  JStream process asks Windows for (`normal`, `above_normal`, `high`, `realtime`), how
+  `JSTREAM_GPU_PRIORITY` and `JSTREAM_CPU_PRIORITY` name a lower one (`Class::named`),
+  and the order a refused class falls back in (`Class::tries`). Pure data: the engine's
+  platform crate ([ADR-0195](../../docs/adr/0195-the-engine-runs-at-top-priority.md))
+  and the browser helper ([ADR-0252](../../docs/adr/0252-browser-paints-keep-up-on-a-busy-gpu.md))
+  read the variables the same way, and each makes its own OS calls.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such

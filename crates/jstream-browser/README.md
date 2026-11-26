@@ -58,8 +58,9 @@ policy decides. Pop-ups are blocked, and nothing a page sends reaches the engine
 | (CPU frames) | `cpu_frames.rs` | Linux, macOS, tests | slot files and the premultiplied-to-straight conversion |
 | `FakeBrowser` | `fake.rs` | feature `fake` | an in-memory backend for tests |
 | `CefBackend`, `CefConfig` | `cef/` | feature `cef`, Windows, Linux and macOS | starts and drives the helper: named pipes and shared textures on Windows, a socket pair and slot files on Linux and macOS, a job object so no helper outlives the engine |
-| `run_helper` | `helper/` | feature `helper`, Windows, Linux and macOS | the helper's CEF code: windowless pages, the request and permission handlers, the page API in the renderer, frames and audio; on macOS also CEF's framework loader, its sandbox and the helper's `NSApp` class (`helper/mac.rs`) |
+| `run_helper` | `helper/` | feature `helper`, Windows, Linux and macOS | the helper's CEF code: windowless pages, the request and permission handlers, the page API in the renderer, frames and audio (on Windows copied in the engine's GPU scheduling class, and a paint that fails asked for again, [ADR-0252](../../docs/adr/0252-browser-paints-keep-up-on-a-busy-gpu.md)); on macOS also CEF's framework loader, its sandbox and the helper's `NSApp` class (`helper/mac.rs`) |
 | (reload hold) | `reload_hold.rs` | feature `helper` | no paints from a reload until the new document paints for real (#1151, #1155) |
+| (paint slots) | `paint_slots.rs` | feature `helper`, tests | which slot the helper paints into next, and a repaint asked for once the engine frees a slot after a paint was skipped ([ADR-0252](../../docs/adr/0252-browser-paints-keep-up-on-a-busy-gpu.md)) |
 
 Only `jstream-browser-helper` turns on `helper`, so no other build downloads or compiles
 CEF. The engine side builds no CEF; `dox` compile-checks it with the rest.

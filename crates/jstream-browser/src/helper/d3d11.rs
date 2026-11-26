@@ -12,12 +12,23 @@
 //! the next of three textures the page shares with the engine through NT handles; the
 //! copy is waited for before the callback returns, since CEF takes its texture back then.
 //! A slot the engine hasn't released isn't painted into: with all three held, the paint is
-//! skipped. Popup-widget paints are ignored.
+//! skipped, and the page asked to paint again once the engine releases one; a paint whose
+//! copy fails is asked for again shortly after (ADR-0252). Popup-widget paints are ignored.
+//!
+//! The copies run in the engine's GPU scheduling class (ADR-0252): the first time the
+//! helper makes a device, the process asks Windows for the class `JSTREAM_GPU_PRIORITY`
+//! names (`realtime` by default, then `high`), read as the engine reads it, so a copy
+//! the engine is waiting for isn't queued behind the engine's own frames on a busy GPU.
+//! A refusal is reported to the engine once; nothing fails.
 
 use std::ffi::c_void;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, Once, PoisonError};
 use std::time::{Duration, Instant};
 
+use windows::Wdk::Graphics::Direct3D::{
+    D3DKMT_SCHEDULINGPRIORITYCLASS_ABOVE_NORMAL, D3DKMT_SCHEDULINGPRIORITYCLASS_HIGH,
+    D3DKMT_SCHEDULINGPRIORITYCLASS_REALTIME, D3DKMTSetProcessSchedulingPriorityClass,
+};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HMODULE, LUID};
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_0};
 use windows::Win32::Graphics::Direct3D11::{
@@ -32,7 +43,12 @@ use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, DXGI_SHARED_RESOURCE_READ, DXGI_SHARED_RESOURCE_WRITE, IDXGIAdapter,
     IDXGIFactory4, IDXGIResource1,
 };
+use windows::Win32::System::Threading::GetCurrentProcess;
 use windows::core::{Interface, PCWSTR};
+
+use jstream_platform::priority::{Class, GPU_VARIABLE};
+
+use crate::paint_slots::PaintSlots;
 
 /// Textures each page shares with the engine.
 pub(crate) const SLOTS: usize = 3;
@@ -113,6 +129,54 @@ impl Gpu {
     }
 }
 
+/// Asks Windows for the engine's GPU scheduling class for this process, the first time
+/// it is called; later calls return `None`. `Some` is a warning for the engine's log: the
+/// variable named no class it takes, or Windows refused every class asked for.
+pub(crate) fn raise_gpu_class_once() -> Option<String> {
+    static ONCE: Once = Once::new();
+    let mut warning = None;
+    ONCE.call_once(|| warning = raise_gpu_class());
+    warning
+}
+
+fn raise_gpu_class() -> Option<String> {
+    let value = std::env::var(GPU_VARIABLE).ok();
+    let (class, known) = Class::named(value.as_deref(), Class::GPU_DEFAULT, Class::Realtime);
+    let mut refused = Vec::new();
+    for &asked in class.tries() {
+        let code = match asked {
+            Class::Normal => return None,
+            Class::AboveNormal => D3DKMT_SCHEDULINGPRIORITYCLASS_ABOVE_NORMAL,
+            Class::High => D3DKMT_SCHEDULINGPRIORITYCLASS_HIGH,
+            Class::Realtime => D3DKMT_SCHEDULINGPRIORITYCLASS_REALTIME,
+        };
+        // SAFETY: `GetCurrentProcess` returns a pseudo-handle that is always valid and
+        // needs no closing, and the class is passed by value.
+        let status = unsafe { D3DKMTSetProcessSchedulingPriorityClass(GetCurrentProcess(), code) };
+        if status.is_ok() {
+            return (!known).then(|| unknown(value.as_deref()));
+        }
+        refused.push(format!("{} (NTSTATUS {:#010x})", asked.name(), status.0));
+    }
+    if refused.is_empty() {
+        return (!known).then(|| unknown(value.as_deref()));
+    }
+    Some(format!(
+        "the browser helper keeps the normal GPU scheduling class, so pages' copies can \
+         wait behind the engine's frames: Windows refused {}",
+        refused.join(", then ")
+    ))
+}
+
+fn unknown(value: Option<&str>) -> String {
+    format!(
+        "the browser helper ignored {GPU_VARIABLE}={:?}, not a GPU scheduling class, and \
+         used {}",
+        value.unwrap_or_default(),
+        Class::GPU_DEFAULT.name()
+    )
+}
+
 /// One texture a page shares with the engine, and its NT handle, closed with it.
 struct Shared {
     texture: ID3D11Texture2D,
@@ -137,15 +201,14 @@ struct Ring {
     generation: u64,
     size: (u32, u32),
     slots: [Option<Shared>; SLOTS],
-    /// Slots the engine hasn't released. Kept across a new device or size: the engine
-    /// may still be reading the slot's old texture.
-    busy: [bool; SLOTS],
-    next: usize,
+    /// Which slot is next, and which the engine holds. Kept across a new device or
+    /// size: the engine may still be reading a slot's old texture.
+    paints: PaintSlots<SLOTS>,
 }
 
 // SAFETY: the D3D11 textures are only used on CEF's UI thread (paints), and the handles
 // are plain values; the lock moves the ring between that thread and the pipe's reader,
-// which only touches `busy`.
+// which only touches `paints`.
 unsafe impl Send for Ring {}
 
 /// One paint copied into a shared texture.
@@ -157,12 +220,12 @@ pub(crate) struct Painted {
 }
 
 impl PageTextures {
-    /// The engine is done with `slot`.
-    pub(crate) fn release(&self, slot: u8) {
+    /// The engine is done with `slot`. True when a paint was skipped for want of a free
+    /// slot since the last one that went through: the page should paint again, as a page
+    /// that only paints on change would otherwise keep showing the frame before it.
+    pub(crate) fn release(&self, slot: u8) -> bool {
         let mut ring = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(busy) = ring.busy.get_mut(usize::from(slot)) {
-            *busy = false;
-        }
+        ring.paints.release(slot)
     }
 
     /// Copies CEF's texture `cef` into the next free slot. `Ok(None)` when the engine
@@ -202,10 +265,7 @@ impl PageTextures {
             ring.size = size;
             ring.slots = Default::default();
         }
-        let Some(slot) = (0..SLOTS)
-            .map(|i| (ring.next + i) % SLOTS)
-            .find(|&slot| !ring.busy[slot])
-        else {
+        let Some(slot) = ring.paints.free() else {
             return Ok(None);
         };
         if ring.slots[slot].is_none() {
@@ -241,8 +301,7 @@ impl PageTextures {
                 Err(e) => return Err(format!("waiting for the copy: {e}")),
             }
         }
-        ring.busy[slot] = true;
-        ring.next = slot + 1;
+        ring.paints.sent(slot);
         Ok(Some(Painted {
             slot: slot as u8,
             handle,

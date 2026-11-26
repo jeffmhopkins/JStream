@@ -6,7 +6,7 @@
 //!
 //! Each software paint is converted to straight
 //! RGBA8 and written into the next free of the page's three slot files (mode 0600) in the
-//! engine's folder, with the same release and skip rules; the page's files are removed
+//! engine's folder, with the same release, skip and repaint rules; the page's files are removed
 //! when its browser closes. CEF failing to start reports that it needs `libcef.so` beside
 //! the helper and a sandbox that can start (not root; user namespaces or a setuid
 //! `chrome-sandbox`).
@@ -17,6 +17,7 @@ use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 
 use crate::cpu_frames::{SLOTS, frame_bytes, handle, slot_file, straight_rgba};
+use crate::paint_slots::PaintSlots;
 
 /// A page's slot files.
 #[derive(Default)]
@@ -25,9 +26,8 @@ pub(crate) struct PageTextures(Mutex<Ring>);
 #[derive(Default)]
 struct Ring {
     files: [Option<File>; SLOTS],
-    /// Slots the engine hasn't released.
-    busy: [bool; SLOTS],
-    next: usize,
+    /// Which slot is next, and which the engine holds.
+    paints: PaintSlots<SLOTS>,
     /// The converted paint, kept for the next.
     rgba: Vec<u8>,
 }
@@ -41,12 +41,12 @@ pub(crate) struct Painted {
 }
 
 impl PageTextures {
-    /// The engine is done with `slot`.
-    pub(crate) fn release(&self, slot: u8) {
+    /// The engine is done with `slot`. True when a paint was skipped for want of a free
+    /// slot since the last one that went through: the page should paint again, as a page
+    /// that only paints on change would otherwise keep showing the frame before it.
+    pub(crate) fn release(&self, slot: u8) -> bool {
         let mut ring = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(busy) = ring.busy.get_mut(usize::from(slot)) {
-            *busy = false;
-        }
+        ring.paints.release(slot)
     }
 
     /// Writes CEF's paint `bgra` (premultiplied BGRA8 of `size`) into page `page`'s next
@@ -70,10 +70,7 @@ impl PageTextures {
                 )
             })?;
         let mut ring = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(slot) = (0..SLOTS)
-            .map(|i| (ring.next + i) % SLOTS)
-            .find(|&slot| !ring.busy[slot])
-        else {
+        let Some(slot) = ring.paints.free() else {
             return Ok(None);
         };
         let Ring { files, rgba, .. } = &mut *ring;
@@ -94,8 +91,7 @@ impl PageTextures {
         let file = files[slot].as_ref().ok_or("the slot has no file")?;
         file.write_all_at(rgba, 0)
             .map_err(|e| format!("writing a slot file: {e}"))?;
-        ring.busy[slot] = true;
-        ring.next = slot + 1;
+        ring.paints.sent(slot);
         Ok(Some(Painted {
             slot: slot_u8,
             handle,
