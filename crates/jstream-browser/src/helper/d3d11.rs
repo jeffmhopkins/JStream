@@ -16,13 +16,19 @@
 //! thread, which also paces their frames, so waiting there for each copy held back every
 //! page. A thread of the helper's waits for the fence, up to 2 s, before the engine is
 //! told of the frame. A slot the engine hasn't released isn't painted into: with all
-//! three held, the paint is skipped. Popup-widget paints are ignored.
+//! three held, the paint is skipped. Up to eight of CEF's pooled textures stay open per
+//! page, each matched by a duplicate of CEF's handle, so a texture handed over again
+//! isn't opened again. Popup-widget paints are ignored.
 
 use std::ffi::c_void;
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HMODULE, LUID, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{
+    CloseHandle, CompareObjectHandles, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, HMODULE,
+    LUID, WAIT_OBJECT_0,
+};
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_0};
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
@@ -36,7 +42,7 @@ use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, DXGI_SHARED_RESOURCE_READ, DXGI_SHARED_RESOURCE_WRITE, IDXGIAdapter,
     IDXGIFactory4, IDXGIResource1,
 };
-use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+use windows::Win32::System::Threading::{CreateEventW, GetCurrentProcess, WaitForSingleObject};
 use windows::core::{Interface, PCWSTR};
 
 /// Textures each page shares with the engine.
@@ -157,13 +163,90 @@ struct Ring {
     /// may still be reading the slot's old texture.
     busy: [bool; SLOTS],
     next: usize,
+    /// CEF's textures opened on this device, most recent last, so a texture CEF's pool
+    /// hands over again isn't opened again (opening one costs milliseconds of CEF's UI
+    /// thread). Each keeps a duplicate of CEF's handle, which keeps the texture's
+    /// identity: a handle value CEF reuses for another texture doesn't match.
+    sources: Vec<Source>,
 }
+
+/// One of CEF's textures, opened.
+struct Source {
+    /// CEF's handle value when it was opened.
+    value: usize,
+    /// Our duplicate of that handle, compared with each later one.
+    handle: OwnedHandle,
+    texture: ID3D11Texture2D,
+}
+
+/// The most of CEF's textures a page keeps open: more than its pool holds.
+const SOURCES: usize = 8;
 
 // SAFETY: the D3D11 textures are only used on CEF's UI thread (paints), and the handles
 // are plain values; the lock moves the ring between that thread and the pipe's reader,
 // which only touches `busy`. A [`Copy`] holds a slot's texture only to keep it alive,
 // dropping it on the copy thread, as COM reference counts allow.
 unsafe impl Send for Ring {}
+
+impl Ring {
+    /// CEF's texture `cef`, opened on `gpu`'s device: the one opened before if CEF's
+    /// pool hands it over again.
+    fn source(&mut self, gpu: &Gpu, cef: *mut c_void) -> Result<ID3D11Texture2D, String> {
+        let value = cef as usize;
+        let known = self.sources.iter().position(|source| {
+            // SAFETY: both are live handles: CEF's for the callback this runs inside, and
+            // our duplicate, owned by the entry.
+            source.value == value
+                && unsafe {
+                    CompareObjectHandles(HANDLE(cef), HANDLE(source.handle.as_raw_handle()))
+                }
+                .as_bool()
+        });
+        if let Some(at) = known {
+            let source = self.sources.remove(at);
+            let texture = source.texture.clone();
+            self.sources.push(source);
+            return Ok(texture);
+        }
+        // SAFETY: CEF guarantees the handle is a live NT handle to a shared texture for
+        // the duration of the callback this runs inside; D3D11 takes its own reference.
+        let texture: ID3D11Texture2D = unsafe { gpu.device.OpenSharedResource1(HANDLE(cef)) }
+            .map_err(|e| {
+                format!(
+                    "opening CEF's texture failed ({e}); CEF may render on another GPU than \
+                     the engine"
+                )
+            })?;
+        let mut duplicate = HANDLE::default();
+        // SAFETY: CEF's handle is live for the callback; the duplicate is ours, in this
+        // process, and owned by the entry from here on.
+        let duplicated = unsafe {
+            DuplicateHandle(
+                GetCurrentProcess(),
+                HANDLE(cef),
+                GetCurrentProcess(),
+                &mut duplicate,
+                0,
+                false,
+                DUPLICATE_SAME_ACCESS,
+            )
+        };
+        // Without a duplicate the texture is used once and not kept.
+        if duplicated.is_ok() {
+            // SAFETY: `DuplicateHandle` just made this handle, which nothing else owns.
+            let handle = unsafe { OwnedHandle::from_raw_handle(duplicate.0) };
+            if self.sources.len() >= SOURCES {
+                self.sources.remove(0);
+            }
+            self.sources.push(Source {
+                value,
+                handle,
+                texture: texture.clone(),
+            });
+        }
+        Ok(texture)
+    }
+}
 
 /// A copy submitted into a page's shared texture, for [`Copy::wait`] on another thread.
 pub(crate) struct Copy {
@@ -242,20 +325,25 @@ impl PageTextures {
     /// Submits the copy of CEF's texture `cef` into the next free slot, which is held
     /// from now on: wait for the [`Copy`] before telling the engine, and
     /// [`release`](Self::release) the slot if it fails. `Ok(None)` when the engine still
-    /// holds every slot: the paint is skipped.
-    pub(crate) fn paint(&self, gpu: &mut Gpu, cef: *mut c_void) -> Result<Option<Copy>, String> {
+    /// holds every slot: the paint is skipped. `opening` is set to the time spent
+    /// finding or opening CEF's texture, for the paint counts.
+    pub(crate) fn paint(
+        &self,
+        gpu: &mut Gpu,
+        cef: *mut c_void,
+        opening: &mut Duration,
+    ) -> Result<Option<Copy>, String> {
         if cef.is_null() {
             return Err("CEF passed no shared texture".into());
         }
-        // SAFETY: CEF guarantees the handle is a live NT handle to a shared texture for
-        // the duration of the callback this runs inside; D3D11 takes its own reference.
-        let source: ID3D11Texture2D = unsafe { gpu.device.OpenSharedResource1(HANDLE(cef)) }
-            .map_err(|e| {
-                format!(
-                    "opening CEF's texture failed ({e}); CEF may render on another GPU than \
-                     the engine"
-                )
-            })?;
+        let mut ring = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if ring.generation != gpu.generation {
+            ring.sources.clear();
+        }
+        let started = std::time::Instant::now();
+        let source = ring.source(gpu, cef);
+        *opening = started.elapsed();
+        let source = source?;
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         // SAFETY: a valid out-pointer.
         unsafe { source.GetDesc(&mut desc) };
@@ -272,7 +360,6 @@ impl PageTextures {
             ));
         }
         let size = (desc.Width, desc.Height);
-        let mut ring = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         if ring.generation != gpu.generation || ring.size != size {
             ring.generation = gpu.generation;
             ring.size = size;

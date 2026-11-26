@@ -48,11 +48,19 @@ This amends ADR-0048 §3 on where the helper waits.
    document before it, as #1151 relies on.
 4. A slot's shared texture, and its handle, stay open until the copy thread has told the
    engine of it, even if a new size or device remakes the page's textures meanwhile.
+5. Each page keeps up to eight of CEF's textures open on the helper's device, so a
+   texture CEF's pool hands over again isn't opened again. Each is recognised by a
+   duplicate of CEF's handle, compared with the one CEF passes (`CompareObjectHandles`),
+   so a handle value reused for another texture is opened afresh. They are dropped with
+   the device.
 
 <a id="consequences"></a>
 ## Consequences
 - CEF's UI thread spends only the time it takes to submit a copy on each paint, so pages
-  are no longer capped by one another's copies.
+  are no longer capped by one another's copies. A first run with the wait moved but
+  every texture opened anew raised the pages from about 19 to 23 paints a second and
+  still spent 2 to 5 ms of the UI thread per paint, which is what keeping the textures
+  open is for.
 - A frame reaches the engine a little later than before by the hand-off to the copy
   thread, which is far less than a frame.
 - Chromium could, in principle, draw a later frame into a pooled texture before the GPU

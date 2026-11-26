@@ -639,6 +639,8 @@ struct PaintCounts {
     /// Time spent copying them, in all and at most.
     took: Duration,
     took_max: Duration,
+    /// Of `took`, the time spent finding or opening CEF's textures (Windows).
+    opening: Duration,
 }
 
 impl PaintCounts {
@@ -650,6 +652,7 @@ impl PaintCounts {
             failed: 0,
             took: Duration::ZERO,
             took_max: Duration::ZERO,
+            opening: Duration::ZERO,
         }
     }
 }
@@ -852,8 +855,9 @@ impl PageShared {
                 return;
             };
             let started = std::time::Instant::now();
-            let submitted = self.textures.paint(gpu, handle);
-            self.count(&submitted, started.elapsed());
+            let mut opening = Duration::ZERO;
+            let submitted = self.textures.paint(gpu, handle, &mut opening);
+            self.count(&submitted, started.elapsed(), opening);
             submitted
         };
         match submitted {
@@ -893,7 +897,7 @@ impl PageShared {
         let painted = self
             .textures
             .paint(&self.host.frames, self.id, bgra, (width, height));
-        self.count(&painted, started.elapsed());
+        self.count(&painted, started.elapsed(), Duration::ZERO);
         self.painted(painted);
         drop(reloading);
     }
@@ -942,7 +946,7 @@ impl PageShared {
     /// Counts a paint that reached the engine's slots and `took` this long to copy (on
     /// CEF's UI thread, which every page's paints share), and sends the page's counts
     /// since the last if [`PAINTS_EVERY`] has passed.
-    fn count<T>(&self, painted: &Result<Option<T>, String>, took: Duration) {
+    fn count<T>(&self, painted: &Result<Option<T>, String>, took: Duration, opening: Duration) {
         let mut counts = lock(&self.paints);
         counts.painted += 1;
         match painted {
@@ -951,6 +955,7 @@ impl PageShared {
             Err(_) => counts.failed += 1,
         }
         counts.took += took;
+        counts.opening += opening;
         counts.took_max = counts.took_max.max(took);
         let elapsed = counts.since.elapsed();
         if elapsed >= PAINTS_EVERY {
@@ -963,6 +968,7 @@ impl PageShared {
                 failed: counts.failed,
                 took_us: micros(counts.took),
                 took_max_us: micros(counts.took_max),
+                open_us: micros(counts.opening),
             });
             *counts = PaintCounts::new();
         }

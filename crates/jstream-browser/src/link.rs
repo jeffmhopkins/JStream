@@ -596,6 +596,7 @@ impl Link {
                 failed,
                 took_us,
                 took_max_us,
+                open_us,
             } => {
                 let seconds = (millis as f64 / 1e3).max(1e-3);
                 let per_s = |n: u64| format!("{:.1}", n as f64 / seconds);
@@ -607,6 +608,8 @@ impl Link {
                     copy_mean_ms =
                         format_args!("{:.1}", took_us as f64 / 1e3 / painted.max(1) as f64),
                     copy_max_ms = format_args!("{:.1}", took_max_us as f64 / 1e3),
+                    open_mean_ms =
+                        format_args!("{:.1}", open_us as f64 / 1e3 / painted.max(1) as f64),
                     "browser page paints in the helper"
                 );
             }

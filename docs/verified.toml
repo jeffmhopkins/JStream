@@ -1686,7 +1686,7 @@ stamp = { hash = "b3:eb9beb009cd62865", by = "agent:page-api-thread", note = "Re
 stamp = { hash = "b3:73f2d6cdaffa7f32", by = "agent:claude-browser-paints", note = "Helper row now names the Windows copy thread (helper/copies.rs, ADR-0254); the debug paint counts and the rest of the map still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/d3d11.rs"]
-stamp = { hash = "b3:8fa20614a4ea9938", by = "agent:claude-browser-paints", note = "Helper row now names the Windows copy thread (helper/copies.rs, ADR-0254); the debug paint counts and the rest of the map still hold" }
+stamp = { hash = "b3:48bfea6c4ded8231", by = "agent:claude-browser-paints", note = "d3d11.rs now keeps CEF's pooled textures open per page and the paint counts carry open time; the helper row's copy-thread note and the rest of the map still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/handlers.rs"]
 stamp = { hash = "b3:7ea3249d6cdc1fae", by = "agent:mac-browser", note = "Adds --use-mock-keychain on macOS so the profile key stays out of the login Keychain; the software-paint path widens to macOS. Linux-only switches stay Linux. The run_helper row's description still holds. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
@@ -1695,7 +1695,7 @@ stamp = { hash = "b3:7ea3249d6cdc1fae", by = "agent:mac-browser", note = "Adds -
 stamp = { hash = "b3:8fde2678f6ca09f6", by = "agent:mac-browser", note = "New file: is_subprocess, the Sandbox and Framework RAII wrappers over cef_scoped_sandbox_initialize and cef_scoped_library_loader_create, bundle_settings and BundlePaths, and the HelperApplication NSApplication subclass with the Cr/Cef app protocols. The run_helper row names exactly these (framework loader, sandbox, NSApp class). The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/mod.rs"]
-stamp = { hash = "b3:ddcd600f0fe49ece", by = "agent:claude-browser-paints", note = "Helper row now names the Windows copy thread (helper/copies.rs, ADR-0254); the debug paint counts and the rest of the map still hold" }
+stamp = { hash = "b3:ff36eb16c2fca823", by = "agent:claude-browser-paints", note = "d3d11.rs now keeps CEF's pooled textures open per page and the paint counts carry open time; the helper row's copy-thread note and the rest of the map still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/page_api.rs"]
 stamp = { hash = "b3:83c6f18f8fe6e658", by = "agent:claude-daw", note = "Re-read against page data: the helper now carries the data grant and the data keys in its page messages; the seam's 'page API data the engine sends it' still holds." }
@@ -1707,7 +1707,7 @@ stamp = { hash = "b3:44b86dd7bd04fa94", by = "agent:mac-browser", note = "Module
 stamp = { hash = "b3:a95ac156ce3945fb", by = "agent:mac-browser", note = "Every cfg that was any(windows, linux) is now any(windows, linux, macos), the CPU-frame modules are linux|macos, and the crate docs say so with ADR-0157. That is what the README's platform columns now say. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/link.rs"]
-stamp = { hash = "b3:875d0ff13bc546e3", by = "agent:claude-browser-paints", note = "Paint counts now also carry the window length and the time copies held CEF's UI thread; debug-only, map unchanged" }
+stamp = { hash = "b3:2389daf551be4286", by = "agent:claude-browser-paints", note = "d3d11.rs now keeps CEF's pooled textures open per page and the paint counts carry open time; the helper row's copy-thread note and the rest of the map still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/page.rs"]
 stamp = { hash = "b3:bd476ac006b820f7", by = "agent:readme-scrub", note = "#1369 review: the cargo doc pointer passes --document-private-items (N1); the moved Behaviour paragraphs no longer open by naming their own file, and audio.rs's ARCH reference is a resolvable path again (N2). Only doc comments and the pointer changed; the map still holds." }
@@ -1728,7 +1728,7 @@ stamp = { hash = "b3:5b10fbc4297274e3", by = "agent:claude", note = "#1155: a ne
 stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cfg widens from any(windows, linux) to include macos; the request policy itself is unchanged. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/wire.rs"]
-stamp = { hash = "b3:29544d2c257e3580", by = "agent:claude-browser-paints", note = "Paint counts now also carry the window length and the time copies held CEF's UI thread; debug-only, map unchanged" }
+stamp = { hash = "b3:6053da855ae5b57e", by = "agent:claude-browser-paints", note = "d3d11.rs now keeps CEF's pooled textures open per page and the paint counts carry open time; the helper row's copy-thread note and the rest of the map still hold" }
 
 ["CRATE-jstream-browser-helper#purpose"."body"]
 stamp = { hash = "b3:63d387d76c98e8d2", by = "agent:mac-browser", note = "The README's macOS paragraph: the same executable in JStream.app/Contents/MacOS, the framework and its copies as helper apps in Contents/Frameworks, each process loading the framework and each subprocess entering the sandbox, built by build-browser-helper.sh and laid out by bundle-app.sh, no run path. Cargo.toml's description, summary and bin comment and main.rs's linux|macos main match it; ARCH's apps/* row and jstream-browser's purpose say the same. build.rs links libc++ on macOS for cef-dll-sys's loader and sandbox objects, which the README names. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
@@ -9192,7 +9192,7 @@ stamp = { hash = "b3:956a50f6752c97f7", by = "agent:claude-ci-load", note = "lin
 stamp = { hash = "b3:7ea3249d6cdc1fae", by = "agent:mac-browser", note = "Adds --use-mock-keychain on macOS (the profile key stays out of the login Keychain), which the Controls paragraph now states; the request policy and permission handlers are unchanged. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/mod.rs"]
-stamp = { hash = "b3:ddcd600f0fe49ece", by = "agent:claude-browser-paints", note = "helper/mod.rs now hands copy waits and the Reloading message to a helper thread; no change to the sandbox, request policy, permissions or what crosses the pipe" }
+stamp = { hash = "b3:ff36eb16c2fca823", by = "agent:claude-browser-paints", note = "Paint counts gained open time (numbers only); keeping duplicates of CEF's texture handles within the helper changes no control" }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/page_api.rs"]
 stamp = { hash = "b3:83c6f18f8fe6e658", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }

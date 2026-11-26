@@ -114,6 +114,8 @@ pub(crate) enum ToEngine {
         failed: u64,
         took_us: u64,
         took_max_us: u64,
+        /// Of `took_us`, the time spent finding or opening CEF's textures.
+        open_us: u64,
     },
 }
 
@@ -536,10 +538,19 @@ impl ToEngine {
                 failed,
                 took_us,
                 took_max_us,
+                open_us,
             } => {
                 out.u8(11);
                 out.u32(*page);
-                for n in [millis, painted, skipped, failed, took_us, took_max_us] {
+                for n in [
+                    millis,
+                    painted,
+                    skipped,
+                    failed,
+                    took_us,
+                    took_max_us,
+                    open_us,
+                ] {
                     out.u64(*n);
                 }
             }
@@ -599,6 +610,7 @@ impl ToEngine {
                 failed: body.u64()?,
                 took_us: body.u64()?,
                 took_max_us: body.u64()?,
+                open_us: body.u64()?,
             },
             _ => return Err(WireError::Malformed("an unknown message to the engine")),
         };
@@ -842,6 +854,7 @@ mod tests {
                 failed: u64::MAX,
                 took_us: 123_456,
                 took_max_us: 9_000,
+                open_us: 4_000,
             },
             ToEngine::Warning {
                 message: "a paint could not be copied".into(),
