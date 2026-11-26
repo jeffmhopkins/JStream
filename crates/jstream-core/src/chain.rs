@@ -1055,7 +1055,7 @@ pub(crate) struct Chains {
     /// that nests the same scene at the same depth reads instead of drawing it again
     /// (#1070).
     drawn: BTreeSet<GpuKey>,
-    /// The nested scenes placed as their one picture this frame (ADR-0249) whose
+    /// The nested scenes placed as their one picture this frame (ADR-0249, ADR-0255) whose
     /// picture they show mirrored, across and down: an item that places one mirrors
     /// it so.
     pub(crate) mirrored: BTreeMap<GpuKey, (bool, bool)>,

@@ -10109,7 +10109,7 @@ fn layer_item<'a>(
         (live, Some(image.extent())),
         camera,
     )?;
-    // A nested scene placed as the picture it shows mirrored (ADR-0249).
+    // A nested scene placed as the picture it shows mirrored (ADR-0255).
     let (placement, crop) = match chains.mirrored.get(&layer.image) {
         Some(&mirror) => mirror_layer((posed.placement, posed.crop), image.extent(), mirror)?,
         None => (posed.placement, posed.crop),
@@ -13709,7 +13709,7 @@ pub(crate) mod tests {
     }
 
     /// A nested scene that shows a capture turned upside down over its canvas, its
-    /// centre a rounding off, is placed as the capture too (ADR-0249), mirrored both
+    /// centre a rounding off, is placed as the capture too (ADR-0255), mirrored both
     /// ways where it is placed: its right half shows on the left, as drawn.
     #[test]
     fn a_scene_of_one_whole_capture_turned_over_is_placed_as_the_capture() {

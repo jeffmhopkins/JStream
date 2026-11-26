@@ -2217,7 +2217,7 @@ stamp = { hash = "b3:fe75a64a7c6fa6ed", by = "agent:claude", note = "Opus test n
 stamp = { hash = "b3:631f38c36d80f7f5", by = "agent:claude", note = "live.rs: a webcam with fps 0 now follows the program rate like a browser page; the Live sources bullet says so" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:a3cff00042b7aa19", by = "agent:claude", note = "model_maps passes each slot's region on; the contents list names nothing it changed" }
+stamp = { hash = "b3:fa749f2b9c64aaef", by = "agent:claude", note = "Only ADR references in comments moved to ADR-0255" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:21fd4f392d245f9c", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
@@ -2616,7 +2616,7 @@ stamp = { hash = "b3:c802a93fc0f13af0", by = "agent:3d-groups", note = "Dependen
 stamp = { hash = "b3:3a4b70d1f92163a7", by = "agent:claude-audio-picker", note = "Audio sources: an audio_input with a device records Input, desktop_audio with a device records OutputLoopback, without one DefaultOutputLoopback; edited" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/chain.rs"]
-stamp = { hash = "b3:25b761c9cfbcf6c3", by = "agent:claude", note = "Model maps paragraph still holds: texture slots resolve one picture each; the region is passed through model_maps untouched" }
+stamp = { hash = "b3:c086cb018217f111", by = "agent:claude", note = "Only ADR references in comments moved to ADR-0255; the section already cites it" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/effect_packs.rs"]
 stamp = { hash = "b3:2dea51e38948ab0c", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Extended the upgrade paragraph to shader sources (Migration, ShaderSource::migrate, live sync after) and said a shader source loads before its pack verbatim; checked against effect_packs.rs, engine.rs and the new test; dropped the not-yet line for sources. | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Replaced 'not migrated yet' with the upgrade: older-version settings through Effect::migrate, fitted to the kind, newer ones kept, one revision with state.changed from client engine, saved, logged in undo history; checked against install_effects and Graph::upgrade_filters." }
@@ -2643,7 +2643,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:a3cff00042b7aa19", by = "agent:claude", note = "Model maps paragraph still holds: texture slots resolve one picture each; the region is passed through model_maps untouched" }
+stamp = { hash = "b3:fa749f2b9c64aaef", by = "agent:claude", note = "Only ADR references in comments moved to ADR-0255; the section already cites it" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:59f7faf81423e628", by = "agent:claude", note = "Model maps paragraph now says texture slots resolve one picture each into ModelMaps::textures (ADR-0250); nested pass-through text checked for the 180-degree/flip case" }
