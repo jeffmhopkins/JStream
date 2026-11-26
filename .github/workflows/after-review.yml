@@ -184,6 +184,8 @@ jobs:
           name: nextest-windows
       # The archive is unpacked into the checkout's own `target`, where `test-build` built
       # it: a test's compile-time paths (CARGO_BIN_EXE_*, CARGO_MANIFEST_DIR) hold there.
+      # The archive doesn't hold `target/tmp` (CARGO_TARGET_TMPDIR), which cargo makes when
+      # it builds, so it is made here.
       # `.config/nextest.toml` sets the GPU group and the `ci` profile.
       - name: Run this shard's tests
         shell: bash
@@ -192,6 +194,7 @@ jobs:
         run: |
           set -euo pipefail
           tar --use-compress-program=zstd -xf nextest.tar.zst
+          mkdir -p target/tmp
           cargo nextest run --profile ci --partition "count:$SHARD/4" \
             --binaries-metadata target/nextest/binaries-metadata.json \
             --cargo-metadata target/nextest/cargo-metadata.json
