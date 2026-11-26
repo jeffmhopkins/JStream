@@ -2707,7 +2707,12 @@ planning gives its composite's pass a `GpuKey::ViewDepth` depth layer
 map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
-the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
+the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). On
+the program stage and the preview a model's layer and its depth hold only the part of the
+canvas its box is in, a step of 64, 96, 128 and so on each way, unless filters run over
+it, it draws a surface, its camera has depth of field or its box can't be told
+(`model_window`, `GpuModel::seen_box`,
+[ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)). A
 model's item carries its `GpuKey::ModelDepth` layer there (`Item::depth`), and
 `Compositor::render_view_depth` writes that layer into the view depth, so the model's
 geometry, drawn once into that layer with its colour, isn't drawn a second time for the

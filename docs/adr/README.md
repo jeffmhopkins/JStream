@@ -254,4 +254,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0248](0248-windows-tests-in-shards-and-carried-passes.md) | The Windows tests run in shards, and a Windows pass carries to a head with the same build inputs | accepted | agent |  |
 | [ADR-0249](0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md) | A nested 2D scene is drawn with the pixels it is shown at | accepted | agent |  |
 | [ADR-0250](0250-a-model-shows-a-live-texture-on-each-part-it-names.md) | A model shows a live texture on each part it names | accepted | agent |  |
+| [ADR-0251](0251-a-models-layer-holds-only-its-part-of-the-canvas.md) | A model's layer holds only its part of the canvas | accepted | agent |  |
 <!-- @generated end adr-index -->

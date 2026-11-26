@@ -330,6 +330,73 @@ fn a_models_layer_is_bounded_by_its_models_box() {
     assert_eq!(layer.content(), None);
 }
 
+/// ADR-0251: a model drawn into a layer that holds only the part of the canvas its box
+/// is in, placed over that part, looks as it does drawn into a layer of the whole
+/// canvas, its depth too; `seen_box` is that box.
+#[test]
+fn a_model_drawn_over_its_part_of_the_canvas_looks_the_same() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let framing = SceneCamera::framing(canvas());
+    let camera = Some(SceneCamera {
+        position: Vec3::new(70.0, -40.0, framing.position.z.get()).expect("finite"),
+        ..framing
+    });
+    let geometry = boxed(100.0, 40.0, 24.0);
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera,
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        textures: &[],
+        reflection: None,
+        probe: None,
+    };
+    let [x, y, width, height] = uploaded
+        .seen_box(geometry, camera, (WIDTH, HEIGHT))
+        .expect("a box");
+    assert!(
+        width > 10 && width < 64 && height < 64,
+        "{x} {y} {width} {height}"
+    );
+    let whole = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let mut part = compositor.layer(64, 64).expect("a layer");
+    part.set_window(Some(crate::Window {
+        x: x.min(WIDTH - 64),
+        y: y.min(HEIGHT - 64),
+        canvas: (WIDTH, HEIGHT),
+    }));
+    let (whole_depth, part_depth) = (
+        compositor.depth_layer(WIDTH, HEIGHT).expect("a layer"),
+        compositor.depth_layer(64, 64).expect("a layer"),
+    );
+    for (layer, depth) in [(&whole, &whole_depth), (&part, &part_depth)] {
+        compositor
+            .draw_model_and_depth(&draw, layer, None, depth)
+            .expect("the model draws");
+    }
+    let mut shown = |layer: &crate::Image| {
+        let items = [Item {
+            camera,
+            ..crate::tests::item(layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+        }];
+        render(compositor, &items)
+    };
+    let (a, b) = (shown(&whole), shown(&part));
+    assert!(count(&a, FRONT) > 100, "the cube shows");
+    assert_eq!(a.rgba(), b.rgba(), "the same picture");
+}
+
 /// ADR-0107 decision 3: a flipped placement mirrors the model but still draws its front.
 #[test]
 fn golden_model_a_mirrored_cube_still_shows_its_front() {

@@ -173,7 +173,9 @@ and calls this crate.
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
   - or a **layer** (`Placement::Layer`, ADR-0107): an image already in the canvas's own
     pixels, such as a model's, drawn flat at its size from the canvas's top-left whatever
-    the camera, sorting as an item with its geometry would. Crop is ignored.
+    the camera, sorting as an item with its geometry would. Crop is ignored. A layer that
+    holds only a part of its canvas (`Image::window`, a `Window`) is drawn over that part
+    ([ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)).
 
   Both depend on the image's size, which is runtime state, so the compositor evaluates
   the placement on every `render`. That size is the image's **extent**
@@ -780,8 +782,8 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Surface pipelines (a model drawn into a surface buffer, the layer pipelines with a surface beside the layer, and the merge) and the buffer's depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another; a bind group per merge |
-| Model depth targets (`Depth32Float`, sampled too, for a view depth read from them), and the view-depth resolve pipelines (single and multisampled) with a bind group per draw that reads one | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
-| Multisampled model targets (ADR-0242): colour (`Rgba16Float`) and depth (`Depth32Float`) at the count `set_model_antialiasing` set, and a surface buffer's three with their resolve bind group once a model is drawn with one; the surface resolve pipeline | The size and count of the last two multisampled draws (`model/msaa.rs`), made again for another; none while models draw with one sample; the pipeline with the compositor |
+| Model depth targets (`Depth32Float`, sampled too, for a view depth read from them), and the view-depth resolve pipelines (single and multisampled) with a bind group per draw that reads one | The sizes of the last four layers a model was drawn into (a model drawn with fewer pixels than its canvas, ADR-0197, or over a part of it, ADR-0251, alternates with draws of other sizes); a layer of a fifth size replaces the one used longest ago, since a pass's attachments must match |
+| Multisampled model targets (ADR-0242): colour (`Rgba16Float`) and depth (`Depth32Float`) at the count `set_model_antialiasing` set, and a surface buffer's three with their resolve bind group once a model is drawn with one; the surface resolve pipeline | The size and count of the last four multisampled draws (`model/msaa.rs`), made again for another; none while models draw with one sample; the pipeline with the compositor |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips (BC1 or BC3 where the device samples them, a normal map RGBA8), material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -977,7 +979,11 @@ by the target's width over its extent's, so the blur covers as much of the pictu
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
-and for the model-to-clip matrix built from it: only that product is `f32`, so a far
+and for the model-to-clip matrix built from it. Into a layer with a `Window` (ADR-0251)
+it draws the whole canvas's view cut to that part (`windowed`), which
+`GpuModel::seen_box` gives a caller the box for
+(`a_model_drawn_over_its_part_of_the_canvas_looks_the_same`). Only the product is
+`f32`, so a far
 camera doesn't jitter. Depth is reversed `Depth32Float`, cleared to 0 with `Greater`:
 with perspective, clip `z` is `NEAR_W`, so `z / w = NEAR_W / w` and the GPU's own
 `z ≤ w` clip is ADR-0050's near plane; without (a 2D scene with no `perspective_px`) it

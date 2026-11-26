@@ -7698,14 +7698,9 @@ fn draw_box(
         return Ok(());
     };
     let key = GpuKey::ItemBox(scene_id.clone(), item_id.clone());
-    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
-    cache.layer(compositor, &key, width, height)?;
     if boxed.boxed.model {
         chains.model_drawn = true;
-        // Its layer stands for the canvas, however many pixels it has (ADR-0197).
-        if let Some(extent) = boxed.boxed.extent() {
-            cache.set_extent(&key, extent);
-        }
+        // Its layer is made where the model's box on the canvas is known (ADR-0251).
         return draw_model(
             compositor,
             (cache, chains),
@@ -7715,6 +7710,8 @@ fn draw_box(
             (live, captures),
         );
     }
+    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
+    cache.layer(compositor, &key, width, height)?;
     let input = box_input(shot, &boxed.source).filter(|input| !chains.failed(input));
     let (placement, crop) = live.apply_to(
         &boxed.item,
@@ -7944,6 +7941,47 @@ fn track_camera(
 ///
 /// # Errors
 /// What the compositor reports for drawing into the layer.
+/// The steps a model's layer that holds a part of the canvas is sized in, each side
+/// (ADR-0251): few sizes, so the layers of several models, and one model's as it moves,
+/// share their multisampled targets and are rarely made again.
+const WINDOW_STEPS: [u32; 12] = [64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072];
+
+/// The part of a canvas of `canvas` a model's layer holds, for a model that can draw
+/// into `seen` (`[x, y, width, height]` in canvas pixels), and its size: each side the
+/// least of [`WINDOW_STEPS`] that holds it, within the canvas, placed over it and kept
+/// inside the canvas (ADR-0251). `None` where that is half the canvas or more: the
+/// layer then holds all of it.
+fn model_window(seen: [u32; 4], canvas: (u32, u32)) -> Option<(jstream_render::Window, [u32; 2])> {
+    let step = |side: u32, whole: u32| {
+        WINDOW_STEPS
+            .into_iter()
+            .find(|step| *step >= side)
+            .unwrap_or(whole)
+            .min(whole)
+            .max(1)
+    };
+    let size = [step(seen[2], canvas.0), step(seen[3], canvas.1)];
+    if u64::from(size[0]) * u64::from(size[1]) * 2 >= u64::from(canvas.0) * u64::from(canvas.1) {
+        return None;
+    }
+    let window = jstream_render::Window {
+        x: seen[0].min(canvas.0 - size[0]),
+        y: seen[1].min(canvas.1 - size[1]),
+        canvas,
+    };
+    Some((window, size))
+}
+
+/// `percent` of `size` each way, rounded up, at least a pixel: the pixels a model's layer
+/// of `size` canvas pixels is drawn with (ADR-0197).
+fn percent_of(size: [u32; 2], percent: u32) -> [u32; 2] {
+    if percent >= 100 {
+        return size;
+    }
+    let percent = u64::from(percent.max(1));
+    size.map(|px| (u64::from(px) * percent).div_ceil(100).max(1) as u32)
+}
+
 fn draw_model(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
@@ -8013,16 +8051,59 @@ fn draw_model(
         (view.as_ref().filter(|_| lit), shown.receives_shadows),
         (live, captures),
     );
+    // A model that reflects its scene, in a scene whose chain reads a surface buffer,
+    // draws its surface with its layer (ADR-0170 decision 4).
+    let surfaces = matches!(owner, ChainOwner::Item(scene, _)
+        if camera.is_some()
+            && lit
+            && shown.reflections
+            && shot
+                .chains
+                .get(&ChainOwner::Scene(scene.clone()))
+                .is_some_and(Chain::reads_surface));
+    // Its layer holds only the part of the canvas the model can draw into, when that is
+    // known and nothing reads the layer as the whole canvas (ADR-0251): the program
+    // stage's and the preview's, with no filters over it, no surface buffer and no
+    // depth of field.
+    let window = (cache.draws_small()
+        && !surfaces
+        && shot.shown_chain(owner).is_none()
+        && !shot.chains.contains_key(owner)
+        && !view.as_ref().is_some_and(|view| view.focus().is_some()))
+    .then(|| chains.model(source))
+    .flatten()
+    .and_then(|model| {
+        let canvas = (shot.canvas.width, shot.canvas.height);
+        model_window(model.seen_box(geometry, camera, canvas)?, canvas)
+    });
+    let ([width, height], extent) = match window {
+        Some((_, extent)) => (
+            percent_of(extent, chains.model_percent.get()),
+            FrameSize::new(extent[0], extent[1]).ok(),
+        ),
+        None => (
+            boxed.boxed.pixels(chains.model_percent.get()),
+            boxed.boxed.extent(),
+        ),
+    };
+    let window = window.map(|(window, _)| window);
+    cache.layer(compositor, key, width, height)?;
+    // Its layer stands for the canvas, or the part of it it holds, however many pixels
+    // it has (ADR-0197).
+    if let Some(extent) = extent {
+        cache.set_extent(key, extent);
+    }
+    cache.set_window(key, window);
     // In a 3D scene the model's depth is drawn too, for the items after it to test
     // against (ADR-0107 decision 7): before its filters run, so a blur doesn't move it.
     let depth_key = match (owner, camera) {
         (ChainOwner::Item(scene, item), Some(_)) => {
             let key = GpuKey::ModelDepth(scene.clone(), item.clone());
-            let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
             cache.depth_layer(compositor, &key, width, height)?;
-            if let Some(extent) = boxed.boxed.extent() {
+            if let Some(extent) = extent {
                 cache.set_extent(&key, extent);
             }
+            cache.set_window(&key, window);
             Some(key)
         }
         _ => None,
@@ -8032,15 +8113,7 @@ fn draw_model(
     // rather than drawing it again. One that doesn't reflect writes no surface: where it
     // is in front, the pass finds the view depth nearer than the surface and leaves it.
     let surface_keys = match owner {
-        ChainOwner::Item(scene, item)
-            if depth_key.is_some()
-                && lit
-                && shown.reflections
-                && shot
-                    .chains
-                    .get(&ChainOwner::Scene(scene.clone()))
-                    .is_some_and(Chain::reads_surface) =>
-        {
+        ChainOwner::Item(scene, item) if depth_key.is_some() && surfaces => {
             let keys = model_surface_keys(scene, item);
             let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
             for key in &keys {
@@ -13703,6 +13776,28 @@ pub(crate) mod tests {
                 );
             }
         }
+    }
+
+    /// ADR-0251: a model's layer holds a part of the canvas in a few steps of size
+    /// that hold its box, inside the canvas; at half the canvas or more, all of it.
+    #[test]
+    fn a_models_part_of_the_canvas_is_a_step_that_holds_its_box() {
+        let canvas = (1920, 1080);
+        let (window, size) = super::model_window([100, 200, 150, 70], canvas).expect("a part");
+        assert_eq!(size, [192, 96]);
+        assert_eq!((window.x, window.y, window.canvas), (100, 200, canvas));
+        // At the far corner it stays inside the canvas.
+        let (window, size) = super::model_window([1900, 1070, 20, 10], canvas).expect("a part");
+        assert_eq!(size, [64, 64]);
+        assert_eq!((window.x, window.y), (1856, 1016));
+        // Off the canvas, the least step.
+        assert_eq!(
+            super::model_window([0, 0, 0, 0], canvas).map(|(_, size)| size),
+            Some([64, 64])
+        );
+        assert_eq!(super::model_window([0, 0, 1500, 600], canvas), None);
+        assert_eq!(super::percent_of([192, 96], 50), [96, 48]);
+        assert_eq!(super::percent_of([192, 96], 100), [192, 96]);
     }
 
     /// A placement and crop mirrored for a layer that shows its picture mirrored: a

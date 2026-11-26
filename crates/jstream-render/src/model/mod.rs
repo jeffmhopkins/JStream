@@ -14,7 +14,7 @@ use wgpu::util::DeviceExt;
 
 use crate::error::RenderError;
 use crate::gpu::Gpu;
-use crate::image::{DEPTH_LAYER_FORMAT, Image, LAYER_FORMAT, Owner};
+use crate::image::{DEPTH_LAYER_FORMAT, Image, LAYER_FORMAT, Owner, Window};
 use crate::mips::{Mips, Region};
 use crate::scene::Color;
 
@@ -113,7 +113,7 @@ pub use jstream_media::model::Lighting;
 
 /// How many sizes of the depth buffer a model's layer is drawn with are kept
 /// (`ModelRuntime::depth_view`).
-const KEPT_DEPTHS: usize = 2;
+const KEPT_DEPTHS: usize = 4;
 
 /// A model on the GPU, made by [`crate::Compositor::upload_model`]. Cheap to clone; a
 /// clone shares the buffers and textures.
@@ -485,6 +485,26 @@ fn drawn_box(clip: &[[f32; 4]; 4], bounds: SolidBounds, size: (u32, u32)) -> Opt
     })
 }
 
+/// `clip`, which takes a model to the clip space of the whole canvas of `window`, cut to
+/// the part `window` holds, `extent` canvas pixels across: that part's clip space spans
+/// what the whole canvas's did over it.
+fn windowed(clip: [[f32; 4]; 4], window: Window, extent: (u32, u32)) -> [[f32; 4]; 4] {
+    let (canvas_w, canvas_h) = (window.canvas.0 as f32, window.canvas.1 as f32);
+    let (w, h) = (extent.0.max(1) as f32, extent.1.max(1) as f32);
+    let (x, y) = (window.x as f32, window.y as f32);
+    // x' = x W / w + (W - 2 x0 - w) / w, y' = y H / h + (h - H + 2 y0) / h, in NDC.
+    let scale = [canvas_w / w, canvas_h / h];
+    let shift = [(canvas_w - 2.0 * x - w) / w, (h - canvas_h + 2.0 * y) / h];
+    let mut out = clip;
+    for column in &mut out {
+        let last = column[3];
+        for axis in 0..2 {
+            column[axis] = column[axis] * scale[axis] + last * shift[axis];
+        }
+    }
+    out
+}
+
 /// The most texture coordinates, by area, one unit of `primitive`'s surface spans over
 /// its triangles: `sqrt(uv area / area)`, the largest of any triangle that has an area.
 fn texel_density(primitive: &jstream_media::model::Primitive) -> f32 {
@@ -639,6 +659,37 @@ impl GpuModel {
     /// The model's bounds, in its own space.
     pub fn bounds(&self) -> SolidBounds {
         self.inner.bounds
+    }
+
+    /// The box of a `canvas` that this model, placed at `geometry` and seen through
+    /// `camera` (none in a 2D scene), can draw into, as its layer's content is told:
+    /// its bounds' eight corners projected, with a pixel of margin, clipped to the
+    /// canvas, as `[x, y, width, height]` in canvas pixels. `None` when that can't be
+    /// told: a rigged model, whose pose can take it past its bounds, a corner at or
+    /// behind the viewer, or a placement that isn't drawable (ADR-0250).
+    pub fn seen_box(
+        &self,
+        geometry: ItemGeometry,
+        camera: Option<SceneCamera>,
+        canvas: (u32, u32),
+    ) -> Option<[u32; 4]> {
+        let model = &self.inner;
+        if model.pose.is_some() {
+            return None;
+        }
+        let size = Canvas {
+            width: canvas.0,
+            height: canvas.1,
+        };
+        let view = match camera {
+            Some(camera) => Some(camera.view(size).ok()?),
+            None => None,
+        };
+        let solid = geometry.solid(model.bounds, view.as_ref()).ok()?;
+        // The depth scale doesn't move a projected point, so any will do.
+        let clip = solid.clip_matrix(size, 0.45);
+        let region = drawn_box(&clip, model.bounds, canvas)?;
+        Some([region.x, region.y, region.width, region.height])
     }
 }
 
@@ -2043,8 +2094,17 @@ impl ModelRuntime {
             None => None,
         };
         // The canvas the model is placed on is the target's extent: a layer drawn with
-        // fewer pixels than its canvas (ADR-0197) holds the same picture, less sharp.
-        let canvas = canvas_of(target);
+        // fewer pixels than its canvas (ADR-0197) holds the same picture, less sharp. A
+        // layer that holds a part of its canvas (ADR-0250) sees the whole canvas through
+        // its camera, cut to that part.
+        let window = target.window().filter(|_| !in_texture);
+        let canvas = match window {
+            Some(window) => Canvas {
+                width: window.canvas.0,
+                height: window.canvas.1,
+            },
+            None => canvas_of(target),
+        };
         let camera = match draw.camera {
             Some(camera) => Some(camera.view(canvas).map_err(placement)?),
             None => None,
@@ -2077,7 +2137,12 @@ impl ModelRuntime {
             ];
             (clip, !sees_front(&solid))
         } else {
-            (solid.clip_matrix(canvas, 0.45 / reach), solid.mirrored())
+            let clip = solid.clip_matrix(canvas, 0.45 / reach);
+            let clip = match window {
+                Some(window) => windowed(clip, window, target.extent()),
+                None => clip,
+            };
+            (clip, solid.mirrored())
         };
         // How much of a live texture's resolution this draw needs, for a picture drawn
         // only as large as it is seen (ADR-0249).
@@ -2093,7 +2158,7 @@ impl ModelRuntime {
                         model,
                         (&on, slot),
                         &clip,
-                        canvas,
+                        canvas_of(target),
                         (image.width(), image.height()),
                     ));
                 }
