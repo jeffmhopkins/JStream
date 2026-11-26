@@ -1,0 +1,23 @@
+# cargo-nextest for the Windows `test` jobs in after-review.yml (ADR-0248): the project's
+# release binary, pinned and checked against its SHA-256 here, as trunk is in ci.yml.
+# Editing this file is a governance change (R-GOV-001).
+name: cargo-nextest
+description: Puts the pinned cargo-nextest release for Windows x64 on the path.
+runs:
+  using: composite
+  steps:
+    - shell: pwsh
+      env:
+        NEXTEST_VERSION: 0.9.151
+        NEXTEST_SHA256: ba35ee0ce14ace65cd8c7aaa9613adb7d2644b0fe3866e85131eb4c269786efb
+      run: |
+        $name = "cargo-nextest-$env:NEXTEST_VERSION-x86_64-pc-windows-msvc.zip"
+        $zip = Join-Path $env:RUNNER_TEMP $name
+        curl.exe -sSLf -o $zip "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$env:NEXTEST_VERSION/$name"
+        if ($LASTEXITCODE -ne 0) { throw "downloading $name failed" }
+        $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+        if ($hash -ne $env:NEXTEST_SHA256) { throw "$name SHA-256 is $hash, expected $env:NEXTEST_SHA256" }
+        $bin = Join-Path $env:RUNNER_TEMP 'nextest'
+        Expand-Archive -Path $zip -DestinationPath $bin
+        if (-not (Test-Path (Join-Path $bin 'cargo-nextest.exe'))) { throw "no cargo-nextest.exe in $name" }
+        Add-Content -Path $env:GITHUB_PATH -Value $bin

@@ -652,6 +652,9 @@ whose checks were all skipped.
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
 the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
+The Windows `test` builds once and runs its tests in four nextest shards, and a Windows `clippy`
+or `test` pass carries to a later head with the same build inputs
+([ADR-0248](adr/0248-windows-tests-in-shards-and-carried-passes.md)).
 A PR into any branch but `main` (a `wave/*` branch, a train, or the PR below it in a stack)
 runs only the required Linux checks: it skips `doc`, `deny`, `wasm`, the after-review jobs and
 the checks this table marks as not required, but runs the Linux `test`
