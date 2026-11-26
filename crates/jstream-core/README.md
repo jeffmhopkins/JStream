@@ -2902,8 +2902,9 @@ places when the item has no effects (`boxed_key`, `key`), `GpuKey::boxed_item` n
 the item behind any of the three images, and `ChainOrder::chain` draws the layer before
 whichever chain reads it. A profile counts it toward the item's effects, as its box is
 (`golden_a_models_source_filters_run_over_its_layer`).
-A model's `texture` and `reflection` ([ADR-0107](../../docs/adr/0107-3d-models.md)
-decision 5) name other sources. Planning resolves each where it places the model
+A model's texture slots and `reflection` ([ADR-0107](../../docs/adr/0107-3d-models.md)
+decision 5, [ADR-0250](../../docs/adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md))
+name other sources, one picture a slot (`ModelMaps::textures`, in slot order). Planning resolves each where it places the model
 (`look_maps`) as an item would show it, its frame, its video chain or, for a `scene`
 source, its scene, into `Shot::maps` by the model's source, though no item shows it; a
 capture it names joins the shot's captures. `schedule_chains` draws a model's layer

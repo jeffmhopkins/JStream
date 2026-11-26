@@ -119,9 +119,10 @@ impl Drop for Temp {
     }
 }
 
-/// ADR-0107 decision 5: `texture`, `texture_material` and `reflection` name what the
-/// model shows and reflects, live; a texture or reflection that isn't a source
-/// reference is refused.
+/// ADR-0107 decision 5, ADR-0250: the texture slots and `reflection` name what the
+/// model shows and reflects, live, each slot with what it is on, in slot order, an
+/// empty slot left out; a texture or reflection that isn't a source reference is
+/// refused.
 #[test]
 fn texture_and_reflection_name_sources_live() {
     let source_ref = |id: &str| {
@@ -132,19 +133,32 @@ fn texture_and_reflection_name_sources_live() {
     };
     let mut source = create(json!({ "shape": "cube" }), &Context::default()).expect("a cube");
     let shown = source.model().expect("a model");
-    assert_eq!((shown.texture, shown.reflection), (None, None));
+    assert!(shown.textures.is_empty());
+    assert_eq!(shown.reflection, None);
     let named = settings(json!({
         "shape": "cube",
         "texture": source_ref("cam"),
         "texture_material": "screen",
+        "texture_3": source_ref("page"),
+        "texture_material_3": "",
+        "texture_material_2": "left",
         "reflection": source_ref("sky"),
     }));
     source.update(&named).expect("the maps are live");
     let shown = source.model().expect("a model");
-    assert_eq!(shown.texture.as_ref().map(|id| id.as_str()), Some("cam"));
-    assert_eq!(shown.texture_material.as_deref(), Some("screen"));
+    let textures: Vec<(&str, Option<&str>)> = shown
+        .textures
+        .iter()
+        .map(|t| (t.source.as_str(), t.on.as_deref()))
+        .collect();
+    assert_eq!(textures, [("cam", Some("screen")), ("page", None)]);
     assert_eq!(shown.reflection.as_ref().map(|id| id.as_str()), Some("sky"));
-    for (id, value) in [("texture", json!("cam")), ("reflection", json!(3))] {
+    for (id, value) in [
+        ("texture", json!("cam")),
+        ("texture_16", json!("cam")),
+        ("texture_material_2", json!(2)),
+        ("reflection", json!(3)),
+    ] {
         let err = create(json!({ "shape": "cube", id: value }), &Context::default())
             .err()
             .expect("refused");
@@ -153,6 +167,28 @@ fn texture_and_reflection_name_sources_live() {
             "{err:?}"
         );
     }
+}
+
+/// ADR-0250: the kind offers sixteen texture slots, each a live source and what it is
+/// on, all in the group `Textures`, the first two as before.
+#[test]
+fn the_kind_offers_sixteen_texture_slots() {
+    let kind = super::ModelKind::new();
+    let params = &kind.descriptor().params;
+    let ids: Vec<&str> = params.iter().map(|p| p.id.as_str()).collect();
+    let first = ids
+        .iter()
+        .position(|id| *id == "texture")
+        .expect("a texture");
+    assert_eq!(ids[first + 1], "texture_material");
+    assert_eq!(ids[first + 2], "texture_2");
+    assert_eq!(ids[first + 31], "texture_material_16");
+    assert_eq!(ids[first + 32], "reflection");
+    assert!(
+        params[first..first + 32]
+            .iter()
+            .all(|p| p.live && p.group.as_deref() == Some("Textures"))
+    );
 }
 
 fn folder(name: &str) -> Temp {

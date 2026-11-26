@@ -771,7 +771,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | A reflected panorama's blurred levels (`panorama_blur.rs`): a texture the size of its mip chain with as many levels, a level uniform and bind group each, and the blur pipeline | With the chain, made the first time a model reflects the sky picture or probe capture it was built from, made again when the chain is rebuilt; the pipeline with the first such chain, or by `warm_3d` |
-| What each model layer was last drawn of (`Kept`, ADR-0246): its frame uniform's and drives' bytes, the material name of its live texture, and weak references to the layer, the model and the pictures it read | Compositor, refilled in place each draw; an entry goes when its layer has been dropped, at the next model draw that keeps one |
+| What each model layer was last drawn of (`Kept`, ADR-0246): its frame uniform's and drives' bytes, what each of its live textures is on, and weak references to the layer, the model and the pictures it read | Compositor, refilled in place each draw; an entry goes when its layer has been dropped, at the next model draw that keeps one |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `depth_layer` texture (`R16Float`) and its render-target view | The returned `Image`; `render_view_depth` and `draw_model_depth` reuse it |
@@ -831,8 +831,9 @@ share of the frame over the texels per canvas pixel along the item's less minifi
 and all of it for a 3D placement of an upload; a layer placed in 3D records the texels
 per pixel where its polygon is drawn largest, at the near end of each edge from the
 ratio of the ends' `w`, `Shape::projected_minification`; and a model's draw records
-for its live texture the densest texture coordinates of its textured triangles against
-the most pixels a unit of the model covers at a corner of its bounds,
+for each live texture the densest texture coordinates of the parts that take it against
+the most pixels a unit of each covers at a corner of that part's bounds (the model's, for
+a rigged model),
 `model::live_minification`). On a cache where `draw_uploads_small` is on (off by
 default, so a deterministic render such as a snapshot draws every upload whole), the
 first frame of a key holds the upload at what the caller's `planned` need says (whole
@@ -1050,22 +1051,26 @@ blended primitive sorts by the middle of its rest pose
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
-**Live textures and reflections** (ADR-0107 decision 5). `ModelDraw::texture` replaces
-the base-colour texture of the material it names (by its glTF name), or of every
-material, with another image: `draw_model` samples it through a mip chain of the whole
+**Live textures and reflections** (ADR-0107 decision 5). Each of `ModelDraw::textures`
+replaces the base-colour texture of the parts it is on with another image
+([ADR-0250](../../docs/adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md)):
+a part (a primitive) takes the first whose `on` is its material's glTF name or its node's
+or mesh's (`Primitive::names`), else the first with no `on` (`slot_of`). `draw_model`
+samples each through a mip chain of the whole
 image (`Region::whole`, kept on the image like a 3D item's and rebuilt only when the
 image changed), bound with the material's own repeating anisotropic sampler (16× for the
 base colour; the normal, surface, occlusion and emissive maps are read through a second
 sampler at 4×, binding 7, [ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)), and the
 material's uniform marks it a premultiplied linear picture (`card.y`), which the shader
 divides by its alpha before multiplying. The material bind groups that carry it are
-kept on the `GpuModel` while the chain's texture and the material stay the same, so a
-steady frame makes none. A texture with no image binds a transparent 1x1. A
+(`LiveSet`, one per material and slot some part takes) are kept on the `GpuModel` while
+the chains' textures and what each is on stay the same, so a steady frame makes none. A texture with no image binds a transparent 1x1. A
 `reflection` image takes the environment's slot (`reflection_values`: no gradient,
 intensity 1, the camera's axes, or the viewing frame's in a 2D scene), so it is read as a
 scene's sky picture is, blurred by roughness over the same ring of taps, with or
 without scene lights; an unlit model ignores it
 (`golden_model_a_live_texture_replaces_the_base_colour`,
+`a_model_shows_a_live_texture_on_each_part_it_names`,
 `golden_model_a_reflection_replaces_the_studio_environment`).
 
 **Scene lights** (ADR-0143 decision 3). With `ModelDraw::lights` set and a camera, the
@@ -1094,7 +1099,7 @@ glow's colour at its own brightness (`set_emissive`) before the others add, the 
 one that sets winning (ADR-0171 decision 5). The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of
 the same model draws it as it is. A material with a live texture binds a uniform of its
-own, which is driven the same way
+own for each slot, which is driven the same way
 (`golden_model_a_draw_drives_its_materials_by_name_and_only_for_itself`).
 
 **Shadows** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision

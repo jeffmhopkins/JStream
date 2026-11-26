@@ -1492,8 +1492,9 @@ spot, directional and ambient, up to 8 shading lights, placed in the camera's fr
 what casts into it has changed, and sampled with a soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md), a card that only
 adds light casting none, [ADR-0179](adr/0179-cards-that-only-add-light-cast-no-shadow.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
-studio gradient). A model's `texture` names another source whose picture, after its
-own filters, replaces its base colour, sampled through a mip chain of the whole picture
+studio gradient). A model's texture slots each name another source whose picture, after its
+own filters, replaces the base colour of the parts it is on, by material, node or mesh
+name ([ADR-0250](adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md)), sampled through a mip chain of the whole picture
 kept on that image and rebuilt only when it changes; its `reflection` names a source read
 as a panorama in place of the studio gradient or the scene's sky. Each is planned like a
 placed source though no item shows it, and the model's layer is drawn after the chains

@@ -404,6 +404,9 @@ pub struct Primitive {
     pub indices: Vec<u32>,
     /// Its material's index in [`Model::materials`].
     pub material: usize,
+    /// The names, in the file, of the node and the mesh it is drawn for, when they have
+    /// one: what a live texture names it by besides its material's (ADR-0250).
+    pub names: Vec<String>,
 }
 
 /// The box around a model, in its own space.
@@ -698,6 +701,7 @@ mod tests {
             vertices: vec![v(0.0, 0.0), v(1.0, 0.0), v(0.0, 1.0)],
             indices: vec![0, 1, 2],
             material,
+            names: Vec::new(),
         }
     }
 

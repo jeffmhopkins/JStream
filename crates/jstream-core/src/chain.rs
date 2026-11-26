@@ -3734,8 +3734,10 @@ mod tests {
         );
         let textured = |source: &'static str, material: Option<&'static str>| {
             move |shown: jstream_sources::ShownModel| jstream_sources::ShownModel {
-                texture: Some(SourceId::new(source)),
-                texture_material: material.map(str::to_owned),
+                textures: vec![jstream_sources::ShownTexture {
+                    source: SourceId::new(source),
+                    on: material.map(str::to_owned),
+                }],
                 ..shown
             }
         };

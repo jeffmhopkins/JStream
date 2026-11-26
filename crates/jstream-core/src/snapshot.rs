@@ -866,13 +866,21 @@ pub(crate) struct Shot {
     maps: BTreeMap<SourceId, ModelMaps>,
 }
 
-/// The pictures a model's `texture` and `reflection` settings name, as the shot shows
+/// The pictures a model's texture slots and `reflection` setting name, as the shot shows
 /// them: after their own filters, a scene source's scene drawn as it is placed. `None`
-/// for a setting that names nothing, or a source that shows nothing.
+/// for a source that shows nothing, or a reflection that names nothing.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct ModelMaps {
-    texture: Option<SourceRef>,
+    /// One per live texture of the model's source, in its order (ADR-0250).
+    textures: Vec<Option<SourceRef>>,
     reflection: Option<SourceRef>,
+}
+
+impl ModelMaps {
+    /// Every picture it reads: its textures', then its reflection's.
+    fn all(&self) -> impl Iterator<Item = &SourceRef> {
+        self.textures.iter().flatten().chain(&self.reflection)
+    }
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -2427,9 +2435,9 @@ fn plan_inner(
     shot.captures.extend(
         shot.maps
             .values()
-            .flat_map(|maps| [&maps.texture, &maps.reflection])
+            .flat_map(ModelMaps::all)
             .filter_map(|map| match map {
-                Some(SourceRef::Capture(spec)) => Some(spec.clone()),
+                SourceRef::Capture(spec) => Some(spec.clone()),
                 _ => None,
             }),
     );
@@ -4327,19 +4335,22 @@ impl<'a> Planner<'a, '_> {
         if out.maps.contains_key(id) {
             return;
         }
-        let Some((texture, reflection)) = out
+        let Some((textures, reflection)) = out
             .frames
             .get(id)
             .and_then(|frame| frame.model.as_ref())
-            .filter(|shown| shown.texture.is_some() || shown.reflection.is_some())
-            .map(|shown| (shown.texture.clone(), shown.reflection.clone()))
+            .filter(|shown| !shown.textures.is_empty() || shown.reflection.is_some())
+            .map(|shown| (shown.textures.clone(), shown.reflection.clone()))
         else {
             return;
         };
         // Marked first, so a map that reaches this model again stops here.
         out.maps.insert(id.clone(), ModelMaps::default());
         let maps = ModelMaps {
-            texture: texture.and_then(|named| self.map_of(id, &named, out, path)),
+            textures: textures
+                .into_iter()
+                .map(|texture| self.map_of(id, &texture.source, out, path))
+                .collect(),
             reflection: reflection.and_then(|named| self.map_of(id, &named, out, path)),
         };
         out.maps.insert(id.clone(), maps);
@@ -4948,8 +4959,7 @@ impl Shot {
         let mapped = self
             .maps
             .values()
-            .flat_map(|maps| [&maps.texture, &maps.reflection])
-            .flatten()
+            .flat_map(ModelMaps::all)
             .any(|map| matches!(map, SourceRef::Capture(shown) if shown == spec));
         if mapped || self.chains.values().any(|chain| chain.input == key) {
             return None;
@@ -5202,7 +5212,7 @@ impl ChainOrder {
         let Some(maps) = self.maps_of(shot, owner) else {
             return;
         };
-        for map in [&maps.texture, &maps.reflection].into_iter().flatten() {
+        for map in maps.all() {
             match map {
                 SourceRef::Filtered(source) => {
                     self.chain(shot, &ChainOwner::Source(source.clone()), done);
@@ -8059,7 +8069,7 @@ fn draw_model(
         |m, own| shot.source_value(&boxed.item, m, at, own),
         |m| shot.tint(&boxed.item, m),
     );
-    let (texture, reflection) = model_maps(shot, &*cache, source, shown);
+    let (textures, reflection) = model_maps(shot, &*cache, source, shown);
     // What the scene's probes saw, inside one (ADR-0170 decision 3), unless it opts out.
     let probe = (lit && shown.reflections)
         .then(|| {
@@ -8085,7 +8095,7 @@ fn draw_model(
                 environment,
                 floor: None,
                 materials: &drives[..driving],
-                texture,
+                textures: &textures,
                 reflection,
                 probe,
             };
@@ -8143,17 +8153,22 @@ fn model_maps<'c>(
     source: &SourceId,
     shown: &'c jstream_sources::ShownModel,
 ) -> (
-    Option<jstream_render::LiveTexture<'c>>,
+    Vec<jstream_render::LiveTexture<'c>>,
     Option<&'c jstream_render::Image>,
 ) {
     let maps = shot.maps.get(source);
     let picture = |map: Option<&SourceRef>| map.and_then(|map| cache.get(&key(map, shot)));
-    let texture = shown.texture.as_ref().map(|_| jstream_render::LiveTexture {
-        image: picture(maps.and_then(|maps| maps.texture.as_ref())),
-        material: shown.texture_material.as_deref(),
-    });
+    let textures = shown
+        .textures
+        .iter()
+        .enumerate()
+        .map(|(slot, texture)| jstream_render::LiveTexture {
+            image: picture(maps.and_then(|maps| maps.textures.get(slot)?.as_ref())),
+            on: texture.on.as_deref(),
+        })
+        .collect();
     let reflection = picture(maps.and_then(|maps| maps.reflection.as_ref()));
-    (texture, reflection)
+    (textures, reflection)
 }
 
 /// The lights of scene `scene_id` as `view` sees them, for a `scene`-lit model or a lit
@@ -8606,7 +8621,7 @@ fn draw_reflection(
         );
         let reflected = GpuKey::ReflectedModel(shown.scene.clone(), shown.item.clone());
         cache.layer(compositor, &reflected, width, height)?;
-        let (texture, reflection) = model_maps(shot, &*cache, shown.source, shown.shown);
+        let (textures, reflection) = model_maps(shot, &*cache, shown.source, shown.shown);
         let Some(target) = cache.get(&reflected) else {
             continue;
         };
@@ -8622,7 +8637,7 @@ fn draw_reflection(
                 // Only what stands above the floor is reflected in it.
                 floor: Some(floor),
                 materials: &drives[..driving],
-                texture,
+                textures: &textures,
                 reflection,
                 probe: None,
             },
@@ -9707,7 +9722,7 @@ fn only_items_read(shot: &Shot, key: &GpuKey) -> bool {
         && !shot
             .maps
             .values()
-            .filter_map(|maps| maps.texture.as_ref())
+            .flat_map(|maps| maps.textures.iter().flatten())
             .any(reads)
 }
 
@@ -10226,7 +10241,7 @@ fn draw_view_depth(
                 environment: None,
                 floor: from.and_then(|(_, _, floor)| floor),
                 materials: &[],
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe: None,
             },
@@ -10331,7 +10346,7 @@ fn draw_surface(
             })
             .flatten();
         // Its live texture and its materials' drives, as its layer was drawn with.
-        let (texture, reflection) = model_maps(shot, cache, drawn.source, shown);
+        let (textures, reflection) = model_maps(shot, cache, drawn.source, shown);
         let owner = ChainOwner::Item(scene.clone(), item.clone());
         let (drives, driving) = match shot.boxes.get(&owner) {
             Some(boxed) => crate::sourced::materials(
@@ -10356,7 +10371,7 @@ fn draw_surface(
                 environment,
                 floor: None,
                 materials: &drives[..driving],
-                texture,
+                textures: &textures,
                 reflection: reflection.filter(|_| reflects),
                 probe,
             },
@@ -12883,11 +12898,11 @@ pub(crate) mod tests {
         assert_eq!(drawn.capture_need(&spec, info.size), Some(0.125));
         for maps in [
             super::ModelMaps {
-                texture: Some(primary()),
+                textures: vec![Some(primary())],
                 reflection: None,
             },
             super::ModelMaps {
-                texture: None,
+                textures: Vec::new(),
                 reflection: Some(primary()),
             },
         ] {

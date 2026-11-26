@@ -256,16 +256,30 @@ pub struct ShownModel {
     /// [`Model::rig`](jstream_media::model::Model::rig): its rest pose until a clip
     /// plays. `None` for a model without a rig.
     pub pose: Option<Arc<[jstream_media::model::rig::Mat4]>>,
-    /// The source whose picture replaces the base-colour texture (ADR-0107 decision
-    /// 5), after its own filters, sampled live every frame. `None` keeps the model's own.
-    pub texture: Option<jstream_protocol::SourceId>,
-    /// The material, by name, whose base-colour texture `texture` replaces; `None` for
-    /// every material.
-    pub texture_material: Option<String>,
+    /// The sources whose pictures replace base-colour textures (ADR-0107 decision 5,
+    /// ADR-0250), after their own filters, sampled live every frame, in the order of
+    /// the source's texture slots: at most [`MAX_LIVE_TEXTURES`]. Empty keeps the
+    /// model's own everywhere.
+    pub textures: Vec<ShownTexture>,
     /// The source the model reflects (ADR-0107 decision 5): its picture, read as an
     /// equirectangular panorama, replaces the studio environment (or its scene's sky)
     /// for the model's reflections and ambient light.
     pub reflection: Option<jstream_protocol::SourceId>,
+}
+
+/// The most live textures one model shows ([`ShownModel::textures`], ADR-0250).
+pub const MAX_LIVE_TEXTURES: usize = 16;
+
+/// One live texture of a model (ADR-0107 decision 5, ADR-0250): a source's picture in
+/// place of the base-colour texture of the parts it is on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShownTexture {
+    /// The source whose picture it is.
+    pub source: jstream_protocol::SourceId,
+    /// What it is on, by name in the file: a material, a node or a mesh. A part takes
+    /// the first texture that names its material, its node or its mesh, else the first
+    /// that names nothing; `None` names nothing.
+    pub on: Option<String>,
 }
 
 /// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.

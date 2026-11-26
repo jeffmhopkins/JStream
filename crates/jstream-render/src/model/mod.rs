@@ -168,8 +168,8 @@ struct Kept {
     chained: [bool; FRAME_TEXTURES],
     /// Each material's drive: none, or the values it drew with.
     drives: Vec<u8>,
-    /// Its live texture: the picture with its texels, and the material it replaces.
-    live: Option<(Option<crate::image::Seen>, Option<String>)>,
+    /// Its live textures: each picture with its texels, and what it is on.
+    live: Vec<(Option<crate::image::Seen>, Option<String>)>,
 }
 
 impl Kept {
@@ -201,24 +201,14 @@ impl Kept {
                 None => self.drives.push(0),
             }
         }
-        match draw.texture {
-            Some(texture) => {
-                let seen = texture
-                    .image
-                    .filter(|image| image.owner().is(owner))
-                    .map(Image::seen);
-                let (picture, material) = self.live.get_or_insert((None, None));
-                *picture = seen;
-                match (texture.material, material.as_mut()) {
-                    (Some(name), Some(kept)) => {
-                        kept.clear();
-                        kept.push_str(name);
-                    }
-                    (name, _) => *material = name.map(str::to_owned),
-                }
-            }
-            None => self.live = None,
-        }
+        self.live.clear();
+        self.live.extend(draw.textures.iter().map(|texture| {
+            let seen = texture
+                .image
+                .filter(|image| image.owner().is(owner))
+                .map(Image::seen);
+            (seen, texture.on.map(str::to_owned))
+        }));
     }
 
     /// Fills in the layers the draw is into, as they hold now.
@@ -254,15 +244,57 @@ impl PartialEq for Kept {
     }
 }
 
-/// Material bind groups with a live texture in place of their base colour's.
+/// Material bind groups with live textures in place of their base colour's.
 struct LiveBinds {
-    /// The texture they bind: a source's mip chain, or the transparent stand-in.
-    texture: wgpu::Texture,
-    /// The material they replace it in, or every material.
-    material: Option<String>,
-    /// One per material: `Some` for a material whose texture is replaced, with the
-    /// uniform it binds, which a draw that drives the material writes (ADR-0171).
-    binds: Vec<Option<(wgpu::BindGroup, wgpu::Buffer)>>,
+    /// The textures they bind, by slot: a source's mip chain, or the transparent
+    /// stand-in.
+    textures: Vec<wgpu::Texture>,
+    /// The groups, and what each texture is on.
+    set: Arc<LiveSet>,
+}
+
+/// Which live texture each part of a model takes, and the bind groups that bind them
+/// (ADR-0107 decision 5, ADR-0250).
+pub(crate) struct LiveSet {
+    /// What each texture is on, by slot: a material's, a node's or a mesh's name, or
+    /// `None` for every part no other names.
+    on: Vec<Option<String>>,
+    /// One per material and slot some part takes: that material's group with the
+    /// slot's texture as its base colour's, and the uniform it binds, which a draw
+    /// that drives the material writes (ADR-0171).
+    binds: Vec<(usize, usize, wgpu::BindGroup, wgpu::Buffer)>,
+}
+
+impl LiveSet {
+    /// The group `p` binds, when it takes a live texture.
+    fn bind(&self, p: &GpuPrimitive, materials: &[GpuMaterial]) -> Option<&wgpu::BindGroup> {
+        let name = &materials.get(p.material)?.name;
+        let slot = slot_of(&self.on, name, &p.names)?;
+        self.binds
+            .iter()
+            .find(|(material, at, ..)| *material == p.material && *at == slot)
+            .map(|(_, _, bind, _)| bind)
+    }
+
+    /// The uniforms of material `material`'s groups.
+    fn uniforms(&self, material: usize) -> impl Iterator<Item = &wgpu::Buffer> {
+        self.binds
+            .iter()
+            .filter(move |(m, ..)| *m == material)
+            .map(|(.., uniform)| uniform)
+    }
+}
+
+/// The slot of the live texture a part with `material`'s name and `names` (its node's
+/// and mesh's) takes, of textures on `on`: the first that names one of them, else the
+/// first that names nothing (ADR-0250).
+fn slot_of(on: &[Option<String>], material: &str, names: &[String]) -> Option<usize> {
+    on.iter()
+        .position(|on| {
+            on.as_deref()
+                .is_some_and(|on| on == material || names.iter().any(|name| name == on))
+        })
+        .or_else(|| on.iter().position(Option::is_none))
 }
 
 struct GpuPrimitive {
@@ -277,6 +309,11 @@ struct GpuPrimitive {
     /// texture is sampled where the model is drawn (ADR-0249). 0 for a primitive with
     /// no surface or no texture coordinates.
     texel_density: f32,
+    /// The names, in the file, of its node and mesh, which a live texture can be on
+    /// (ADR-0250).
+    names: Vec<String>,
+    /// The box of its vertices, in the model's space.
+    bounds: SolidBounds,
 }
 
 struct GpuMaterial {
@@ -479,62 +516,62 @@ fn texel_density(primitive: &jstream_media::model::Primitive) -> f32 {
     most
 }
 
-/// How many texels of a live texture of `texels` one pixel of `model`, drawn through
-/// `clip` on a canvas of `canvas`, spans where it is drawn largest (ADR-0249): the
-/// densest texture coordinates of the primitives whose material `material` replaces
-/// (every one for `None`), against the most pixels a unit of the model covers at any
-/// corner of its bounds. 0 when it can't be told (a corner at or behind the viewer, or
-/// no such primitive), so the texture is needed whole.
+/// How many texels of live texture `slot` of `texels`, of textures on `on`, one pixel of
+/// `model`, drawn through `clip` on a canvas of `canvas`, spans where it is drawn
+/// largest (ADR-0249, ADR-0250): over the parts that take it, the densest texture
+/// coordinates of each against the most pixels a unit of it covers at any corner of
+/// its bounds (the model's, for a rigged model, whose parts its pose moves). 0 when it
+/// can't be told (a corner at or behind the viewer, or no such part), so the texture is
+/// needed whole.
 fn live_minification(
     model: &Uploaded,
-    material: Option<&str>,
+    (on, slot): (&[Option<String>], usize),
     clip: &[[f32; 4]; 4],
     canvas: Canvas,
     texels: (u32, u32),
 ) -> f32 {
-    let density = model
-        .primitives
-        .iter()
-        .filter(|p| {
-            material.is_none_or(|name| {
-                model
-                    .materials
-                    .get(p.material)
-                    .is_some_and(|m| m.name == name)
-            })
-        })
-        .map(|p| p.texel_density)
-        .fold(0.0_f32, f32::max);
-    if density <= 0.0 {
-        return 0.0;
-    }
     let (width, height) = (f64::from(canvas.width), f64::from(canvas.height));
     let row = |r: usize| [0, 1, 2, 3].map(|c| f64::from(clip[c][r]));
     let (rx, ry, rw) = (row(0), row(1), row(3));
     let length = |r: &[f64; 4]| (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt();
-    let mut pixels = 0.0_f64;
-    for corner in 0..8 {
-        let pick = |bit: usize, axis: usize| {
-            f64::from(if corner & (1 << bit) == 0 {
-                model.bounds.min[axis]
-            } else {
-                model.bounds.max[axis]
-            })
-        };
-        let at = [pick(0, 0), pick(1, 1), pick(2, 2), 1.0];
-        let dot = |r: &[f64; 4]| r.iter().zip(&at).map(|(a, b)| a * b).sum::<f64>();
-        let w = dot(&rw);
-        if w.is_nan() || w <= 1e-6 {
-            return 0.0;
+    let side = (f64::from(texels.0) * f64::from(texels.1)).sqrt();
+    let mut least = f64::INFINITY;
+    for p in &model.primitives {
+        let taken = model
+            .materials
+            .get(p.material)
+            .and_then(|m| slot_of(on, &m.name, &p.names));
+        if taken != Some(slot) || p.texel_density <= 0.0 {
+            continue;
         }
-        // A projected point moves by at most (|row| + |ndc| |w row|) / w per unit.
-        let (x, y) = (dot(&rx) / w, dot(&ry) / w);
-        let across = (length(&rx) + x.abs() * length(&rw)) / w * width / 2.0;
-        let down = (length(&ry) + y.abs() * length(&rw)) / w * height / 2.0;
-        pixels = pixels.max(across).max(down);
+        let bounds = if model.pose.is_some() {
+            model.bounds
+        } else {
+            p.bounds
+        };
+        let mut pixels = 0.0_f64;
+        for corner in 0..8 {
+            let pick = |bit: usize, axis: usize| {
+                f64::from(if corner & (1 << bit) == 0 {
+                    bounds.min[axis]
+                } else {
+                    bounds.max[axis]
+                })
+            };
+            let at = [pick(0, 0), pick(1, 1), pick(2, 2), 1.0];
+            let dot = |r: &[f64; 4]| r.iter().zip(&at).map(|(a, b)| a * b).sum::<f64>();
+            let w = dot(&rw);
+            if w.is_nan() || w <= 1e-6 {
+                return 0.0;
+            }
+            // A projected point moves by at most (|row| + |ndc| |w row|) / w per unit.
+            let (x, y) = (dot(&rx) / w, dot(&ry) / w);
+            let across = (length(&rx) + x.abs() * length(&rw)) / w * width / 2.0;
+            let down = (length(&ry) + y.abs() * length(&rw)) / w * height / 2.0;
+            pixels = pixels.max(across).max(down);
+        }
+        least = least.min(f64::from(p.texel_density) * side / pixels);
     }
-    let spanned = f64::from(density) * (f64::from(texels.0) * f64::from(texels.1)).sqrt();
-    let least = spanned / pixels;
     if least.is_finite() && least > 0.0 {
         least as f32
     } else {
@@ -649,10 +686,11 @@ pub struct ModelDraw<'a> {
     /// How this placement changes the model's materials as it draws them (ADR-0171
     /// decision 4); empty draws them as the file has them.
     pub materials: &'a [MaterialDrive<'a>],
-    /// Another source's picture in place of the base-colour texture (ADR-0107
-    /// decision 5), sampled through a mip chain the compositor builds from it once per
-    /// change. `None` keeps the model's own textures.
-    pub texture: Option<LiveTexture<'a>>,
+    /// Other sources' pictures in place of base-colour textures (ADR-0107 decision 5,
+    /// ADR-0250), each sampled through a mip chain the compositor builds from it once
+    /// per change: a part takes the first that is on its material, node or mesh, else
+    /// the first that is on nothing in particular. Empty keeps the model's own textures.
+    pub textures: &'a [LiveTexture<'a>],
     /// Another source's picture the model reflects (ADR-0107 decision 5), read as an
     /// equirectangular panorama as a scene's sky is: it replaces the studio
     /// environment, or for a model lit by its scene that scene's sky, for its
@@ -686,9 +724,10 @@ pub struct LiveTexture<'a> {
     /// The picture, made by the compositor that draws the model. `None` for a source
     /// that is missing or not drawing yet: the texture then reads transparent.
     pub image: Option<&'a Image>,
-    /// The material, by its name in the file, whose base-colour texture it replaces;
-    /// `None` replaces every material's.
-    pub material: Option<&'a str>,
+    /// What it is on, by name in the file: a material, a node or a mesh, whose parts'
+    /// base-colour texture it replaces (ADR-0250). `None` is on every part no other
+    /// texture of the draw names.
+    pub on: Option<&'a str>,
 }
 
 /// The bounds of the quad a lit card is shaded on: a unit square, flat.
@@ -1431,6 +1470,8 @@ impl UploadKit {
                 material: p.material,
                 center: [0, 1, 2].map(|c| (min[c] + max[c]) * 0.5),
                 texel_density: texel_density(p),
+                names: p.names.clone(),
+                bounds: SolidBounds { min, max },
             });
         }
         let bounds = model.bounds();
@@ -1530,15 +1571,15 @@ impl ModelRuntime {
 
     /// Draws `draw` into `target`, replacing what it held: transparent wherever the
     /// model isn't.
-    /// `live` is `draw.texture`'s mip chain, its texture and its whole view, when its
-    /// picture is drawing, and `panoramas` the chains its blurred reflections read.
+    /// `live` is each of `draw.textures`' mip chains, by slot, its texture and its whole
+    /// view, when its picture is drawing, and `panoramas` the chains its blurred reflections read.
     pub(crate) fn draw(
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
         draw: &ModelDraw<'_>,
         target: &Image,
-        (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
+        (live, panoramas): (&[LiveView<'_>], Panoramas<'_>),
         (surface, view_depth): (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         let how = surface.map_or(DrawAs::Layer, DrawAs::LayerWithSurface);
@@ -1636,32 +1677,58 @@ impl ModelRuntime {
         Ok(())
     }
 
-    /// The material bind groups `draw` binds with its live texture `live` (the clear
-    /// stand-in for `None`), from those kept on its model when they match, else made
-    /// and kept. Each is the material's own, its base colour's view replaced and its
-    /// uniform marking that view as a premultiplied linear picture.
+    /// The material bind groups `draw` binds with its live textures `textures`, their
+    /// pictures `live` by slot (the clear stand-in for `None`), from those kept on its
+    /// model when they match, else made and kept. Each is a material's own, its base
+    /// colour's view replaced and its uniform marking that view as a premultiplied
+    /// linear picture: one per material and slot that a part takes.
     fn live_binds(
         &self,
         gpu: &Gpu,
         model: &Uploaded,
-        material: Option<&str>,
-        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
-    ) -> Vec<Option<(wgpu::BindGroup, wgpu::Buffer)>> {
-        let (texture, view) = live.unwrap_or((&self.clear.0, &self.clear.1));
+        textures: &[LiveTexture<'_>],
+        live: &[LiveView<'_>],
+    ) -> Arc<LiveSet> {
+        let views: Vec<(&wgpu::Texture, &wgpu::TextureView)> = (0..textures.len())
+            .map(|slot| {
+                live.get(slot)
+                    .copied()
+                    .flatten()
+                    .unwrap_or((&self.clear.0, &self.clear.1))
+            })
+            .collect();
+        let on: Vec<Option<String>> = textures
+            .iter()
+            .map(|texture| texture.on.map(str::to_owned))
+            .collect();
         let mut kept = model.live.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(binds) = kept.as_ref()
-            && binds.texture == *texture
-            && binds.material.as_deref() == material
+            && binds.set.on == on
+            && binds.textures.len() == views.len()
+            && binds
+                .textures
+                .iter()
+                .zip(&views)
+                .all(|(kept, (texture, _))| kept == *texture)
         {
-            return binds.binds.clone();
+            return Arc::clone(&binds.set);
         }
-        let binds: Vec<Option<(wgpu::BindGroup, wgpu::Buffer)>> = model
-            .materials
-            .iter()
-            .map(|m| {
-                if material.is_some_and(|name| name != m.name) {
-                    return None;
-                }
+        let mut used = Vec::new();
+        for p in &model.primitives {
+            let Some(m) = model.materials.get(p.material) else {
+                continue;
+            };
+            if let Some(slot) = slot_of(&on, &m.name, &p.names)
+                && !used.contains(&(p.material, slot))
+            {
+                used.push((p.material, slot));
+            }
+        }
+        let binds = used
+            .into_iter()
+            .filter_map(|(material, slot)| {
+                let m = model.materials.get(material)?;
+                let (_, view) = views.get(slot)?;
                 let mut values = m.values;
                 // The material's base colour texture is a source's picture.
                 values[17] = 1.0;
@@ -1701,15 +1768,18 @@ impl ModelRuntime {
                     layout: &self.material_layout,
                     entries: &entries,
                 });
-                Some((bind, uniform))
+                Some((material, slot, bind, uniform))
             })
             .collect();
+        let set = Arc::new(LiveSet { on, binds });
         *kept = Some(LiveBinds {
-            texture: texture.clone(),
-            material: material.map(str::to_owned),
-            binds: binds.clone(),
+            textures: views
+                .iter()
+                .map(|(texture, _)| (*texture).clone())
+                .collect(),
+            set: Arc::clone(&set),
         });
-        binds
+        set
     }
 
     /// Lights `card.image`, a card's picture flat in its box layer, into `target`, a
@@ -1819,6 +1889,8 @@ impl ModelRuntime {
                     center: [0.0; 3],
                     // A card's picture is its layer, which no need is recorded for.
                     texel_density: 0.0,
+                    names: Vec::new(),
+                    bounds: CARD_BOUNDS,
                 }],
                 materials: vec![GpuMaterial {
                     bind,
@@ -1853,7 +1925,7 @@ impl ModelRuntime {
             environment: card.environment,
             floor: None,
             materials: &[],
-            texture: None,
+            textures: &[],
             reflection: None,
             probe: card.probe,
         };
@@ -1862,7 +1934,7 @@ impl ModelRuntime {
             owner,
             &draw,
             (target, None),
-            (None, panoramas),
+            (&[], panoramas),
             DrawAs::InTexture,
         )
     }
@@ -1932,7 +2004,7 @@ impl ModelRuntime {
         owner: &Owner,
         draw: &ModelDraw<'_>,
         (target, view_depth): (&Image, Option<&Image>),
-        (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
+        (live, panoramas): (&[LiveView<'_>], Panoramas<'_>),
         how: DrawAs<'_>,
     ) -> Result<(), RenderError> {
         let in_texture = matches!(how, DrawAs::InTexture);
@@ -2009,16 +2081,23 @@ impl ModelRuntime {
         };
         // How much of a live texture's resolution this draw needs, for a picture drawn
         // only as large as it is seen (ADR-0249).
-        if let Some(texture) = draw.texture.filter(|_| !in_texture)
-            && let Some(image) = texture.image
-        {
-            image.record_draw(live_minification(
-                model,
-                texture.material,
-                &clip,
-                canvas,
-                (image.width(), image.height()),
-            ));
+        if !in_texture {
+            let on: Vec<Option<String>> = draw
+                .textures
+                .iter()
+                .map(|texture| texture.on.map(str::to_owned))
+                .collect();
+            for (slot, texture) in draw.textures.iter().enumerate() {
+                if let Some(image) = texture.image {
+                    image.record_draw(live_minification(
+                        model,
+                        (&on, slot),
+                        &clip,
+                        canvas,
+                        (image.width(), image.height()),
+                    ));
+                }
+            }
         }
         let lights = match (draw.lights, camera.as_ref()) {
             (Some(lights), Some(view)) if draw.lighting != Lighting::Unlit => {
@@ -2123,9 +2202,8 @@ impl ModelRuntime {
             }
         }
         let frame_bind = self.frame_bind_for(gpu, maps, chains);
-        let live_binds = draw
-            .texture
-            .map(|texture| self.live_binds(gpu, model, texture.material, live));
+        let live_binds =
+            (!draw.textures.is_empty()).then(|| self.live_binds(gpu, model, draw.textures, live));
         let beside = match how {
             DrawAs::LayerWithSurface(layers) => {
                 let views = surface_views(owner, layers)?;
@@ -2182,10 +2260,7 @@ impl ModelRuntime {
                     }
                 }
             }
-            let Some((_, live)) = live_binds
-                .as_ref()
-                .and_then(|binds| binds.get(index)?.as_ref())
-            else {
+            let Some(live) = live_binds.as_ref() else {
                 continue;
             };
             let was = m.live_driven.swap(driven.is_some(), Ordering::Relaxed);
@@ -2193,7 +2268,9 @@ impl ModelRuntime {
                 let mut values = driven.unwrap_or(m.values);
                 // The base colour texture is a source's picture, as `live_binds` marks it.
                 values[17] = 1.0;
-                gpu.queue.write_buffer(live, 0, &material_bytes(&values));
+                for uniform in live.uniforms(index) {
+                    gpu.queue.write_buffer(uniform, 0, &material_bytes(&values));
+                }
             }
         }
         // A surface on its own reads the same materials, live textures and drives.
@@ -2300,8 +2377,8 @@ impl ModelRuntime {
                 };
                 let bind = live_binds
                     .as_ref()
-                    .and_then(|binds| binds.get(p.material)?.as_ref())
-                    .map_or(&material.bind, |(bind, _)| bind);
+                    .and_then(|live| live.bind(p, &model.materials))
+                    .unwrap_or(&material.bind);
                 pass.set_bind_group(1, bind, &[]);
                 pass.set_vertex_buffer(0, p.vertices.slice(..));
                 pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -2628,7 +2705,7 @@ impl ModelRuntime {
         gpu: &Gpu,
         owner: &Owner,
         draw: &ModelDraw<'_>,
-        (targets, (live, panoramas)): ([&Image; 3], (LiveView<'_>, Panoramas<'_>)),
+        (targets, (live, panoramas)): ([&Image; 3], (&[LiveView<'_>], Panoramas<'_>)),
     ) -> Result<(), RenderError> {
         if draw.camera.is_none() {
             return Ok(());
@@ -2650,7 +2727,7 @@ impl ModelRuntime {
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
-        (model, frame_bind, live_binds): (&Uploaded, &wgpu::BindGroup, Option<&[LiveBind]>),
+        (model, frame_bind, live_binds): (&Uploaded, &wgpu::BindGroup, Option<&LiveSet>),
         targets: [&Image; 3],
     ) -> Result<(), RenderError> {
         let views = surface_views(owner, targets)?;
@@ -2700,8 +2777,8 @@ impl ModelRuntime {
                     continue;
                 };
                 let bind = live_binds
-                    .and_then(|binds| binds.get(p.material)?.as_ref())
-                    .map_or(&material.bind, |(bind, _)| bind);
+                    .and_then(|live| live.bind(p, &model.materials))
+                    .unwrap_or(&material.bind);
                 pass.set_bind_group(1, bind, &[]);
                 pass.set_vertex_buffer(0, p.vertices.slice(..));
                 pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -3053,10 +3130,7 @@ fn merge_pipeline(gpu: &Gpu) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline) {
 }
 
 /// A live texture's whole picture as a model reads it: its texture and its view.
-type LiveView<'a> = Option<(&'a wgpu::Texture, &'a wgpu::TextureView)>;
-
-/// A material's bind group for a live texture, with its uniform, where it has one.
-type LiveBind = Option<(wgpu::BindGroup, wgpu::Buffer)>;
+pub(crate) type LiveView<'a> = Option<(&'a wgpu::Texture, &'a wgpu::TextureView)>;
 
 /// What [`ModelRuntime::draw_as`] draws.
 #[derive(Clone, Copy)]
