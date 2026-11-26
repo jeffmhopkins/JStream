@@ -7071,7 +7071,7 @@ stamp = { hash = "b3:67cb3de4e6103ee0", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#canvas"."body"]
-stamp = { hash = "b3:455ad480d510040f", by = "agent:claude", note = "Rewrote the 3D orbit and wheel/fly paragraphs for #1809: moves held unsaved in one live gesture (Held, camera::Unsaved), Save bar commits one scene.set_camera, Revert/leaving/stored-camera change cancel; Wheeling and WHEEL_SETTLE gone" }
+stamp = { hash = "b3:3e155bf41790cee6", by = "agent:preview-toggle", note = "Added the Live preview off bullet: Disable closes the stream and moves Stream to the next channel, switch/reshow only update Stream while off, Enable subscribes it, choice kept under jstream.canvas.preview_off; checked against mod.rs and preview.rs." }
 
 ["CRATE-jstream-ui#canvas"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -7101,7 +7101,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:a5ad680026f05fb2", by = "agent:issues-thread", note = "Re-read after merging the train: the live aim paragraph says a button holds its axis from one drive on press to one stop on release, pointer captured and let go on pointerup, pointercancel or lostpointercapture, never on leave, and Space or Enter holds it (repeats ignored) until keyup or blur (#1707); matches live_aim.rs." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:73cce966d556677b", by = "agent:claude", note = "Rewrote the 3D orbit and wheel/fly paragraphs for #1809: moves held unsaved in one live gesture (Held, camera::Unsaved), Save bar commits one scene.set_camera, Revert/leaving/stored-camera change cancel; Wheeling and WHEEL_SETTLE gone" }
+stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "Added the Live preview off bullet: Disable closes the stream and moves Stream to the next channel, switch/reshow only update Stream while off, Enable subscribes it, choice kept under jstream.canvas.preview_off; checked against mod.rs and preview.rs." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Rewrote the outline paragraph: a hidden item draws nothing and isn't hit, marqueed or snapped to unless selected (Layout::seen_boxes/seen_shapes), and only a selected hidden item is dashed (#1732)" }
@@ -7110,7 +7110,7 @@ stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Rewr
 stamp = { hash = "b3:30b296a585fd26dd", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train changed neither canvas/ nor this text; the preview paragraph (moving the open stream with preview.show, Stream::showing after preview::SETTLE, the skip asking preview.request_keyframe) and the monitor sentence still match preview.rs, mod.rs and monitor.rs" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/preview.rs"]
-stamp = { hash = "b3:8ac58e6e96b4ffe6", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train changed neither canvas/ nor this text; the preview paragraph (moving the open stream with preview.show, Stream::showing after preview::SETTLE, the skip asking preview.request_keyframe) and the monitor sentence still match preview.rs, mod.rs and monitor.rs" }
+stamp = { hash = "b3:66f1a8e436def8e3", by = "agent:preview-toggle", note = "Added the Live preview off bullet: Disable closes the stream and moves Stream to the next channel, switch/reshow only update Stream while off, Enable subscribes it, choice kept under jstream.canvas.preview_off; checked against mod.rs and preview.rs." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:9778ff45bb04288b", by = "agent:alpha13-train", note = "Canvas paragraph now says the <canvas> is sized as each picture is drawn (Painter::fit), not when the frame arrives; re-read against screen.rs" }
@@ -7170,7 +7170,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:a5ad680026f05fb2", by = "agent:issues-thread", note = "Re-read after merging the train (#1707): the live aim buttons capture the pointer and take Space/Enter; no design choice (connecting, state, styles, CSP) changes, and the buttons set no style attribute." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:73cce966d556677b", by = "agent:claude", note = "Re-read: no new module, state store or style mechanism; the Save bar is a style.css class like the keyframe banner, no inline style" }
+stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "Re-read the design section: the canvas still opens one preview stream per session channel; the off state keeps run_preview reading the binary channel for taps, and persistence is browser storage like the camera controls." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Re-read the canvas and model parts of the design section; nothing there names hidden-item outlines or hit rules, which the canvas section covers; still holds" }
@@ -7179,7 +7179,7 @@ stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Re-r
 stamp = { hash = "b3:30b296a585fd26dd", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train's #1759 changed this section's text (dock bands: dock::Edge, Zone::Bottom(n), EdgeView's .new-band strip, Arrangement::tidy; links, toasts, settings errors and About's facts keeping the browser's menu), not canvas/ or projector.rs; the studio-mode monitor and Projectors bullets hold with this PR's preview.show moves and keyframe requests" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/preview.rs"]
-stamp = { hash = "b3:8ac58e6e96b4ffe6", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train's #1759 changed this section's text (dock bands: dock::Edge, Zone::Bottom(n), EdgeView's .new-band strip, Arrangement::tidy; links, toasts, settings errors and About's facts keeping the browser's menu), not canvas/ or projector.rs; the studio-mode monitor and Projectors bullets hold with this PR's preview.show moves and keyframe requests" }
+stamp = { hash = "b3:66f1a8e436def8e3", by = "agent:preview-toggle", note = "Re-read the design section: the canvas still opens one preview stream per session channel; the off state keeps run_preview reading the binary channel for taps, and persistence is browser storage like the camera controls." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:9778ff45bb04288b", by = "agent:alpha13-train", note = "Re-read against screen.rs's change (the canvas is sized in Painter::draw, not Screen::show): nothing this section says about the screen, its counts or the canvas changes" }
@@ -7527,7 +7527,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:a5ad680026f05fb2", by = "agent:issues-thread", note = "Re-read after merging the alpha.13 train: live_aim.rs only changes how its buttons hold and release an axis (#1707); the crate's purpose, layering and contents list still hold." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:73cce966d556677b", by = "agent:claude", note = "Re-read: crate purpose and module list unchanged by the unsaved-camera change in canvas/mod.rs and camera.rs" }
+stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "Re-read the purpose against the live-preview toggle: still a Leptos client over the protocol; the toggle only subscribes and unsubscribes the canvas's existing preview stream, no new protocol use." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "canvas/mod.rs and model.rs only change which items the canvas draws and hits (hidden ones only while selected, #1732); the crate's purpose is unchanged" }
@@ -7536,7 +7536,7 @@ stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "canv
 stamp = { hash = "b3:30b296a585fd26dd", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train's #1759 rewrote this section's Dock and Workspace bullets (each outer Edge holds bands as many as are in use; stacks decided again on a ResizeObserver), checked against dock.rs and workspace.rs, and left canvas/ and projector.rs alone; the Canvas bullet's Monitor of the program or any scene, which this PR moves with preview.show, still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/preview.rs"]
-stamp = { hash = "b3:8ac58e6e96b4ffe6", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train's #1759 rewrote this section's Dock and Workspace bullets (each outer Edge holds bands as many as are in use; stacks decided again on a ResizeObserver), checked against dock.rs and workspace.rs, and left canvas/ and projector.rs alone; the Canvas bullet's Monitor of the program or any scene, which this PR moves with preview.show, still holds" }
+stamp = { hash = "b3:66f1a8e436def8e3", by = "agent:preview-toggle", note = "Re-read the purpose against the live-preview toggle: still a Leptos client over the protocol; the toggle only subscribes and unsubscribes the canvas's existing preview stream, no new protocol use." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:9778ff45bb04288b", by = "agent:alpha13-train", note = "Re-read against screen.rs's change (the canvas is sized in Painter::draw, not Screen::show): nothing this section says about the screen, its counts or the canvas changes" }
@@ -7947,7 +7947,7 @@ stamp = { hash = "b3:bd6b1e63aa1b86d2", by = "agent:a13-train", note = "Re-read:
 stamp = { hash = "b3:aaf7fc7be9160d3f", by = "agent:mappings-panel", note = "mappings.spec.js's Triggers test now waits for the key capture's focus before F8, as keys-and-midi.spec does; the section's description holds | merge: Merged #1697's head 9b0b36f0 (item targets, map_target, channel_reader) with #1708 and the Mappings panel: specs only; harness unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
-stamp = { hash = "b3:479f0922ccc1fa3f", by = "agent:claude", note = "menus, filters, scene-filters and tool-bars specs changed tests only, no harness or fixture change; holds" }
+stamp = { hash = "b3:9ac5600b01e1d70a", by = "agent:preview-toggle", note = "Re-read the harness: the new spec uses only connect, page.reload and the existing fixtures; the mock daemon, setup and browser notes still hold." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/mixer.spec.js"]
 stamp = { hash = "b3:b6d1bba66bcd3a81", by = "agent:issues-thread", note = "Specs gained live-drag tests only; harness (daemon, mock, fixtures) unchanged, holds" }
@@ -8034,7 +8034,7 @@ stamp = { hash = "b3:27ab7a66446cf07e", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:1717ff2e47c9051c", by = "agent:claude", note = "Updated scene-cameras and fly entries: moves show the Unsaved camera bar with no revision, leaving or Revert restore, Save commits one revision | merge: #1816 added the data trigger form (style.css selectors shared with .midi-trigger-form, keys-and-midi spec and its README entry); re-read, nothing in this section about the camera Save bar changes | kept from the merged side: Keys & MIDI bullet now covers the note Learn test and the Bitwig data trigger test as keys-and-midi.spec.js drives them; ran that spec, 4 of 4 pass" }
+stamp = { hash = "b3:efcd013e9988021d", by = "agent:preview-toggle", note = "menus.spec.js entry now names the live preview toggle test (off text, kept across a reload, on again) and the menus' new Disable live preview entry; the rest of the list is unchanged." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -8112,7 +8112,7 @@ stamp = { hash = "b3:bd6b1e63aa1b86d2", by = "agent:a13-train", note = "Map cont
 stamp = { hash = "b3:aaf7fc7be9160d3f", by = "agent:mappings-panel", note = "mappings.spec.js's Triggers test now waits for the key capture's focus before F8, as keys-and-midi.spec does; the section's description holds | merge: Merged #1697's head 9b0b36f0 (item targets, map_target, channel_reader) with #1708 and the Mappings panel: map-control bullet's Inspector item test kept, then the Mappings bullet" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
-stamp = { hash = "b3:479f0922ccc1fa3f", by = "agent:claude", note = "Edited the Filters, Scene filters, Tool bars and Menus entries for Edit filters opening Properties on Filters, the menu order, and the Sources back-out button" }
+stamp = { hash = "b3:9ac5600b01e1d70a", by = "agent:preview-toggle", note = "menus.spec.js entry now names the live preview toggle test (off text, kept across a reload, on again) and the menus' new Disable live preview entry; the rest of the list is unchanged." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/mixer.spec.js"]
 stamp = { hash = "b3:b6d1bba66bcd3a81", by = "agent:issues-thread", note = "Edited filters, inspector and mixer descriptions for the live drag, opacity, send and back-to-start tests" }
@@ -8616,10 +8616,10 @@ stamp = { hash = "b3:774b3c2a470ad485", by = "agent:claude", note = "Only the de
 stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "Packaging now ships DXC in the zip; the requirements still hold: nothing else to install" }
 
 ["GETTING-STARTED#scene"."body"]
-stamp = { hash = "b3:cf6353790d49704a", by = "agent:claude", note = "Added that a camera move only looks around until Save in the bar under the tool bar, and that leaving the scene unsaved brings the saved camera back (#1809)" }
+stamp = { hash = "b3:c313eded3773d2d1", by = "agent:preview-toggle", note = "Added two sentences on Disable/Enable live preview from the canvas right-click menu; the rest of the section is untouched by the change." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#canvas"]
-stamp = { hash = "b3:2a83e9c525de89b8", by = "agent:claude", note = "Added that a camera move only looks around until Save in the bar under the tool bar, and that leaving the scene unsaved brings the saved camera back (#1809)" }
+stamp = { hash = "b3:e942751dcba1bce8", by = "agent:preview-toggle", note = "Added two sentences on Disable/Enable live preview from the canvas right-click menu; the rest of the section is untouched by the change." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#dialogs"]
 stamp = { hash = "b3:004a982aa9267782", by = "agent:claude", note = "Re-read against SceneCamera.fixed_aperture (0.191, ADR-0223) on the latest alpha.13 train: nothing here describes the camera's depth-of-field fields or the protocol number, so it holds." }
@@ -8634,7 +8634,7 @@ stamp = { hash = "b3:a7b08f75137c425c", by = "agent:aa-thread", note = "Re-read 
 stamp = { hash = "b3:c543b9884c4afcdc", by = "agent:claude-audio-picker", note = "Adding a source: its properties now pick an audio input's or desktop audio's device from a list; edited" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#menus"]
-stamp = { hash = "b3:dbab96cbf37853ea", by = "agent:claude", note = "Upstream CM-02/03/04, SC-11, OB-01 and OB-10 changed menu order, Edit filters opening Properties on Filters and the Sources back-out button; this walkthrough names New scene, Add source, Copy/Paste, Duplicate scene and Pop out, none of which moved; holds" }
+stamp = { hash = "b3:c4b1df27b03af988", by = "agent:preview-toggle", note = "Added two sentences on Disable/Enable live preview from the canvas right-click menu; the rest of the section is untouched by the change." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#mixer"]
 stamp = { hash = "b3:e8fcc2e69060d66e", by = "agent:claude", note = "Re-read: step 4 only says to watch meters and mute or set a fader; the mixer's right-click mapping (UI-FEATURES#mixer) isn't described here" }
@@ -9486,7 +9486,7 @@ stamp = { hash = "b3:21472b2516d7a36f", by = "agent:claude", note = "C18: the WA
 stamp = { hash = "b3:076299ee126c849d", by = "agent:claude-ui-features", note = "session.rs: connect and open with hello and engine_url_for_page back the connect form; host.rs: desktop() hands the desktop app's engine for the automatic connection and desktop_vcam its camera; pairing.rs: start, devices and revoke back the pairing panel per ADR-0044." }
 
 ["UI-FEATURES#canvas"."body"]
-stamp = { hash = "b3:2a83e9c525de89b8", by = "agent:claude", note = "CV-11 now names the Save bar under the tool bar for an unsaved camera move (#1809)" }
+stamp = { hash = "b3:e942751dcba1bce8", by = "agent:preview-toggle", note = "Added CV-19 (Disable/Enable live preview in the canvas menu, unsubscribes the stream, follows scene/rate/size while off, kept in this browser, canvas only); other rows unchanged by the diff." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
 stamp = { hash = "b3:b9c619b27cdea693", by = "agent:claude", note = "CV-11 now names the Save bar under the tool bar for an unsaved camera move (#1809)" }
@@ -9510,7 +9510,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:a5ad680026f05fb2", by = "agent:issues-thread", note = "Re-read after merging the train (no canvas rows changed there): CV-11 says the live aim press captures the pointer, passing over a button sends nothing, and Space or Enter holds one until keyup or blur (#1707); matches live_aim.rs and the scene-cameras e2e test." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:73cce966d556677b", by = "agent:claude", note = "CV-11 now names the Save bar under the tool bar for an unsaved camera move (#1809)" }
+stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "Added CV-19 (Disable/Enable live preview in the canvas menu, unsubscribes the stream, follows scene/rate/size while off, kept in this browser, canvas only); other rows unchanged by the diff." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "CV-04 now says a hidden item draws nothing and takes no click, marquee or snap until selected, then shows a dashed outline (#1732); matches boxes/hit/marquee/snap in canvas/mod.rs" }
@@ -9519,7 +9519,7 @@ stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "CV-0
 stamp = { hash = "b3:30b296a585fd26dd", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train's UI-FEATURES edits (#1759: HD-01's menus dropping from their button, DK-01's dock bands, CM-09's right-click list) are outside this section, and it changed neither canvas/ nor store.rs; CV-03's preview.show (0.188) and preview.request_keyframe text is intact and matches the canvas code" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/preview.rs"]
-stamp = { hash = "b3:8ac58e6e96b4ffe6", by = "agent:seamless-preview", note = "Verified earlier in this PR after a full re-read; since then the only change to this section's text and inputs is renaming preview.keyframe to preview.request_keyframe (PreviewRequestKeyframe) for R-API-002's noun.verb, which I checked line by line in the diff | merge: The alpha.13 train's UI-FEATURES edits (#1759: HD-01's menus dropping from their button, DK-01's dock bands, CM-09's right-click list) are outside this section, and it changed neither canvas/ nor store.rs; CV-03's preview.show (0.188) and preview.request_keyframe text is intact and matches the canvas code" }
+stamp = { hash = "b3:66f1a8e436def8e3", by = "agent:preview-toggle", note = "Added CV-19 (Disable/Enable live preview in the canvas menu, unsubscribes the stream, follows scene/rate/size while off, kept in this browser, canvas only); other rows unchanged by the diff." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:9778ff45bb04288b", by = "agent:alpha13-train", note = "Re-read against screen.rs's change (the canvas is sized in Painter::draw, not Screen::show): nothing this section says about the screen, its counts or the canvas changes" }
@@ -9621,7 +9621,7 @@ stamp = { hash = "b3:d7dc35a103517112", by = "agent:claude-audio-picker", note =
 stamp = { hash = "b3:6ea512f03f193bae", by = "agent:mappings-thread", note = "KB-08 now describes + Data trigger (presets, sender, Equals/Changes/Rises to/Falls below, the read-back and the state note) and Learn taking the next pad played (midi.last_notes); checked against triggers.rs and bindings.rs" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:73cce966d556677b", by = "agent:claude", note = "Re-read KB-01/KB-02: keys unchanged; Enter still saves the view as a keyframe, Esc during a drag now restores the drag's start camera as described in Beyond" }
+stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "The diff adds no key handling; canvas keys (V, C, arrows, Ctrl+A) unchanged." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: KB-01 (C toggles crop mode, V leaves it) and KB-02 (Alt on a handle crops; Shift halves a crop drag's speed) match on_key and single_handle in mod.rs, which leaves Alt a plain resize while no size is known; transform.rs only makes rotate and from_local pub(crate) for crop.rs and changes no key." }
@@ -9639,7 +9639,7 @@ stamp = { hash = "b3:44e1c0b2c52b494b", by = "agent:mappings-thread", note = "MP
 stamp = { hash = "b3:86706e2ee7e4c9a9", by = "agent:jtunnel-discovery", note = "mappings test now expects a moved Mod as an unnamed reader, as VC-03 already says; holds" }
 
 ["UI-FEATURES#menus"."body"]
-stamp = { hash = "b3:dbab96cbf37853ea", by = "agent:claude", note = "Edited CM-02 (Edit filters opens Properties on Filters, a nested scene's Scene properties, else the Filters panel), CM-03 (Properties… and Edit filters… lead the scene menu, Edit filters… opens Scene properties on Filters) and CM-04 (Rename after Properties and Edit filters); checked against item_menu.rs, scenes.rs, sources.rs" }
+stamp = { hash = "b3:c4b1df27b03af988", by = "agent:preview-toggle", note = "CM-02 now lists Disable/Enable live preview on the empty canvas and margin menus, matching on_context's two entry lists." }
 
 ["UI-FEATURES#menus"."file:crates/jstream-ui/src/chrome.rs"]
 stamp = { hash = "b3:f3608a71fd643661", by = "agent:claude", note = "Edited CM-09: a toast's text keeps the browser's menu and selection but its buttons don't (chrome::TEXT now lists .toast-text, app.rs wraps the toast's text in it); the rest holds | kept from the merged side: Re-read with chrome.rs and Menus::open leaving a right-click in a text field to the browser: added CM-09 (which surfaces have menus, everything else swallowed, text keeps the browser menu and selection) and chrome.rs to covers; CM-01 to CM-08 hold." }

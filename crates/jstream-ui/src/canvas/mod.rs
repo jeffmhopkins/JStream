@@ -80,6 +80,30 @@ const IDLE: &str = "rgba(154,161,172,0.55)";
 /// Where camera mode's mouse bindings are kept in this browser.
 const CAMERA_CONTROLS_KEY: &str = "jstream.canvas.camera_controls";
 
+/// Where this browser keeps that the canvas's live preview is off.
+const PREVIEW_OFF_KEY: &str = "jstream.canvas.preview_off";
+
+/// Whether the canvas's live preview was turned off in this browser. On unless it was.
+fn load_preview_off() -> bool {
+    window()
+        .local_storage()
+        .ok()
+        .flatten()
+        .and_then(|storage| storage.get_item(PREVIEW_OFF_KEY).ok().flatten())
+        .is_some_and(|stored| stored == "1")
+}
+
+/// Keeps in this browser whether the canvas's live preview is off.
+fn store_preview_off(off: bool) {
+    if let Ok(Some(storage)) = window().local_storage() {
+        let _ = if off {
+            storage.set_item(PREVIEW_OFF_KEY, "1")
+        } else {
+            storage.remove_item(PREVIEW_OFF_KEY)
+        };
+    }
+}
+
 /// Camera mode's mouse bindings as this browser kept them, or the defaults.
 fn load_camera_controls() -> camera::CameraControls {
     let stored = window()
@@ -348,7 +372,17 @@ pub fn Canvas() -> impl IntoView {
     // the margin and a handle reaching past the frame can still be grabbed.
     let area = NodeRef::<leptos::html::Div>::new();
     let screen = NodeRef::<leptos::html::Canvas>::new();
-    let preview_state = RwSignal::new(PreviewState::Starting);
+    // Whether the person turned the live preview off ("Disable live preview" in the
+    // canvas menu), kept in this browser. While it is off no stream is open: the engine
+    // draws and encodes nothing for the canvas, and `stream` only follows what the
+    // canvas would show, so turning it on opens that.
+    let preview_off = RwSignal::new(load_preview_off());
+    Effect::new(move |_| store_preview_off(preview_off.get()));
+    let preview_state = RwSignal::new(if preview_off.get_untracked() {
+        PreviewState::Off
+    } else {
+        PreviewState::Starting
+    });
     // What the canvas did with its preview pictures, reported to the engine
     // (`preview.report`, ADR-0132): each time it shows its waiting text or why it has
     // no picture counts once.
@@ -361,7 +395,7 @@ pub fn Canvas() -> impl IntoView {
                 match now {
                     PreviewState::Starting => tally.placeholder(),
                     PreviewState::Unavailable(_) => tally.blank(),
-                    PreviewState::Live => {}
+                    PreviewState::Live | PreviewState::Off => {}
                 }
             }
             now
@@ -503,6 +537,10 @@ pub fn Canvas() -> impl IntoView {
             return;
         };
         stream.set_value(Some(next.clone()));
+        // Off, no stream is open: `next` is opened when the preview is turned on.
+        if preview_off.get_untracked() {
+            return;
+        }
         // A picture already shown stays until the new stream draws (#1205).
         preview_state.update(|state| *state = state.resubscribed());
         let Some(open) = session.and_then(|s| s.get()) else {
@@ -536,6 +574,9 @@ pub fn Canvas() -> impl IntoView {
     // picture opens on the next channel.
     let reshow = move |next: preview::Stream| {
         stream.set_value(Some(next.clone()));
+        if preview_off.get_untracked() {
+            return;
+        }
         let Some(open) = session.and_then(|s| s.get()) else {
             return;
         };
@@ -556,6 +597,66 @@ pub fn Canvas() -> impl IntoView {
                 return;
             }
             switch(next.clone(), next.on_next_channel());
+        });
+    };
+    // Turns the live preview off or on (CV-19). Off closes the open stream and moves
+    // `stream` to the next channel, so a late frame of the closed one is never drawn
+    // and the in-flight switch, if any, opens nothing. On opens that stream, which
+    // `switch` and `reshow` kept showing what the canvas shows meanwhile.
+    let set_preview_off = move |off: bool| {
+        if preview_off.get_untracked() == off {
+            return;
+        }
+        preview_off.set(off);
+        let Some(current) = stream.try_get_value().flatten() else {
+            // The `<canvas>` isn't in the page yet: it opens no stream while off.
+            if !off {
+                preview_state.set(PreviewState::Starting);
+            }
+            return;
+        };
+        let next = if off {
+            current.on_next_channel()
+        } else {
+            current.clone()
+        };
+        stream.set_value(Some(next.clone()));
+        preview_state.set(if off {
+            PreviewState::Off
+        } else {
+            PreviewState::Starting
+        });
+        let Some(open) = session.and_then(|s| s.get()) else {
+            return;
+        };
+        let Some(tally) = view_tally.try_get_value() else {
+            return;
+        };
+        let control = Rc::clone(&open.control);
+        spawn_local(async move {
+            use jstream_control::protocol::{Action, Call};
+            if off {
+                let close = Action::PreviewUnsubscribe {
+                    channel: current.channel,
+                };
+                let _closed = control.call(Call::Action { action: close }).await;
+                return;
+            }
+            // Turned off again, or another switch, while this was on its way.
+            if preview_off.try_get_untracked() != Some(false)
+                || stream.try_get_value().flatten().map(|s| s.channel) != Some(next.channel)
+            {
+                return;
+            }
+            tally.opened();
+            if let Err(error) = control
+                .call(Call::Action {
+                    action: next.subscribe(),
+                })
+                .await
+            {
+                preview_state.try_set(PreviewState::Unavailable(error.to_string()));
+            }
         });
     };
     // Another scene shown: the stream shows it (CV-03), once what the canvas wants has
@@ -1948,6 +2049,11 @@ pub fn Canvas() -> impl IntoView {
             "Turn snapping on"
         };
         let snap = Entry::item(snap, move || snapping.update(|on| *on = !*on));
+        let live_preview = if preview_off.get_untracked() {
+            Entry::item("Enable live preview", move || set_preview_off(false))
+        } else {
+            Entry::item("Disable live preview", move || set_preview_off(true))
+        };
         let select = Entry::item("Select all", select_all).hint("Ctrl+A");
         let has_scene = scene.is_some();
         let entries = if on_frame {
@@ -1977,7 +2083,7 @@ pub fn Canvas() -> impl IntoView {
             })
             .hint("Ctrl+V")
             .disabled_if(!pasting.is_some_and(|p| p.clipboard.has_items()) || in_keyframe());
-            vec![select, snap, Entry::Sep, add, group, paste]
+            vec![select, snap, live_preview, Entry::Sep, add, group, paste]
         } else {
             // The scene's transitions and Properties, for the scene the canvas shows.
             let transitions = |into: bool| match (&scene, session) {
@@ -2005,6 +2111,7 @@ pub fn Canvas() -> impl IntoView {
                 Entry::Sep,
                 select,
                 snap,
+                live_preview,
                 Entry::Sep,
                 transitions(true),
                 transitions(false),
@@ -3094,14 +3201,18 @@ async fn run_preview(
         }
     };
     let Some(first) = current() else { return };
-    tally.opened();
-    match subscribe(first.subscribe()).await {
-        Some(Ok(_)) => {}
-        // The canvas shows why; the channel is still read, for the taps' frames.
-        Some(Err(error)) => {
-            state.try_set(PreviewState::Unavailable(error.to_string()));
+    // Off (CV-19), the canvas opens its stream when the preview is turned on; the
+    // channel is still read, for the taps' frames.
+    if state.try_get_untracked() != Some(PreviewState::Off) {
+        tally.opened();
+        match subscribe(first.subscribe()).await {
+            Some(Ok(_)) => {}
+            // The canvas shows why; the channel is still read, for the taps' frames.
+            Some(Err(error)) => {
+                state.try_set(PreviewState::Unavailable(error.to_string()));
+            }
+            None => return,
         }
-        None => return,
     }
     while let Some(frame) = frames.next().await {
         if !alive.load(Ordering::Relaxed) {

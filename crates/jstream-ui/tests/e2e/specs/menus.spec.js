@@ -42,7 +42,14 @@ test('the canvas has a menu on the frame and another on the margin', async ({ pa
   const inside = await onScreen(page, 200, 200);
   await page.mouse.click(inside.x, inside.y, { button: 'right' });
   await expect(menu(page)).toBeVisible();
-  expect(await labels(page)).toEqual(['Select all', 'Turn snapping off', 'Add source…', 'New group', 'Paste']);
+  expect(await labels(page)).toEqual([
+    'Select all',
+    'Turn snapping off',
+    'Disable live preview',
+    'Add source…',
+    'New group',
+    'Paste',
+  ]);
   await expect(menu(page).getByRole('menuitem', { name: 'Paste' })).toBeDisabled();
 
   // Turning snapping off from the menu presses the toolbar's toggle off.
@@ -64,6 +71,7 @@ test('the canvas has a menu on the frame and another on the margin', async ({ pa
     'Screenshot (scene)',
     'Select all',
     'Turn snapping on',
+    'Disable live preview',
     'Transition in',
     'Transition out',
     'Scene properties…',
@@ -87,6 +95,8 @@ test('the arrow keys move through a menu, and a press outside closes it', async 
   await page.keyboard.press('ArrowDown');
   await expect(item('Turn snapping off')).toBeFocused();
   await page.keyboard.press('ArrowDown');
+  await expect(item('Disable live preview')).toBeFocused();
+  await page.keyboard.press('ArrowDown');
   await expect(item('Add source…')).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(item('New group')).toBeFocused();
@@ -106,6 +116,27 @@ test('the arrow keys move through a menu, and a press outside closes it', async 
   await expect(menu(page)).toBeVisible();
   await page.mouse.click(5, 5);
   await expect(menu(page)).toBeHidden();
+});
+
+test('the canvas menu turns the live preview off and on, and the page remembers it', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const inside = await onScreen(page, 200, 200);
+  const off = page.locator('.stage-overlay text', { hasText: 'Live preview off' });
+  await page.mouse.click(inside.x, inside.y, { button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Disable live preview' }).click();
+  await expect(menu(page)).toBeHidden();
+  await expect(off).toBeVisible();
+  await expect(page.locator('canvas.stage-screen')).toBeHidden();
+
+  // Kept in this browser: a reload opens the canvas with the preview still off.
+  await page.reload();
+  await connect(page, daemon);
+  await expect(off).toBeVisible();
+
+  const again = await onScreen(page, 200, 200);
+  await page.mouse.click(again.x, again.y, { button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Enable live preview' }).click();
+  await expect(off).toBeHidden();
 });
 
 test('the Sources panel adds a source as a reference', async ({ page, daemon }) => {

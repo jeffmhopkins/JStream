@@ -275,7 +275,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   straight from their buttons, each open button the same colour as its menu.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off, Select all, and New group, which
-  groups the selection into "Group 1") and on the margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
+  groups the selection into "Group 1") and on the margin, which Escape closes; Disable
+  live preview, which shows "Live preview off" and is still off after a reload, and
+  Enable live preview, which turns it back on (CV-19); the arrow keys move through a menu, skipping a disabled
   item and wrapping, Enter chooses, and a press outside closes it; the Sources
   panel's menu opens the Add source dialog, whose types start with the seed's audio
   inputs, and its Color type places the seed's Backdrop again as a reference 40 px
