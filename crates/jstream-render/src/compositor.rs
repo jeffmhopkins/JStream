@@ -216,12 +216,7 @@ struct DepthPipelines {
 /// while a later submit still holds the view is a use of a freed GPU resource.
 struct SceneDepth {
     size: (u32, u32),
-    /// Held so the image outlives every submit that attached `view`.
-    #[allow(
-        dead_code,
-        reason = "the texture must outlive the view used as an attachment"
-    )]
-    texture: wgpu::Texture,
+    /// The view keeps its texture alive for every submit that attaches it.
     view: wgpu::TextureView,
 }
 
@@ -3096,7 +3091,6 @@ impl Compositor {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.scene_depth = Some(SceneDepth {
             size: (width, height),
-            texture,
             view,
         });
     }
