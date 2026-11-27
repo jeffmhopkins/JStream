@@ -88,6 +88,7 @@ impl Shape {
             vertices: mesh.vertices,
             indices: mesh.indices,
             material: 0,
+            names: Vec::new(),
         };
         compute_tangents(&mut primitive);
         Model::new(

@@ -27,7 +27,7 @@ use jstream_graph::{
     Filter, Graph, Item as GraphItem, Output as GraphOutput, Placement as GraphPlacement,
     Scene as GraphScene, Source, State,
 };
-use jstream_media::model::Lighting;
+use jstream_media::model::{AlphaMode, Lighting};
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
@@ -866,13 +866,21 @@ pub(crate) struct Shot {
     maps: BTreeMap<SourceId, ModelMaps>,
 }
 
-/// The pictures a model's `texture` and `reflection` settings name, as the shot shows
+/// The pictures a model's texture slots and `reflection` setting name, as the shot shows
 /// them: after their own filters, a scene source's scene drawn as it is placed. `None`
-/// for a setting that names nothing, or a source that shows nothing.
+/// for a source that shows nothing, or a reflection that names nothing.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct ModelMaps {
-    texture: Option<SourceRef>,
+    /// One per live texture of the model's source, in its order (ADR-0250).
+    textures: Vec<Option<SourceRef>>,
     reflection: Option<SourceRef>,
+}
+
+impl ModelMaps {
+    /// Every picture it reads: its textures', then its reflection's.
+    fn all(&self) -> impl Iterator<Item = &SourceRef> {
+        self.textures.iter().flatten().chain(&self.reflection)
+    }
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -2427,9 +2435,9 @@ fn plan_inner(
     shot.captures.extend(
         shot.maps
             .values()
-            .flat_map(|maps| [&maps.texture, &maps.reflection])
+            .flat_map(ModelMaps::all)
             .filter_map(|map| match map {
-                Some(SourceRef::Capture(spec)) => Some(spec.clone()),
+                SourceRef::Capture(spec) => Some(spec.clone()),
                 _ => None,
             }),
     );
@@ -4327,19 +4335,22 @@ impl<'a> Planner<'a, '_> {
         if out.maps.contains_key(id) {
             return;
         }
-        let Some((texture, reflection)) = out
+        let Some((textures, reflection)) = out
             .frames
             .get(id)
             .and_then(|frame| frame.model.as_ref())
-            .filter(|shown| shown.texture.is_some() || shown.reflection.is_some())
-            .map(|shown| (shown.texture.clone(), shown.reflection.clone()))
+            .filter(|shown| !shown.textures.is_empty() || shown.reflection.is_some())
+            .map(|shown| (shown.textures.clone(), shown.reflection.clone()))
         else {
             return;
         };
         // Marked first, so a map that reaches this model again stops here.
         out.maps.insert(id.clone(), ModelMaps::default());
         let maps = ModelMaps {
-            texture: texture.and_then(|named| self.map_of(id, &named, out, path)),
+            textures: textures
+                .into_iter()
+                .map(|texture| self.map_of(id, &texture.source, out, path))
+                .collect(),
             reflection: reflection.and_then(|named| self.map_of(id, &named, out, path)),
         };
         out.maps.insert(id.clone(), maps);
@@ -4948,8 +4959,7 @@ impl Shot {
         let mapped = self
             .maps
             .values()
-            .flat_map(|maps| [&maps.texture, &maps.reflection])
-            .flatten()
+            .flat_map(ModelMaps::all)
             .any(|map| matches!(map, SourceRef::Capture(shown) if shown == spec));
         if mapped || self.chains.values().any(|chain| chain.input == key) {
             return None;
@@ -5202,7 +5212,7 @@ impl ChainOrder {
         let Some(maps) = self.maps_of(shot, owner) else {
             return;
         };
-        for map in [&maps.texture, &maps.reflection].into_iter().flatten() {
+        for map in maps.all() {
             match map {
                 SourceRef::Filtered(source) => {
                     self.chain(shot, &ChainOwner::Source(source.clone()), done);
@@ -7125,6 +7135,7 @@ pub(crate) fn compose_metered(
                             camera: None,
                             depth_run: 0,
                             depth: None,
+                            occludes: false,
                         }
                     })
                     .collect();
@@ -7221,15 +7232,7 @@ pub(crate) fn compose_metered(
         }
     }
     {
-        let cache = &*cache;
-        let chains = &*chains;
-        let image = |key: &GpuKey| {
-            cache.get(key).ok_or_else(|| RenderError::Invalid {
-                what: "cache",
-                detail: format!("no image for {key:?}"),
-            })
-        };
-        let mut items: Vec<Item<'_>> = Vec::new();
+        let image = cached;
         for pass in nested.iter().chain(show_nested.iter().copied()) {
             // The chains drew this scene at this depth already this frame, for a
             // chain that reads it: the same pass, so its layer holds what this one
@@ -7239,6 +7242,21 @@ pub(crate) fn compose_metered(
             }
             let started = Instant::now();
             meter.gpu_unit_pass(compositor, &pass.scene);
+            let camera = moved_camera(
+                live.camera(pass),
+                pass.camera.as_ref(),
+                (shot, at, shot.pass_shown(pass)),
+                (live, captures),
+                chains,
+            );
+            warm_shared_lights(
+                compositor,
+                (cache, chains),
+                (shot, pass),
+                (at, camera),
+                (live, captures),
+            );
+            let mut items = Vec::new();
             let camera = fill_items(
                 &mut items,
                 (cache, chains),
@@ -7250,19 +7268,46 @@ pub(crate) fn compose_metered(
             under_sky(&mut items, (cache, chains), pass, canvas, camera);
             // A layer with fewer pixels than the canvas, for a nested scene shown small
             // (ADR-0249), is drawn at its own size.
-            let layer = image(&pass.key)?;
+            let layer = image(cache, &pass.key)?;
             let drawn = FrameSize::new(layer.width(), layer.height()).unwrap_or(canvas);
             if drawn != canvas {
                 scale_items(&mut items, canvas, drawn);
             }
-            compositor.render_into(&scene(drawn, pass.background, &items), layer)?;
+            render_models(
+                compositor,
+                (cache, chains),
+                (shot, Some(pass)),
+                &mut items,
+                (pass.background, layer, drawn),
+                (at, canvas, camera),
+                live,
+            )?;
             let took = meter.phase_since(Phase::Passes, started);
             meter.pass(&pass.scene, took);
         }
         let started = Instant::now();
         meter.gpu_unit_composite(compositor);
         // Where the mix shows a transparent pixel, the output is black (ADR-0024 §4).
-        let clear = match (root, tracks) {
+        let mut items: Vec<Item<'_>> = Vec::new();
+        // The show's models share a depth too. Their lights are drawn before program's
+        // items borrow the cache.
+        if let Some(show_root) = show_root {
+            let camera = moved_camera(
+                live.camera(show_root),
+                show_root.camera.as_ref(),
+                (shot, at, shot.pass_shown(show_root)),
+                (live, captures),
+                chains,
+            );
+            warm_shared_lights(
+                compositor,
+                (cache, chains),
+                (shot, show_root),
+                (at, camera),
+                (live, captures),
+            );
+        }
+        let (background, mut drawn_pass, mut drawn_camera) = match (root, tracks) {
             (_, Some(transition)) => {
                 fill_tracks(
                     &mut items,
@@ -7272,9 +7317,23 @@ pub(crate) fn compose_metered(
                     at,
                     (live, captures),
                 );
-                transition.background(at, shot.blending)
+                (transition.background(at, shot.blending), None, None)
             }
             (Some(root), None) => {
+                let camera = moved_camera(
+                    live.camera(root),
+                    root.camera.as_ref(),
+                    (shot, at, shot.pass_shown(root)),
+                    (live, captures),
+                    chains,
+                );
+                warm_shared_lights(
+                    compositor,
+                    (cache, chains),
+                    (shot, root),
+                    (at, camera),
+                    (live, captures),
+                );
                 let camera = fill_items(
                     &mut items,
                     (cache, chains),
@@ -7284,19 +7343,27 @@ pub(crate) fn compose_metered(
                 );
                 meter.drew_camera(&root.scene, camera);
                 under_sky(&mut items, (cache, chains), root, canvas, camera);
-                root.background
+                (root.background, Some(root), camera)
             }
             (None, None) => {
                 items.clear();
-                Color::TRANSPARENT
+                (Color::TRANSPARENT, None, None)
             }
-        }
-        .over_black(shot.blending);
+        };
+        let clear = background.over_black(shot.blending);
         // With the show scene up, program goes into its bottom layer, and its items
         // are placed over that. Its own background is never drawn: program fills it.
         if let Some(show_root) = show_root {
-            let under = image(&GpuKey::UnderShow)?;
-            compositor.render_into(&scene(canvas, clear, &items), under)?;
+            let under = image(cache, &GpuKey::UnderShow)?;
+            render_models(
+                compositor,
+                (cache, chains),
+                (shot, drawn_pass),
+                &mut items,
+                (clear, under, canvas),
+                (at, canvas, drawn_camera),
+                live,
+            )?;
             let mut over = Vec::new();
             let camera = fill_items(
                 &mut over,
@@ -7310,21 +7377,52 @@ pub(crate) fn compose_metered(
             items.clear();
             items.push(fitted(under, canvas, canvas));
             items.extend(over);
+            drawn_pass = Some(show_root);
+            drawn_camera = camera;
         }
         match &stage {
             Some(stage) => {
-                compositor.render_into(&scene(canvas, clear, &items), image(&stage.mixed)?)?;
+                let mixed = image(cache, &stage.mixed)?;
+                render_models(
+                    compositor,
+                    (cache, chains),
+                    (shot, drawn_pass),
+                    &mut items,
+                    (clear, mixed, canvas),
+                    (at, canvas, drawn_camera),
+                    live,
+                )?;
                 meter.gpu_unit_none(compositor);
                 let took = meter.phase_since(Phase::Passes, started);
                 meter.composite(took);
             }
-            None if direct => {
+            None if direct
+                && drawn_pass.is_none_or(|pass| {
+                    !pass.layers.iter().any(|layer| {
+                        layer.boxed.is_some_and(|boxed| boxed.model) && drawn_camera.is_some()
+                    })
+                }) =>
+            {
                 let shown = scene(output, clear, &items);
                 return composite_from(compositor, meter, &shown, readback, started);
             }
             None => {
-                let layer = image(&GpuKey::Program)?;
-                compositor.render_into(&scene(canvas, clear, &items), layer)?;
+                let owned;
+                let layer = if direct {
+                    owned = compositor.layer(canvas.width(), canvas.height())?;
+                    &owned
+                } else {
+                    image(cache, &GpuKey::Program)?
+                };
+                render_models(
+                    compositor,
+                    (cache, chains),
+                    (shot, drawn_pass),
+                    &mut items,
+                    (clear, layer, canvas),
+                    (at, canvas, drawn_camera),
+                    live,
+                )?;
                 let placed = [fitted(layer, canvas, output)];
                 let shown = scene(output, Color::BLACK, &placed);
                 return composite_from(compositor, meter, &shown, readback, started);
@@ -7517,6 +7615,20 @@ fn run_chains(
                     (live, captures),
                 )?;
                 let mut items = Vec::new();
+                let camera = moved_camera(
+                    live.camera(pass),
+                    pass.camera.as_ref(),
+                    (shot, at, shot.pass_shown(pass)),
+                    (live, captures),
+                    chains,
+                );
+                warm_shared_lights(
+                    compositor,
+                    (cache, chains),
+                    (shot, pass),
+                    (at, camera),
+                    (live, captures),
+                );
                 let camera = fill_items(
                     &mut items,
                     (&*cache, &*chains),
@@ -7535,8 +7647,16 @@ fn run_chains(
                 if size != canvas {
                     scale_items(&mut items, canvas, size);
                 }
+                let shared = render_models(
+                    compositor,
+                    (&*cache, &mut *chains),
+                    (shot, Some(pass)),
+                    &mut items,
+                    (pass.background, layer, size),
+                    (at, canvas, camera),
+                    live,
+                )?;
                 let drawn = scene(size, pass.background, &items);
-                compositor.render_into(&drawn, layer)?;
                 profile::gpu_part(compositor, Some(profile::GpuPart::ViewDepth));
                 let view = match (&pass.view_depth, camera) {
                     (Some(depth), Some(camera)) => draw_view_depth(
@@ -7549,6 +7669,14 @@ fn run_chains(
                     )?,
                     _ => None,
                 };
+                if shared
+                    && let Some(depth) = &pass.view_depth
+                    && let Some(image) = cache.get(depth)
+                {
+                    // The shared pass wrote geometric depth. Fold it into the view
+                    // depth under the cards `draw_view_depth` just placed (ADR-0257).
+                    compositor.blend_scene_depth(image)?;
+                }
                 profile::gpu_part(compositor, None);
                 drop(items);
                 if let (Some(depth), Some(view)) = (&pass.view_depth, view) {
@@ -7688,14 +7816,9 @@ fn draw_box(
         return Ok(());
     };
     let key = GpuKey::ItemBox(scene_id.clone(), item_id.clone());
-    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
-    cache.layer(compositor, &key, width, height)?;
     if boxed.boxed.model {
         chains.model_drawn = true;
-        // Its layer stands for the canvas, however many pixels it has (ADR-0197).
-        if let Some(extent) = boxed.boxed.extent() {
-            cache.set_extent(&key, extent);
-        }
+        // Its layer is made where the model's box on the canvas is known (ADR-0251).
         return draw_model(
             compositor,
             (cache, chains),
@@ -7705,6 +7828,8 @@ fn draw_box(
             (live, captures),
         );
     }
+    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
+    cache.layer(compositor, &key, width, height)?;
     let input = box_input(shot, &boxed.source).filter(|input| !chains.failed(input));
     let (placement, crop) = live.apply_to(
         &boxed.item,
@@ -7761,6 +7886,7 @@ fn draw_box(
         camera: None,
         depth_run: 0,
         depth: None,
+        occludes: false,
     }];
     let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
         what: "item box",
@@ -7883,6 +8009,7 @@ fn light_card(
                 camera: None,
                 depth_run: 0,
                 depth: None,
+                occludes: false,
             }];
             let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
                 what: "item box",
@@ -7926,6 +8053,419 @@ fn track_camera(
     transition.camera(&cameras, (key, track, *seen), elapsed)
 }
 
+/// Whether `owner`'s model is drawn into its scene's shared colour and depth (ADR-0257)
+/// rather than a layer of its own. A model with item filters, source filters, depth of
+/// field, or a screen-space reflection keeps its layer: those passes need an image of
+/// the model alone. A 2D scene has no shared depth.
+/// Whether the model `image` places is drawn into the shared pass, so its private
+/// depth must not be copied into the view depth.
+fn model_layer_shares(shot: &Shot, image: &GpuKey, camera: Option<SceneCamera>) -> bool {
+    let Some((scene, item)) = image.boxed_item() else {
+        return false;
+    };
+    let owner = ChainOwner::Item(scene.clone(), item.clone());
+    let Some(boxed) = shot.boxes.get(&owner) else {
+        return false;
+    };
+    let SourceRef::Frame(source) = &boxed.source else {
+        return false;
+    };
+    let Some(shown) = shot
+        .frames
+        .get(source)
+        .and_then(|frame| frame.model.as_ref())
+    else {
+        return false;
+    };
+    // A model alone in its scene keeps its layer and its depth (ADR-0257 decision 1):
+    // only two or more share.
+    model_shares(shot, &owner, camera, shown) && sharing_models(shot, scene, camera) >= 2
+}
+
+fn model_shares(
+    shot: &Shot,
+    owner: &ChainOwner,
+    camera: Option<SceneCamera>,
+    shown: &jstream_sources::ShownModel,
+) -> bool {
+    let Some(camera) = camera else {
+        return false;
+    };
+    if camera.blur_px.get() > 0.0 || camera.fixed_aperture {
+        return false;
+    }
+    let ChainOwner::Item(scene, _) = owner else {
+        return false;
+    };
+    if shot.chains.contains_key(owner) || shot.shown_chain(owner).is_some() {
+        return false;
+    }
+    let reflects = shown.lighting == Lighting::Scene && shown.reflections;
+    if reflects && scene_pass(shot, scene).is_some_and(|pass| pass.surface) {
+        return false;
+    }
+    true
+}
+
+/// How many models of scene `scene` [`model_shares`]. One model keeps its own layer,
+/// which may be only the part of the canvas it covers (ADR-0251). Two or more share
+/// the scene depth (ADR-0257).
+fn sharing_models(shot: &Shot, scene: &SceneId, camera: Option<SceneCamera>) -> usize {
+    let Some(pass) = scene_pass(shot, scene) else {
+        return 0;
+    };
+    pass.layers
+        .iter()
+        .filter(|layer| {
+            let Some((scene_id, item_id)) = layer.image.boxed_item() else {
+                return false;
+            };
+            let owner = ChainOwner::Item(scene_id.clone(), item_id.clone());
+            let Some(boxed) = shot.boxes.get(&owner) else {
+                return false;
+            };
+            let SourceRef::Frame(source) = &boxed.source else {
+                return false;
+            };
+            let Some(shown) = shot
+                .frames
+                .get(source)
+                .and_then(|frame| frame.model.as_ref())
+            else {
+                return false;
+            };
+            model_shares(shot, &owner, camera, shown)
+        })
+        .count()
+}
+
+/// One sharing model's pose, gathered before the draws borrow the cache.
+struct SharedPose<'a> {
+    source: SourceId,
+    shown: &'a jstream_sources::ShownModel,
+    geometry: ItemGeometry,
+    opacity: f32,
+    blend: BlendMode,
+    /// The item, for its material drives.
+    owner: ChainOwner,
+}
+
+/// Draws `pass`'s models that [`model_shares`] into `layer`, between the items with no
+/// camera and the ones seen through `camera`. Returns whether it did: the scene depth
+/// then holds those models, for [`Compositor::blend_scene_depth`]. Items of models it
+/// drew are removed from `items`. With nothing to share, or no camera, this is
+/// [`Compositor::render_into`].
+///
+/// # Errors
+/// What the compositor reports for the pass or a model.
+/// Draws the shadow maps a pass's sharing models receive, before the pass's items
+/// borrow the cache. A model that keeps its own layer draws them itself.
+fn warm_shared_lights(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (shot, pass): (&Shot, &Pass),
+    (at, camera): (MediaTime, Option<SceneCamera>),
+    (live, captures): (&LiveParams, &dyn Captures),
+) {
+    let Some(camera) = camera else {
+        return;
+    };
+    if sharing_models(shot, &pass.scene, Some(camera)) < 2 {
+        return;
+    }
+    let needs = pass.layers.iter().any(|layer| {
+        let Some((scene_id, item_id)) = layer.image.boxed_item() else {
+            return false;
+        };
+        let owner = ChainOwner::Item(scene_id.clone(), item_id.clone());
+        let Some(boxed) = shot.boxes.get(&owner) else {
+            return false;
+        };
+        let SourceRef::Frame(source) = &boxed.source else {
+            return false;
+        };
+        let Some(shown) = shot
+            .frames
+            .get(source)
+            .and_then(|frame| frame.model.as_ref())
+        else {
+            return false;
+        };
+        model_shares(shot, &owner, Some(camera), shown) && shown.lighting == Lighting::Scene
+    });
+    if !needs {
+        return;
+    }
+    let view = camera.view(shot.canvas).ok();
+    let (lights, shadowed) = light_scene(
+        compositor,
+        (cache, chains),
+        (shot, at),
+        &pass.scene,
+        (view.as_ref(), true),
+        (live, captures),
+    );
+    chains.lights = lights;
+    chains.shadowed = shadowed;
+}
+
+fn render_models<'a>(
+    compositor: &mut Compositor,
+    (cache, chains): (&ResourceCache<GpuKey>, &mut Chains),
+    (shot, pass): (&Shot, Option<&Pass>),
+    items: &mut Vec<Item<'a>>,
+    (background, layer, size): (Color, &jstream_render::Image, FrameSize),
+    (at, canvas, camera): (MediaTime, FrameSize, Option<SceneCamera>),
+    live: &LiveParams,
+) -> Result<bool, RenderError> {
+    let Some(pass) = pass else {
+        compositor.render_into(&scene(size, background, items), layer)?;
+        return Ok(false);
+    };
+    let Some(camera) = camera else {
+        compositor.render_into(&scene(size, background, items), layer)?;
+        return Ok(false);
+    };
+    let live_size = [canvas.width() as f32, canvas.height() as f32];
+    let mut poses = Vec::new();
+    let mut own_layers = Vec::new();
+    for shown in &pass.layers {
+        if !shown.boxed.is_some_and(|boxed| boxed.model) {
+            continue;
+        }
+        let Some((scene_id, item_id)) = shown.image.boxed_item() else {
+            continue;
+        };
+        let owner = ChainOwner::Item(scene_id.clone(), item_id.clone());
+        let Some(source) = shot
+            .boxes
+            .get(&owner)
+            .and_then(|boxed| match &boxed.source {
+                SourceRef::Frame(source) => Some(source.clone()),
+                _ => None,
+            })
+        else {
+            continue;
+        };
+        let Some(model_shown) = shot
+            .frames
+            .get(&source)
+            .and_then(|frame| frame.model.as_ref())
+        else {
+            continue;
+        };
+        if !model_shares(shot, &owner, Some(camera), model_shown) {
+            continue;
+        }
+        let Some(posed) = layer_pose(
+            shown,
+            (cache, chains),
+            shot,
+            (at, live_size),
+            (live, None),
+            Some(camera),
+        ) else {
+            continue;
+        };
+        let Placement::Layer(geometry) = posed.placement else {
+            continue;
+        };
+        if let Some(image) = cache.get(&shown.image) {
+            own_layers.push(image);
+        }
+        let geometry = if size == canvas {
+            geometry
+        } else {
+            let sx = size.width() as f32 / canvas.width() as f32;
+            let sy = size.height() as f32 / canvas.height() as f32;
+            scaled_geometry(geometry, [sx, sy], (sx + sy) / 2.0)
+        };
+        poses.push(SharedPose {
+            source,
+            shown: model_shown,
+            geometry,
+            opacity: posed.opacity,
+            blend: posed.blend,
+            owner,
+        });
+    }
+    // One model keeps its windowed layer (ADR-0251). Sharing starts at two.
+    if poses.len() < 2 {
+        compositor.render_into(&scene(size, background, items), layer)?;
+        return Ok(false);
+    }
+    items.retain(|item| {
+        !own_layers
+            .iter()
+            .any(|image| std::ptr::eq(item.image, *image))
+    });
+    let split = items
+        .iter()
+        .position(|item| item.camera.is_some())
+        .unwrap_or(items.len());
+    // The model shader writes linear light. An sRGB pass decodes its target at the end,
+    // so a pass drawn before the models and one drawn after them would decode the models'
+    // linear texels as if they were still encoded and darken the scene under a bloom.
+    // This draw stays in linear light. The caller composites the layer in its own space.
+    let encoded = compositor.blending() == Blending::Srgb;
+    if encoded {
+        compositor.set_blending(Blending::Linear);
+    }
+    let restore = |compositor: &mut Compositor| {
+        if encoded {
+            compositor.set_blending(Blending::Srgb);
+        }
+    };
+    if let Err(err) = compositor.render_into(&scene(size, background, &items[..split]), layer) {
+        restore(compositor);
+        return Err(err);
+    }
+    let lit = poses
+        .iter()
+        .any(|pose| pose.shown.lighting == Lighting::Scene);
+    let receives = poses.iter().any(|pose| pose.shown.receives_shadows);
+    let lights = chains.lights.clone();
+    let environment = if lit {
+        scene_sky((shot, cache), chains, &pass.scene, at, live)
+    } else {
+        None
+    };
+    let maps = if receives {
+        shadow_maps(cache, chains, &pass.scene)
+    } else {
+        Vec::new()
+    };
+    let mut drives = Vec::with_capacity(poses.len());
+    let mut pictures = Vec::with_capacity(poses.len());
+    let mut probes = Vec::with_capacity(poses.len());
+    for pose in &poses {
+        let (drive, driving) = match shot.boxes.get(&pose.owner) {
+            Some(boxed) => crate::sourced::materials(
+                shot.source_drives(&boxed.item),
+                |m, own| shot.source_value(&boxed.item, m, at, own),
+                |m| shot.tint(&boxed.item, m),
+            ),
+            None => ([jstream_render::MaterialDrive::default(); 32], 0),
+        };
+        drives.push((drive, driving));
+        pictures.push(model_maps(shot, cache, &pose.source, pose.shown));
+        let probe = (pose.shown.lighting == Lighting::Scene && pose.shown.reflections)
+            .then(|| {
+                probes::lookup(
+                    (cache, chains),
+                    shot,
+                    &pass.scene,
+                    probes::centre_of(pose.geometry),
+                    (at, live),
+                )
+            })
+            .flatten();
+        probes.push(probe);
+    }
+    let uploaded: Vec<_> = poses
+        .iter()
+        .map(|pose| chains.model(&pose.source))
+        .collect();
+    for (placed, model) in poses.iter().zip(&uploaded) {
+        if let Some(model) = model {
+            pose(compositor, model, placed.shown);
+        }
+    }
+    let shared: Vec<jstream_render::SharedModel<'_>> = poses
+        .iter()
+        .enumerate()
+        .filter_map(|(i, pose)| {
+            let model = *uploaded.get(i)?;
+            Some(jstream_render::SharedModel {
+                draw: jstream_render::ModelDraw {
+                    model: model?,
+                    geometry: pose.geometry,
+                    camera: Some(camera),
+                    lighting: pose.shown.lighting,
+                    lights: (pose.shown.lighting == Lighting::Scene).then_some(lights.as_slice()),
+                    shadows: if pose.shown.receives_shadows {
+                        &maps
+                    } else {
+                        &[]
+                    },
+                    environment: environment
+                        .as_ref()
+                        .filter(|_| pose.shown.lighting == Lighting::Scene)
+                        .copied(),
+                    floor: None,
+                    materials: &drives[i].0[..drives[i].1],
+                    textures: &pictures[i].0,
+                    reflection: pictures[i].1,
+                    probe: probes[i],
+                },
+                opacity: pose.opacity,
+                blend: pose.blend,
+            })
+        })
+        .collect();
+    #[cfg(test)]
+    chains
+        .scene_model_draws
+        .set(chains.scene_model_draws.get() + shared.len() as u64);
+    let drawn = compositor.draw_shared_models_over(layer, &shared);
+    if let Err(err) = drawn {
+        restore(compositor);
+        return Err(err);
+    }
+    if split < items.len()
+        && let Err(err) = compositor.render_over(&scene(size, background, &items[split..]), layer)
+    {
+        restore(compositor);
+        return Err(err);
+    }
+    restore(compositor);
+    // The cards' composite records only their own box. The models are in the layer
+    // too, so a scene filter must read the whole picture, not a rectangle of one item.
+    layer.mark_everywhere();
+    Ok(true)
+}
+
+/// Empties the layer and depth image of a model the shared pass draws instead. The
+/// images stay allocated. Their texels are transparent, and the layer names an empty
+/// content box, so a composite trims it away.
+fn clear_skipped_model(
+    compositor: &mut Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    key: &GpuKey,
+    scene_id: &SceneId,
+    owner: &ChainOwner,
+) -> Result<(), RenderError> {
+    let blank = |image: &jstream_render::Image| {
+        image.mark_everywhere();
+        FrameSize::new(image.width(), image.height())
+            .ok()
+            .map(|canvas| jstream_render::Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &[],
+            })
+    };
+    if let Some(layer) = cache.get(key)
+        && let Some(scene) = blank(layer)
+    {
+        compositor.render_into(&scene, layer)?;
+        // An empty scene that the layer already holds is left as it is, and the
+        // `mark_everywhere` above would then leave the layer covering the whole frame.
+        // An empty box is what a composite trims away.
+        layer.mark_undrawn();
+    }
+    let ChainOwner::Item(_, item_id) = owner else {
+        return Ok(());
+    };
+    let depth_key = GpuKey::ModelDepth(scene_id.clone(), item_id.clone());
+    if let Some(depth) = cache.get(&depth_key)
+        && let Some(scene) = blank(depth)
+    {
+        compositor.render_view_depth(&scene, depth)?;
+    }
+    Ok(())
+}
+
 /// Draws the 3D model item `boxed` shows into its canvas-sized layer `key` (ADR-0107
 /// decision 6): posed by its geometry with its live values and motion applied, seen
 /// through its scene's camera as it moves this frame, and lit as its source says. The
@@ -7934,6 +8474,47 @@ fn track_camera(
 ///
 /// # Errors
 /// What the compositor reports for drawing into the layer.
+/// The steps a model's layer that holds a part of the canvas is sized in, each side
+/// (ADR-0251): few sizes, so the layers of several models, and one model's as it moves,
+/// share their multisampled targets and are rarely made again.
+const WINDOW_STEPS: [u32; 12] = [64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072];
+
+/// The part of a canvas of `canvas` a model's layer holds, for a model that can draw
+/// into `seen` (`[x, y, width, height]` in canvas pixels), and its size: each side the
+/// least of [`WINDOW_STEPS`] that holds it, within the canvas, placed over it and kept
+/// inside the canvas (ADR-0251). `None` where that is half the canvas or more: the
+/// layer then holds all of it.
+fn model_window(seen: [u32; 4], canvas: (u32, u32)) -> Option<(jstream_render::Window, [u32; 2])> {
+    let step = |side: u32, whole: u32| {
+        WINDOW_STEPS
+            .into_iter()
+            .find(|step| *step >= side)
+            .unwrap_or(whole)
+            .min(whole)
+            .max(1)
+    };
+    let size = [step(seen[2], canvas.0), step(seen[3], canvas.1)];
+    if u64::from(size[0]) * u64::from(size[1]) * 2 >= u64::from(canvas.0) * u64::from(canvas.1) {
+        return None;
+    }
+    let window = jstream_render::Window {
+        x: seen[0].min(canvas.0 - size[0]),
+        y: seen[1].min(canvas.1 - size[1]),
+        canvas,
+    };
+    Some((window, size))
+}
+
+/// `percent` of `size` each way, rounded up, at least a pixel: the pixels a model's layer
+/// of `size` canvas pixels is drawn with (ADR-0197).
+fn percent_of(size: [u32; 2], percent: u32) -> [u32; 2] {
+    if percent >= 100 {
+        return size;
+    }
+    let percent = u64::from(percent.max(1));
+    size.map(|px| (u64::from(px) * percent).div_ceil(100).max(1) as u32)
+}
+
 fn draw_model(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
@@ -7975,7 +8556,10 @@ fn draw_model(
     };
     // A model a transition's track draws is seen through that track's camera, which a
     // Move moves, so both sides of a glide draw it the same (ADR-0180).
-    let camera = track_camera(shot, owner, at, chains, (live, captures)).or_else(|| {
+    // A transition's track composites this layer, so it is drawn even when the scene
+    // pass draws the model into the shared depth instead (ADR-0257).
+    let tracked = track_camera(shot, owner, at, chains, (live, captures));
+    let camera = tracked.or_else(|| {
         moved_camera(
             live.camera_of(scene_id, boxed.camera.as_ref()),
             boxed.camera.as_ref(),
@@ -7991,6 +8575,36 @@ fn draw_model(
     if let Some(model) = chains.model(source) {
         pose(compositor, model, shown);
     }
+    if tracked.is_none()
+        && model_shares(shot, owner, camera, shown)
+        && sharing_models(shot, scene_id, camera) >= 2
+    {
+        // The shadow maps are drawn now, before a later chain replaces the pictures
+        // they read, as a model that keeps its layer does. The shared pass shades
+        // with these maps and does not draw them again.
+        if shown.lighting == Lighting::Scene {
+            let view = camera.and_then(|camera| camera.view(shot.canvas).ok());
+            let (lights, shadowed) = light_scene(
+                compositor,
+                (&mut *cache, &mut *chains),
+                (shot, at),
+                scene_id,
+                (view.as_ref(), shown.receives_shadows),
+                (live, captures),
+            );
+            chains.lights = lights;
+            chains.shadowed = shadowed;
+        }
+        // The pass draws this model. Its private layer and depth are allocated and
+        // not drawn. Clear them: a composite that still samples the layer, or a copy
+        // of the depth, must read transparent texels. An undefined rectangle there is
+        // what a scene bloom shows over the ship on a device that does not zero new
+        // images. A window from a frame when the model was alone would place that
+        // rectangle.
+        clear_skipped_model(compositor, cache, key, scene_id, owner)?;
+        cache.set_window(key, None);
+        return Ok(());
+    }
     // A `scene`-lit model in a 3D scene is lit by the scene's lights (ADR-0143
     // decision 3); in a 2D scene it is studio-lit.
     let view = camera.and_then(|camera| camera.view(shot.canvas).ok());
@@ -8003,16 +8617,59 @@ fn draw_model(
         (view.as_ref().filter(|_| lit), shown.receives_shadows),
         (live, captures),
     );
+    // A model that reflects its scene, in a scene whose chain reads a surface buffer,
+    // draws its surface with its layer (ADR-0170 decision 4).
+    let surfaces = matches!(owner, ChainOwner::Item(scene, _)
+        if camera.is_some()
+            && lit
+            && shown.reflections
+            && shot
+                .chains
+                .get(&ChainOwner::Scene(scene.clone()))
+                .is_some_and(Chain::reads_surface));
+    // Its layer holds only the part of the canvas the model can draw into, when that is
+    // known and nothing reads the layer as the whole canvas (ADR-0251): the program
+    // stage's and the preview's, with no filters over it, no surface buffer and no
+    // depth of field.
+    let window = (cache.draws_small()
+        && !surfaces
+        && shot.shown_chain(owner).is_none()
+        && !shot.chains.contains_key(owner)
+        && !view.as_ref().is_some_and(|view| view.focus().is_some()))
+    .then(|| chains.model(source))
+    .flatten()
+    .and_then(|model| {
+        let canvas = (shot.canvas.width, shot.canvas.height);
+        model_window(model.seen_box(geometry, camera, canvas)?, canvas)
+    });
+    let ([width, height], extent) = match window {
+        Some((_, extent)) => (
+            percent_of(extent, chains.model_percent.get()),
+            FrameSize::new(extent[0], extent[1]).ok(),
+        ),
+        None => (
+            boxed.boxed.pixels(chains.model_percent.get()),
+            boxed.boxed.extent(),
+        ),
+    };
+    let window = window.map(|(window, _)| window);
+    cache.layer(compositor, key, width, height)?;
+    // Its layer stands for the canvas, or the part of it it holds, however many pixels
+    // it has (ADR-0197).
+    if let Some(extent) = extent {
+        cache.set_extent(key, extent);
+    }
+    cache.set_window(key, window);
     // In a 3D scene the model's depth is drawn too, for the items after it to test
     // against (ADR-0107 decision 7): before its filters run, so a blur doesn't move it.
     let depth_key = match (owner, camera) {
         (ChainOwner::Item(scene, item), Some(_)) => {
             let key = GpuKey::ModelDepth(scene.clone(), item.clone());
-            let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
             cache.depth_layer(compositor, &key, width, height)?;
-            if let Some(extent) = boxed.boxed.extent() {
+            if let Some(extent) = extent {
                 cache.set_extent(&key, extent);
             }
+            cache.set_window(&key, window);
             Some(key)
         }
         _ => None,
@@ -8022,15 +8679,7 @@ fn draw_model(
     // rather than drawing it again. One that doesn't reflect writes no surface: where it
     // is in front, the pass finds the view depth nearer than the surface and leaves it.
     let surface_keys = match owner {
-        ChainOwner::Item(scene, item)
-            if depth_key.is_some()
-                && lit
-                && shown.reflections
-                && shot
-                    .chains
-                    .get(&ChainOwner::Scene(scene.clone()))
-                    .is_some_and(Chain::reads_surface) =>
-        {
+        ChainOwner::Item(scene, item) if depth_key.is_some() && surfaces => {
             let keys = model_surface_keys(scene, item);
             let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
             for key in &keys {
@@ -8059,7 +8708,7 @@ fn draw_model(
         |m, own| shot.source_value(&boxed.item, m, at, own),
         |m| shot.tint(&boxed.item, m),
     );
-    let (texture, reflection) = model_maps(shot, &*cache, source, shown);
+    let (textures, reflection) = model_maps(shot, &*cache, source, shown);
     // What the scene's probes saw, inside one (ADR-0170 decision 3), unless it opts out.
     let probe = (lit && shown.reflections)
         .then(|| {
@@ -8085,7 +8734,7 @@ fn draw_model(
                 environment,
                 floor: None,
                 materials: &drives[..driving],
-                texture,
+                textures: &textures,
                 reflection,
                 probe,
             };
@@ -8143,17 +8792,23 @@ fn model_maps<'c>(
     source: &SourceId,
     shown: &'c jstream_sources::ShownModel,
 ) -> (
-    Option<jstream_render::LiveTexture<'c>>,
+    Vec<jstream_render::LiveTexture<'c>>,
     Option<&'c jstream_render::Image>,
 ) {
     let maps = shot.maps.get(source);
     let picture = |map: Option<&SourceRef>| map.and_then(|map| cache.get(&key(map, shot)));
-    let texture = shown.texture.as_ref().map(|_| jstream_render::LiveTexture {
-        image: picture(maps.and_then(|maps| maps.texture.as_ref())),
-        material: shown.texture_material.as_deref(),
-    });
+    let textures = shown
+        .textures
+        .iter()
+        .enumerate()
+        .map(|(slot, texture)| jstream_render::LiveTexture {
+            image: picture(maps.and_then(|maps| maps.textures.get(slot)?.as_ref())),
+            on: texture.on.as_deref(),
+            region: texture.region,
+        })
+        .collect();
     let reflection = picture(maps.and_then(|maps| maps.reflection.as_ref()));
-    (texture, reflection)
+    (textures, reflection)
 }
 
 /// The lights of scene `scene_id` as `view` sees them, for a `scene`-lit model or a lit
@@ -8606,7 +9261,7 @@ fn draw_reflection(
         );
         let reflected = GpuKey::ReflectedModel(shown.scene.clone(), shown.item.clone());
         cache.layer(compositor, &reflected, width, height)?;
-        let (texture, reflection) = model_maps(shot, &*cache, shown.source, shown.shown);
+        let (textures, reflection) = model_maps(shot, &*cache, shown.source, shown.shown);
         let Some(target) = cache.get(&reflected) else {
             continue;
         };
@@ -8622,7 +9277,7 @@ fn draw_reflection(
                 // Only what stands above the floor is reflected in it.
                 floor: Some(floor),
                 materials: &drives[..driving],
-                texture,
+                textures: &textures,
                 reflection,
                 probe: None,
             },
@@ -9641,12 +10296,15 @@ fn passes_through(shot: &Shot, pass: &Pass) -> bool {
 
 /// Places [`passes_through`] pass `pass`'s layer as its one picture
 /// ([`ResourceCache::share`]) when that picture, posed this frame with its live values,
-/// fills the canvas exactly as the pass would draw it: whole, unrotated, flat, at the
-/// canvas's box, and stretched or of the canvas's aspect ratio. Returns whether it did;
-/// when it didn't, the caller draws the pass.
+/// fills the canvas exactly as the pass would draw it: whole, flat, at the canvas's box
+/// (to a hundredth of a pixel), and stretched or of the canvas's aspect ratio, turned
+/// by 0 or 180 degrees and flipped or not. A picture shown mirrored is placed so by the
+/// items that place the layer ([`mirror_layer`]), and so only when nothing else reads
+/// the layer: a transition's track, an item's effects or a model's texture. Returns
+/// whether it did; when it didn't, the caller draws the pass.
 fn share_pass(
     cache: &mut ResourceCache<GpuKey>,
-    chains: &Chains,
+    chains: &mut Chains,
     (shot, pass): (&Shot, &Pass),
     (at, canvas): (MediaTime, FrameSize),
     (live, captures): (&LiveParams, &dyn Captures),
@@ -9654,54 +10312,148 @@ fn share_pass(
     let [layer] = pass.layers.as_slice() else {
         return false;
     };
-    let fills = {
+    let mirror = {
         let mut items = Vec::new();
         let camera = fill_items(
             &mut items,
-            (&*cache, chains),
+            (&*cache, &*chains),
             (shot, pass),
             (at, canvas),
             (live, captures),
         );
-        camera.is_none()
-            && match items.as_slice() {
-                [item] => {
-                    item.visible
-                        && item.opacity == OPAQUE
-                        && item.blend == BlendMode::Normal
-                        && item.crop == Crop::NONE
-                        && item.camera.is_none()
-                        && item.depth.is_none()
-                        && fills_canvas(item.placement, item.image.extent(), canvas)
-                }
-                _ => false,
+        match items.as_slice() {
+            [item]
+                if camera.is_none()
+                    && item.visible
+                    && item.opacity == OPAQUE
+                    && item.blend == BlendMode::Normal
+                    && item.crop == Crop::NONE
+                    && item.camera.is_none()
+                    && item.depth.is_none() =>
+            {
+                fills_canvas(item.placement, item.image.extent(), canvas)
             }
+            _ => None,
+        }
     };
-    fills && cache.share(&pass.key, &layer.image, canvas)
+    let Some(mirror) =
+        mirror.filter(|&mirror| mirror == (false, false) || only_items_read(shot, &pass.key))
+    else {
+        return false;
+    };
+    if !cache.share(&pass.key, &layer.image, canvas) {
+        return false;
+    }
+    if mirror != (false, false) {
+        chains.mirrored.insert(pass.key.clone(), mirror);
+    }
+    true
+}
+
+/// Whether only scenes' items read layer `key`: no running transition's track, no
+/// item's effects (whose box reads a nested scene's layer) and no model's texture.
+fn only_items_read(shot: &Shot, key: &GpuKey) -> bool {
+    let reads = |source: &SourceRef| matches!(source, SourceRef::Scene(id) if GpuKey::reference(id) == *key);
+    !shot
+        .transition
+        .as_ref()
+        .is_some_and(|transition| transition.tracks.iter().any(|(shown, ..)| shown == key))
+        && !shot.boxes.values().any(|boxed| reads(&boxed.source))
+        && !shot
+            .maps
+            .values()
+            .flat_map(|maps| maps.textures.iter().flatten())
+            .any(reads)
 }
 
 /// Whether `placement` draws an image of `extent` over exactly the whole of a canvas of
-/// `canvas`, with nothing cut off or left out.
-fn fills_canvas(placement: Placement, (width, height): (u32, u32), canvas: FrameSize) -> bool {
+/// `canvas`, with nothing cut off or left out, and if so whether it shows it mirrored
+/// across and down: a geometry turned by 180 degrees is mirrored both ways, and each
+/// flip mirrors its own way again. Positions and sizes count within a hundredth of a
+/// pixel, angles within a thousandth of a degree.
+fn fills_canvas(
+    placement: Placement,
+    (width, height): (u32, u32),
+    canvas: FrameSize,
+) -> Option<(bool, bool)> {
     let (cw, ch) = (canvas.width(), canvas.height());
     match placement {
-        Placement::Legacy(transform) => {
-            transform == LegacyTransform::IDENTITY && (width, height) == (cw, ch)
-        }
+        Placement::Legacy(transform) => (transform == LegacyTransform::IDENTITY
+            && (width, height) == (cw, ch))
+            .then_some((false, false)),
         Placement::Geometry(geometry) => {
+            let whole = ItemGeometry::covering_canvas(cw, ch).ok()?;
+            let near = |a: jstream_protocol::Finite32, b: jstream_protocol::Finite32| {
+                (a.get() - b.get()).abs() <= 0.01
+            };
             let aspect = u64::from(width) * u64::from(ch) == u64::from(height) * u64::from(cw);
-            ItemGeometry::covering_canvas(cw, ch).is_ok_and(|whole| {
-                geometry.center == whole.center
-                    && geometry.size == whole.size
-                    && geometry.rotation_deg.get() == 0.0
-                    && geometry.is_neutral_3d()
-                    && !geometry.flip_h
-                    && !geometry.flip_v
-                    && (geometry.fit_mode == jstream_protocol::FitMode::Stretch || aspect)
-            })
+            let turn = geometry.rotation_deg.get().rem_euclid(360.0);
+            let turned = if turn <= 1e-3 || turn >= 360.0 - 1e-3 {
+                false
+            } else if (turn - 180.0).abs() <= 1e-3 {
+                true
+            } else {
+                return None;
+            };
+            (near(geometry.center.x, whole.center.x)
+                && near(geometry.center.y, whole.center.y)
+                && near(geometry.size.width, whole.size.width)
+                && near(geometry.size.height, whole.size.height)
+                && geometry.is_neutral_3d()
+                && (geometry.fit_mode == jstream_protocol::FitMode::Stretch || aspect))
+                .then_some((geometry.flip_h != turned, geometry.flip_v != turned))
         }
-        Placement::Layer(_) => false,
+        Placement::Layer(_) => None,
     }
+}
+
+/// `placement` and `crop` of an image of `extent`, mirrored across and down as `mirror`
+/// says within where they draw it: a layer placed as a picture it shows mirrored
+/// ([`share_pass`]). A geometry flips its content and the crop swaps its sides; a legacy
+/// transform runs the other way from the far edge. `None` for a layer drawn in the
+/// canvas's own pixels, which no such layer is.
+fn mirror_layer(
+    (placement, crop): (Placement, Crop),
+    (width, height): (u32, u32),
+    (across, down): (bool, bool),
+) -> Option<(Placement, Crop)> {
+    let mut crop = crop;
+    if across {
+        std::mem::swap(&mut crop.left, &mut crop.right);
+    }
+    if down {
+        std::mem::swap(&mut crop.top, &mut crop.bottom);
+    }
+    let placement = match placement {
+        Placement::Geometry(mut geometry) => {
+            geometry.flip_h ^= across;
+            geometry.flip_v ^= down;
+            Placement::Geometry(geometry)
+        }
+        Placement::Legacy(mut transform) => {
+            // The cropped picture's far corner along each mirrored axis, in canvas
+            // pixels from the position, turned with it.
+            let shown = [
+                width.saturating_sub(crop.left.saturating_add(crop.right)) as f32,
+                height.saturating_sub(crop.top.saturating_add(crop.bottom)) as f32,
+            ];
+            let (sin, cos) = transform.rotation_deg.to_radians().sin_cos();
+            let mut by = [0.0_f32; 2];
+            if across {
+                by[0] += transform.scale[0] * shown[0];
+                transform.scale[0] = -transform.scale[0];
+            }
+            if down {
+                by[1] += transform.scale[1] * shown[1];
+                transform.scale[1] = -transform.scale[1];
+            }
+            transform.position[0] += by[0] * cos - by[1] * sin;
+            transform.position[1] += by[0] * sin + by[1] * cos;
+            Placement::Legacy(transform)
+        }
+        Placement::Layer(_) => return None,
+    };
+    Some((placement, crop))
 }
 
 /// How much of the canvas's resolution the placements of layer `key` say it needs,
@@ -9902,6 +10654,7 @@ fn sky_item(image: &jstream_render::Image) -> Item<'_> {
         camera: None,
         depth_run: 0,
         depth: None,
+        occludes: false,
     }
 }
 
@@ -9923,16 +10676,22 @@ fn layer_item<'a>(
         (live, Some(image.extent())),
         camera,
     )?;
+    // A nested scene placed as the picture it shows mirrored (ADR-0255).
+    let (placement, crop) = match chains.mirrored.get(&layer.image) {
+        Some(&mirror) => mirror_layer((posed.placement, posed.crop), image.extent(), mirror)?,
+        None => (posed.placement, posed.crop),
+    };
     Some(Item {
         image,
-        placement: posed.placement,
-        crop: posed.crop,
+        placement,
+        crop,
         opacity: posed.opacity,
         blend: posed.blend,
         visible: true,
         camera,
         depth_run: 0,
         depth: posed.depth,
+        occludes: posed.occludes,
     })
 }
 
@@ -9950,6 +10709,8 @@ struct LayerPose<'a> {
     blend: BlendMode,
     /// A model's own depth layer, as [`Item::depth`] carries it.
     depth: Option<&'a jstream_render::Image>,
+    /// Whether that depth occludes other models (ADR-0256).
+    occludes: bool,
 }
 
 /// [`LayerPose`] of `layer`; `None` for a layer that draws nothing at `at`. `extent` is
@@ -9983,6 +10744,7 @@ fn layer_pose<'a>(
             opacity: sampled.opacity,
             blend: sampled.blend,
             depth: None,
+            occludes: false,
         });
     }
     let (placement, crop) = live.apply(layer);
@@ -9990,14 +10752,24 @@ fn layer_pose<'a>(
     let (item, modifiers) = &layer.motion.to;
     let by = shot.motion_at(item, modifiers, at);
     let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
-    // A model's own depth, in a 3D scene, when it is at least half opaque, as the
-    // view depth takes it (ADR-0107 decision 7).
-    let depth = match (&layer.boxed, layer.image.boxed_item(), camera) {
-        (Some(boxed), Some((scene, item)), Some(_)) if boxed.model && opacity >= 0.5 => {
-            cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
+    // A model's own depth, in a 3D scene (ADR-0107 decision 7, ADR-0256). Carried at
+    // any opacity so a faded plume is still tested against the hull; the view depth
+    // and a scene-depth write still require half opacity, where those passes check.
+    // A model the shared pass draws has its depth in the scene target. Its private
+    // depth image is never drawn, so carrying it would copy an undefined rectangle
+    // the size of the item over the view depth a bloom filter reads.
+    let depth = if model_layer_shares(shot, &layer.image, camera) {
+        None
+    } else {
+        match (&layer.boxed, layer.image.boxed_item(), camera) {
+            (Some(boxed), Some((scene, item)), Some(_)) if boxed.model => {
+                cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
+            }
+            _ => None,
         }
-        _ => None,
     };
+    let occludes =
+        depth.is_some() && layer.blend == BlendMode::Normal && model_occludes(shot, &layer.image);
     let (placement, crop) = match &layer.boxed {
         // A model's layer is in the canvas's pixels; it sorts by the model's pose.
         Some(boxed) if boxed.model => match placement {
@@ -10028,7 +10800,31 @@ fn layer_pose<'a>(
         opacity,
         blend: layer.blend,
         depth,
+        occludes,
     })
+}
+
+/// Whether the model `image` places writes depth (ADR-0257): it has an opaque or
+/// masked material. A canopy does not stop the hull writing depth. A missing model
+/// is treated as solid. A model whose every material is blended only tests.
+fn model_occludes(shot: &Shot, image: &GpuKey) -> bool {
+    let Some((scene, item)) = image.boxed_item() else {
+        return true;
+    };
+    shot.boxes
+        .get(&ChainOwner::Item(scene.clone(), item.clone()))
+        .and_then(|boxed| match &boxed.source {
+            SourceRef::Frame(id) => shot.frames.get(id),
+            _ => None,
+        })
+        .and_then(|frame| frame.model.as_ref())
+        .is_none_or(|shown| {
+            shown
+                .model
+                .materials()
+                .iter()
+                .any(|material| !matches!(material.alpha_mode, AlphaMode::Blend))
+        })
 }
 
 /// A show scene item's pose at `at` on a canvas of `size`, on its way in or out by
@@ -10124,7 +10920,7 @@ fn draw_view_depth(
                 environment: None,
                 floor: from.and_then(|(_, _, floor)| floor),
                 materials: &[],
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe: None,
             },
@@ -10229,7 +11025,7 @@ fn draw_surface(
             })
             .flatten();
         // Its live texture and its materials' drives, as its layer was drawn with.
-        let (texture, reflection) = model_maps(shot, cache, drawn.source, shown);
+        let (textures, reflection) = model_maps(shot, cache, drawn.source, shown);
         let owner = ChainOwner::Item(scene.clone(), item.clone());
         let (drives, driving) = match shot.boxes.get(&owner) {
             Some(boxed) => crate::sourced::materials(
@@ -10254,7 +11050,7 @@ fn draw_surface(
                 environment,
                 floor: None,
                 materials: &drives[..driving],
-                texture,
+                textures: &textures,
                 reflection: reflection.filter(|_| reflects),
                 probe,
             },
@@ -10625,6 +11421,7 @@ fn fill_tracks<'a>(
                     // A stinger's items sort on their own, over the scenes under them.
                     depth_run: transition.cameras.depth_run(track, *seen),
                     depth: None,
+                    occludes: false,
                 })
             }),
     );
@@ -10781,6 +11578,7 @@ fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> It
         camera: None,
         depth_run: 0,
         depth: None,
+        occludes: false,
     }
 }
 
@@ -10790,6 +11588,16 @@ fn fit_inside(from: FrameSize, into: FrameSize) -> (f32, [f32; 2]) {
     let (iw, ih) = (into.width() as f32, into.height() as f32);
     let scale = (iw / fw).min(ih / fh);
     (scale, [(iw - fw * scale) / 2.0, (ih - fh * scale) / 2.0])
+}
+
+fn cached<'a>(
+    cache: &'a ResourceCache<GpuKey>,
+    key: &GpuKey,
+) -> Result<&'a jstream_render::Image, RenderError> {
+    cache.get(key).ok_or_else(|| RenderError::Invalid {
+        what: "cache",
+        detail: format!("no image for {key:?}"),
+    })
 }
 
 fn scene<'a>(canvas: FrameSize, background: Color, items: &'a [Item<'a>]) -> Scene<'a> {
@@ -12781,11 +13589,11 @@ pub(crate) mod tests {
         assert_eq!(drawn.capture_need(&spec, info.size), Some(0.125));
         for maps in [
             super::ModelMaps {
-                texture: Some(primary()),
+                textures: vec![Some(primary())],
                 reflection: None,
             },
             super::ModelMaps {
-                texture: None,
+                textures: Vec::new(),
                 reflection: Some(primary()),
             },
         ] {
@@ -13515,6 +14323,132 @@ pub(crate) mod tests {
             placed.texture() != captured.texture(),
             "drawn into a layer again"
         );
+    }
+
+    /// A nested scene that shows a capture turned upside down over its canvas, its
+    /// centre a rounding off, is placed as the capture too (ADR-0255), mirrored both
+    /// ways where it is placed: its right half shows on the left, as drawn.
+    #[test]
+    fn a_scene_of_one_whole_capture_turned_over_is_placed_as_the_capture() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let canvas = FrameSize::new(1920, 1080).expect("invariant: non-zero");
+        let size = FrameSize::new(32, 18).expect("invariant: non-zero");
+        // Blue on the left half, green on the right.
+        let halves: Vec<u8> = (0..32 * 18)
+            .flat_map(|i| if i % 32 < 16 { [0, 0, 255, 255] } else { GREEN })
+            .collect();
+        let capture = CaptureFrame {
+            version: 1,
+            image: CaptureImage::Rgba {
+                size,
+                rgba: &halves,
+            },
+        };
+        let whole = jstream_protocol::ItemGeometry::covering_canvas(1920, 1080).expect("positive");
+        let turned = jstream_protocol::ItemGeometry {
+            center: jstream_protocol::Vec2::new(959.999_94, 539.999_94).expect("finite"),
+            rotation_deg: jstream_protocol::Finite32::new(180.0).expect("finite"),
+            ..whole
+        };
+        let small = |geometry: jstream_protocol::ItemGeometry| {
+            Placement::Geometry(jstream_protocol::ItemGeometry {
+                size: jstream_protocol::Size::try_new(240.0, 135.0).expect("positive"),
+                ..geometry
+            })
+        };
+        let key = layer("webcam", 1);
+        for shown in [
+            Placement::Geometry(turned),
+            Placement::Geometry(jstream_protocol::ItemGeometry {
+                flip_h: true,
+                flip_v: true,
+                ..whole
+            }),
+        ] {
+            let shot = shot(vec![
+                ("program", vec![fill("red"), nest("webcam", small(whole))]),
+                ("webcam", vec![placed(primary(), shown)]),
+            ]);
+            let mut cache = ResourceCache::new();
+            cache.draw_uploads_small(true);
+            for _ in 0..2 {
+                let out = frame_at(&mut compositor, &mut cache, &shot, Some(&capture), canvas);
+                assert_eq!(
+                    out.pixel(960 - 60, 540),
+                    Some(GREEN),
+                    "its right half on the left"
+                );
+                assert_eq!(
+                    out.pixel(960 + 60, 540),
+                    Some([0, 0, 255, 255]),
+                    "and its left on the right"
+                );
+                let placed = cache.get(&key).expect("shared");
+                let captured = cache
+                    .get(&GpuKey::Capture(CaptureKey::primary()))
+                    .expect("uploaded");
+                assert!(
+                    placed.texture() == captured.texture(),
+                    "no layer of its own"
+                );
+            }
+        }
+    }
+
+    /// ADR-0251: a model's layer holds a part of the canvas in a few steps of size
+    /// that hold its box, inside the canvas; at half the canvas or more, all of it.
+    #[test]
+    fn a_models_part_of_the_canvas_is_a_step_that_holds_its_box() {
+        let canvas = (1920, 1080);
+        let (window, size) = super::model_window([100, 200, 150, 70], canvas).expect("a part");
+        assert_eq!(size, [192, 96]);
+        assert_eq!((window.x, window.y, window.canvas), (100, 200, canvas));
+        // At the far corner it stays inside the canvas.
+        let (window, size) = super::model_window([1900, 1070, 20, 10], canvas).expect("a part");
+        assert_eq!(size, [64, 64]);
+        assert_eq!((window.x, window.y), (1856, 1016));
+        // Off the canvas, the least step.
+        assert_eq!(
+            super::model_window([0, 0, 0, 0], canvas).map(|(_, size)| size),
+            Some([64, 64])
+        );
+        assert_eq!(super::model_window([0, 0, 1500, 600], canvas), None);
+        assert_eq!(super::percent_of([192, 96], 50), [96, 48]);
+        assert_eq!(super::percent_of([192, 96], 100), [192, 96]);
+    }
+
+    /// A placement and crop mirrored for a layer that shows its picture mirrored: a
+    /// legacy transform runs back from the far edge of the cropped picture, so it covers
+    /// the same quad.
+    #[test]
+    fn a_mirrored_legacy_placement_covers_the_same_quad() {
+        let transform = LegacyTransform {
+            position: [100.0, 50.0],
+            scale: [2.0, 3.0],
+            rotation_deg: 90.0,
+        };
+        let crop = Crop {
+            left: 2,
+            top: 1,
+            right: 0,
+            bottom: 3,
+        };
+        let (placement, mirrored) =
+            super::mirror_layer((Placement::Legacy(transform), crop), (16, 9), (true, true))
+                .expect("mirrored");
+        assert_eq!(
+            (mirrored.left, mirrored.right, mirrored.top, mirrored.bottom),
+            (0, 2, 3, 1)
+        );
+        let Placement::Legacy(turned) = placement else {
+            panic!("still legacy");
+        };
+        // Cropped to 14x5, scaled to 28x15, turned a quarter: the far corner is at
+        // (100 - 15, 50 + 28), where the mirrored one starts.
+        assert!((turned.position[0] - 85.0).abs() < 1e-3, "{turned:?}");
+        assert!((turned.position[1] - 78.0).abs() < 1e-3, "{turned:?}");
+        assert_eq!(turned.scale, [-2.0, -3.0]);
     }
 
     /// A program scene with a video chain (a 1-pixel blur) showing scene `monitor` in a

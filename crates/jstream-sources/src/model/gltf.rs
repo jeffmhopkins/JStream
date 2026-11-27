@@ -101,6 +101,8 @@ struct SceneDef {
 #[derive(Deserialize, Default)]
 struct Node {
     #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
     children: Vec<usize>,
     #[serde(default)]
     mesh: Option<usize>,
@@ -160,6 +162,8 @@ struct SamplerDef {
 
 #[derive(Deserialize, Default)]
 struct Mesh {
+    #[serde(default)]
+    name: Option<String>,
     #[serde(default)]
     primitives: Vec<PrimitiveDef>,
 }
@@ -819,7 +823,8 @@ impl Builder<'_> {
         let world = multiply(&parent, &local(node));
         if let Some(mesh) = node.mesh {
             let placed = self.placed(index, node.skin)?;
-            self.mesh(mesh, &world, placed)?;
+            let name = node.name.clone();
+            self.mesh(mesh, &world, placed, name)?;
         }
         for &child in &node.children {
             self.node(child, world, depth + 1)?;
@@ -985,12 +990,25 @@ impl Builder<'_> {
         Rig::new(tree.nodes, tree.slots, clips).map_err(|err| LoadError::new(err.to_string()))
     }
 
-    fn mesh(&mut self, index: usize, world: &Mat4, placed: Placed) -> Result<()> {
+    /// Adds the primitives of mesh `index`, drawn for the node named `node`.
+    fn mesh(
+        &mut self,
+        index: usize,
+        world: &Mat4,
+        placed: Placed,
+        node: Option<String>,
+    ) -> Result<()> {
         let mesh = self
             .doc
             .meshes
             .get(index)
             .ok_or_else(|| LoadError::new(format!("mesh {index} doesn't exist")))?;
+        // What a live texture can name its primitives by (ADR-0250).
+        let names: Vec<String> = node
+            .into_iter()
+            .chain(mesh.name.clone())
+            .filter(|name| !name.is_empty())
+            .collect();
         let linear = linear(world);
         let normals = normal_matrix(&linear);
         // A mirroring transform turns triangles inside out; swap them back. A skin's
@@ -1189,6 +1207,7 @@ impl Builder<'_> {
                 vertices,
                 indices,
                 material,
+                names: names.clone(),
             };
             if tangent_data.is_none() {
                 compute_tangents(&mut primitive);

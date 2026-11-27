@@ -137,6 +137,71 @@ impl BlendPipelines {
         }
     }
 
+    /// The blend pipelines of a model layer that shares the scene depth (ADR-0256):
+    /// each fragment's depth is the model's view-depth texel (`fs_model`), tested
+    /// nearer-wins. `write` stores that depth; a blended or additive model passes
+    /// `false` so it is tested and does not occlude what is drawn after it.
+    pub(crate) fn sharing_depth(device: &wgpu::Device, layouts: &Layouts<'_>, write: bool) -> Self {
+        let over = component(wgpu::BlendFactor::One, wgpu::BlendFactor::OneMinusSrcAlpha);
+        let fixed = |label: &str, color: wgpu::BlendComponent, alpha: wgpu::BlendComponent| {
+            pipeline_sharing(
+                device,
+                layouts,
+                label,
+                "fs_model",
+                Some(wgpu::BlendState { color, alpha }),
+                write,
+            )
+        };
+        let keep = component(wgpu::BlendFactor::Zero, wgpu::BlendFactor::One);
+        let under = component(wgpu::BlendFactor::OneMinusDstAlpha, wgpu::BlendFactor::One);
+        let multiply = [
+            fixed(
+                "jstream-render-model-multiply-1",
+                component(wgpu::BlendFactor::Dst, wgpu::BlendFactor::OneMinusSrcAlpha),
+                keep,
+            ),
+            fixed("jstream-render-model-multiply-2", under, under),
+        ];
+        let backdrop = BACKDROP_MODES.map(|(mode, entry)| {
+            pipeline_sharing(
+                device,
+                layouts,
+                &format!("jstream-render-model-{}", mode.as_str()),
+                &format!("fs_model_{}", entry.trim_start_matches("fs_")),
+                None,
+                write,
+            )
+        });
+        // Unused: a model layer is not a card's view-depth draw. Built so the set has
+        // the same shape as [`Self::new`].
+        let depth_pipe = pipeline_with(
+            device,
+            layouts,
+            "jstream-render-model-view-depth",
+            "fs_depth",
+            Some(wgpu::BlendState::REPLACE),
+            Some((wgpu::CompareFunction::Always, false)),
+            (wgpu::ColorWrites::ALL, DEPTH_LAYER_FORMAT),
+        );
+        Self {
+            depth: depth_pipe,
+            normal: fixed("jstream-render-model-composite", over, over),
+            additive: fixed(
+                "jstream-render-model-additive",
+                component(wgpu::BlendFactor::One, wgpu::BlendFactor::One),
+                over,
+            ),
+            screen: fixed(
+                "jstream-render-model-screen",
+                component(wgpu::BlendFactor::One, wgpu::BlendFactor::OneMinusSrc),
+                over,
+            ),
+            multiply,
+            backdrop,
+        }
+    }
+
     /// The pipeline that draws a scene's view depth (ADR-0143 decision 4).
     pub(crate) fn depth(&self) -> &wgpu::RenderPipeline {
         &self.depth
@@ -216,6 +281,98 @@ fn component(src: wgpu::BlendFactor, dst: wgpu::BlendFactor) -> wgpu::BlendCompo
         dst_factor: dst,
         operation: wgpu::BlendOperation::Add,
     }
+}
+
+/// A model layer's pipeline (ADR-0256): group 0 is the colour, group 1 is the colour
+/// again for a fixed-function mode (so group 2 can be the depth) or the backdrop for a
+/// mode that reads it, and group 2 is the model's view depth. The fragment writes
+/// `frag_depth` from that depth and tests nearer-wins; `write` stores it.
+fn pipeline_sharing(
+    device: &wgpu::Device,
+    layouts: &Layouts<'_>,
+    label: &str,
+    entry: &str,
+    blend: Option<wgpu::BlendState>,
+    write: bool,
+) -> wgpu::RenderPipeline {
+    let groups = if blend.is_some() {
+        vec![
+            Some(layouts.image),
+            Some(layouts.image),
+            Some(layouts.image),
+        ]
+    } else {
+        vec![
+            Some(layouts.image),
+            Some(layouts.backdrop),
+            Some(layouts.image),
+        ]
+    };
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some(label),
+        bind_group_layouts: &groups,
+        immediate_size: 0,
+    });
+    let attributes = wgpu::vertex_attr_array![
+        0 => Float32x2,
+        1 => Float32x2,
+        2 => Float32,
+        3 => Float32,
+        4 => Float32,
+        5 => Float32x3,
+        6 => Float32x3,
+        7 => Float32x3,
+        8 => Float32x3,
+        9 => Float32x3,
+        10 => Float32x4,
+        11 => Float32x3,
+    ];
+    let buffers = [Some(wgpu::VertexBufferLayout {
+        array_stride: crate::compositor::VERTEX_STRIDE,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &attributes,
+    })];
+    let desc = wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: layouts.shader,
+            entry_point: Some("vs"),
+            compilation_options: Default::default(),
+            buffers: &buffers,
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: SCENE_DEPTH_FORMAT,
+            depth_write_enabled: Some(write),
+            depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: layouts.shader,
+            entry_point: Some(entry),
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: &[("ENCODED", if layouts.encoded { 1.0 } else { 0.0 })],
+                ..Default::default()
+            },
+            targets: &[Some(wgpu::ColorTargetState {
+                format: crate::image::LAYER_FORMAT,
+                blend,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    };
+    layouts
+        .built
+        .render(device, crate::compositor::COMPOSITE_SOURCE, &(), &desc)
 }
 
 fn pipeline(

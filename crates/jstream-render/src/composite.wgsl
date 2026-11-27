@@ -366,3 +366,79 @@ fn fs_difference(in: VsOut) -> @location(0) vec4<f32> {
 fn fs_exclusion(in: VsOut) -> @location(0) vec4<f32> {
     return blended(in, EXCLUSION);
 }
+
+// A model's layer tested against the scene depth at each texel (ADR-0256). Group 0 is
+// the colour layer. Group 1 is unused by these entries (the fixed-function pipelines
+// bind the colour there so group 2 can be the depth; a backdrop mode binds the
+// backdrop there, as `fs_darken` does). Group 2 is the model's view depth, red
+// `1 / w` where it covered the texel and 0 elsewhere, the same texels as the colour.
+@group(2) @binding(0) var model_depth_tex: texture_2d<f32>;
+// Binding 1 is the depth image's sampler. Nothing samples it: the depth is a load, so
+// a filtered edge can't mix a covered texel with an empty one. Declared so the bind
+// group, which is the image's, matches this entry.
+@group(2) @binding(1) var model_depth_samp: sampler;
+
+struct ModelOut {
+    @location(0) colour: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+}
+
+// The scene depth at this fragment: `NEAR_W / w` where the model covered the texel,
+// and 0 where it did not (a clear texel, or a filter that spread colour past the
+// model). 0 is the far plane the target is cleared to, so a halo shows only where
+// nothing nearer was drawn.
+fn model_depth_at(in: VsOut) -> f32 {
+    let size = textureDimensions(model_depth_tex);
+    let at = clamp(
+        vec2<i32>(in.uv * vec2<f32>(size)),
+        vec2<i32>(0),
+        vec2<i32>(size) - vec2<i32>(1),
+    );
+    let inverse_w = textureLoad(model_depth_tex, at, 0).r;
+    if inverse_w <= 0.0 {
+        return 0.0;
+    }
+    return min(NEAR_W * inverse_w, 1.0);
+}
+
+fn model_fragment(in: VsOut, colour: vec4<f32>) -> ModelOut {
+    let depth = model_depth_at(in);
+    // Nothing was drawn here and no filter left colour: skip the blend and the write.
+    if depth == 0.0 && colour.a == 0.0 && all(colour.rgb == vec3<f32>(0.0)) {
+        discard;
+    }
+    var out: ModelOut;
+    out.colour = colour;
+    out.depth = depth;
+    return out;
+}
+
+@fragment
+fn fs_model(in: VsOut) -> ModelOut {
+    return model_fragment(in, item(in));
+}
+
+@fragment
+fn fs_model_darken(in: VsOut) -> ModelOut {
+    return model_fragment(in, blended(in, DARKEN));
+}
+
+@fragment
+fn fs_model_lighten(in: VsOut) -> ModelOut {
+    return model_fragment(in, blended(in, LIGHTEN));
+}
+
+@fragment
+fn fs_model_overlay(in: VsOut) -> ModelOut {
+    return model_fragment(in, blended(in, OVERLAY));
+}
+
+@fragment
+fn fs_model_difference(in: VsOut) -> ModelOut {
+    return model_fragment(in, blended(in, DIFFERENCE));
+}
+
+@fragment
+fn fs_model_exclusion(in: VsOut) -> ModelOut {
+    return model_fragment(in, blended(in, EXCLUSION));
+}

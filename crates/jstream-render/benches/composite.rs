@@ -137,6 +137,7 @@ fn blended(images: &[Image], blend: BlendMode) -> Vec<Item<'_>> {
                 camera: None,
                 depth_run: 0,
                 depth: None,
+                occludes: false,
             }
         })
         .collect()
@@ -257,6 +258,7 @@ fn cards(images: &[Image]) -> Vec<Item<'_>> {
                 camera: Some(camera),
                 depth_run: 0,
                 depth: None,
+                occludes: false,
             }
         })
         .collect()
@@ -311,7 +313,7 @@ fn three_d(c: &mut Criterion) {
             environment: None,
             floor: None,
             materials: &[],
-            texture: None,
+            textures: &[],
             reflection: None,
             probe: None,
         };
@@ -328,6 +330,7 @@ fn three_d(c: &mut Criterion) {
                     camera: Some(camera),
                     depth_run: 0,
                     depth: None,
+                    occludes: false,
                 }];
                 black_box(compositor.render(&scene(&items), false).expect("render"));
                 wait(&compositor);
@@ -401,7 +404,7 @@ fn three_d(c: &mut Criterion) {
                         environment: None,
                         floor: None,
                         materials: &[],
-                        texture: None,
+                        textures: &[],
                         reflection: None,
                         probe: None,
                     },
@@ -420,7 +423,7 @@ fn three_d(c: &mut Criterion) {
                         environment: None,
                         floor: None,
                         materials: &[],
-                        texture: None,
+                        textures: &[],
                         reflection: None,
                         probe: None,
                     },

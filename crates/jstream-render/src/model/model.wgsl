@@ -43,6 +43,13 @@ struct Light {
     cone: vec4<f32>,
 }
 
+// The item this model is drawn for (ADR-0257): x is its opacity. 1 draws the
+// material as authored. A shared scene pass multiplies it here, because the
+// model is not composited as its own layer afterwards.
+struct ItemFade {
+    opacity: vec4<f32>,
+}
+
 struct Frame {
     clip: mat4x4<f32>,
     view: mat4x4<f32>,
@@ -59,6 +66,7 @@ struct Frame {
     // + w is at or above 0 is at or below it, and isn't drawn. (0, 0, 0, -1) cuts nothing.
     cut: vec4<f32>,
     probe: Probe,
+    item: ItemFade,
 }
 
 // The reflection probe a surface reads (ADR-0170 decision 3), in the viewing frame.
@@ -119,6 +127,16 @@ struct Material {
     // the base texture is another source's picture (ADR-0107 decision 5), a mip chain in
     // premultiplied linear light.
     card: vec4<f32>,
+    // A live texture's region (ADR-0250): the texture coordinates `uv * xy + zw` read
+    // the picture, so the part of the coordinates the region gives spans all of it.
+    // (1, 1, 0, 0) for every other texture.
+    region: vec4<f32>,
+}
+
+// The texture coordinates the base colour texture is read at: a live texture's within
+// its region (ADR-0250), any other's as they are.
+fn base_uv(uv: vec2<f32>) -> vec2<f32> {
+    return uv * material.region.xy + material.region.zw;
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -573,7 +591,7 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
     if !facing && !double_sided {
         discard;
     }
-    var texel = textureSample(base_tex, tex_sampler, in.uv);
+    var texel = textureSample(base_tex, tex_sampler, base_uv(in.uv));
     let card = material.card.x > 0.5;
     if card || material.card.y > 0.5 {
         // A picture is premultiplied: its colour is what it holds over its alpha.
@@ -680,7 +698,11 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
         out.reflected = reflected * occlusion;
         out.reflects = select(0.0, 1.0, frame.params.w > 0.5 && mode < 1.5);
     }
-    out.color = vec4<f32>(color * base.a, base.a);
+    // The item's opacity, as a layer's composite applies it: colour scales by the whole
+    // opacity (so one above 1 stays brighter) and alpha is held to 1.
+    let opacity = frame.item.opacity.x;
+    let alpha = base.a * min(opacity, 1.0);
+    out.color = vec4<f32>(color * base.a * opacity, alpha);
     return out;
 }
 
@@ -704,7 +726,7 @@ fn fs_prepass(in: VsOut, @builtin(front_facing) front_facing: bool) {
     let mode = material.flags.x;
     if mode > 0.5 && mode < 1.5 {
         // As `fs` masks: a picture's unpremultiplying leaves its alpha as it was.
-        let alpha = material.base.a * textureSample(base_tex, tex_sampler, in.uv).a * in.color.a;
+        let alpha = material.base.a * textureSample(base_tex, tex_sampler, base_uv(in.uv)).a * in.color.a;
         if alpha < material.flags.y {
             discard;
         }
@@ -712,15 +734,15 @@ fn fs_prepass(in: VsOut, @builtin(front_facing) front_facing: bool) {
 }
 
 // The model's view depth (ADR-0143 decision 4): red holds 1 / w, the viewer's distance
-// over the fragment's along the viewing axis, where the material's alpha is at least one
-// half. The pipeline keeps the larger value, so the nearest thing wins. Only a model seen
-// with perspective (a camera) is drawn here.
+// over the fragment's along the viewing axis, wherever the fragment covers the texel.
+// A faint fragment is still a depth. The pipeline keeps the larger value, so the nearest
+// thing wins. Only a model seen with perspective (a camera) is drawn here.
 @fragment
 fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
     if below_floor(in.seen) {
         discard;
     }
-    let base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
+    let base = material.base * textureSample(base_tex, tex_sampler, base_uv(in.uv)) * in.color;
     let mode = material.flags.x;
     var alpha = 1.0;
     if mode > 1.5 {
@@ -730,7 +752,9 @@ fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
     }
     let p = frame.params.x;
     let w = (p - in.seen.z) / max(p, 1e-6);
-    if alpha < 0.5 || p <= 0.0 || w <= 0.0 {
+    // Any coverage is a real depth. A faint fragment is still tested where it is;
+    // only nothing (alpha 0) is absent.
+    if alpha <= 0.0 || p <= 0.0 || w <= 0.0 {
         discard;
     }
     return vec4<f32>(1.0 / w, 0.0, 0.0, 1.0);

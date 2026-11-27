@@ -122,6 +122,8 @@ pub(crate) fn item<'a>(
         camera: None,
         depth_run: 0,
         depth: None,
+        // A solid model. A test that composites a blended one sets this false.
+        occludes: true,
     }
 }
 

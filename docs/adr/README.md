@@ -253,7 +253,12 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0247](0247-a-3d-extra-that-runs-too-long-holds-the-extras-at-their-cheapest.md) | A 3D extra that runs too long holds the extras at their cheapest | accepted | agent |  |
 | [ADR-0248](0248-windows-tests-in-shards-and-carried-passes.md) | The Windows tests run in shards, and a Windows pass carries to a head with the same build inputs | accepted | agent |  |
 | [ADR-0249](0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md) | A nested 2D scene is drawn with the pixels it is shown at | accepted | agent |  |
+| [ADR-0250](0250-a-model-shows-a-live-texture-on-each-part-it-names.md) | A model shows a live texture on each part it names | accepted | agent |  |
+| [ADR-0251](0251-a-models-layer-holds-only-its-part-of-the-canvas.md) | A model's layer holds only its part of the canvas | accepted | agent |  |
 | [ADR-0253](0253-jtunnel-opus-streams-decode-through-rusty-opus.md) | JTunnel's Opus streams decode through rusty-opus | accepted | agent |  |
 | [ADR-0254](0254-browser-paint-copies-are-waited-for-off-cefs-ui-thread.md) | The browser helper waits for its paint copies off CEF's UI thread | accepted | agent |  |
+| [ADR-0255](0255-a-whole-picture-turned-over-or-flipped-has-no-layer-either.md) | A whole picture turned over or flipped has no layer either | accepted | agent |  |
+| [ADR-0256](0256-models-in-one-scene-share-a-depth.md) | Models in one 3D scene share a depth | superseded | agent | [ADR-0257](0257-models-in-one-scene-are-one-depth.md) |
+| [ADR-0257](0257-models-in-one-scene-are-one-depth.md) | Models in one 3D scene are one depth | accepted | agent |  |
 | [ADR-0258](0258-a-native-crash-writes-a-local-minidump-on-windows.md) | A native crash writes a local minidump on Windows | accepted | agent |  |
 <!-- @generated end adr-index -->

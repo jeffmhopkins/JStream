@@ -1370,7 +1370,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 ## GPU pipeline
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "crates/jstream-platform-macos/src/gpu/**"]
-depends_on = ["docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0063-macos-platform-support.md"]
+depends_on = ["docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0063-macos-platform-support.md", "docs/adr/0257-models-in-one-scene-are-one-depth.md"]
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -1450,13 +1450,17 @@ camera and always takes that path: the same polygon, built through the camera's 
 consecutive items that share a camera with `depth_sort` on (and a `depth_run`, which
 keeps a stinger's items over the scenes under them), far to near by the depth of their
 centre, stacking order breaking ties; cards have no depth buffer of their own. A 3D
-model's layer carries the model's view depth ([ADR-0107](adr/0107-3d-models.md)
-decision 7): a scene pass that places one gets a reversed `Depth32Float` target, the
-model writes `NEAR_W / w` there where it covers a pixel (before its filters), and every
-item drawn after it tests against that, so a card that sorts in front of a model but
-passes behind it is hidden where the model is nearer. A model's own layer isn't
-tested, so models still order among themselves by their centres; a scene with no model
-has no depth target. In a Fade between
+scene pass has a reversed `Depth32Float` target. When two or more models can share it,
+they are drawn into it together
+([ADR-0257](adr/0257-models-in-one-scene-are-one-depth.md)): opaque primitives of every
+such model, depth tested and written, then transparent primitives far to near, tested
+and not written, each fragment at the depth the rasterizer gives it. One model, and a
+model that keeps a layer (filters, depth of field, a screen-space reflection), still
+carries its view depth
+([ADR-0107](adr/0107-3d-models.md) decision 7) and the composite tests that layer, with the
+half-opacity limit [ADR-0257](adr/0257-models-in-one-scene-are-one-depth.md) records. A card is tested against the same depth, so one that sorts in front of a model but
+passes behind it is hidden where the model is nearer. A scene with no model has no depth
+target. In a Fade between
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had. A camera with a depth of field
@@ -1492,8 +1496,9 @@ spot, directional and ambient, up to 8 shading lights, placed in the camera's fr
 what casts into it has changed, and sampled with a soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md), a card that only
 adds light casting none, [ADR-0179](adr/0179-cards-that-only-add-light-cast-no-shadow.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
-studio gradient). A model's `texture` names another source whose picture, after its
-own filters, replaces its base colour, sampled through a mip chain of the whole picture
+studio gradient). A model's texture slots each name another source whose picture, after its
+own filters, replaces the base colour of the parts it is on, by material, node or mesh
+name ([ADR-0250](adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md)), sampled through a mip chain of the whole picture
 kept on that image and rebuilt only when it changes; its `reflection` names a source read
 as a panorama in place of the studio gradient or the scene's sky. Each is planned like a
 placed source though no item shows it, and the model's layer is drawn after the chains

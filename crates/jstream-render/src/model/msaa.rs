@@ -19,9 +19,10 @@ use super::DEPTH_FORMAT;
 const COUNTS: [u32; 4] = [8, 4, 2, 1];
 
 /// The targets of the sizes and counts used last that are kept: as the depth targets
-/// are, two, since a model drawn with fewer pixels than its canvas (ADR-0197) alternates
-/// with one drawn at the canvas's size.
-const KEPT: usize = 2;
+/// are, four, since models drawn with fewer pixels than their canvas (ADR-0197), or
+/// over a part of it in a few sizes (ADR-0251), alternate with one drawn at the
+/// canvas's size.
+const KEPT: usize = 4;
 
 /// The most samples no more than `asked` that this device draws a model's layer and its
 /// depth with, and resolves: 1 when `asked` is 1 or less. A count the device can't draw

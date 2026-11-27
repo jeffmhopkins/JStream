@@ -144,6 +144,24 @@ pub struct Image {
     /// What a layer's last [`crate::Compositor::render_into`] drew into it
     /// ([`Self::drawn_as`]).
     drawn: Arc<Mutex<Option<crate::compositor::Drawn>>>,
+    /// The part of a canvas a model's layer holds, when it holds only part of it
+    /// ([`Self::window`]).
+    window: Option<Window>,
+}
+
+/// Where a layer that holds only part of its canvas sits on it (ADR-0250): a model's
+/// layer drawn only over the box its model can cover. The layer stands for
+/// [`Image::extent`] canvas pixels from `x`, `y`; [`crate::Placement::Layer`] places it
+/// there, and [`crate::Compositor::draw_model`] draws the model as the whole canvas's
+/// camera sees it, cut to that part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Window {
+    /// The part's left edge, in canvas pixels.
+    pub x: u32,
+    /// The part's top edge, in canvas pixels.
+    pub y: u32,
+    /// The whole canvas's width and height.
+    pub canvas: (u32, u32),
 }
 
 /// What an image held when it was looked at ([`Image::seen`]): which image, and how many
@@ -197,6 +215,19 @@ impl Image {
         self.extent = (extent.width(), extent.height());
     }
 
+    /// The part of its canvas a layer holds ([`Window`]), or `None` for one that holds
+    /// all of it from its top-left, as every image does unless [`Self::set_window`] says
+    /// otherwise.
+    pub fn window(&self) -> Option<Window> {
+        self.window
+    }
+
+    /// Makes the image stand for the part `window` of its canvas, its
+    /// [`Self::extent`] wide and high, or for all of it with `None`.
+    pub fn set_window(&mut self, window: Option<Window>) {
+        self.window = window;
+    }
+
     /// The sampled texture. For an uploaded or rendered image it is `Rgba16Float` holding
     /// premultiplied linear light; for an imported one it is the texture that was given.
     pub fn texture(&self) -> &wgpu::Texture {
@@ -218,12 +249,41 @@ impl Image {
         self.generation.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// This frame drew nothing into the layer. A composite that still places it trims
+    /// it away, so an undrawn model layer cannot leave a rectangle of stale texels.
+    pub fn mark_undrawn(&self) {
+        self.mark_changed();
+        self.set_content(Some(Region {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        }));
+    }
+
+    /// The layer may hold a picture at any texel. A filter reads all of it, and a
+    /// composite does not trim it to a smaller box.
+    pub fn mark_everywhere(&self) {
+        self.set_content(None);
+    }
+
     /// Records the texels the write that just marked a change ([`Self::mark_changed`])
     /// drew into, all others transparent: `None` when they may be anywhere.
     pub(crate) fn set_content(&self, content: Option<Region>) {
         let generation = self.generation();
         *self.content.lock().unwrap_or_else(PoisonError::into_inner) =
             content.map(|region| (generation, region));
+    }
+
+    /// Whether the last write named the texels that can be other than transparent.
+    /// `false` means they may be anywhere, so a filter reads the whole image.
+    pub fn names_its_content(&self) -> bool {
+        self.content().is_some()
+    }
+
+    /// Whether that named region is empty. A composite then draws none of the image.
+    pub fn content_is_empty(&self) -> bool {
+        self.content().is_some_and(crate::wipe::is_empty)
     }
 
     /// The texels outside of which the image is transparent, when its last write said
@@ -416,6 +476,7 @@ impl std::fmt::Debug for Image {
             .field("width", &self.width)
             .field("height", &self.height)
             .field("extent", &self.extent)
+            .field("window", &self.window)
             .field("format", &self.texture.format())
             .field("alpha", &self.alpha)
             .field("synced", &self.sync.is_some())
@@ -819,6 +880,7 @@ fn finish(
         need: Arc::new(AtomicU32::new(0)),
         content: Arc::new(Mutex::new(None)),
         drawn: Arc::new(Mutex::new(None)),
+        window: None,
     }
 }
 
