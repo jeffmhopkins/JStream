@@ -127,6 +127,16 @@ struct Material {
     // the base texture is another source's picture (ADR-0107 decision 5), a mip chain in
     // premultiplied linear light.
     card: vec4<f32>,
+    // A live texture's region (ADR-0250): the texture coordinates `uv * xy + zw` read
+    // the picture, so the part of the coordinates the region gives spans all of it.
+    // (1, 1, 0, 0) for every other texture.
+    region: vec4<f32>,
+}
+
+// The texture coordinates the base colour texture is read at: a live texture's within
+// its region (ADR-0250), any other's as they are.
+fn base_uv(uv: vec2<f32>) -> vec2<f32> {
+    return uv * material.region.xy + material.region.zw;
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -581,7 +591,7 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
     if !facing && !double_sided {
         discard;
     }
-    var texel = textureSample(base_tex, tex_sampler, in.uv);
+    var texel = textureSample(base_tex, tex_sampler, base_uv(in.uv));
     let card = material.card.x > 0.5;
     if card || material.card.y > 0.5 {
         // A picture is premultiplied: its colour is what it holds over its alpha.
@@ -716,7 +726,7 @@ fn fs_prepass(in: VsOut, @builtin(front_facing) front_facing: bool) {
     let mode = material.flags.x;
     if mode > 0.5 && mode < 1.5 {
         // As `fs` masks: a picture's unpremultiplying leaves its alpha as it was.
-        let alpha = material.base.a * textureSample(base_tex, tex_sampler, in.uv).a * in.color.a;
+        let alpha = material.base.a * textureSample(base_tex, tex_sampler, base_uv(in.uv)).a * in.color.a;
         if alpha < material.flags.y {
             discard;
         }
@@ -732,7 +742,7 @@ fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
     if below_floor(in.seen) {
         discard;
     }
-    let base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
+    let base = material.base * textureSample(base_tex, tex_sampler, base_uv(in.uv)) * in.color;
     let mode = material.flags.x;
     var alpha = 1.0;
     if mode > 1.5 {

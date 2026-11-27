@@ -45,7 +45,8 @@ Contents:
   planar `SampleFormat`) and `AudioBuffer`, whose sample count is always whole frames.
 - **3D models** (`model`, [ADR-0107](../../docs/adr/0107-3d-models.md)): a checked
   `Model` of triangle `Primitive`s in a scene's axes (x right, y down, z toward the
-  viewer), metallic-roughness `Material`s and `ModelTexture`s, each with its mips built
+  viewer), each with its node's and mesh's names from the file, which a live texture
+  names it by ([ADR-0250](../../docs/adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md)), metallic-roughness `Material`s and `ModelTexture`s, each with its mips built
   on construction (in linear light for sRGB, weighted by alpha), so the render thread
   only uploads them. `Model::new` checks every index and reference and the caps: 2,000,000
   triangles, 64 textures, 4096 px a side, 512 MiB in all. `model::shapes` builds the

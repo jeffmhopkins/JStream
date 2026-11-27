@@ -1055,6 +1055,10 @@ pub(crate) struct Chains {
     /// that nests the same scene at the same depth reads instead of drawing it again
     /// (#1070).
     drawn: BTreeSet<GpuKey>,
+    /// The nested scenes placed as their one picture this frame (ADR-0249, ADR-0255) whose
+    /// picture they show mirrored, across and down: an item that places one mirrors
+    /// it so.
+    pub(crate) mirrored: BTreeMap<GpuKey, (bool, bool)>,
     /// The 3D models this compositor draws (ADR-0107), uploaded once per version, by
     /// the source that shows them.
     models: BTreeMap<SourceId, (u64, jstream_render::GpuModel)>,
@@ -1188,6 +1192,7 @@ impl Chains {
         self.surfaced.clear();
         self.staged.clear();
         self.drawn.clear();
+        self.mirrored.clear();
         let used = std::mem::take(&mut self.models_used);
         self.models.retain(|source, _| used.contains(source));
         if let Some(aside) = &mut self.models_aside {
@@ -3729,8 +3734,11 @@ mod tests {
         );
         let textured = |source: &'static str, material: Option<&'static str>| {
             move |shown: jstream_sources::ShownModel| jstream_sources::ShownModel {
-                texture: Some(SourceId::new(source)),
-                texture_material: material.map(str::to_owned),
+                textures: vec![jstream_sources::ShownTexture {
+                    source: SourceId::new(source),
+                    on: material.map(str::to_owned),
+                    region: None,
+                }],
                 ..shown
             }
         };
@@ -7041,10 +7049,11 @@ mod tests {
             .....WWWW.......
             .....WWWW.......
             .....WWWW.......
-            .....WWW........
+            .....WWW?.......
             ";
-        // The shared scene pass draws one sample a pixel (ADR-0257), so the slanted
-        // near corner is black rather than the grey a 4x layer would blend there.
+        // One model keeps its layer, so the last row's `?` is the plane's slanted near
+        // corner, which the layer's 4x multisampling (ADR-0242) blends with the black
+        // around it. Two models in one scene take the shared pass, which is one sample.
         assert_golden(
             &model_shot(&graph, "plane"),
             expected,

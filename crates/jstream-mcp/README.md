@@ -258,7 +258,8 @@ light that adds evenly, chosen before tuning opacities, ADR-0126), 3D sets throu
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), 3D models (built-in shapes or a glTF
-file, studio, unlit or scene lighting, a live `texture` on a named material and a
+file, studio, unlit or scene lighting, live textures, up to sixteen, each on a named material, node or mesh
+([ADR-0250](../../docs/adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md)), and a
 `reflection` of a scene source, [ADR-0107](../../docs/adr/0107-3d-models.md)), a camera move through
 several shots as one switch with `via`, an orbiting `move` preset (`camera_path`
 `orbit`) and turns in more than one angle as one rotation
