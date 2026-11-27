@@ -2,14 +2,15 @@
 id = "ADR-0256"
 title = "Models in one 3D scene share a depth"
 kind = "adr"
-status = "accepted"
+status = "superseded"
 tier = "agent"
+superseded_by = "docs/adr/0257-models-in-one-scene-are-one-depth.md"
 -->
 
 # ADR-0256: Models in one 3D scene share a depth
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0257: Models in one 3D scene are one depth](0257-models-in-one-scene-are-one-depth.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

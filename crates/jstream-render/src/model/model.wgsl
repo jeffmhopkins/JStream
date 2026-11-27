@@ -43,6 +43,13 @@ struct Light {
     cone: vec4<f32>,
 }
 
+// The item this model is drawn for (ADR-0257): x is its opacity. 1 draws the
+// material as authored. A shared scene pass multiplies it here, because the
+// model is not composited as its own layer afterwards.
+struct ItemFade {
+    opacity: vec4<f32>,
+}
+
 struct Frame {
     clip: mat4x4<f32>,
     view: mat4x4<f32>,
@@ -59,6 +66,7 @@ struct Frame {
     // + w is at or above 0 is at or below it, and isn't drawn. (0, 0, 0, -1) cuts nothing.
     cut: vec4<f32>,
     probe: Probe,
+    item: ItemFade,
 }
 
 // The reflection probe a surface reads (ADR-0170 decision 3), in the viewing frame.
@@ -680,7 +688,11 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
         out.reflected = reflected * occlusion;
         out.reflects = select(0.0, 1.0, frame.params.w > 0.5 && mode < 1.5);
     }
-    out.color = vec4<f32>(color * base.a, base.a);
+    // The item's opacity, as a layer's composite applies it: colour scales by the whole
+    // opacity (so one above 1 stays brighter) and alpha is held to 1.
+    let opacity = frame.item.opacity.x;
+    let alpha = base.a * min(opacity, 1.0);
+    out.color = vec4<f32>(color * base.a * opacity, alpha);
     return out;
 }
 

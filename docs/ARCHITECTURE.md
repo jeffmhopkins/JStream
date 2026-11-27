@@ -1370,7 +1370,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 ## GPU pipeline
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "crates/jstream-platform-macos/src/gpu/**"]
-depends_on = ["docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0063-macos-platform-support.md", "docs/adr/0256-models-in-one-scene-share-a-depth.md"]
+depends_on = ["docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0063-macos-platform-support.md", "docs/adr/0257-models-in-one-scene-are-one-depth.md"]
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -1450,14 +1450,16 @@ camera and always takes that path: the same polygon, built through the camera's 
 consecutive items that share a camera with `depth_sort` on (and a `depth_run`, which
 keeps a stinger's items over the scenes under them), far to near by the depth of their
 centre, stacking order breaking ties; cards have no depth buffer of their own. A 3D
-model's layer carries the model's view depth ([ADR-0107](adr/0107-3d-models.md)
-decision 7, [ADR-0256](adr/0256-models-in-one-scene-share-a-depth.md)): a scene pass that
-places one gets a reversed `Depth32Float` target. Opaque models (no blended material,
-`normal` blend, full opacity) are drawn first and test that depth per pixel, writing
-`NEAR_W / w` where the model covered the texel, so two models hide each other where each
-is nearer. Blended and additive models are drawn with the cards, tested and not written.
-A card is tested against every occluder, so one that sorts in front of a model but passes
-behind it is hidden where the model is nearer. A scene with no model has no depth target. In a Fade between
+scene pass has a reversed `Depth32Float` target. A model that shares the scene is drawn
+into it with the others
+([ADR-0257](adr/0257-models-in-one-scene-are-one-depth.md)): opaque primitives of every
+such model, depth tested and written, then transparent primitives far to near, tested
+and not written, each fragment at the depth the rasterizer gives it. A model that keeps
+a layer (filters, depth of field, a screen-space reflection) still carries its view depth
+([ADR-0107](adr/0107-3d-models.md) decision 7) and the composite tests that layer, with the
+half-opacity limit [ADR-0257](adr/0257-models-in-one-scene-are-one-depth.md) records. A card is tested against the same depth, so one that sorts in front of a model but
+passes behind it is hidden where the model is nearer. A scene with no model has no depth
+target. In a Fade between
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had. A camera with a depth of field

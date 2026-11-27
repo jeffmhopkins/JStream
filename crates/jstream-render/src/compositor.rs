@@ -13,7 +13,7 @@ use crate::gpu::{Faults, Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
-use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime, Panoramas};
+use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime, Panoramas, SharedModel};
 use crate::panorama_blur::{BlurPipeline, Blurred};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Placement, Scene, Snapshot};
@@ -255,6 +255,9 @@ pub struct Compositor {
     scene_depth: Option<SceneDepth>,
     /// Whether the scene [`Self::load`] prepared draws with `scene_depth`.
     depth_on: bool,
+    /// The next composite loads the target's colour and depth instead of clearing
+    /// them, and tests depth even when no item carries its own ([`Self::render_over`]).
+    resume: bool,
     /// The space every scene this compositor draws mixes in.
     blending: Blending,
     backdrop: Option<Backdrop>,
@@ -1181,6 +1184,232 @@ impl Compositor {
         self.draw_model_beside(draw, target, (None, None))
     }
 
+    /// Draws every model in `models` into `target` with one depth (ADR-0257). Opaque
+    /// materials of a fully opaque `normal` item are drawn first, depth tested and
+    /// written, across all of them. Transparent fragments — blended materials, an item
+    /// opacity below 1, or a blend other than `normal` — follow, far to near by each
+    /// primitive's centre, depth tested at that fragment and not written. The scene
+    /// depth is left for a later pass to test cards against; it is not cleared there.
+    ///
+    /// # Errors
+    /// What [`Self::draw_model`] reports for a model, or a target this compositor did
+    /// not make.
+    pub fn draw_shared_models(
+        &mut self,
+        target: &Image,
+        models: &[SharedModel<'_>],
+    ) -> Result<(), RenderError> {
+        self.paint_shared(target, models, false)
+    }
+
+    /// [`Self::draw_shared_models`] over what `target` already holds. The depth is
+    /// cleared; the colour is not, so a sky drawn into `target` stays behind the models.
+    ///
+    /// # Errors
+    /// As for [`Self::draw_shared_models`].
+    pub fn draw_shared_models_over(
+        &mut self,
+        target: &Image,
+        models: &[SharedModel<'_>],
+    ) -> Result<(), RenderError> {
+        self.paint_shared(target, models, true)
+    }
+
+    /// Folds the scene depth into `target`, a depth layer of the same size, keeping
+    /// whichever is nearer at each texel (ADR-0257). Nothing happens when this
+    /// compositor has no scene depth, or it is a different size.
+    ///
+    /// # Errors
+    /// When `target` is not a depth layer this compositor made.
+    pub fn blend_scene_depth(&mut self, target: &Image) -> Result<(), RenderError> {
+        let Some(depth) = &self.scene_depth else {
+            return Ok(());
+        };
+        if depth.size != (target.width(), target.height()) {
+            return Ok(());
+        }
+        let view = target
+            .depth_target()
+            .filter(|_| target.owner().is(&self.owner))
+            .ok_or_else(|| RenderError::Invalid {
+                what: "layer",
+                detail: "the view depth is not a depth layer this compositor made".into(),
+            })?;
+        let depth = depth.view.clone();
+        self.models.blend_scene_depth(&self.gpu, &depth, view);
+        target.mark_changed();
+        Ok(())
+    }
+
+    /// Composites `scene` over `target` without clearing it or its depth (ADR-0257).
+    /// Cards test the depth [`Self::draw_shared_models`] left. Items with no camera are
+    /// not tested, as in [`Self::render_into`].
+    ///
+    /// # Errors
+    /// As for [`Self::render_into`].
+    pub fn render_over(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
+        self.resume = true;
+        let drawn = self.render_into(scene, target);
+        self.resume = false;
+        drawn
+    }
+
+    fn paint_shared(
+        &mut self,
+        target: &Image,
+        models: &[SharedModel<'_>],
+        keep_color: bool,
+    ) -> Result<(), RenderError> {
+        if models.is_empty() {
+            return Ok(());
+        }
+        let errors = self.errors();
+        let drawn = self.paint_shared_models(target, models, keep_color);
+        errors.close(drawn)
+    }
+
+    /// [`Self::draw_shared_models`], its errors not yet collected.
+    fn paint_shared_models(
+        &mut self,
+        target: &Image,
+        models: &[SharedModel<'_>],
+        keep_color: bool,
+    ) -> Result<(), RenderError> {
+        self.ensure_scene_depth(target.width(), target.height());
+        self.depth_on = true;
+        let depth = self
+            .scene_depth
+            .as_ref()
+            .expect("ensure_scene_depth just set it")
+            .view
+            .clone();
+        let mut color_cleared = false;
+        let mut depth_cleared = false;
+        let step = |this: &mut Self,
+                    model: &SharedModel<'_>,
+                    phase: crate::model::SharePhase,
+                    prims: Option<&[usize]>,
+                    clear_color: bool,
+                    clear_depth: bool|
+         -> Result<(), RenderError> {
+            let share = crate::model::Share {
+                depth: &depth,
+                clear_color,
+                clear_depth,
+                phase,
+                opacity: model.opacity,
+                blend: model.blend,
+                force_transparent: !model.writes_depth(),
+                prims,
+            };
+            let chain = model
+                .draw
+                .texture
+                .and_then(|texture| texture.image)
+                .filter(|image| image.owner().is(&this.owner))
+                .map(|image| this.built_chain(image, "jstream-render-model-texture"));
+            let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
+            let lit = model.draw.lighting != jstream_media::model::Lighting::Unlit;
+            let sky = model
+                .draw
+                .reflection
+                .or(model
+                    .draw
+                    .environment
+                    .and_then(|environment| environment.image))
+                .filter(|_| lit);
+            let probe = model
+                .draw
+                .probe
+                .map(|probe| probe.image)
+                .filter(|_| model.draw.lighting == jstream_media::model::Lighting::Scene);
+            let (sky, probe) = (this.panorama_chain(sky), this.panorama_chain(probe));
+            let panoramas = Panoramas {
+                sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
+                probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
+            };
+            this.models.draw_shared_step(
+                &this.gpu,
+                &this.owner,
+                &model.draw,
+                target,
+                (live, panoramas),
+                share,
+            )
+        };
+        for model in models.iter().filter(|model| model.writes_depth()) {
+            step(
+                self,
+                model,
+                crate::model::SharePhase::Prepass,
+                None,
+                !keep_color && !color_cleared,
+                !depth_cleared,
+            )?;
+            color_cleared = true;
+            depth_cleared = true;
+        }
+        for model in models.iter().filter(|model| model.writes_depth()) {
+            step(
+                self,
+                model,
+                crate::model::SharePhase::Shade,
+                None,
+                false,
+                false,
+            )?;
+        }
+        // Every transparent primitive, across models, far to near.
+        let mut order: Vec<(f64, usize, usize)> = Vec::new();
+        for (index, model) in models.iter().enumerate() {
+            let Some(camera) = model.draw.camera else {
+                continue;
+            };
+            let canvas = crate::model::canvas_of(target);
+            let view = camera.view(canvas).map_err(|err| RenderError::Invalid {
+                what: "placement",
+                detail: err.to_string(),
+            })?;
+            let solid = model
+                .draw
+                .geometry
+                .solid(model.draw.model.bounds(), Some(&view))
+                .map_err(|err| RenderError::Invalid {
+                    what: "placement",
+                    detail: err.to_string(),
+                })?;
+            for (depth, prim) in model
+                .draw
+                .model
+                .transparent_order(&solid, !model.writes_depth())
+            {
+                order.push((depth, index, prim));
+            }
+        }
+        order.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        let mut run_at = 0;
+        while run_at < order.len() {
+            let model_index = order[run_at].1;
+            let mut run_end = run_at + 1;
+            while run_end < order.len() && order[run_end].1 == model_index {
+                run_end += 1;
+            }
+            let prims: Vec<usize> = order[run_at..run_end].iter().map(|bit| bit.2).collect();
+            step(
+                self,
+                &models[model_index],
+                crate::model::SharePhase::Transparent,
+                Some(&prims),
+                !keep_color && !color_cleared,
+                !depth_cleared,
+            )?;
+            color_cleared = true;
+            depth_cleared = true;
+            run_at = run_end;
+        }
+        Ok(())
+    }
+
     /// Draws `draw` into `target` as [`Self::draw_model`] does, with what a
     /// screen-space reflection reads of it into `surface` as
     /// [`Self::draw_model_with_surface`] does when given, and its view depth into
@@ -2075,6 +2304,7 @@ impl Compositor {
             depth_pipelines: None,
             scene_depth: None,
             depth_on: false,
+            resume: false,
             blending: Blending::Linear,
             backdrop: None,
             resolve_layout,
@@ -2710,10 +2940,11 @@ impl Compositor {
             self.ensure_backdrop(scene.canvas.width(), scene.canvas.height());
         }
         // A model's depth gives the pass a depth target (ADR-0107 decision 7).
-        self.depth_on = self
-            .draws
-            .iter()
-            .any(|draw| scene.items[draw.index].depth.is_some());
+        self.depth_on = self.resume
+            || self
+                .draws
+                .iter()
+                .any(|draw| scene.items[draw.index].depth.is_some());
         if self.depth_on {
             self.ensure_scene_depth(scene.canvas.width(), scene.canvas.height());
         }
@@ -2822,7 +3053,7 @@ impl Compositor {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: blend::SCENE_DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         self.scene_depth = Some(SceneDepth {
@@ -2893,9 +3124,13 @@ impl Compositor {
         // that alone; any other is cleared whole.
         // A pass with a depth target clears it, and its colour too: the wipe's pipeline
         // has no depth state.
-        let start = match prior {
-            Some(region) if !self.depth_on => Start::Wipe(region),
-            _ => Start::Clear(clear),
+        let start = if self.resume {
+            Start::Load
+        } else {
+            match prior {
+                Some(region) if !self.depth_on => Start::Wipe(region),
+                _ => Start::Clear(clear),
+            }
         };
         let reads = |draw: &Draw| draw.rect.is_some();
         let count = self.draws.len();
@@ -2987,7 +3222,7 @@ impl Compositor {
     ) {
         let load = match start {
             Some(Start::Clear(clear)) => wgpu::LoadOp::Clear(clear),
-            Some(Start::Wipe(_)) | None => wgpu::LoadOp::Load,
+            Some(Start::Wipe(_) | Start::Load) | None => wgpu::LoadOp::Load,
         };
         // The scene's depth target: cleared to far by the pass that starts the target.
         let depth = self
@@ -2997,7 +3232,7 @@ impl Compositor {
             .map(|depth| wgpu::RenderPassDepthStencilAttachment {
                 view: &depth.view,
                 depth_ops: Some(wgpu::Operations {
-                    load: if start.is_some() {
+                    load: if matches!(start, Some(Start::Clear(_))) {
                         wgpu::LoadOp::Clear(0.0)
                     } else {
                         wgpu::LoadOp::Load
@@ -3643,6 +3878,8 @@ enum Start {
     Clear(wgpu::Color),
     /// Loaded, transparent outside the region, and made transparent over it.
     Wipe(Region),
+    /// Colour and depth loaded: a pass continuing one that already drew (ADR-0257).
+    Load,
 }
 
 fn color_attachment(

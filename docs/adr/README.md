@@ -255,5 +255,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0249](0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md) | A nested 2D scene is drawn with the pixels it is shown at | accepted | agent |  |
 | [ADR-0253](0253-jtunnel-opus-streams-decode-through-rusty-opus.md) | JTunnel's Opus streams decode through rusty-opus | accepted | agent |  |
 | [ADR-0254](0254-browser-paint-copies-are-waited-for-off-cefs-ui-thread.md) | The browser helper waits for its paint copies off CEF's UI thread | accepted | agent |  |
-| [ADR-0256](0256-models-in-one-scene-share-a-depth.md) | Models in one 3D scene share a depth | accepted | agent |  |
+| [ADR-0256](0256-models-in-one-scene-share-a-depth.md) | Models in one 3D scene share a depth | superseded | agent | [ADR-0257](0257-models-in-one-scene-are-one-depth.md) |
+| [ADR-0257](0257-models-in-one-scene-are-one-depth.md) | Models in one 3D scene are one depth | accepted | agent |  |
 <!-- @generated end adr-index -->

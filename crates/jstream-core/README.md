@@ -822,8 +822,9 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   and the times that come back a frame or two later go into the unit's `gpu_frames` and
   `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
   `gpu_timing` is on once any unit carries one. Inside a unit, the draw names the part of
-  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw, with its
-  view depth read from the depth its pass tested (`draw_model`), a scene's shadow maps (around `draw_shadows`), its view depth and
+  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw (`draw_model`,
+  or the shared scene pass), with a private layer's view depth read from the depth its
+  pass tested, a scene's shadow maps (around `draw_shadows`), its view depth and
   its surface buffer (the scene pass), and each filter of a chain by its place
   (`Chains::run_one`, the first `GPU_PART_FILTERS`; a model source's filters, counted
   with its item's effects, are no part). A part's spans come back under the
@@ -2219,7 +2220,7 @@ The engine keeps the keyframe each placed scene is switched to
 ## Snapshots
 <!-- @section
 covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
-depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry", "docs/adr/0256-models-in-one-scene-share-a-depth.md"]
+depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry", "docs/adr/0257-models-in-one-scene-are-one-depth.md"]
 -->
 
 `video.snapshot` returns the program mix as a PNG
@@ -2711,12 +2712,16 @@ map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
 the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
-model's item carries its `GpuKey::ModelDepth` layer at any opacity (`Item::depth`), so the
-composite can test a faded model against the others
-([ADR-0256](../../docs/adr/0256-models-in-one-scene-share-a-depth.md)), and
+model that shares the scene is not drawn again there: its opaque fragments are already in the
+scene depth, and `Compositor::blend_scene_depth` max-blends that into the view depth
+afterwards
+([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)), so it is not drawn
+again for the filters. A model that keeps a layer carries its `GpuKey::ModelDepth` at any
+opacity (`Item::depth`), so the composite can test it
+([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)), and
 `Compositor::render_view_depth` writes that layer into the view depth only at half opacity
-or more, so the model's
-geometry, drawn once into that layer with its colour, isn't drawn a second time for the
+or more, so that model's
+geometry, drawn once into its layer with its colour, isn't drawn a second time for the
 scene's filters; a shadow map and a floor reflection, which see it through another
 camera, draw it posed as its layer is (`depth_models`). `Chains::drew_depth`
 keeps it with the camera's view and the scene's lights, as `scene_lights` gives them

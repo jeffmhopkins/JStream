@@ -9,7 +9,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use jstream_media::model::{AlphaMode, Model, ModelTexture, TextureColor, TextureRef, rig};
-use jstream_protocol::{Canvas, ItemGeometry, SceneCamera, Solid, SolidBounds};
+use jstream_protocol::{BlendMode, Canvas, ItemGeometry, SceneCamera, Solid, SolidBounds};
 use wgpu::util::DeviceExt;
 
 use crate::error::RenderError;
@@ -62,7 +62,8 @@ const FRAME_BYTES: u64 = 64
     + MAX_SHADOW_MAPS as u64 * SHADOW_BYTES
     + ENVIRONMENT_BYTES
     + 16
-    + PROBE_BYTES;
+    + PROBE_BYTES
+    + 16;
 /// Bytes of the reflection probe in the frame uniform: five `vec4`.
 const PROBE_BYTES: u64 = 80;
 /// The frame's textures: the shadow maps, then the environment's picture, then the
@@ -603,6 +604,24 @@ impl GpuModel {
     pub fn bounds(&self) -> SolidBounds {
         self.inner.bounds
     }
+
+    /// `(view depth, primitive)` of the primitives a shared pass draws as transparent.
+    /// `force` includes the opaque materials, for an item that is itself transparent.
+    pub(crate) fn transparent_order(&self, solid: &Solid, force: bool) -> Vec<(f64, usize)> {
+        self.inner
+            .primitives
+            .iter()
+            .enumerate()
+            .filter_map(|(index, primitive)| {
+                let blended = self
+                    .inner
+                    .materials
+                    .get(primitive.material)
+                    .is_some_and(|material| material.blended);
+                (force || blended).then_some((solid.in_view(primitive.center)[2], index))
+            })
+            .collect()
+    }
 }
 
 impl std::fmt::Debug for GpuModel {
@@ -611,6 +630,27 @@ impl std::fmt::Debug for GpuModel {
             .field("version", &self.inner.version)
             .field("primitives", &self.inner.primitives.len())
             .finish_non_exhaustive()
+    }
+}
+
+/// One model in a 3D scene's shared colour and depth pass (ADR-0257).
+#[derive(Clone, Copy, Debug)]
+pub struct SharedModel<'a> {
+    /// The model, its pose and its lighting, as [`crate::Compositor::draw_model`] takes them.
+    pub draw: ModelDraw<'a>,
+    /// The item's opacity, 0 to 4. Below 1 the model is transparent: it is depth tested
+    /// at each fragment and does not write depth.
+    pub opacity: f32,
+    /// The item's blend. [`BlendMode::Additive`] adds the fragment; other modes composite
+    /// it source-over.
+    pub blend: BlendMode,
+}
+
+impl SharedModel<'_> {
+    /// Whether its opaque materials write the shared depth. A blended material, an
+    /// opacity below 1, or a blend other than `normal` is drawn in the transparent pass.
+    pub(crate) fn writes_depth(&self) -> bool {
+        self.opacity >= 1.0 && self.blend == BlendMode::Normal
     }
 }
 
@@ -1549,6 +1589,7 @@ impl ModelRuntime {
             (target, view_depth),
             (live, panoramas),
             how,
+            None,
         )
     }
 
@@ -1864,6 +1905,7 @@ impl ModelRuntime {
             (target, None),
             (None, panoramas),
             DrawAs::InTexture,
+            None,
         )
     }
 
@@ -1922,11 +1964,55 @@ impl ModelRuntime {
         (vertices, indices)
     }
 
+    /// Max-blends the scene depth `depth` into `target`, a depth layer of the same size,
+    /// as `1 / w` (ADR-0257). What `target` already holds that is nearer stays.
+    pub(crate) fn blend_scene_depth(
+        &self,
+        gpu: &Gpu,
+        depth: &wgpu::TextureView,
+        target: &wgpu::TextureView,
+    ) {
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-scene-depth"),
+            });
+        self.depth_resolve
+            .record_max(gpu, &mut encoder, depth, target);
+        gpu.submit_work(encoder.finish());
+    }
+
+    /// One step of a shared scene pass: `share` says whether this is the depth prepass,
+    /// the opaque shading, or some of the transparent primitives.
+    pub(crate) fn draw_shared_step(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+        (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
+        share: Share<'_>,
+    ) -> Result<(), RenderError> {
+        self.draw_as(
+            gpu,
+            owner,
+            draw,
+            (target, None),
+            (live, panoramas),
+            DrawAs::Layer,
+            Some(share),
+        )
+    }
+
     /// Draws `draw` into `target`: through its camera, or, [`DrawAs::InTexture`], laid
     /// flat over the target in its own texture coordinates while shaded where it sits in
     /// the scene, its camera's side of it facing. [`DrawAs::Surface`] draws what a
     /// screen-space reflection reads instead, into its targets, `target` the first.
-    fn draw_as(
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the shared scene pass is one more mode of this draw"
+    )]
+    pub(crate) fn draw_as(
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
@@ -1934,6 +2020,7 @@ impl ModelRuntime {
         (target, view_depth): (&Image, Option<&Image>),
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
         how: DrawAs<'_>,
+        share: Option<Share<'_>>,
     ) -> Result<(), RenderError> {
         let in_texture = matches!(how, DrawAs::InTexture);
         let model = &draw.model.inner;
@@ -2102,9 +2189,10 @@ impl ModelRuntime {
                 floor_cut(draw.floor, camera.as_ref()),
                 probe.as_ref(),
             ),
+            share.map_or(1.0, |share| share.opacity),
         );
         // A layer that still holds this very draw is left as it is (ADR-0246).
-        let keeps = matches!(how, DrawAs::Layer | DrawAs::LayerWithSurface(_));
+        let keeps = share.is_none() && matches!(how, DrawAs::Layer | DrawAs::LayerWithSurface(_));
         if keeps {
             let mut asked = std::mem::take(&mut self.asked);
             asked.fill(
@@ -2140,20 +2228,28 @@ impl ModelRuntime {
             _ => None,
         };
         // A lit card's quad covers its whole target, with no edge to smooth (ADR-0242).
-        let samples = if in_texture { 1 } else { self.samples };
+        let samples = if in_texture || share.is_some() {
+            1
+        } else {
+            self.samples
+        };
         let multi = (samples > 1).then(|| {
             let resolve = beside.as_ref().map(|_| &self.surface_resolve);
             self.msaa.get(gpu, ((width, height), samples), resolve)
         });
-        let depth = match &multi {
+        let own_depth = match &multi {
             Some(multi) => multi.depth.clone(),
             None => self.depth_view(gpu, width, height),
         };
+        let depth = share.map(|share| share.depth).unwrap_or(&own_depth);
         let at = self.pipelines_at(gpu, samples);
-        // Blended primitives far to near by their centres.
+        // Blended primitives far to near by their centres. A shared pass that draws the
+        // whole item as transparent (its opacity or its blend) sorts every primitive.
         self.order.clear();
+        let force_transparent = share.is_some_and(|share| share.force_transparent);
         for (index, p) in model.primitives.iter().enumerate() {
-            if model.materials.get(p.material).is_some_and(|m| m.blended) {
+            let blended = model.materials.get(p.material).is_some_and(|m| m.blended);
+            if force_transparent || blended {
                 self.order.push((solid.in_view(p.center)[2], index));
             }
         }
@@ -2213,13 +2309,18 @@ impl ModelRuntime {
                 label: Some("jstream-render-model"),
             });
         {
+            let color_load = if share.is_some_and(|share| !share.clear_color) {
+                wgpu::LoadOp::Load
+            } else {
+                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+            };
             let cleared = |view| {
                 Some(wgpu::RenderPassColorAttachment {
                     view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        load: color_load,
                         store: wgpu::StoreOp::Store,
                     },
                 })
@@ -2268,15 +2369,22 @@ impl ModelRuntime {
                 Some(_) => &pipelines.surface,
                 None => &pipelines.plain,
             };
+            let additive = &pipelines.additive;
+            let phase = share.map(|share| share.phase);
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("jstream-render-model"),
                 color_attachments: attachments,
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth,
+                    view: depth,
                     depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        // Kept only for the view depth to be read from.
-                        store: if view_depth.is_some() && camera.is_some() {
+                        load: if share.is_some_and(|share| !share.clear_depth) {
+                            wgpu::LoadOp::Load
+                        } else {
+                            wgpu::LoadOp::Clear(0.0)
+                        },
+                        // Kept when a later pass reads it: the view depth, or a shared
+                        // scene depth that cards test.
+                        store: if share.is_some() || (view_depth.is_some() && camera.is_some()) {
                             wgpu::StoreOp::Store
                         } else {
                             wgpu::StoreOp::Discard
@@ -2308,26 +2416,47 @@ impl ModelRuntime {
                 pass.draw_indexed(0..p.index_count, 0, 0..1);
             };
             // Depth first, then shading only where it is the nearest: a pixel several
-            // surfaces cover is shaded once, not once a surface.
+            // surfaces cover is shaded once, not once a surface. A shared scene pass
+            // draws every model's prepass before any model's shading, so the equal
+            // test keeps the nearest of all of them (ADR-0257).
             let is_opaque =
                 |p: &&GpuPrimitive| !model.materials.get(p.material).is_some_and(|m| m.blended);
-            pass.set_pipeline(prepass);
-            for p in model.primitives.iter().filter(is_opaque) {
-                draw_one(&mut pass, p);
+            let draw_opaque = !matches!(phase, Some(SharePhase::Transparent));
+            let draw_transparent = !matches!(phase, Some(SharePhase::Prepass | SharePhase::Shade));
+            if draw_opaque && !matches!(phase, Some(SharePhase::Shade)) {
+                pass.set_pipeline(prepass);
+                for p in model.primitives.iter().filter(is_opaque) {
+                    draw_one(&mut pass, p);
+                }
             }
             // Last to first: where two primitives lie in one plane both pass the equal
             // test and the later draw replaces the earlier, so this order shows the
             // first of them, as one pass that kept the first nearest fragment did.
             // Inside one primitive its triangles still draw in index order, so of two
             // of its own triangles in one plane the later now shows.
-            pass.set_pipeline(opaque);
-            for p in model.primitives.iter().rev().filter(is_opaque) {
-                draw_one(&mut pass, p);
+            if draw_opaque && !matches!(phase, Some(SharePhase::Prepass)) {
+                pass.set_pipeline(opaque);
+                for p in model.primitives.iter().rev().filter(is_opaque) {
+                    draw_one(&mut pass, p);
+                }
             }
-            if !self.order.is_empty() {
-                pass.set_pipeline(blended);
-                for &(_, index) in &self.order {
-                    draw_one(&mut pass, &model.primitives[index]);
+            if draw_transparent {
+                let pipeline = if share.is_some_and(|share| share.blend == BlendMode::Additive) {
+                    additive
+                } else {
+                    blended
+                };
+                pass.set_pipeline(pipeline);
+                if let Some(prims) = share.and_then(|share| share.prims) {
+                    for &index in prims {
+                        if let Some(primitive) = model.primitives.get(index) {
+                            draw_one(&mut pass, primitive);
+                        }
+                    }
+                } else {
+                    for &(_, index) in &self.order {
+                        draw_one(&mut pass, &model.primitives[index]);
+                    }
                 }
             }
         }
@@ -2346,7 +2475,7 @@ impl ModelRuntime {
                 gpu,
                 &mut encoder,
                 (model, camera.is_some()),
-                (&depth, samples),
+                (depth, samples),
                 depth_view,
             );
         }
@@ -2354,7 +2483,7 @@ impl ModelRuntime {
         target.mark_changed();
         // Outside the model's box on the target the layer is transparent: what places
         // or filters it draws only over the rest (#1070).
-        let content = (!in_texture && model.pose.is_none())
+        let content = (share.is_none() && !in_texture && model.pose.is_none())
             .then(|| drawn_box(&clip, model.bounds, (width, height)))
             .flatten();
         target.set_content(content);
@@ -2505,6 +2634,7 @@ impl ModelRuntime {
             Lighting::Unlit,
             None,
             (&[], None, floor_cut(draw.floor, Some(&camera)), None),
+            1.0,
         );
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
@@ -2640,6 +2770,7 @@ impl ModelRuntime {
             (targets[0], None),
             (live, panoramas),
             DrawAs::Surface(targets),
+            None,
         )
     }
 
@@ -2855,6 +2986,9 @@ struct WithSurface {
 struct LayerPipelines {
     plain: [wgpu::RenderPipeline; 3],
     surface: [wgpu::RenderPipeline; 3],
+    /// Transparent primitives composited additively, depth tested and not written
+    /// (ADR-0257). The plain blended pipeline is source-over.
+    additive: wgpu::RenderPipeline,
 }
 
 /// The layer's pipelines drawn with `samples` (ADR-0242), of the model shader and its
@@ -2872,6 +3006,7 @@ fn layer_pipelines(
         Prepass,
         Opaque,
         Blended,
+        Additive,
     }
     // With `surface`, the pass also has a surface buffer's three targets, which only
     // the opaque shading writes (`fs_with_surface`, ADR-0170 decision 4).
@@ -2891,11 +3026,26 @@ fn layer_pipelines(
         } else {
             unwritten
         };
+        let blend = match kind {
+            Kind::Prepass => None,
+            Kind::Additive => Some(wgpu::BlendState {
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
+            }),
+            Kind::Opaque | Kind::Blended => Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+        };
         let targets = [
             Some(wgpu::ColorTargetState {
                 format: LAYER_FORMAT,
-                blend: (kind != Kind::Prepass)
-                    .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                blend,
                 write_mask: if kind == Kind::Prepass {
                     wgpu::ColorWrites::empty()
                 } else {
@@ -2911,6 +3061,7 @@ fn layer_pipelines(
                 (Kind::Prepass, false) => "jstream-render-model-prepass",
                 (Kind::Opaque, false) => "jstream-render-model-opaque",
                 (Kind::Blended, false) => "jstream-render-model-blended",
+                (Kind::Additive, _) => "jstream-render-model-additive",
                 (Kind::Prepass, true) => "jstream-render-model-prepass-surface",
                 (Kind::Opaque, true) => "jstream-render-model-opaque-surface",
                 (Kind::Blended, true) => "jstream-render-model-blended-surface",
@@ -2963,6 +3114,7 @@ fn layer_pipelines(
                 entry_point: Some(match kind {
                     Kind::Prepass => "fs_prepass",
                     Kind::Opaque if surface => "fs_with_surface",
+                    Kind::Additive => "fs",
                     _ => "fs",
                 }),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -2986,6 +3138,7 @@ fn layer_pipelines(
             pipeline(Kind::Opaque, true),
             pipeline(Kind::Blended, true),
         ],
+        additive: pipeline(Kind::Additive, false),
     }
 }
 
@@ -3058,9 +3211,42 @@ type LiveView<'a> = Option<(&'a wgpu::Texture, &'a wgpu::TextureView)>;
 /// A material's bind group for a live texture, with its uniform, where it has one.
 type LiveBind = Option<(wgpu::BindGroup, wgpu::Buffer)>;
 
+/// Which part of a model a shared scene pass draws (ADR-0257).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SharePhase {
+    /// Opaque depth only, before any model is shaded.
+    Prepass,
+    /// Opaque shading, where the prepass left this model's depth.
+    Shade,
+    /// Transparent primitives, depth tested and not written.
+    Transparent,
+}
+
+/// One model drawn into a scene's shared colour and depth (ADR-0257), rather than into
+/// a layer of its own.
+#[derive(Clone, Copy)]
+pub(crate) struct Share<'a> {
+    /// The scene depth. Not cleared between models.
+    pub(crate) depth: &'a wgpu::TextureView,
+    pub(crate) clear_color: bool,
+    pub(crate) clear_depth: bool,
+    pub(crate) phase: SharePhase,
+    /// The item's opacity, multiplied in the shader.
+    pub(crate) opacity: f32,
+    /// `Additive` selects the additive pipeline; anything else is source-over.
+    pub(crate) blend: BlendMode,
+    /// Draw every primitive in the transparent phase, not only blended materials.
+    /// An item under full opacity, or whose blend is not `normal`, is transparent
+    /// even where its materials are opaque.
+    pub(crate) force_transparent: bool,
+    /// Primitive indices for this transparent draw, in far-to-near order. `None`
+    /// draws [`ModelRuntime`]'s own order.
+    pub(crate) prims: Option<&'a [usize]>,
+}
+
 /// What [`ModelRuntime::draw_as`] draws.
 #[derive(Clone, Copy)]
-enum DrawAs<'a> {
+pub(crate) enum DrawAs<'a> {
     /// The model through its camera, into a layer.
     Layer,
     /// The model through its camera, into a layer, and its surface into these three
@@ -3397,6 +3583,7 @@ fn frame_bytes(
     lighting: Lighting,
     lights: Option<&SceneLighting>,
     (shadows, environment, cut, probe): FrameTail<'_>,
+    opacity: f32,
 ) -> Vec<u8> {
     let mut values = Vec::with_capacity((FRAME_BYTES / 4) as usize);
     values.extend(clip.iter().flatten());
@@ -3442,6 +3629,9 @@ fn frame_bytes(
     // The floor's cutting plane follows the environment, and the probe follows it.
     values.extend(cut);
     values.extend(probe.copied().unwrap_or([0.0; 20]));
+    // The item's opacity. Existing draws pass 1, so a layer is unchanged; a shared
+    // scene pass passes the item's own.
+    values.extend([opacity, 0.0, 0.0, 0.0]);
     values.resize((FRAME_BYTES / 4) as usize, 0.0);
     f32_bytes(&values)
 }
