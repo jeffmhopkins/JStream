@@ -72,7 +72,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
 - **Crash reports**: `jstream-crash`'s panic hook, which writes a redacted report into
-  the log directory ([Design](#design)).
+  the log directory, and on Windows a minidump for a native crash
+  ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md),
+  [Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs` and `logs.rs` unit tests, the token
   registered for redaction, and the stream key registered through the live engine's
   `Redacting` store; `set_up` registering the stored YouTube token through the setup's
@@ -247,7 +249,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--ptz-controller <spec>` | Lets a PTZ controller drive a scene camera over VISCA ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)), repeatable: `address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the VISCA address it answers as (1 to 7, default 1), then `=program`, `=preview` or `=scene:<scene id>` for what it drives, as in `192.168.1.10:52381=program`. The address is the one LAN interface it listens on, never every interface (ADR-0123 §5). Needs `--ptz-controller-allow`. Default: none, so no controller socket is open. |
 | `--ptz-controller-allow <ip>` | A controller address the `--ptz-controller` endpoints answer, on the LAN, repeatable. Every other address is dropped and counted. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
-| `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
+| `--log-dir <dir>` | Where the log files, crash reports, Windows native minidumps and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `--youtube-client <path>` | Windows, for developers: a Google OAuth client to use for YouTube sign-in instead of JStream's built-in one, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables, else the built-in client. |
 | `--register-vcam` | Windows, optional: registers the virtual camera for this machine from an administrators-only copy, then exits (see **Virtual camera** below). Takes no other options. |
@@ -370,7 +372,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   effect pack whose shader panics the validator writes none (unless its load thread
   can't start): it is logged as a pack that failed to load.
   Nothing is uploaded ([R-SEC-004](../../docs/RULES.md#R-SEC-004)): attach the report
-  to a bug report yourself. What it holds is in [Design](#design).
+  to a bug report yourself. What it holds is in [Design](#design). On Windows a native
+  crash (an access violation, not a panic) also writes `crash-<pid>-<n>.dmp` there
+  ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md));
+  the newest three are kept.
 - **Stopping.** Ctrl-C (SIGINT) or SIGTERM on Unix, Ctrl-C or Ctrl-Break on Windows:
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. Without `--collection` the
@@ -852,7 +857,12 @@ folder another process is using, so the daemon couldn't start pages while the ap
   `jstream_core::HANDLED_PANIC_THREADS` (`Program::handled`) writes none: an
   effect-pack load that panics naga is the engine's own failed load, logged as such
   (#999). The oldest reports beyond 10 are
-  deleted before each new one.
+  deleted before each new one. On Windows, `main` then installs the native-crash
+  minidump in the same folder
+  ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)):
+  thread stacks and the module list, not the process heap, and the newest three
+  dumps are kept. The filter cannot build the report file's DACL, so a dump keeps
+  the process's default one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
@@ -864,8 +874,8 @@ folder another process is using, so the daemon couldn't start pages while the ap
   `jstream-platform` (`Backends`, the key store trait, the data directory),
   `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
-  (the backends, the key store, the Media Foundation check and the user-only token
-  and log files), `jstream-platform-macos` on macOS only (the backends built so far,
+  (the backends, the key store, the Media Foundation check, the user-only token
+  and log files, and the native-crash minidump), `jstream-platform-macos` on macOS only (the backends built so far,
   the GPU-interop stand-in and the Keychain key store), `jstream-platform-linux` on
   Linux only (the backends, the media-file decoders, the Secret Service key store and
   the process CPU reader; the integration tests use its AAC-LC encoder and OpenH264
@@ -908,15 +918,12 @@ folder another process is using, so the daemon couldn't start pages while the ap
    with a user-only DACL and an existing token or devices file's DACL is checked (#344),
    but that has only run in CI's `windows-latest` job, never on a machine with a token
    in a shared folder, a domain account or a synced folder.
-4. **Native crash dumps.** Only panics write a report. A native crash (an access
-   violation in a driver or FFI code, an abort) writes nothing yet, though
-   [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence) plans local minidumps.
-   On Windows that needs either `MiniDumpWriteDump` from an unhandled-exception filter,
-   which is `unsafe` and so belongs in `jstream-platform-windows`
-   ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001); the daemon forbids `unsafe`), or
-   an out-of-process monitor (`crash-handler` and `minidumper`), whose attach call is
-   `unsafe` too and which adds a helper process. Either needs testing on Windows, and
-   would be shared with the desktop app through `jstream-crash` (ADR-0067).
+4. **Native crash dumps on Linux and macOS.** Windows writes a local minidump from
+   an unhandled-exception filter in `jstream-platform-windows`
+   ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)).
+   Linux and macOS still write nothing for an access violation or an abort. A dump
+   on Windows is not given the report file's user-and-SYSTEM DACL: building that
+   DACL looks up SIDs, which the filter must not do.
 5. **Data directory.** The log directory's default is `logs` in the data directory
    (`jstream-platform`'s `paths`, which handles ADR-0066's `portable` marker), and
    `--log-dir` overrides it. The token file (question 2) and the collection

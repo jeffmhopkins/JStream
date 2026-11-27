@@ -104,7 +104,9 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
 - **Crash reports**: `jstream-crash`'s panic hook, which writes a redacted report beside
-  the log file (none for a panic on a thread in `jstream_core::HANDLED_PANIC_THREADS`,
+  the log file, and on Windows a minidump for a native crash
+  ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md))
+  (none for a panic on a thread in `jstream_core::HANDLED_PANIC_THREADS`,
   an effect-pack load the engine catches and logs, #999), and its `Redacting` key store wrapper, which registers each stream key
   with the redaction.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
@@ -132,8 +134,7 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
 Not here yet: signing and notarising the macOS app (ADR-0063's question 1;
 `scripts/mac/bundle-app.sh` takes an identity when there is one), Linux packages, the
 virtual camera's optional registration and unregistration modes (`jstream.exe --register-vcam`, which
-`jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
-dumps (only a panic writes a report, as in the daemon), renewing the network
+`jstream-daemon` provides for now), a native dialog when WebView2 is missing, renewing the network
 certificate from the app (the daemon's `--lan-renew` renews the same file), and browser sources in a default build
 (the `cef` feature is off). `cargo xtask dist` builds the portable folder, and
 `cargo xtask dist-linux` the Linux `.deb`, which installs `jstream` in the application menu
@@ -764,5 +765,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Each report is user-only: mode `0600` on Unix, and on Windows a protected DACL for
   SYSTEM and the user (`jstream_platform_windows::create_private_file`, passed to
   `jstream_crash::install_creating`, #656). Before each report the oldest beyond 10 are deleted; the log file and
-  the audit log in the same folder are left alone. A native crash writes nothing yet
-  (the daemon's open question 4 holds here too).
+  the audit log in the same folder are left alone. On Windows a native crash also
+  writes `logs\crash-<pid>-<n>.dmp` there, thread stacks and the module list, and the
+  newest three are kept
+  ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)).
+  The filter cannot build the report file's DACL, so a dump keeps the process's
+  default one. Linux and macOS still write nothing for a native crash.

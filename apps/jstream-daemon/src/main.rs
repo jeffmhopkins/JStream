@@ -190,6 +190,11 @@ fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Fa
         crash_line,
         logs::create_new,
     );
+    // A native crash is not a panic. On Windows the same folder also gets a
+    // minidump (ADR-0258). Installed before the log subscriber, so a crash while
+    // logging still leaves a dump.
+    #[cfg(windows)]
+    let dumps = jstream_platform_windows::install_native_dump(dir);
     let files = logs::LogFiles::open(dir)
         .with_context(|| format!("could not create a log file in `{}`", dir.display()))?;
     let file_path = files.current_path();
@@ -204,6 +209,13 @@ fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Fa
         log_file = %file_path.display(),
         "jstream-daemon starting"
     );
+    #[cfg(windows)]
+    if !dumps {
+        tracing::warn!(
+            log_dir = %dir.display(),
+            "native crash dumps were not installed; the log path does not fit"
+        );
+    }
     Ok(())
 }
 
