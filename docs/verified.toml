@@ -2220,7 +2220,7 @@ stamp = { hash = "b3:fe75a64a7c6fa6ed", by = "agent:claude", note = "Opus test n
 stamp = { hash = "b3:631f38c36d80f7f5", by = "agent:claude", note = "live.rs: a webcam with fps 0 now follows the program rate like a browser page; the Live sources bullet says so" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:361f7172aa223b0e", by = "agent:grok", note = "Re-read the live-sources list. The empty content box is described under Snapshots, not here. | kept from the merged side: Only ADR references in comments moved to ADR-0255" }
+stamp = { hash = "b3:74fa00c055b9ad15", by = "agent:grok", note = "model_layer_shares now also requires two or more sharing models, so a lone model keeps its windowed layer and depth (ADR-0257 decision 7); the section's sources and contents are unchanged. | kept from the merged side: Only ADR references in comments moved to ADR-0255" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:21fd4f392d245f9c", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
@@ -2649,7 +2649,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:361f7172aa223b0e", by = "agent:grok", note = "A skipped model's layer is cleared and names an empty box, and any window it had is dropped. The sRGB linear draw is unchanged. | kept from the merged side: Only ADR references in comments moved to ADR-0255; the section already cites it" }
+stamp = { hash = "b3:74fa00c055b9ad15", by = "agent:grok", note = "Re-read: a lone model keeps its private layer, only two or more share the scene pass and depth, as the section and ADR-0257 say; the fix restores that for a lone model with a card behind it. | kept from the merged side: Only ADR references in comments moved to ADR-0255; the section already cites it" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:59f7faf81423e628", by = "agent:claude", note = "Model maps paragraph now says texture slots resolve one picture each into ModelMaps::textures (ADR-0250); nested pass-through text checked for the 180-degree/flip case" }

@@ -8077,7 +8077,9 @@ fn model_layer_shares(shot: &Shot, image: &GpuKey, camera: Option<SceneCamera>) 
     else {
         return false;
     };
-    model_shares(shot, &owner, camera, shown)
+    // A model alone in its scene keeps its layer and its depth (ADR-0257 decision 1):
+    // only two or more share.
+    model_shares(shot, &owner, camera, shown) && sharing_models(shot, scene, camera) >= 2
 }
 
 fn model_shares(
