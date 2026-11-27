@@ -84,3 +84,11 @@ max_frame_ms = 250
 [scene.nested_deep]
 min_fps = 4
 max_frame_ms = 250
+
+# One 1080p still through apply_lut. A fast hosted runner draws it at about 15 fps and
+# a slow one at about 9, the same ratio as the one-colour baseline on that runner
+# (8 ms, then 12 ms). The default floor of 10 fails the slow runner. Half of that slow
+# run still catches a scene that stops drawing.
+[scene.vf_apply_lut]
+min_fps = 5
+max_frame_ms = 250

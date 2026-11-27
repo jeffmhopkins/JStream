@@ -218,12 +218,41 @@ impl Image {
         self.generation.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// This frame drew nothing into the layer. A composite that still places it trims
+    /// it away, so an undrawn model layer cannot leave a rectangle of stale texels.
+    pub fn mark_undrawn(&self) {
+        self.mark_changed();
+        self.set_content(Some(Region {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        }));
+    }
+
+    /// The layer may hold a picture at any texel. A filter reads all of it, and a
+    /// composite does not trim it to a smaller box.
+    pub fn mark_everywhere(&self) {
+        self.set_content(None);
+    }
+
     /// Records the texels the write that just marked a change ([`Self::mark_changed`])
     /// drew into, all others transparent: `None` when they may be anywhere.
     pub(crate) fn set_content(&self, content: Option<Region>) {
         let generation = self.generation();
         *self.content.lock().unwrap_or_else(PoisonError::into_inner) =
             content.map(|region| (generation, region));
+    }
+
+    /// Whether the last write named the texels that can be other than transparent.
+    /// `false` means they may be anywhere, so a filter reads the whole image.
+    pub fn names_its_content(&self) -> bool {
+        self.content().is_some()
+    }
+
+    /// Whether that named region is empty. A composite then draws none of the image.
+    pub fn content_is_empty(&self) -> bool {
+        self.content().is_some_and(crate::wipe::is_empty)
     }
 
     /// The texels outside of which the image is transparent, when its last write said

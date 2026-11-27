@@ -579,7 +579,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    target clears the depth to 0. One that resumes over models already drawn into it
    (`Compositor::render_over`) loads the colour and the depth. Models that share the scene
    were drawn into both by `Compositor::draw_shared_models` before that resume (ADR-0257):
-   opaque primitives of every one, then transparent primitives far to near. A model that
+   opaque primitives of every one, then transparent primitives far to near. The layer
+   then names no content box (`Image::mark_everywhere`): the models can cover any texel,
+   so a filter reads the whole picture rather than the cards drawn over them. A model that
    kept its layer is drawn by `fs_model`, which loads its view depth texel for texel and
    writes `NEAR_W` times that `1 / w` (0, the far plane, where the texel is empty, including
    a blended fragment under half opacity) as `frag_depth`. An occluder writes it; a blended

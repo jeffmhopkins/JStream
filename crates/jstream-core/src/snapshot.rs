@@ -7268,9 +7268,7 @@ pub(crate) fn compose_metered(
                 (cache, chains),
                 (shot, Some(pass)),
                 &mut items,
-                pass.background,
-                layer,
-                drawn,
+                (pass.background, layer, drawn),
                 (at, canvas, camera),
                 live,
             )?;
@@ -7352,9 +7350,7 @@ pub(crate) fn compose_metered(
                 (cache, chains),
                 (shot, drawn_pass),
                 &mut items,
-                clear,
-                under,
-                canvas,
+                (clear, under, canvas),
                 (at, canvas, drawn_camera),
                 live,
             )?;
@@ -7382,9 +7378,7 @@ pub(crate) fn compose_metered(
                     (cache, chains),
                     (shot, drawn_pass),
                     &mut items,
-                    clear,
-                    mixed,
-                    canvas,
+                    (clear, mixed, canvas),
                     (at, canvas, drawn_camera),
                     live,
                 )?;
@@ -7415,9 +7409,7 @@ pub(crate) fn compose_metered(
                     (cache, chains),
                     (shot, drawn_pass),
                     &mut items,
-                    clear,
-                    layer,
-                    canvas,
+                    (clear, layer, canvas),
                     (at, canvas, drawn_camera),
                     live,
                 )?;
@@ -7650,9 +7642,7 @@ fn run_chains(
                     (&*cache, &mut *chains),
                     (shot, Some(pass)),
                     &mut items,
-                    pass.background,
-                    layer,
-                    size,
+                    (pass.background, layer, size),
                     (at, canvas, camera),
                     live,
                 )?;
@@ -8060,6 +8050,29 @@ fn track_camera(
 /// rather than a layer of its own. A model with item filters, source filters, depth of
 /// field, or a screen-space reflection keeps its layer: those passes need an image of
 /// the model alone. A 2D scene has no shared depth.
+/// Whether the model `image` places is drawn into the shared pass, so its private
+/// depth must not be copied into the view depth.
+fn model_layer_shares(shot: &Shot, image: &GpuKey, camera: Option<SceneCamera>) -> bool {
+    let Some((scene, item)) = image.boxed_item() else {
+        return false;
+    };
+    let owner = ChainOwner::Item(scene.clone(), item.clone());
+    let Some(boxed) = shot.boxes.get(&owner) else {
+        return false;
+    };
+    let SourceRef::Frame(source) = &boxed.source else {
+        return false;
+    };
+    let Some(shown) = shot
+        .frames
+        .get(source)
+        .and_then(|frame| frame.model.as_ref())
+    else {
+        return false;
+    };
+    model_shares(shot, &owner, camera, shown)
+}
+
 fn model_shares(
     shot: &Shot,
     owner: &ChainOwner,
@@ -8152,18 +8165,12 @@ fn warm_shared_lights(
     chains.shadowed = shadowed;
 }
 
-#[allow(
-    clippy::too_many_arguments,
-    reason = "a scene pass draws its backdrop, its models and its cards from these"
-)]
 fn render_models<'a>(
     compositor: &mut Compositor,
     (cache, chains): (&ResourceCache<GpuKey>, &mut Chains),
     (shot, pass): (&Shot, Option<&Pass>),
     items: &mut Vec<Item<'a>>,
-    background: Color,
-    layer: &jstream_render::Image,
-    size: FrameSize,
+    (background, layer, size): (Color, &jstream_render::Image, FrameSize),
     (at, canvas, camera): (MediaTime, FrameSize, Option<SceneCamera>),
     live: &LiveParams,
 ) -> Result<bool, RenderError> {
@@ -8344,6 +8351,9 @@ fn render_models<'a>(
     if split < items.len() {
         compositor.render_over(&scene(size, background, &items[split..]), layer)?;
     }
+    // The cards' composite records only their own box. The models are in the layer
+    // too, so a scene filter must read the whole picture, not a rectangle of one item.
+    layer.mark_everywhere();
     Ok(true)
 }
 
@@ -8416,6 +8426,27 @@ fn draw_model(
         pose(compositor, model, shown);
     }
     if tracked.is_none() && model_shares(shot, owner, camera, shown) {
+        // The shadow maps are drawn now, before a later chain replaces the pictures
+        // they read, as a model that keeps its layer does. The shared pass shades
+        // with these maps and does not draw them again.
+        if shown.lighting == Lighting::Scene {
+            let view = camera.and_then(|camera| camera.view(shot.canvas).ok());
+            let (lights, shadowed) = light_scene(
+                compositor,
+                (&mut *cache, &mut *chains),
+                (shot, at),
+                scene_id,
+                (view.as_ref(), shown.receives_shadows),
+                (live, captures),
+            );
+            chains.lights = lights;
+            chains.shadowed = shadowed;
+        }
+        // The pass draws this model. Its layer is not composited, and must not keep
+        // a rectangle of whatever it held.
+        if let Some(layer) = cache.get(key) {
+            layer.mark_undrawn();
+        }
         return Ok(());
     }
     // A `scene`-lit model in a 3D scene is lit by the scene's lights (ADR-0143
@@ -10425,11 +10456,18 @@ fn layer_pose<'a>(
     // A model's own depth, in a 3D scene (ADR-0107 decision 7, ADR-0256). Carried at
     // any opacity so a faded plume is still tested against the hull; the view depth
     // and a scene-depth write still require half opacity, where those passes check.
-    let depth = match (&layer.boxed, layer.image.boxed_item(), camera) {
-        (Some(boxed), Some((scene, item)), Some(_)) if boxed.model => {
-            cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
+    // A model the shared pass draws has its depth in the scene target. Its private
+    // depth image is never drawn, so carrying it would copy an undefined rectangle
+    // the size of the item over the view depth a bloom filter reads.
+    let depth = if model_layer_shares(shot, &layer.image, camera) {
+        None
+    } else {
+        match (&layer.boxed, layer.image.boxed_item(), camera) {
+            (Some(boxed), Some((scene, item)), Some(_)) if boxed.model => {
+                cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
+            }
+            _ => None,
         }
-        _ => None,
     };
     let occludes =
         depth.is_some() && layer.blend == BlendMode::Normal && model_occludes(shot, &layer.image);

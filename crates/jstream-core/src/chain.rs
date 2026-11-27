@@ -6882,6 +6882,227 @@ mod tests {
         assert_eq!(lit, unshadowed, "a card that shows nothing casts none");
     }
 
+    /// A scene filter that reads depth must see the shared models' depth, not a
+    /// rectangle of an additive plume's private depth image. That image is allocated
+    /// and never drawn. Filling it with a near value must not un-fog the ship the
+    /// plume's screen bounds cover.
+    #[test]
+    fn a_scene_filter_ignores_an_additive_plumes_undrawn_depth() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else {
+            return;
+        };
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let camera = jstream_protocol::SceneCamera::framing(canvas);
+        let f = camera.view(canvas).expect("a view").focal_px();
+        let mut ship_box = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(24.0, 16.0).expect("positive"),
+        )
+        .expect("valid");
+        ship_box.fit_mode = jstream_protocol::FitMode::Stretch;
+        ship_box.depth_px = jstream_protocol::Finite32::new(-f).expect("finite");
+        let mut plume_box = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(64.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        plume_box.fit_mode = jstream_protocol::FitMode::Stretch;
+        plume_box.depth_px = jstream_protocol::Finite32::new(-4.0 * f).expect("finite");
+        let mut graph = graph(&[]);
+        let main = SceneId::new("main");
+        apply(
+            &mut graph,
+            vec![
+                Edit::CanvasSetSize {
+                    width: CANVAS.0,
+                    height: CANVAS.1,
+                },
+                Edit::CanvasSetBlending {
+                    blending: jstream_protocol::Blending::Linear,
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry: ship_box,
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry: plume_box,
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("card"),
+                    name: "card".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: main.clone(),
+                    item_id: ItemId::new("card"),
+                    source_id: SourceId::new("card"),
+                    transform: None,
+                    geometry: Some({
+                        let mut g = jstream_protocol::ItemGeometry::try_new(
+                            jstream_protocol::Vec2::new(4.0, 4.0).expect("finite"),
+                            jstream_protocol::Size::try_new(4.0, 4.0).expect("positive"),
+                        )
+                        .expect("valid");
+                        g.fit_mode = jstream_protocol::FitMode::Stretch;
+                        g
+                    }),
+                    opacity: None,
+                    blend: None,
+                },
+                Edit::ItemSetBlend {
+                    item_id: ItemId::new("logo"),
+                    blend: jstream_protocol::BlendMode::Additive,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: main.clone(),
+                    camera: Some(camera),
+                },
+                Edit::FilterAdd {
+                    owner: FilterOwner::Scene {
+                        scene_id: main.clone(),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("fog"),
+                    kind: "depth_fog".into(),
+                    settings: [
+                        ("mode", serde_json::json!("linear")),
+                        ("color", serde_json::json!("#000000ff")),
+                        ("start_px", serde_json::json!(f)),
+                        ("end_px", serde_json::json!(3.0 * f)),
+                        ("density", serde_json::json!(0.5)),
+                        ("max", serde_json::json!(1.0)),
+                        ("background", serde_json::json!(false)),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_owned(), v))
+                    .collect(),
+                    enabled: Some(true),
+                    index: None,
+                },
+            ],
+        );
+        let plane = |color: &str| {
+            use jstream_sources::SourceKind as _;
+            let kind = jstream_sources::ModelKind::new();
+            let mut settings: jstream_protocol::Settings = kind
+                .descriptor()
+                .params
+                .iter()
+                .map(|p| (p.id.clone(), p.default.clone()))
+                .collect();
+            settings.insert(String::from("shape"), serde_json::json!("plane"));
+            settings.insert(String::from("lighting"), serde_json::json!("unlit"));
+            settings.insert(String::from("color"), serde_json::json!(color));
+            kind.create(&settings, &jstream_sources::Context::default())
+                .expect("a model")
+                .model()
+        };
+        let ship = plane("#ffffff");
+        let plume = plane("#000000");
+        let blank = Frame::new(1, 1, &[0, 0, 0, 255], 4).expect("1x1 RGBA8");
+        let shot = snapshot::plan_with(
+            &graph,
+            Some(&main),
+            None,
+            &mut |id| {
+                let frame = match id.as_str() {
+                    "cam" => blank.clone().with_model(ship.clone()),
+                    "logo" => blank.clone().with_model(plume.clone()),
+                    _ => blank.clone(),
+                };
+                Some(Look::frame(frame, None))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let sample = |compositor: &mut Compositor,
+                      cache: &mut ResourceCache<GpuKey>,
+                      chains: &mut Chains| {
+            draw_points(
+                compositor,
+                (cache, chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 18)],
+            )
+        };
+        let first = sample(&mut compositor, &mut cache, &mut chains);
+        // The plume's private depth was allocated and not drawn. A near value there is
+        // what an undefined texel can be. The next frame must not copy it over the ship.
+        let depth_key = snapshot::GpuKey::ModelDepth(main.clone(), ItemId::new("logo"));
+        let depth = cache
+            .get(&depth_key)
+            .expect("the plume's depth image is allocated");
+        let white = compositor
+            .upload_rgba8(4, 4, &[255, 255, 255, 255].repeat(16))
+            .expect("a white card");
+        let mut cover = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(64.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        cover.fit_mode = jstream_protocol::FitMode::Stretch;
+        let items = [jstream_render::Item {
+            image: &white,
+            placement: jstream_render::Placement::Geometry(cover),
+            crop: jstream_render::Crop::NONE,
+            opacity: 1.0,
+            blend: jstream_render::BlendMode::Normal,
+            visible: true,
+            camera: Some(camera),
+            depth_run: 0,
+            depth: None,
+            occludes: false,
+        }];
+        let near = jstream_render::Scene {
+            canvas: FrameSize::new(CANVAS.0, CANVAS.1).expect("non-zero"),
+            background: jstream_render::Color::TRANSPARENT,
+            items: &items,
+        };
+        compositor
+            .render_view_depth(&near, depth)
+            .expect("plant a near depth in the plume's layer");
+        let second = sample(&mut compositor, &mut cache, &mut chains);
+        let composite = cache
+            .get(&GpuKey::Composite(main.clone()))
+            .expect("the scene's picture");
+        assert!(
+            !composite.names_its_content(),
+            "the shared picture is not a rectangle a filter can clip to"
+        );
+        let plume_layer = cache
+            .get(&GpuKey::ItemBox(main.clone(), ItemId::new("logo")))
+            .expect("the plume's layer");
+        assert!(
+            plume_layer.content_is_empty(),
+            "an undrawn plume layer must not composite as its screen bounds"
+        );
+        assert!(
+            luma(first[0]) < 650 && luma(first[0]) > 400,
+            "the far ship is fogged: {:?}",
+            first[0]
+        );
+        assert!(
+            luma(second[0]) < 650 && luma(second[0]) > 400,
+            "the plume's depth does not un-fog the ship: {:?} after {:?}",
+            second[0],
+            first[0]
+        );
+    }
+
     /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition
     /// switches to that scene too, not only once it has landed.
     #[test]

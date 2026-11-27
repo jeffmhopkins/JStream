@@ -1592,8 +1592,7 @@ impl ModelRuntime {
             draw,
             (target, view_depth),
             (live, panoramas),
-            how,
-            None,
+            DrawMode { how, share: None },
         )
     }
 
@@ -1908,8 +1907,10 @@ impl ModelRuntime {
             &draw,
             (target, None),
             (None, panoramas),
-            DrawAs::InTexture,
-            None,
+            DrawMode {
+                how: DrawAs::InTexture,
+                share: None,
+            },
         )
     }
 
@@ -2003,8 +2004,10 @@ impl ModelRuntime {
             draw,
             (target, None),
             (live, panoramas),
-            DrawAs::Layer,
-            Some(share),
+            DrawMode {
+                how: DrawAs::Layer,
+                share: Some(share),
+            },
         )
     }
 
@@ -2012,10 +2015,6 @@ impl ModelRuntime {
     /// flat over the target in its own texture coordinates while shaded where it sits in
     /// the scene, its camera's side of it facing. [`DrawAs::Surface`] draws what a
     /// screen-space reflection reads instead, into its targets, `target` the first.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the shared scene pass is one more mode of this draw"
-    )]
     pub(crate) fn draw_as(
         &mut self,
         gpu: &Gpu,
@@ -2023,9 +2022,9 @@ impl ModelRuntime {
         draw: &ModelDraw<'_>,
         (target, view_depth): (&Image, Option<&Image>),
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
-        how: DrawAs<'_>,
-        share: Option<Share<'_>>,
+        mode: DrawMode<'_>,
     ) -> Result<(), RenderError> {
+        let DrawMode { how, share } = mode;
         let in_texture = matches!(how, DrawAs::InTexture);
         let model = &draw.model.inner;
         if !model.owner.is(owner) {
@@ -2780,8 +2779,10 @@ impl ModelRuntime {
             draw,
             (targets[0], None),
             (live, panoramas),
-            DrawAs::Surface(targets),
-            None,
+            DrawMode {
+                how: DrawAs::Surface(targets),
+                share: None,
+            },
         )
     }
 
@@ -3259,6 +3260,12 @@ pub(crate) struct Share<'a> {
     /// Primitive indices for this transparent draw, in far-to-near order. `None`
     /// draws [`ModelRuntime`]'s own order.
     pub(crate) prims: Option<&'a [usize]>,
+}
+
+/// What [`ModelRuntime::draw_as`] draws, and the shared-pass step when this draw is one.
+pub(crate) struct DrawMode<'a> {
+    pub(crate) how: DrawAs<'a>,
+    pub(crate) share: Option<Share<'a>>,
 }
 
 /// What [`ModelRuntime::draw_as`] draws.

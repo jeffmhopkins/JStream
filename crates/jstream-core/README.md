@@ -2716,7 +2716,13 @@ model that shares the scene is not drawn again there: its opaque fragments are a
 scene depth, and `Compositor::blend_scene_depth` max-blends that into the view depth
 afterwards
 ([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)), so it is not drawn
-again for the filters. A model that keeps a layer carries its `GpuKey::ModelDepth` at any
+again for the filters. It does not carry `Item::depth`. That image is allocated and never
+drawn, and copying it would paint the model's screen bounds with undefined depth. The box
+step marks the model's own layer empty (`Image::mark_undrawn`) for the same reason, and
+draws the shadow maps then, before a later chain replaces the pictures they read. After
+the shared pass the composite names no content box, so a scene filter reads the whole
+picture
+(`a_scene_filter_ignores_an_additive_plumes_undrawn_depth`). A model that keeps a layer carries its `GpuKey::ModelDepth` at any
 opacity (`Item::depth`), so the composite can test it
 ([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)), and
 `Compositor::render_view_depth` writes that layer into the view depth only at half opacity
