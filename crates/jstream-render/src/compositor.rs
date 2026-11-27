@@ -211,9 +211,17 @@ struct DepthPipelines {
     writer: wgpu::RenderPipeline,
 }
 
-/// A scene pass's depth target, of the canvas size it was made for.
+/// A scene pass's depth target, of the canvas size it was made for. The texture is
+/// kept with the view: the pass samples it after drawing, and dropping the texture
+/// while a later submit still holds the view is a use of a freed GPU resource.
 struct SceneDepth {
     size: (u32, u32),
+    /// Held so the image outlives every submit that attached `view`.
+    #[allow(
+        dead_code,
+        reason = "the texture must outlive the view used as an attachment"
+    )]
+    texture: wgpu::Texture,
     view: wgpu::TextureView,
 }
 
@@ -1308,7 +1316,7 @@ impl Compositor {
                 phase,
                 opacity: model.opacity,
                 blend: model.blend,
-                force_transparent: !model.writes_depth(),
+                force_transparent: false,
                 prims,
             };
             let chains: Vec<Option<Arc<Mips>>> = model
@@ -1354,7 +1362,7 @@ impl Compositor {
                 share,
             )
         };
-        for model in models.iter().filter(|model| model.writes_depth()) {
+        for model in models.iter().filter(|model| model.draw.model.has_opaque()) {
             step(
                 self,
                 model,
@@ -1366,7 +1374,7 @@ impl Compositor {
             color_cleared = true;
             depth_cleared = true;
         }
-        for model in models.iter().filter(|model| model.writes_depth()) {
+        for model in models.iter().filter(|model| model.draw.model.has_opaque()) {
             step(
                 self,
                 model,
@@ -1395,11 +1403,7 @@ impl Compositor {
                     what: "placement",
                     detail: err.to_string(),
                 })?;
-            for (depth, prim) in model
-                .draw
-                .model
-                .transparent_order(&solid, !model.writes_depth())
-            {
+            for (depth, prim) in model.draw.model.transparent_order(&solid, false) {
                 order.push((depth, index, prim));
             }
         }
@@ -3089,9 +3093,11 @@ impl Compositor {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.scene_depth = Some(SceneDepth {
             size: (width, height),
-            view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            texture,
+            view,
         });
     }
 

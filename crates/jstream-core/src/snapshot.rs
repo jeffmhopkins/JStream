@@ -10697,29 +10697,27 @@ fn layer_pose<'a>(
     })
 }
 
-/// Whether the model `image` places writes depth (ADR-0256): it has no blended
-/// material. A missing model is treated as solid. The item's blend and opacity are
-/// checked where the layer is drawn.
+/// Whether the model `image` places writes depth (ADR-0257): it has an opaque or
+/// masked material. A canopy does not stop the hull writing depth. A missing model
+/// is treated as solid. A model whose every material is blended only tests.
 fn model_occludes(shot: &Shot, image: &GpuKey) -> bool {
     let Some((scene, item)) = image.boxed_item() else {
         return true;
     };
-    let blended = shot
-        .boxes
+    shot.boxes
         .get(&ChainOwner::Item(scene.clone(), item.clone()))
         .and_then(|boxed| match &boxed.source {
             SourceRef::Frame(id) => shot.frames.get(id),
             _ => None,
         })
         .and_then(|frame| frame.model.as_ref())
-        .is_some_and(|shown| {
+        .is_none_or(|shown| {
             shown
                 .model
                 .materials()
                 .iter()
-                .any(|material| matches!(material.alpha_mode, AlphaMode::Blend))
-        });
-    !blended
+                .any(|material| !matches!(material.alpha_mode, AlphaMode::Blend))
+        })
 }
 
 /// A show scene item's pose at `at` on a canvas of `size`, on its way in or out by

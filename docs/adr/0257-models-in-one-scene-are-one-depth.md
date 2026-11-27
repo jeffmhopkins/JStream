@@ -37,14 +37,13 @@ superseded for that path. There is still no scene or camera option.
    composite test of ADR-0256, including its half-opacity limit: a filter, a blur or a
    reflection needs an image of that model alone. A transition that composites the layer
    still draws it; the scene pass draws the shared geometry as well.
-2. **Opaque, then transparent.** Every opaque primitive of every full-opacity `normal`
-   model is drawn first, depth tested and written (`Greater` on the reversed
-   `Depth32Float`), and shaded where that depth is equal, so a pixel is shaded once at
-   the nearest surface of any of them. Then every transparent primitive — a blended
-   material, an item opacity below 1, or a blend other than `normal` — is drawn far to
-   near by the primitive's centre, across models, depth tested and not written. The
-   fragment's depth is the rasterizer's, so a fragment under half opacity is tested where
-   it is.
+2. **Opaque, then transparent.** Every opaque or masked primitive is drawn first, depth
+   tested and written (`Greater` on the reversed `Depth32Float`), whichever other
+   materials that model has and whichever blend the item uses, and shaded where that
+   depth is equal. A canopy does not stop the hull writing depth. Then every blended
+   primitive is drawn far to near by its centre, across models, depth tested and not
+   written. There is no alpha cutoff: a fragment at opacity 0.2 is tested at the
+   rasterizer's depth.
 3. **The item stays the item.** Opacity (colour by the whole value, alpha held to 1), the
    blend (`additive` adds; anything else is source-over) and the material drives are
    applied in that pass, per model.
