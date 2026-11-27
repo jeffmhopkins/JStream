@@ -3228,9 +3228,12 @@ fn layer_pipelines(
                     dst_factor: wgpu::BlendFactor::One,
                     operation: wgpu::BlendOperation::Add,
                 },
+                // Coverage stays whatever is already there. An additive fragment must
+                // not turn a transparent texel opaque, or paint a rectangle of coverage
+                // over the ship for a scene bloom to read.
                 alpha: wgpu::BlendComponent {
-                    src_factor: wgpu::BlendFactor::One,
-                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    src_factor: wgpu::BlendFactor::Zero,
+                    dst_factor: wgpu::BlendFactor::One,
                     operation: wgpu::BlendOperation::Add,
                 },
             }),

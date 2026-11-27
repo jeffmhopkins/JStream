@@ -2724,14 +2724,17 @@ it, it draws a surface, its camera has depth of field or its box can't be told
 A scene with two or more models that can share one depth draws those into the scene
 instead of into those layers
 ([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)); a model alone keeps
-its window. A model that shares is not drawn again for the view depth: its opaque
-fragments are already in the scene depth, and `Compositor::blend_scene_depth` max-blends
-that in afterwards. It does not carry `Item::depth`. That image is allocated and never
-drawn, and copying it would paint the model's screen bounds with undefined depth. The box
-step marks the model's own layer empty (`Image::mark_undrawn`) and clears any window it
-had, and draws the shadow maps then, before a later chain replaces the pictures they
-read. After the shared pass the composite names no content box, so a scene filter reads
-the whole picture
+its window. That draw stays in linear light even when the canvas blends in sRGB. An sRGB
+pass decodes its target when it finishes, and decoding the models' linear texels would
+darken the scene under a bloom
+(`warp_show_bloom_does_not_darken_a_rectangle_over_the_ship`, when the warp models are
+on disk). A model that shares does not carry `Item::depth`, so the view depth is not a
+copy of its private depth image. `draw_model_depth` poses the mesh into the view depth,
+and `Compositor::blend_scene_depth` max-blends the scene depth under that. The private
+layer and depth are cleared to transparent, and any window they had is dropped. The box
+step draws the shadow maps then, before a later chain replaces the pictures they read.
+After the shared pass the composite names no content box, so a scene filter reads the
+whole picture
 (`a_scene_filter_ignores_an_additive_plumes_undrawn_depth`). A model that keeps a layer
 carries its `GpuKey::ModelDepth` there
 (`Item::depth`), and `Compositor::render_view_depth` writes that layer into the view depth

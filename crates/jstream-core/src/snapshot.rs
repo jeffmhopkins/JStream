@@ -8301,7 +8301,23 @@ fn render_models<'a>(
         .iter()
         .position(|item| item.camera.is_some())
         .unwrap_or(items.len());
-    compositor.render_into(&scene(size, background, &items[..split]), layer)?;
+    // The model shader writes linear light. An sRGB pass decodes its target at the end,
+    // so a pass drawn before the models and one drawn after them would decode the models'
+    // linear texels as if they were still encoded and darken the scene under a bloom.
+    // This draw stays in linear light. The caller composites the layer in its own space.
+    let encoded = compositor.blending() == Blending::Srgb;
+    if encoded {
+        compositor.set_blending(Blending::Linear);
+    }
+    let restore = |compositor: &mut Compositor| {
+        if encoded {
+            compositor.set_blending(Blending::Srgb);
+        }
+    };
+    if let Err(err) = compositor.render_into(&scene(size, background, &items[..split]), layer) {
+        restore(compositor);
+        return Err(err);
+    }
     let lit = poses
         .iter()
         .any(|pose| pose.shown.lighting == Lighting::Scene);
@@ -8390,14 +8406,58 @@ fn render_models<'a>(
         .scene_model_draws
         .set(chains.scene_model_draws.get() + shared.len() as u64);
     let drawn = compositor.draw_shared_models_over(layer, &shared);
-    drawn?;
-    if split < items.len() {
-        compositor.render_over(&scene(size, background, &items[split..]), layer)?;
+    if let Err(err) = drawn {
+        restore(compositor);
+        return Err(err);
     }
+    if split < items.len()
+        && let Err(err) = compositor.render_over(&scene(size, background, &items[split..]), layer)
+    {
+        restore(compositor);
+        return Err(err);
+    }
+    restore(compositor);
     // The cards' composite records only their own box. The models are in the layer
     // too, so a scene filter must read the whole picture, not a rectangle of one item.
     layer.mark_everywhere();
     Ok(true)
+}
+
+/// Empties the layer and depth image of a model the shared pass draws instead. The
+/// images stay allocated. Their texels are transparent, and the layer names an empty
+/// content box, so a composite trims it away.
+fn clear_skipped_model(
+    compositor: &mut Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    key: &GpuKey,
+    scene_id: &SceneId,
+    owner: &ChainOwner,
+) -> Result<(), RenderError> {
+    let blank = |image: &jstream_render::Image| {
+        image.mark_everywhere();
+        FrameSize::new(image.width(), image.height())
+            .ok()
+            .map(|canvas| jstream_render::Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &[],
+            })
+    };
+    if let Some(layer) = cache.get(key)
+        && let Some(scene) = blank(layer)
+    {
+        compositor.render_into(&scene, layer)?;
+    }
+    let ChainOwner::Item(_, item_id) = owner else {
+        return Ok(());
+    };
+    let depth_key = GpuKey::ModelDepth(scene_id.clone(), item_id.clone());
+    if let Some(depth) = cache.get(&depth_key)
+        && let Some(scene) = blank(depth)
+    {
+        compositor.render_view_depth(&scene, depth)?;
+    }
+    Ok(())
 }
 
 /// Draws the 3D model item `boxed` shows into its canvas-sized layer `key` (ADR-0107
@@ -8529,12 +8589,13 @@ fn draw_model(
             chains.lights = lights;
             chains.shadowed = shadowed;
         }
-        // The pass draws this model. Its layer is not composited, and must not keep
-        // a rectangle of whatever it held. A window from a frame when it was alone
-        // would place that rectangle.
-        if let Some(layer) = cache.get(key) {
-            layer.mark_undrawn();
-        }
+        // The pass draws this model. Its private layer and depth are allocated and
+        // not drawn. Clear them: a composite that still samples the layer, or a copy
+        // of the depth, must read transparent texels. An undefined rectangle there is
+        // what a scene bloom shows over the ship on a device that does not zero new
+        // images. A window from a frame when the model was alone would place that
+        // rectangle.
+        clear_skipped_model(compositor, cache, key, scene_id, owner)?;
         cache.set_window(key, None);
         return Ok(());
     }
