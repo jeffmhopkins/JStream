@@ -111,7 +111,7 @@ fn draw_uploaded(
                 environment: None,
                 floor: None,
                 materials: &[],
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe: None,
             },
@@ -283,7 +283,7 @@ fn a_models_layer_is_bounded_by_its_models_box() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -328,6 +328,73 @@ fn a_models_layer_is_bounded_by_its_models_box() {
         .draw_model(&model_draw(boxed(80.0, 50.0, 5000.0)), &layer)
         .expect("the model draws");
     assert_eq!(layer.content(), None);
+}
+
+/// ADR-0251: a model drawn into a layer that holds only the part of the canvas its box
+/// is in, placed over that part, looks as it does drawn into a layer of the whole
+/// canvas, its depth too; `seen_box` is that box.
+#[test]
+fn a_model_drawn_over_its_part_of_the_canvas_looks_the_same() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let framing = SceneCamera::framing(canvas());
+    let camera = Some(SceneCamera {
+        position: Vec3::new(70.0, -40.0, framing.position.z.get()).expect("finite"),
+        ..framing
+    });
+    let geometry = boxed(100.0, 40.0, 24.0);
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera,
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        textures: &[],
+        reflection: None,
+        probe: None,
+    };
+    let [x, y, width, height] = uploaded
+        .seen_box(geometry, camera, (WIDTH, HEIGHT))
+        .expect("a box");
+    assert!(
+        width > 10 && width < 64 && height < 64,
+        "{x} {y} {width} {height}"
+    );
+    let whole = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let mut part = compositor.layer(64, 64).expect("a layer");
+    part.set_window(Some(crate::Window {
+        x: x.min(WIDTH - 64),
+        y: y.min(HEIGHT - 64),
+        canvas: (WIDTH, HEIGHT),
+    }));
+    let (whole_depth, part_depth) = (
+        compositor.depth_layer(WIDTH, HEIGHT).expect("a layer"),
+        compositor.depth_layer(64, 64).expect("a layer"),
+    );
+    for (layer, depth) in [(&whole, &whole_depth), (&part, &part_depth)] {
+        compositor
+            .draw_model_and_depth(&draw, layer, None, depth)
+            .expect("the model draws");
+    }
+    let mut shown = |layer: &crate::Image| {
+        let items = [Item {
+            camera,
+            ..crate::tests::item(layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+        }];
+        render(compositor, &items)
+    };
+    let (a, b) = (shown(&whole), shown(&part));
+    assert!(count(&a, FRONT) > 100, "the cube shows");
+    assert_eq!(a.rgba(), b.rgba(), "the same picture");
 }
 
 /// ADR-0107 decision 3: a flipped placement mirrors the model but still draws its front.
@@ -573,7 +640,7 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     environment: None,
                     floor: None,
                     materials: &[],
-                    texture: None,
+                    textures: &[],
                     reflection: None,
                     probe: None,
                 },
@@ -624,7 +691,7 @@ fn golden_model_depth_hides_a_camera_card_but_not_a_screen_item() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -678,7 +745,7 @@ fn a_model_from_another_compositor_is_refused() {
             environment: None,
             floor: None,
             materials: &[],
-            texture: None,
+            textures: &[],
             reflection: None,
             probe: None,
         },
@@ -781,7 +848,7 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     environment: None,
                     floor: None,
                     materials: &[],
-                    texture: None,
+                    textures: &[],
                     reflection: None,
                     probe: None,
                 },
@@ -1169,7 +1236,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                 environment: None,
                 floor: None,
                 materials: &[],
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe: None,
             },
@@ -1222,7 +1289,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                     environment: None,
                     floor: None,
                     materials: &[],
-                    texture: None,
+                    textures: &[],
                     reflection: None,
                     probe: None,
                 },
@@ -1281,7 +1348,7 @@ fn sky_sphere(
                 environment: Some(environment),
                 floor: None,
                 materials: &[],
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe: None,
             },
@@ -1475,7 +1542,7 @@ fn golden_model_a_rough_surface_blurs_a_starry_sky_smoothly() {
                 environment: Some(environment),
                 floor: None,
                 materials: &[],
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe: None,
             },
@@ -1524,7 +1591,7 @@ fn golden_model_a_floor_cuts_what_is_below_it() {
         environment: None,
         floor: Some(50.0),
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -1612,7 +1679,7 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
                     environment: None,
                     floor: None,
                     materials: &[],
-                    texture: None,
+                    textures: &[],
                     reflection: None,
                     probe: None,
                 },
@@ -1657,7 +1724,7 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -1702,7 +1769,7 @@ fn driven_middle(
                 environment: None,
                 floor: None,
                 materials,
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe: None,
             },
@@ -1777,7 +1844,7 @@ fn golden_model_a_draw_drives_its_materials_by_name_and_only_for_itself() {
 fn a_material_drive_adds_within_ranges_and_nothing_when_it_adds_nothing() {
     let values = [
         0.5, 0.5, 0.5, 1.0, 2.0, 1.0, 0.0, 0.0, 0.3, 0.6, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0,
+        0.0, 0.0, 1.0, 1.0, 0.0, 0.0,
     ];
     assert_eq!(super::driven_values(&values, "a", &[]), None);
     let drive = |d: super::MaterialDrive<'static>| {
@@ -2268,7 +2335,7 @@ fn textured_plane_driven(
                 shadows: &[],
                 environment: None,
                 floor: None,
-                texture,
+                textures: texture.as_slice(),
                 materials,
                 reflection: None,
                 probe: None,
@@ -2310,9 +2377,10 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
     let picture = compositor
         .upload_rgba8(8, 8, &rgba)
         .expect("the picture uploads");
-    let live = |material| super::LiveTexture {
+    let live = |on| super::LiveTexture {
         image: Some(&picture),
-        material,
+        on,
+        region: None,
     };
     let shot = textured_plane(compositor, Some(live(None)));
     assert_near(rgb(&shot, 80, 30), [255, 0, 0], (80, 30));
@@ -2325,7 +2393,8 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
         compositor,
         Some(super::LiveTexture {
             image: None,
-            material: None,
+            on: None,
+            region: None,
         }),
     );
     assert_near(rgb(&missing, 80, 50), [0, 0, 0], (80, 50));
@@ -2356,7 +2425,8 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
             compositor,
             Some(super::LiveTexture {
                 image: Some(&layer),
-                material: None,
+                on: None,
+                region: None,
             }),
         );
         let want = if colour.g > 0.5 {
@@ -2366,6 +2436,141 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
         };
         assert_near(rgb(&shot, 80, 50), want, (80, 50));
     }
+}
+
+/// ADR-0250: a model takes several live textures, each on the parts it names by their
+/// node's or mesh's name though they share one material, and one that names nothing on
+/// the rest; each records the resolution its own parts need.
+#[test]
+fn a_model_shows_a_live_texture_on_each_part_it_names() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let plane = Shape::Plane
+        .model(Material {
+            unlit: true,
+            ..Material::default()
+        })
+        .expect("the plane builds");
+    // The plane's left and right halves, one material, named apart.
+    let half = |shift: f32, name: &str| {
+        let mut part = plane.primitives()[0].clone();
+        for vertex in &mut part.vertices {
+            vertex.position[0] = vertex.position[0] * 0.5 + shift;
+        }
+        part.names = vec![name.to_owned()];
+        part
+    };
+    let model = Model::new(
+        vec![half(-0.25, "left"), half(0.25, "right")],
+        plane.materials().to_vec(),
+        vec![],
+    )
+    .expect("the halves build");
+    let uploaded = compositor.upload_model(&model).expect("the model uploads");
+    let solid = |rgba: [u8; 4]| {
+        let texels: Vec<u8> = (0..64).flat_map(|_| rgba).collect();
+        compositor
+            .upload_rgba8(8, 8, &texels)
+            .expect("the picture uploads")
+    };
+    let (red, blue) = (solid([255, 0, 0, 255]), solid([0, 0, 255, 255]));
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let textures = [
+        super::LiveTexture {
+            image: Some(&red),
+            on: Some("right"),
+            region: None,
+        },
+        super::LiveTexture {
+            image: Some(&blue),
+            on: None,
+            region: None,
+        },
+    ];
+    compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera: None,
+                lighting: Lighting::Unlit,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+                textures: &textures,
+                materials: &[],
+                reflection: None,
+                probe: None,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [crate::tests::item(
+        &layer,
+        Placement::Layer(geometry),
+        Crop::NONE,
+        1.0,
+    )];
+    let shot = render(compositor, &items);
+    assert_near(rgb(&shot, 60, 50), [0, 0, 255], (60, 50));
+    assert_near(rgb(&shot, 100, 50), [255, 0, 0], (100, 50));
+    // Each half is 40 pixels wide for 8 texels: both need all of theirs.
+    for picture in [&red, &blue] {
+        let need = picture.take_need();
+        assert!(need >= 1.0, "{need}");
+    }
+}
+
+/// ADR-0250: a live texture with a region spans only that part of its parts' texture
+/// coordinates: over the plane's lower half, its picture's top half shows above its
+/// bottom half; and its need counts the picture spread over less.
+#[test]
+fn a_live_texture_spans_its_region() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    // 8x8 texels: red over its top half, blue under it.
+    let rgba: Vec<u8> = (0..8)
+        .flat_map(|y| {
+            (0..8).flat_map(move |_| {
+                if y < 4 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 255, 255]
+                }
+            })
+        })
+        .collect();
+    let picture = compositor
+        .upload_rgba8(8, 8, &rgba)
+        .expect("the picture uploads");
+    let shot = textured_plane(
+        compositor,
+        Some(super::LiveTexture {
+            image: Some(&picture),
+            on: None,
+            region: Some([0.0, 0.5, 1.0, 0.5]),
+        }),
+    );
+    // The plane spans rows 10 to 90: its lower half, rows 50 to 90, is the picture.
+    assert_near(rgb(&shot, 80, 60), [255, 0, 0], (80, 60));
+    assert_near(rgb(&shot, 80, 85), [0, 0, 255], (80, 85));
+    let spread = picture.take_need();
+    textured_plane(
+        compositor,
+        Some(super::LiveTexture {
+            image: Some(&picture),
+            on: None,
+            region: None,
+        }),
+    );
+    let whole = picture.take_need();
+    assert!(spread < whole, "{spread} over its region, {whole} over all");
 }
 
 /// ADR-0249: a live texture's draw records how much of its picture's resolution the
@@ -2386,7 +2591,8 @@ fn a_live_texture_records_the_resolution_its_model_needs() {
         compositor,
         Some(super::LiveTexture {
             image: Some(&picture),
-            material: None,
+            on: None,
+            region: None,
         }),
     );
     let need = picture.take_need();
@@ -2426,7 +2632,7 @@ fn golden_model_a_reflection_replaces_the_studio_environment() {
                     shadows: &[],
                     environment: None,
                     floor: None,
-                    texture: None,
+                    textures: &[],
                     materials: &[],
                     reflection,
                     probe: None,
@@ -2498,7 +2704,7 @@ fn probed_sphere(compositor: &mut Compositor, probe: Option<super::ProbeLookup<'
                 }),
                 floor: None,
                 materials: &[],
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe,
             },
@@ -2601,7 +2807,7 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         shadows: &[],
         environment: None,
         floor: None,
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
         materials: &[],
@@ -2813,7 +3019,7 @@ fn a_models_surface_marks_where_a_reflection_may_be_replaced() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -2888,7 +3094,7 @@ fn a_surface_drawn_with_the_layer_merges_as_a_second_draw_would() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -2987,10 +3193,11 @@ fn a_surface_reads_the_live_texture_its_layer_shows() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: Some(super::LiveTexture {
+        textures: &[super::LiveTexture {
             image: Some(&red),
-            material: None,
-        }),
+            on: None,
+            region: None,
+        }],
         reflection: None,
         probe: None,
     };
@@ -3050,7 +3257,7 @@ fn draw_at(
                 environment: None,
                 floor: None,
                 materials: &[],
-                texture: None,
+                textures: &[],
                 reflection: None,
                 probe: None,
             },
@@ -3216,7 +3423,7 @@ fn a_multisampled_surface_matches_the_single_sampled_one_inside() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -3296,7 +3503,7 @@ fn a_view_depth_read_from_the_layer_is_the_one_drawn_again() {
             environment: None,
             floor: None,
             materials: &[],
-            texture: None,
+            textures: &[],
             reflection: None,
             probe: None,
         };
@@ -3545,7 +3752,7 @@ fn a_layer_still_holding_the_same_model_draw_is_kept() {
         environment: None,
         floor: None,
         materials,
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -3622,7 +3829,7 @@ fn warming_3d_makes_the_model_layers_pipelines_at_its_samples() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };

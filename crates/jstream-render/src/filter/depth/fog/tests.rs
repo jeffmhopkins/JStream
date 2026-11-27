@@ -356,7 +356,7 @@ fn golden_view_depth_takes_a_models_own_depth() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };
@@ -398,7 +398,7 @@ fn golden_view_depth_takes_the_depth_a_models_layer_carries() {
         environment: None,
         floor: None,
         materials: &[],
-        texture: None,
+        textures: &[],
         reflection: None,
         probe: None,
     };

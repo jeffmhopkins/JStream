@@ -74,8 +74,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Model` the engine draws in 3D where an item places it, with its `Lighting`
   ([ADR-0107](../../docs/adr/0107-3d-models.md)), whether it casts and receives
   shadows, whether it reflects its scene through the scene's reflection probes
-  (`reflections`, ADR-0170 decision 2), and the sources its `texture` (with `texture_material`) and `reflection`
-  name (decision 5). Only the `model` kind has one.
+  (`reflections`, ADR-0170 decision 2), and the sources its texture slots (`texture`
+  with `texture_material`, then `texture_2` to `texture_16`, each with what it is on: a
+  material's, a node's or a mesh's name, and the region of their texture coordinates the
+  picture covers, `texture_region` and `texture_region_N`, `ShownTexture`, ADR-0250) and
+  `reflection` name
+  (decision 5). Only the `model` kind has one.
   `light()` (default `None`) is a `ShownLight` for the `light` kind: its `LightType`,
   colour, intensity, range, cone and softness, and whether it casts shadows and how
   softly, which the engine places where an item

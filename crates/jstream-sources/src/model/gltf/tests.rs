@@ -165,6 +165,34 @@ fn a_glb_triangle_lands_in_the_scenes_axes_facing_the_viewer() {
     assert_eq!(model.materials()[0].metallic, 1.0);
 }
 
+/// ADR-0250: a primitive keeps its node's and its mesh's names, which a live texture
+/// can name it by; a mesh two nodes draw is named by each node.
+#[test]
+fn a_primitive_keeps_its_node_and_mesh_names() {
+    let (mut doc, bin) = triangle(json!({}), true);
+    doc["scenes"] = json!([{ "nodes": [0, 1, 2] }]);
+    doc["nodes"] = json!([
+        { "mesh": 0, "name": "left screen" },
+        { "mesh": 0, "name": "right screen", "translation": [2.0, 0.0, 0.0] },
+        { "mesh": 0, "name": "" }
+    ]);
+    doc["meshes"][0]["name"] = json!("screen");
+    let (model, _) = load_glb(&doc, &bin).expect("loads");
+    let names: Vec<Vec<&str>> = model
+        .primitives()
+        .iter()
+        .map(|p| p.names.iter().map(String::as_str).collect())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            vec!["left screen", "screen"],
+            vec!["right screen", "screen"],
+            vec!["screen"]
+        ]
+    );
+}
+
 #[test]
 fn a_gltf_reads_a_data_uri_and_bakes_its_node_transforms() {
     let (mut doc, bin) = triangle(json!({}), true);

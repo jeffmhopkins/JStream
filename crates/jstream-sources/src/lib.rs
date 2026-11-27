@@ -91,8 +91,8 @@ pub use scope::{
     heard_scope, heard_source,
 };
 pub use source::{
-    AssetRoots, Context, Limits, Painter, ShownModel, Source, SourceAudio, SourceKind,
-    needs_restart,
+    AssetRoots, Context, Limits, MAX_LIVE_TEXTURES, Painter, ShownModel, ShownTexture, Source,
+    SourceAudio, SourceKind, needs_restart,
 };
 pub use still::Still;
 pub use text::MAX_DENSITY;

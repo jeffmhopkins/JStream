@@ -402,6 +402,7 @@ mod tests {
             vertices: vec![v(-1.0, -1.0), v(1.0, -1.0), v(1.0, 1.0), v(-1.0, 1.0)],
             indices: vec![0, 1, 2, 0, 2, 3],
             material,
+            names: Vec::new(),
         }
     }
 

@@ -173,7 +173,9 @@ and calls this crate.
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
   - or a **layer** (`Placement::Layer`, ADR-0107): an image already in the canvas's own
     pixels, such as a model's, drawn flat at its size from the canvas's top-left whatever
-    the camera, sorting as an item with its geometry would. Crop is ignored.
+    the camera, sorting as an item with its geometry would. Crop is ignored. A layer that
+    holds only a part of its canvas (`Image::window`, a `Window`) is drawn over that part
+    ([ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)).
 
   Both depend on the image's size, which is runtime state, so the compositor evaluates
   the placement on every `render`. That size is the image's **extent**
@@ -771,7 +773,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | A reflected panorama's blurred levels (`panorama_blur.rs`): a texture the size of its mip chain with as many levels, a level uniform and bind group each, and the blur pipeline | With the chain, made the first time a model reflects the sky picture or probe capture it was built from, made again when the chain is rebuilt; the pipeline with the first such chain, or by `warm_3d` |
-| What each model layer was last drawn of (`Kept`, ADR-0246): its frame uniform's and drives' bytes, the material name of its live texture, and weak references to the layer, the model and the pictures it read | Compositor, refilled in place each draw; an entry goes when its layer has been dropped, at the next model draw that keeps one |
+| What each model layer was last drawn of (`Kept`, ADR-0246): its frame uniform's and drives' bytes, what each of its live textures is on, and weak references to the layer, the model and the pictures it read | Compositor, refilled in place each draw; an entry goes when its layer has been dropped, at the next model draw that keeps one |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `depth_layer` texture (`R16Float`) and its render-target view | The returned `Image`; `render_view_depth` and `draw_model_depth` reuse it |
@@ -780,8 +782,8 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Surface pipelines (a model drawn into a surface buffer, the layer pipelines with a surface beside the layer, and the merge) and the buffer's depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another; a bind group per merge |
-| Model depth targets (`Depth32Float`, sampled too, for a view depth read from them), and the view-depth resolve pipelines (single and multisampled) with a bind group per draw that reads one | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
-| Multisampled model targets (ADR-0242): colour (`Rgba16Float`) and depth (`Depth32Float`) at the count `set_model_antialiasing` set, and a surface buffer's three with their resolve bind group once a model is drawn with one; the surface resolve pipeline | The size and count of the last two multisampled draws (`model/msaa.rs`), made again for another; none while models draw with one sample; the pipeline with the compositor |
+| Model depth targets (`Depth32Float`, sampled too, for a view depth read from them), and the view-depth resolve pipelines (single and multisampled) with a bind group per draw that reads one | The sizes of the last four layers a model was drawn into (a model drawn with fewer pixels than its canvas, ADR-0197, or over a part of it, ADR-0251, alternates with draws of other sizes); a layer of a fifth size replaces the one used longest ago, since a pass's attachments must match |
+| Multisampled model targets (ADR-0242): colour (`Rgba16Float`) and depth (`Depth32Float`) at the count `set_model_antialiasing` set, and a surface buffer's three with their resolve bind group once a model is drawn with one; the surface resolve pipeline | The size and count of the last four multisampled draws (`model/msaa.rs`), made again for another; none while models draw with one sample; the pipeline with the compositor |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips (BC1 or BC3 where the device samples them, a normal map RGBA8), material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -831,8 +833,9 @@ share of the frame over the texels per canvas pixel along the item's less minifi
 and all of it for a 3D placement of an upload; a layer placed in 3D records the texels
 per pixel where its polygon is drawn largest, at the near end of each edge from the
 ratio of the ends' `w`, `Shape::projected_minification`; and a model's draw records
-for its live texture the densest texture coordinates of its textured triangles against
-the most pixels a unit of the model covers at a corner of its bounds,
+for each live texture the densest texture coordinates of the parts that take it against
+the most pixels a unit of each covers at a corner of that part's bounds (the model's, for
+a rigged model),
 `model::live_minification`). On a cache where `draw_uploads_small` is on (off by
 default, so a deterministic render such as a snapshot draws every upload whole), the
 first frame of a key holds the upload at what the caller's `planned` need says (whole
@@ -976,7 +979,11 @@ by the target's width over its extent's, so the blur covers as much of the pictu
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
-and for the model-to-clip matrix built from it: only that product is `f32`, so a far
+and for the model-to-clip matrix built from it. Into a layer with a `Window` (ADR-0251)
+it draws the whole canvas's view cut to that part (`windowed`), which
+`GpuModel::seen_box` gives a caller the box for
+(`a_model_drawn_over_its_part_of_the_canvas_looks_the_same`). Only the product is
+`f32`, so a far
 camera doesn't jitter. Depth is reversed `Depth32Float`, cleared to 0 with `Greater`:
 with perspective, clip `z` is `NEAR_W`, so `z / w = NEAR_W / w` and the GPU's own
 `z ≤ w` clip is ADR-0050's near plane; without (a 2D scene with no `perspective_px`) it
@@ -1050,22 +1057,27 @@ blended primitive sorts by the middle of its rest pose
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
-**Live textures and reflections** (ADR-0107 decision 5). `ModelDraw::texture` replaces
-the base-colour texture of the material it names (by its glTF name), or of every
-material, with another image: `draw_model` samples it through a mip chain of the whole
+**Live textures and reflections** (ADR-0107 decision 5). Each of `ModelDraw::textures`
+replaces the base-colour texture of the parts it is on with another image
+([ADR-0250](../../docs/adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md)):
+a part (a primitive) takes the first whose `on` is its material's glTF name or its node's
+or mesh's (`Primitive::names`), else the first with no `on` (`slot_of`), read over its
+`region` of the part's texture coordinates (the material uniform's sixth `vec4`,
+`live_values`, `a_live_texture_spans_its_region`). `draw_model` samples each through a mip chain of the whole
 image (`Region::whole`, kept on the image like a 3D item's and rebuilt only when the
 image changed), bound with the material's own repeating anisotropic sampler (16× for the
 base colour; the normal, surface, occlusion and emissive maps are read through a second
 sampler at 4×, binding 7, [ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)), and the
 material's uniform marks it a premultiplied linear picture (`card.y`), which the shader
 divides by its alpha before multiplying. The material bind groups that carry it are
-kept on the `GpuModel` while the chain's texture and the material stay the same, so a
-steady frame makes none. A texture with no image binds a transparent 1x1. A
+(`LiveSet`, one per material and slot some part takes) are kept on the `GpuModel` while
+the chains' textures and what each is on stay the same, so a steady frame makes none. A texture with no image binds a transparent 1x1. A
 `reflection` image takes the environment's slot (`reflection_values`: no gradient,
 intensity 1, the camera's axes, or the viewing frame's in a 2D scene), so it is read as a
 scene's sky picture is, blurred by roughness over the same ring of taps, with or
 without scene lights; an unlit model ignores it
 (`golden_model_a_live_texture_replaces_the_base_colour`,
+`a_model_shows_a_live_texture_on_each_part_it_names`,
 `golden_model_a_reflection_replaces_the_studio_environment`).
 
 **Scene lights** (ADR-0143 decision 3). With `ModelDraw::lights` set and a camera, the
@@ -1094,7 +1106,7 @@ glow's colour at its own brightness (`set_emissive`) before the others add, the 
 one that sets winning (ADR-0171 decision 5). The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of
 the same model draws it as it is. A material with a live texture binds a uniform of its
-own, which is driven the same way
+own for each slot, which is driven the same way
 (`golden_model_a_draw_drives_its_materials_by_name_and_only_for_itself`).
 
 **Shadows** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
