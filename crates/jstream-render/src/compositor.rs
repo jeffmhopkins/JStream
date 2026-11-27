@@ -1056,12 +1056,21 @@ impl Compositor {
         targets: [&Image; 3],
     ) -> Result<(), RenderError> {
         let errors = self.errors();
-        let chain = draw
-            .texture
-            .and_then(|texture| texture.image)
-            .filter(|image| image.owner().is(&self.owner))
-            .map(|image| self.built_chain(image, "jstream-render-model-texture"));
-        let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
+        let chains: Vec<Option<Arc<Mips>>> = draw
+            .textures
+            .iter()
+            .map(|texture| {
+                texture
+                    .image
+                    .filter(|image| image.owner().is(&self.owner))
+                    .map(|image| self.built_chain(image, "jstream-render-model-texture"))
+            })
+            .collect();
+        let live: Vec<crate::model::LiveView<'_>> = chains
+            .iter()
+            .map(|chain| chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1)))
+            .collect();
+        let live = live.as_slice();
         let lit = draw.lighting != jstream_media::model::Lighting::Unlit;
         let sky = draw
             .reflection
@@ -1178,8 +1187,8 @@ impl Compositor {
     /// [`RenderError::Invalid`] when the model or the layer came from another compositor
     /// or the target is not a layer, or when the placement or camera can't be drawn.
     ///
-    /// A live `texture` (ADR-0107 decision 5) is sampled through a mip chain of its
-    /// whole picture, kept on its image and rebuilt here only when the image changed
+    /// Each live texture (ADR-0107 decision 5, ADR-0250) is sampled, on the parts it is
+    /// on, through a mip chain of its whole picture, kept on its image and rebuilt here only when the image changed
     /// since, as a 3D item's is; a `reflection` is read as a scene's sky picture is.
     /// The sky picture and the probe's capture it reflects are read through mip chains
     /// of their own, made the same way, so a rough surface blurs them smoothly
@@ -1306,13 +1315,21 @@ impl Compositor {
                 force_transparent: false,
                 prims,
             };
-            let chain = model
+            let chains: Vec<Option<Arc<Mips>>> = model
                 .draw
-                .texture
-                .and_then(|texture| texture.image)
-                .filter(|image| image.owner().is(&this.owner))
-                .map(|image| this.built_chain(image, "jstream-render-model-texture"));
-            let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
+                .textures
+                .iter()
+                .map(|texture| {
+                    texture
+                        .image
+                        .filter(|image| image.owner().is(&this.owner))
+                        .map(|image| this.built_chain(image, "jstream-render-model-texture"))
+                })
+                .collect();
+            let live: Vec<crate::model::LiveView<'_>> = chains
+                .iter()
+                .map(|chain| chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1)))
+                .collect();
             let lit = model.draw.lighting != jstream_media::model::Lighting::Unlit;
             let sky = model
                 .draw
@@ -1337,7 +1354,7 @@ impl Compositor {
                 &this.owner,
                 &model.draw,
                 target,
-                (live, panoramas),
+                (live.as_slice(), panoramas),
                 share,
             )
         };
@@ -1484,12 +1501,21 @@ impl Compositor {
         beside: (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         let errors = self.errors();
-        let chain = draw
-            .texture
-            .and_then(|texture| texture.image)
-            .filter(|image| image.owner().is(&self.owner))
-            .map(|image| self.built_chain(image, "jstream-render-model-texture"));
-        let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
+        let chains: Vec<Option<Arc<Mips>>> = draw
+            .textures
+            .iter()
+            .map(|texture| {
+                texture
+                    .image
+                    .filter(|image| image.owner().is(&self.owner))
+                    .map(|image| self.built_chain(image, "jstream-render-model-texture"))
+            })
+            .collect();
+        let live: Vec<crate::model::LiveView<'_>> = chains
+            .iter()
+            .map(|chain| chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1)))
+            .collect();
+        let live = live.as_slice();
         // As the model reads them: nothing unlit, and a probe only lit by its scene.
         let lit = draw.lighting != jstream_media::model::Lighting::Unlit;
         let sky = draw
@@ -1561,13 +1587,13 @@ impl Compositor {
     /// [`Self::draw_model`], its errors not yet collected. When the model's camera has
     /// depth of field (ADR-0165), the model and its view depth are drawn into layers of
     /// their own first, and the model's focus passes blur them into `target`. `live` is
-    /// the live texture's mip chain and the panoramas' chains, as [`Self::draw_model`]
+    /// the live textures' mip chains and the panoramas' chains, as [`Self::draw_model`]
     /// made them.
     fn draw_model_focused(
         &mut self,
         draw: &ModelDraw<'_>,
         target: &Image,
-        live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
+        live: (&[crate::model::LiveView<'_>], Panoramas<'_>),
         (surface, view_depth): (Option<[&Image; 3]>, Option<&Image>),
     ) -> Result<(), RenderError> {
         // The canvas the model is placed on, which the target may hold with fewer
@@ -2429,6 +2455,13 @@ impl Compositor {
             }
             let seen = item.camera.and(view.as_ref()).map(|(_, view)| view);
             let mut shape = place::shape_seen(width, height, item.placement, item.crop, seen)?;
+            // A model's layer that holds a part of the canvas is placed over that part
+            // (ADR-0250).
+            if let (Placement::Layer(_), Some(window), Some(shape)) =
+                (item.placement, item.image.window(), shape.as_mut())
+            {
+                shape.shift([window.x as f32, window.y as f32]);
+            }
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }

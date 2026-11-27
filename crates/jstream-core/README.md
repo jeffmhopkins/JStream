@@ -2298,8 +2298,12 @@ and up, placed at the canvas's size: its items are laid out on the canvas and sc
 onto the layer (`snapshot::drawn_small`, `layer_need`, `scale_items`;
 [ADR-0249](../../docs/adr/0249-a-nested-scene-is-drawn-at-the-size-it-is-shown.md)).
 Such a scene that only shows one capture, or one picture over no background, covering
-its canvas exactly this frame has no layer at all: its key holds that picture's image,
-placed at the canvas's size (`passes_through`, `share_pass`, `ResourceCache::share`). The graph already rejects cycles at every
+its canvas this frame (to a hundredth of a pixel, unturned or turned a half turn) has
+no layer at all: its key holds that picture's image, placed at the canvas's size
+(`passes_through`, `share_pass`, `ResourceCache::share`). A flipped or turned-over one
+is placed mirrored by the items that show it (`fills_canvas`, `Chains::mirrored`,
+`mirror_layer`), and is drawn into a layer while a transition, a box or a model shows it
+([ADR-0255](../../docs/adr/0255-a-whole-picture-turned-over-or-flipped-has-no-layer-either.md)). The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
 draws nothing. A group that shares its 3D scene's space
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)) is the exception:
@@ -2711,24 +2715,31 @@ planning gives its composite's pass a `GpuKey::ViewDepth` depth layer
 map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
-the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
-model that shares the scene does not carry `Item::depth`, so the view depth is not a
+the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). On
+the program stage and the preview a model's layer and its depth hold only the part of the
+canvas its box is in, a step of 64, 96, 128 and so on each way, unless filters run over
+it, it draws a surface, its camera has depth of field or its box can't be told
+(`model_window`, `GpuModel::seen_box`,
+[ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)).
+A scene with two or more models that can share one depth draws those into the scene
+instead of into those layers
+([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)); a model alone keeps
+its window. That draw stays in linear light even when the canvas blends in sRGB. An sRGB
+pass decodes its target when it finishes, and decoding the models' linear texels would
+darken the scene under a bloom
+(`warp_show_bloom_does_not_darken_a_rectangle_over_the_ship`, when the warp models are
+on disk). A model that shares does not carry `Item::depth`, so the view depth is not a
 copy of its private depth image. `draw_model_depth` poses the mesh into the view depth,
-and `Compositor::blend_scene_depth` max-blends the scene depth under that
-([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)). That draw stays
-in linear light even when the canvas blends in sRGB. An sRGB pass decodes its target
-when it finishes, and decoding the models' linear texels would darken the scene under
-a bloom (`warp_show_bloom_does_not_darken_a_rectangle_over_the_ship`, when the warp
-models are on disk). The private layer and depth are cleared to transparent, and the
-layer names an empty box, so a composite draws none of it. The box
+and `Compositor::blend_scene_depth` max-blends the scene depth under that. The private
+layer and depth are cleared to transparent, the layer names an empty box so a composite
+draws none of it, and any window they had is dropped. The box
 step draws the shadow maps then, before a later chain replaces the pictures they read.
 After the shared pass the composite names no content box, so a scene filter reads the
 whole picture
-(`a_scene_filter_ignores_an_additive_plumes_undrawn_depth`). A model that keeps a layer carries its `GpuKey::ModelDepth` at any
-opacity (`Item::depth`), so the composite can test it
-([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)), and
-`Compositor::render_view_depth` writes that layer into the view depth only at half opacity
-or more, so that model's
+(`a_scene_filter_ignores_an_additive_plumes_undrawn_depth`). A model that keeps a layer
+carries its `GpuKey::ModelDepth` there
+(`Item::depth`), and `Compositor::render_view_depth` writes that layer into the view depth
+only at half opacity or more, so that model's
 geometry, drawn once into its layer with its colour, isn't drawn a second time for the
 scene's filters; a shadow map and a floor reflection, which see it through another
 camera, draw it posed as its layer is (`depth_models`). `Chains::drew_depth`
@@ -2921,8 +2932,9 @@ places when the item has no effects (`boxed_key`, `key`), `GpuKey::boxed_item` n
 the item behind any of the three images, and `ChainOrder::chain` draws the layer before
 whichever chain reads it. A profile counts it toward the item's effects, as its box is
 (`golden_a_models_source_filters_run_over_its_layer`).
-A model's `texture` and `reflection` ([ADR-0107](../../docs/adr/0107-3d-models.md)
-decision 5) name other sources. Planning resolves each where it places the model
+A model's texture slots and `reflection` ([ADR-0107](../../docs/adr/0107-3d-models.md)
+decision 5, [ADR-0250](../../docs/adr/0250-a-model-shows-a-live-texture-on-each-part-it-names.md))
+name other sources, one picture a slot (`ModelMaps::textures`, in slot order). Planning resolves each where it places the model
 (`look_maps`) as an item would show it, its frame, its video chain or, for a `scene`
 source, its scene, into `Shot::maps` by the model's source, though no item shows it; a
 capture it names joins the shot's captures. `schedule_chains` draws a model's layer

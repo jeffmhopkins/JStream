@@ -25,7 +25,9 @@ use crate::color::{parse_color, rgba_frame};
 use crate::describe::{asset, kind, param};
 use crate::image::decode::decode;
 use crate::source::{self, changed_non_live, setting};
-use crate::{Context, ShownModel, Source, SourceError, SourceKind};
+use crate::{
+    Context, MAX_LIVE_TEXTURES, ShownModel, ShownTexture, Source, SourceError, SourceKind,
+};
 
 /// The longer side of a model's stand-in frame, in pixels: the size `source.sizes`
 /// reports for it (ADR-0107 decision 8).
@@ -58,7 +60,7 @@ impl ModelKind {
         };
         let live = |p: ParamDescriptor| ParamDescriptor { live: true, ..p };
         Self(KindDescriptor {
-            params: vec![
+            params: with_texture_slots(vec![
                 described(
                     param(
                         "shape",
@@ -133,7 +135,8 @@ impl ModelKind {
                     "A source whose picture, live and after its own filters, replaces the \
                      base-colour texture: a webcam, a browser page, a shader, a scene. \
                      Not another model, whose picture is drawn only where an item places \
-                     it. Missing or not yet drawing, it reads transparent.",
+                     it. Missing or not yet drawing, it reads transparent. Texture 2 to \
+                     16 put more pictures on other parts of the same model.",
                 )),
                 live(described(
                     param(
@@ -145,8 +148,8 @@ impl ModelKind {
                         },
                         json!(""),
                     ),
-                    "Which of a file's materials, by name, the texture replaces; empty \
-                     replaces every material's.",
+                    "What the texture is on, by its name in the file: a material, a node \
+                     or a mesh. Empty puts it on every part no other texture names.",
                 )),
                 live(described(
                     param(
@@ -235,10 +238,130 @@ impl ModelKind {
                     ),
                     "Whether it plays again from its start; if not, it holds its last frame.",
                 )),
-            ],
+            ]),
             ..kind("model", "3D model", true, false)
         })
     }
+}
+
+/// The ids of texture slot `n` (from 1), of what it is on and of its region: slot 1 is
+/// `texture`, `texture_material` and `texture_region` (ADR-0250).
+fn slot_ids(n: usize) -> (String, String, String) {
+    match n {
+        1 => (
+            "texture".into(),
+            "texture_material".into(),
+            "texture_region".into(),
+        ),
+        n => (
+            format!("texture_{n}"),
+            format!("texture_material_{n}"),
+            format!("texture_region_{n}"),
+        ),
+    }
+}
+
+/// The region parameter of texture slot `n`, labelled `label`.
+fn region_param(id: &str, label: &str) -> ParamDescriptor {
+    ParamDescriptor {
+        description: Some(
+            "The part of what the texture is on that the whole picture covers, for a file \
+             whose screens share one texture's coordinates: `x y width height`, each from \
+             0 to 1 of those coordinates (`0.5 0 0.5 0.5` is their top right quarter). \
+             Empty covers all of them."
+                .into(),
+        ),
+        live: true,
+        group: Some("Textures".to_owned()),
+        ..param(
+            id,
+            label,
+            ParamType::String {
+                multiline: false,
+                max_len: 64,
+            },
+            json!(""),
+        )
+    }
+}
+
+/// A region setting's value: four numbers, `x y width height`, each from 0 to 1, the
+/// width and height more than 0 and the region inside the square, apart by spaces or
+/// commas; `None` for an empty one.
+fn parse_region(text: &str) -> Option<Option<[f32; 4]>> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Some(None);
+    }
+    let numbers: Vec<f32> = text
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|part| !part.is_empty())
+        .map(str::parse)
+        .collect::<Result<_, _>>()
+        .ok()?;
+    let [x, y, width, height] = <[f32; 4]>::try_from(numbers).ok()?;
+    let unit = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
+    let fits = [x, y, width, height].into_iter().all(unit)
+        && width > 0.0
+        && height > 0.0
+        && x + width <= 1.0 + 1e-6
+        && y + height <= 1.0 + 1e-6;
+    fits.then_some(Some([x, y, width, height]))
+}
+
+/// `params` with texture slots 2 to [`MAX_LIVE_TEXTURES`] after the first's, all in the
+/// group `Textures` (ADR-0250).
+fn with_texture_slots(mut params: Vec<ParamDescriptor>) -> Vec<ParamDescriptor> {
+    let group = || Some("Textures".to_owned());
+    let Some(first) = params.iter().position(|p| p.id == "texture") else {
+        return params;
+    };
+    let mut slots = Vec::new();
+    for n in 2..=MAX_LIVE_TEXTURES {
+        let (texture, on, region) = slot_ids(n);
+        slots.push(ParamDescriptor {
+            description: Some(format!(
+                "Another source whose picture replaces a base-colour texture, as Texture \
+                 does, on the part Texture {n} on names."
+            )),
+            live: true,
+            group: group(),
+            ..param(
+                &texture,
+                &format!("Texture {n}"),
+                ParamType::Source {
+                    media: Some(Media::Video),
+                },
+                Value::Null,
+            )
+        });
+        slots.push(ParamDescriptor {
+            description: Some(format!(
+                "What Texture {n} is on, by its name in the file: a material, a node or a \
+                 mesh. A part takes the first texture that names it; the first with this \
+                 empty takes the rest."
+            )),
+            live: true,
+            group: group(),
+            ..param(
+                &on,
+                &format!("Texture {n} on"),
+                ParamType::String {
+                    multiline: false,
+                    max_len: 256,
+                },
+                json!(""),
+            )
+        });
+        slots.push(region_param(&region, &format!("Texture {n} region")));
+    }
+    params[first].group = group();
+    if let Some(on) = params.get_mut(first + 1) {
+        on.group = group();
+    }
+    slots.insert(0, region_param("texture_region", "Texture region"));
+    params.splice(first + 2..first + 2, slots);
+    params
 }
 
 impl Default for ModelKind {
@@ -283,10 +406,9 @@ struct Look {
     receives_shadows: bool,
     /// Whether it reflects the rest of its scene (ADR-0170 decision 2).
     reflections: bool,
-    /// The source whose picture is the base-colour texture (ADR-0107 decision 5).
-    texture: Option<SourceId>,
-    /// The file's material it replaces, or every material's for `None`.
-    texture_material: Option<String>,
+    /// The sources whose pictures are base-colour textures, with what each is on
+    /// (ADR-0107 decision 5, ADR-0250), in slot order.
+    textures: Vec<ShownTexture>,
     /// The source the model reflects.
     reflection: Option<SourceId>,
 }
@@ -340,15 +462,32 @@ impl Look {
         let (casts_shadows, receives_shadows) = (flag("casts_shadows")?, flag("receives_shadows")?);
         // Settings saved before scene reflections had none: on.
         let reflections = flag("reflections")?;
-        let texture_material = match settings.get("texture_material") {
-            None => None,
-            Some(value) => {
-                let name = value
-                    .as_str()
-                    .ok_or_else(|| bad("texture_material", "must be a material's name"))?;
-                (!name.is_empty()).then(|| name.to_owned())
+        // Settings saved before a slot existed have none.
+        let mut textures = Vec::new();
+        for n in 1..=MAX_LIVE_TEXTURES {
+            let (texture, on, region) = slot_ids(n);
+            let region = match settings.get(&region) {
+                None => None,
+                Some(value) => value.as_str().and_then(parse_region).ok_or_else(|| {
+                    bad(
+                        &region,
+                        "must be `x y width height`, each from 0 to 1, inside the square",
+                    )
+                })?,
+            };
+            let on = match settings.get(&on) {
+                None => None,
+                Some(value) => {
+                    let name = value.as_str().ok_or_else(|| {
+                        bad(&on, "must be the name of a material, a node or a mesh")
+                    })?;
+                    (!name.is_empty()).then(|| name.to_owned())
+                }
+            };
+            if let Some(source) = named_source(settings, &texture)? {
+                textures.push(ShownTexture { source, on, region });
             }
-        };
+        }
         // The colour setting is sRGB; a material's base colour is linear.
         let decode = |c: u8| {
             let c = f32::from(c) / 255.0;
@@ -372,8 +511,7 @@ impl Look {
             casts_shadows,
             receives_shadows,
             reflections,
-            texture: named_source(settings, "texture")?,
-            texture_material,
+            textures,
             reflection: named_source(settings, "reflection")?,
         })
     }
@@ -403,8 +541,7 @@ impl Look {
             receives_shadows: self.receives_shadows,
             reflections: self.reflections,
             pose,
-            texture: self.texture.clone(),
-            texture_material: self.texture_material.clone(),
+            textures: self.textures.clone(),
             reflection: self.reflection.clone(),
         }
     }

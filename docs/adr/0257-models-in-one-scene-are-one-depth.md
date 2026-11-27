@@ -32,7 +32,8 @@ superseded for that path. There is still no scene or camera option.
 
 1. **Who shares.** A model seen through the scene camera, with no item filters, no filters
    on its source, no depth of field (`blur_px` above 0, or a fixed aperture) and no
-   screen-space reflection of its own surface. The others keep the private layer and the
+   screen-space reflection of its own surface, and only when another model in that scene
+   shares too. One model keeps its layer. The others keep the private layer and the
    composite test of ADR-0256, including its half-opacity limit: a filter, a blur or a
    reflection needs an image of that model alone. A transition that composites the layer
    still draws it; the scene pass draws the shared geometry as well.
@@ -59,9 +60,10 @@ superseded for that path. There is still no scene or camera option.
    test is the scene's single-sample target. A private layer stays at the samples
    [ADR-0242](0242-3d-models-are-drawn-multisampled.md) set. A slanted edge in the shared
    pass is a hard step.
-7. **Windowed layers.** A private layer may be only the pixels the model covers. The
-   shared pass draws into the scene target, which is the canvas, so that window does not
-   apply to a model that shares.
+7. **Windowed layers.** ADR-0251 sizes a private layer to the model's box. A model alone
+   keeps that window. The shared pass, used when two or more models share, draws into the
+   scene target, which is the canvas, so the window does not apply to those models. Their
+   texture slots (ADR-0250) still apply in the shared pass.
 
 A 2D scene is unchanged.
 

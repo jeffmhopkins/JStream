@@ -443,7 +443,7 @@ fn capture(
                 |m, own| shot.source_value(shown.item, m, at, own),
                 |m| shot.tint(shown.item, m),
             );
-            let (texture, reflection) = super::model_maps(shot, cache, shown.source, shown.shown);
+            let (textures, reflection) = super::model_maps(shot, cache, shown.source, shown.shown);
             let lit = shown.shown.lighting == jstream_media::model::Lighting::Scene;
             compositor.draw_model(
                 &jstream_render::ModelDraw {
@@ -456,7 +456,7 @@ fn capture(
                     environment: if lit { environment } else { None },
                     floor: None,
                     materials: &drives[..driving],
-                    texture,
+                    textures: &textures,
                     reflection,
                     // A capture never reads a probe, so it never reads itself.
                     probe: None,

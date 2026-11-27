@@ -246,6 +246,20 @@ impl<K: Ord + Clone> ResourceCache<K> {
         self.drawn_small = on;
     }
 
+    /// Whether [`Self::draw_uploads_small`] is on: a cache whose frames may be drawn
+    /// with fewer pixels where that isn't seen.
+    pub fn draws_small(&self) -> bool {
+        self.drawn_small
+    }
+
+    /// Makes the image under `key` stand for the part `window` of its canvas, or all of
+    /// it ([`Image::set_window`]).
+    pub fn set_window(&mut self, key: &K, window: Option<crate::Window>) {
+        if let Some(entry) = self.live.get_mut(key) {
+            entry.image.set_window(window);
+        }
+    }
+
     /// [`Self::upload`] of a `width` × `height` frame that only items draw (not a video chain, which reads
     /// its texels as they are), held at the size the compositor drew it at over the
     /// frames before, once [`Self::draw_uploads_small`] allows it (#1139, ADR-0117 §2).

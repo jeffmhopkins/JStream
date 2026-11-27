@@ -51,7 +51,7 @@ pub use filter::{
     screen_reflections_descriptor,
 };
 pub use gpu::{OpenOptions, adapter_available, context_lost, submits_on_this_thread};
-pub use image::{Image, Seen};
+pub use image::{Image, Seen, Window};
 pub use jstream_protocol::BlendMode;
 pub use model::{
     CardDraw, Environment, GpuModel, LightKind, Lighting, LiveTexture, MAX_EMISSIVE_STRENGTH,

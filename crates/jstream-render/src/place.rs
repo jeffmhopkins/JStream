@@ -67,6 +67,14 @@ impl Shape {
         &self.vertices[..self.len]
     }
 
+    /// Moves a flat shape by `by` canvas pixels: a layer that holds a part of its canvas
+    /// placed where that part is ([`crate::image::Window`]).
+    pub(crate) fn shift(&mut self, by: [f32; 2]) {
+        for vertex in &mut self.vertices[..self.len] {
+            vertex.canvas = [vertex.canvas[0] + by[0], vertex.canvas[1] + by[1]];
+        }
+    }
+
     /// Whether this is a 3D item's shape, which has edge lines and samples mips.
     pub(crate) fn is_3d(&self) -> bool {
         self.edges[0] != NO_EDGE

@@ -144,6 +144,24 @@ pub struct Image {
     /// What a layer's last [`crate::Compositor::render_into`] drew into it
     /// ([`Self::drawn_as`]).
     drawn: Arc<Mutex<Option<crate::compositor::Drawn>>>,
+    /// The part of a canvas a model's layer holds, when it holds only part of it
+    /// ([`Self::window`]).
+    window: Option<Window>,
+}
+
+/// Where a layer that holds only part of its canvas sits on it (ADR-0250): a model's
+/// layer drawn only over the box its model can cover. The layer stands for
+/// [`Image::extent`] canvas pixels from `x`, `y`; [`crate::Placement::Layer`] places it
+/// there, and [`crate::Compositor::draw_model`] draws the model as the whole canvas's
+/// camera sees it, cut to that part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Window {
+    /// The part's left edge, in canvas pixels.
+    pub x: u32,
+    /// The part's top edge, in canvas pixels.
+    pub y: u32,
+    /// The whole canvas's width and height.
+    pub canvas: (u32, u32),
 }
 
 /// What an image held when it was looked at ([`Image::seen`]): which image, and how many
@@ -195,6 +213,19 @@ impl Image {
     /// (ADR-0073, docs/adr/0073-sources-drawn-at-their-shown-size.md).
     pub fn set_extent(&mut self, extent: FrameSize) {
         self.extent = (extent.width(), extent.height());
+    }
+
+    /// The part of its canvas a layer holds ([`Window`]), or `None` for one that holds
+    /// all of it from its top-left, as every image does unless [`Self::set_window`] says
+    /// otherwise.
+    pub fn window(&self) -> Option<Window> {
+        self.window
+    }
+
+    /// Makes the image stand for the part `window` of its canvas, its
+    /// [`Self::extent`] wide and high, or for all of it with `None`.
+    pub fn set_window(&mut self, window: Option<Window>) {
+        self.window = window;
     }
 
     /// The sampled texture. For an uploaded or rendered image it is `Rgba16Float` holding
@@ -445,6 +476,7 @@ impl std::fmt::Debug for Image {
             .field("width", &self.width)
             .field("height", &self.height)
             .field("extent", &self.extent)
+            .field("window", &self.window)
             .field("format", &self.texture.format())
             .field("alpha", &self.alpha)
             .field("synced", &self.sync.is_some())
@@ -848,6 +880,7 @@ fn finish(
         need: Arc::new(AtomicU32::new(0)),
         content: Arc::new(Mutex::new(None)),
         drawn: Arc::new(Mutex::new(None)),
+        window: None,
     }
 }
 
