@@ -4482,7 +4482,7 @@ stamp = { hash = "b3:a8642e870dae6f63", by = "agent:claude@session_01S5wwtX3BX1X
 stamp = { hash = "b3:8b11c1c1f91b3f72", by = "agent:cursor", note = "Re-read the opening and the tests paragraph: dialog.rs opens the Browse file, save and folder dialogs, and the extension filter, starting folder and suggested name are tested on every platform. The backend list is unchanged. Showing the dialog was not run here." }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/dump.rs"]
-stamp = { hash = "b3:527d6dffe1f87474", by = "agent:grok", note = "The table lists install_native_dump in dump.rs, and the tests paragraph says the MDMP check compiles only on Windows. The rest of the crate map is unchanged." }
+stamp = { hash = "b3:01b7b8621b4f479d", by = "agent:grok", note = "Re-read after write_dump was gated on cfg(test). The filter still writes through write_at, and the minidump test still writes a dump of this process and checks MDMP. The purpose table and the test paragraph still match." }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/folders.rs"]
 stamp = { hash = "b3:6fdc5a545bda852b", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
