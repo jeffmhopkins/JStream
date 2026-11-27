@@ -104,6 +104,9 @@ unsafe extern "system" fn on_exception(info: *const EXCEPTION_POINTERS) -> i32 {
 
 /// Writes one dump of this process into `dir`. `info` is the exception the
 /// filter was given, or null for a dump of the running process (the test).
+/// Only the test calls it; the filter goes through `write_at` with the prefix
+/// `install` kept.
+#[cfg(test)]
 pub(crate) fn write_dump(dir: &Path, info: *const EXCEPTION_POINTERS) -> io::Result<()> {
     let prefix =
         Prefix::from_dir(dir).ok_or_else(|| io::Error::other("the dump path is too long"))?;
