@@ -110,6 +110,8 @@ mod codec;
 mod com;
 mod credential;
 mod decode;
+#[cfg(windows)]
+mod dump;
 // The extension filter is tested on every platform; the dialog itself is Windows.
 #[cfg(any(windows, test))]
 mod dialog;
@@ -158,6 +160,8 @@ pub use credential::WindowsCredentials;
 pub use decode::MfMediaDecoders;
 #[cfg(windows)]
 pub use dialog::{Pick, PickKind, pick_path};
+#[cfg(windows)]
+pub use dump::install as install_native_dump;
 #[cfg(windows)]
 pub use folders::user_folder;
 #[cfg(windows)]

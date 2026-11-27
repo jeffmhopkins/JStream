@@ -29,6 +29,8 @@ fn main() -> ExitCode {
     // (R-SEC-004).
     // The hook, the token and the key store share one redaction list.
     let secrets = jstream_crash::Secrets::new();
+    #[cfg(windows)]
+    let mut dumps_installed = false;
     if let Some(data) = data.as_deref() {
         // On Windows each report gets a protected DACL for SYSTEM and the user, as the
         // reports are user-only on Unix (#656).
@@ -47,6 +49,13 @@ fn main() -> ExitCode {
             crash_line,
             create,
         );
+        // A native crash is not a panic. On Windows the same folder also gets a
+        // minidump (ADR-0258), installed before logging so a crash there still
+        // leaves a dump.
+        #[cfg(windows)]
+        {
+            dumps_installed = jstream_platform_windows::install_native_dump(&data.join("logs"));
+        }
     }
     let log = app::init_logging(data.as_deref());
     tracing::info!(
@@ -55,6 +64,10 @@ fn main() -> ExitCode {
         data = ?data,
         "jstream-desktop starting"
     );
+    #[cfg(windows)]
+    if data.is_some() && !dumps_installed {
+        tracing::warn!("native crash dumps were not installed; the log path does not fit");
+    }
     let startup = match app::parse(&args) {
         Ok(options) => app::start(&options, exe_dir.as_deref(), data.as_deref(), &secrets),
         Err(message) => Startup::problem(message),

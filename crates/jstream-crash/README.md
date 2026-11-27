@@ -77,8 +77,13 @@ Contents:
   sends (#353). The crate doesn't depend on `jstream-youtube`, which is on its layer:
   the kind is the caller's type.
 
-Not yet: native crashes (access violations, aborts) write no report; a minidump would
-need its own ADR.
+A native crash is not a panic, so this hook never sees it. On Windows the apps also
+install `jstream_platform_windows::install_native_dump`, which writes
+`crash-<pid>-<n>.dmp` in the same folder
+([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)).
+The writer is there, not here: this crate forbids `unsafe`, and the two crates sit
+on the same layer, so neither can depend on the other. Other platforms still write
+nothing for a native crash.
 
 **Tests** (`src/tests.rs`): redaction wherever a secret appears and at the message cut,
 UTC dates, `Secrets` shared by clones, a slot staying at two values across a thousand

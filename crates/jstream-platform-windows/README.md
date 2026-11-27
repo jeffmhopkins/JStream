@@ -43,6 +43,7 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | `register_vcam`, `unregister_vcam`, `vcam_registration` | | `vcam_register.rs` | the camera's opt-in registration from an administrators-only copy ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)) |
 | `WindowsCredentials` | `StreamKeyStore`, `OAuthTokenStore` | `credential.rs` | Windows Credential Manager ([R-SEC-001](../../docs/RULES.md#R-SEC-001)) |
 | `create_private_file`, `check_private_file` | | `private_file.rs` | files only the user can read, for a host's token files |
+| `install_native_dump` | | `dump.rs` | a local minidump for a native crash, from the unhandled-exception filter ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)) |
 | `check_media_foundation` | | `n_edition.rs` | whether Media Foundation is present, and the advice for N editions |
 | `PluginBlock`, `ProAudioThread`, `WindowsPluginHosts` | `PluginHosts` | `plugin_block.rs`, `plugin_hosts.rs` | CLAP filters hosted out of process: the shared block, the audio thread and the host processes ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) |
 | `pick_path` | | `dialog.rs` | the desktop app's Browse dialogs: a file, a save or a folder |
@@ -57,7 +58,9 @@ encoder configuration, the first-frame fallback, the direct encoders' vendor cho
 check and picture cropping, the GPU capture ring, credential names
 and limits, the virtual camera's format, the media-file conversions, the dialog filter, the GPU
 and CPU priority classes the variables name)
-run on every platform. The clock, the credential round trip and the Media Foundation
+run on every platform. The minidump test writes a dump of this process and checks
+that the file starts with `MDMP`; the module compiles only on Windows, so the test
+runs in the Windows job. The clock, the credential round trip and the Media Foundation
 probe run in CI's Windows job. Tests against real devices, the OS encoders, the GPU and
 a display are behind the `hw-tests` feature and `#[ignore]`d, because CI machines may
 have none of them ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run them on a Windows

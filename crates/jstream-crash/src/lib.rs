@@ -13,8 +13,10 @@
 //! [`MAX_REPORTS`] reports are kept. A panic on a thread named in [`Program::handled`],
 //! whose panics the app's own code catches and reports, writes no report (#999).
 //!
-//! Native crashes (access violations, aborts) write no report yet: see
-//! crates/jstream-crash/README.md#purpose.
+//! Native crashes (access violations, aborts) are not panics. On Windows the apps
+//! also install `jstream_platform_windows::install_native_dump`, which writes a
+//! local minidump beside these reports (ADR-0258). This crate stays free of
+//! `unsafe`, so the dump writer lives in `jstream-platform-windows`.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-crash/README.md#purpose, docs/adr/0067-shared-crash-reports.md
 
