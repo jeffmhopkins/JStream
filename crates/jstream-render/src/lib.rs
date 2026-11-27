@@ -4,7 +4,7 @@
 //! Layer 2: no `unsafe`. The scene graph is the same layer, so the engine builds the
 //! [`Scene`] snapshot and calls in.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, crates/jstream-render/README.md#purpose, crates/jstream-render/README.md#design, crates/jstream-render/README.md#filters, crates/jstream-render/README.md#testing, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0107-3d-models.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, crates/jstream-render/README.md#purpose, crates/jstream-render/README.md#design, crates/jstream-render/README.md#filters, crates/jstream-render/README.md#testing, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0107-3d-models.md, docs/adr/0257-models-in-one-scene-are-one-depth.md
 
 #![forbid(unsafe_code)]
 
@@ -56,7 +56,7 @@ pub use jstream_protocol::BlendMode;
 pub use model::{
     CardDraw, Environment, GpuModel, LightKind, Lighting, LiveTexture, MAX_EMISSIVE_STRENGTH,
     MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, ProbeLookup, SHADOW_MAP_PX,
-    SceneLight, SeenModel, ShadowMap,
+    SceneLight, SeenModel, ShadowMap, SharedModel,
 };
 pub use probe::ProbeFace;
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};

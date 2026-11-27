@@ -822,8 +822,9 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   and the times that come back a frame or two later go into the unit's `gpu_frames` and
   `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
   `gpu_timing` is on once any unit carries one. Inside a unit, the draw names the part of
-  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw, with its
-  view depth read from the depth its pass tested (`draw_model`), a scene's shadow maps (around `draw_shadows`), its view depth and
+  it that runs (`profile::gpu_part`, `Compositor::gpu_part`): a model's draw (`draw_model`,
+  or the shared scene pass), with a private layer's view depth read from the depth its
+  pass tested, a scene's shadow maps (around `draw_shadows`), its view depth and
   its surface buffer (the scene pass), and each filter of a chain by its place
   (`Chains::run_one`, the first `GPU_PART_FILTERS`; a model source's filters, counted
   with its item's effects, are no part). A part's spans come back under the
@@ -2219,7 +2220,7 @@ The engine keeps the keyframe each placed scene is switched to
 ## Snapshots
 <!-- @section
 covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
-depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
+depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry", "docs/adr/0257-models-in-one-scene-are-one-depth.md"]
 -->
 
 `video.snapshot` returns the program mix as a PNG
@@ -2719,10 +2720,27 @@ the program stage and the preview a model's layer and its depth hold only the pa
 canvas its box is in, a step of 64, 96, 128 and so on each way, unless filters run over
 it, it draws a surface, its camera has depth of field or its box can't be told
 (`model_window`, `GpuModel::seen_box`,
-[ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)). A
-model's item carries its `GpuKey::ModelDepth` layer there (`Item::depth`), and
-`Compositor::render_view_depth` writes that layer into the view depth, so the model's
-geometry, drawn once into that layer with its colour, isn't drawn a second time for the
+[ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)).
+A scene with two or more models that can share one depth draws those into the scene
+instead of into those layers
+([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)); a model alone keeps
+its window. That draw stays in linear light even when the canvas blends in sRGB. An sRGB
+pass decodes its target when it finishes, and decoding the models' linear texels would
+darken the scene under a bloom
+(`warp_show_bloom_does_not_darken_a_rectangle_over_the_ship`, when the warp models are
+on disk). A model that shares does not carry `Item::depth`, so the view depth is not a
+copy of its private depth image. `draw_model_depth` poses the mesh into the view depth,
+and `Compositor::blend_scene_depth` max-blends the scene depth under that. The private
+layer and depth are cleared to transparent, the layer names an empty box so a composite
+draws none of it, and any window they had is dropped. The box
+step draws the shadow maps then, before a later chain replaces the pictures they read.
+After the shared pass the composite names no content box, so a scene filter reads the
+whole picture
+(`a_scene_filter_ignores_an_additive_plumes_undrawn_depth`). A model that keeps a layer
+carries its `GpuKey::ModelDepth` there
+(`Item::depth`), and `Compositor::render_view_depth` writes that layer into the view depth
+only at half opacity or more, so that model's
+geometry, drawn once into its layer with its colour, isn't drawn a second time for the
 scene's filters; a shadow map and a floor reflection, which see it through another
 camera, draw it posed as its layer is (`depth_models`). `Chains::drew_depth`
 keeps it with the camera's view and the scene's lights, as `scene_lights` gives them

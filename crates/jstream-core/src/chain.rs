@@ -6890,6 +6890,555 @@ mod tests {
         assert_eq!(lit, unshadowed, "a card that shows nothing casts none");
     }
 
+    /// A scene filter that reads depth must see the shared models' depth, not a
+    /// rectangle of an additive plume's private depth image. That image is allocated
+    /// and never drawn. Filling it with a near value must not un-fog the ship the
+    /// plume's screen bounds cover.
+    #[test]
+    fn a_scene_filter_ignores_an_additive_plumes_undrawn_depth() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else {
+            return;
+        };
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let camera = jstream_protocol::SceneCamera::framing(canvas);
+        let f = camera.view(canvas).expect("a view").focal_px();
+        let mut ship_box = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(24.0, 16.0).expect("positive"),
+        )
+        .expect("valid");
+        ship_box.fit_mode = jstream_protocol::FitMode::Stretch;
+        ship_box.depth_px = jstream_protocol::Finite32::new(-f).expect("finite");
+        let mut plume_box = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(64.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        plume_box.fit_mode = jstream_protocol::FitMode::Stretch;
+        plume_box.depth_px = jstream_protocol::Finite32::new(-4.0 * f).expect("finite");
+        let mut graph = graph(&[]);
+        let main = SceneId::new("main");
+        apply(
+            &mut graph,
+            vec![
+                Edit::CanvasSetSize {
+                    width: CANVAS.0,
+                    height: CANVAS.1,
+                },
+                Edit::CanvasSetBlending {
+                    blending: jstream_protocol::Blending::Linear,
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry: ship_box,
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry: plume_box,
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("card"),
+                    name: "card".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: main.clone(),
+                    item_id: ItemId::new("card"),
+                    source_id: SourceId::new("card"),
+                    transform: None,
+                    geometry: Some({
+                        let mut g = jstream_protocol::ItemGeometry::try_new(
+                            jstream_protocol::Vec2::new(4.0, 4.0).expect("finite"),
+                            jstream_protocol::Size::try_new(4.0, 4.0).expect("positive"),
+                        )
+                        .expect("valid");
+                        g.fit_mode = jstream_protocol::FitMode::Stretch;
+                        g
+                    }),
+                    opacity: None,
+                    blend: None,
+                },
+                Edit::ItemSetBlend {
+                    item_id: ItemId::new("logo"),
+                    blend: jstream_protocol::BlendMode::Additive,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: main.clone(),
+                    camera: Some(camera),
+                },
+                Edit::FilterAdd {
+                    owner: FilterOwner::Scene {
+                        scene_id: main.clone(),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("fog"),
+                    kind: "depth_fog".into(),
+                    settings: [
+                        ("mode", serde_json::json!("linear")),
+                        ("color", serde_json::json!("#000000ff")),
+                        ("start_px", serde_json::json!(f)),
+                        ("end_px", serde_json::json!(3.0 * f)),
+                        ("density", serde_json::json!(0.5)),
+                        ("max", serde_json::json!(1.0)),
+                        ("background", serde_json::json!(false)),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_owned(), v))
+                    .collect(),
+                    enabled: Some(true),
+                    index: None,
+                },
+            ],
+        );
+        let plane = |color: &str| {
+            use jstream_sources::SourceKind as _;
+            let kind = jstream_sources::ModelKind::new();
+            let mut settings: jstream_protocol::Settings = kind
+                .descriptor()
+                .params
+                .iter()
+                .map(|p| (p.id.clone(), p.default.clone()))
+                .collect();
+            settings.insert(String::from("shape"), serde_json::json!("plane"));
+            settings.insert(String::from("lighting"), serde_json::json!("unlit"));
+            settings.insert(String::from("color"), serde_json::json!(color));
+            kind.create(&settings, &jstream_sources::Context::default())
+                .expect("a model")
+                .model()
+        };
+        let ship = plane("#ffffff");
+        let plume = plane("#000000");
+        let blank = Frame::new(1, 1, &[0, 0, 0, 255], 4).expect("1x1 RGBA8");
+        let shot = snapshot::plan_with(
+            &graph,
+            Some(&main),
+            None,
+            &mut |id| {
+                let frame = match id.as_str() {
+                    "cam" => blank.clone().with_model(ship.clone()),
+                    "logo" => blank.clone().with_model(plume.clone()),
+                    _ => blank.clone(),
+                };
+                Some(Look::frame(frame, None))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let sample = |compositor: &mut Compositor,
+                      cache: &mut ResourceCache<GpuKey>,
+                      chains: &mut Chains| {
+            draw_points(
+                compositor,
+                (cache, chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 18)],
+            )
+        };
+        let first = sample(&mut compositor, &mut cache, &mut chains);
+        // The plume's private depth was allocated and not drawn. A near value there is
+        // what an undefined texel can be. The next frame must not copy it over the ship.
+        let depth_key = snapshot::GpuKey::ModelDepth(main.clone(), ItemId::new("logo"));
+        let depth = cache
+            .get(&depth_key)
+            .expect("the plume's depth image is allocated");
+        let white = compositor
+            .upload_rgba8(4, 4, &[255, 255, 255, 255].repeat(16))
+            .expect("a white card");
+        let mut cover = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(64.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        cover.fit_mode = jstream_protocol::FitMode::Stretch;
+        let items = [jstream_render::Item {
+            image: &white,
+            placement: jstream_render::Placement::Geometry(cover),
+            crop: jstream_render::Crop::NONE,
+            opacity: 1.0,
+            blend: jstream_render::BlendMode::Normal,
+            visible: true,
+            camera: Some(camera),
+            depth_run: 0,
+            depth: None,
+            occludes: false,
+        }];
+        let near = jstream_render::Scene {
+            canvas: FrameSize::new(CANVAS.0, CANVAS.1).expect("non-zero"),
+            background: jstream_render::Color::TRANSPARENT,
+            items: &items,
+        };
+        compositor
+            .render_view_depth(&near, depth)
+            .expect("plant a near depth in the plume's layer");
+        let second = sample(&mut compositor, &mut cache, &mut chains);
+        let composite = cache
+            .get(&GpuKey::Composite(main.clone()))
+            .expect("the scene's picture");
+        assert!(
+            !composite.names_its_content(),
+            "the shared picture is not a rectangle a filter can clip to"
+        );
+        let plume_layer = cache
+            .get(&GpuKey::ItemBox(main.clone(), ItemId::new("logo")))
+            .expect("the plume's layer");
+        assert!(
+            plume_layer.content_is_empty(),
+            "an undrawn plume layer must not composite as its screen bounds"
+        );
+        assert!(
+            luma(first[0]) < 650 && luma(first[0]) > 400,
+            "the far ship is fogged: {:?}",
+            first[0]
+        );
+        assert!(
+            luma(second[0]) < 650 && luma(second[0]) > 400,
+            "the plume's depth does not un-fog the ship: {:?} after {:?}",
+            second[0],
+            first[0]
+        );
+    }
+
+    /// The warp show's `ws_bloom` over the real ship and a plume, in the sRGB space the
+    /// show is drawn in. Sharing the pass must not decode the models' linear colour a
+    /// second time: that paints a darkened rectangle, and the bloom around it is what
+    /// makes the rectangle show. The same picture with the filter off, and the ship on
+    /// its own, are the baselines. Skips when the warp models are not on disk.
+    #[test]
+    fn warp_show_bloom_does_not_darken_a_rectangle_over_the_ship() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else {
+            return;
+        };
+        let root = std::path::PathBuf::from("/tmp/warp");
+        if !root.join("models/spaceship_r15_ship_2k_d.glb").is_file() {
+            return;
+        }
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let ctx = jstream_sources::Context {
+            assets: jstream_sources::AssetRoots {
+                collection: Some(root),
+                app: None,
+            },
+            ..jstream_sources::Context::default()
+        };
+        let load = |file: &str| {
+            let mut settings: jstream_protocol::Settings = kind
+                .descriptor()
+                .params
+                .iter()
+                .map(|p| (p.id.clone(), p.default.clone()))
+                .collect();
+            settings.insert(String::from("shape"), serde_json::json!("file"));
+            settings.insert(String::from("lighting"), serde_json::json!("scene"));
+            settings.insert(String::from("texture_size"), serde_json::json!("512"));
+            settings.insert(
+                String::from("file"),
+                jstream_protocol::Reference::Asset {
+                    root: jstream_protocol::AssetRoot::Collection,
+                    path: file.into(),
+                }
+                .to_value(),
+            );
+            kind.create(&settings, &ctx)
+                .unwrap_or_else(|err| panic!("load {file}: {err}"))
+                .model()
+                .expect("a model")
+        };
+        let ship = load("models/spaceship_r15_ship_2k_d.glb");
+        let plume = load("models/plume_t100_occ.glb");
+        let (w, h) = (192u32, 108u32);
+        let mut graph = graph(&[]);
+        let main = SceneId::new("main");
+        let geom = |x: f32, y: f32, width: f32, height: f32| {
+            let mut g = jstream_protocol::ItemGeometry::try_new(
+                jstream_protocol::Vec2::new(x, y).expect("finite"),
+                jstream_protocol::Size::try_new(width, height).expect("positive"),
+            )
+            .expect("valid");
+            g.fit_mode = jstream_protocol::FitMode::Fit;
+            g.turn_deg = jstream_protocol::Finite32::new(90.0).expect("finite");
+            g
+        };
+        apply(
+            &mut graph,
+            vec![
+                Edit::CanvasSetSize {
+                    width: w,
+                    height: h,
+                },
+                Edit::SceneSetOptions {
+                    scene_id: main.clone(),
+                    options: jstream_protocol::SceneOptions {
+                        background: Some("#00ff00".into()),
+                        ..jstream_protocol::SceneOptions::default()
+                    },
+                },
+                Edit::CanvasSetBlending {
+                    blending: jstream_protocol::Blending::Srgb,
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry: geom(96.0, 54.0, 140.0, 80.0),
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry: geom(96.0, 54.0, 176.0, 101.0),
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("lamp"),
+                    name: "lamp".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "light".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: main.clone(),
+                    item_id: ItemId::new("lamp"),
+                    source_id: SourceId::new("lamp"),
+                    transform: None,
+                    geometry: Some(geom(40.0, 20.0, 8.0, 8.0)),
+                    opacity: None,
+                    blend: None,
+                },
+                Edit::ItemSetBlend {
+                    item_id: ItemId::new("logo"),
+                    blend: jstream_protocol::BlendMode::Additive,
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("sky"),
+                    name: "sky".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "light".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: main.clone(),
+                    item_id: ItemId::new("sky"),
+                    source_id: SourceId::new("sky"),
+                    transform: None,
+                    geometry: Some(geom(96.0, 54.0, 6.0, 6.0)),
+                    opacity: None,
+                    blend: None,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: main.clone(),
+                    camera: Some(jstream_protocol::SceneCamera {
+                        position: jstream_protocol::Vec3 {
+                            x: jstream_protocol::Finite32::new(96.0).unwrap(),
+                            y: jstream_protocol::Finite32::new(17.0).unwrap(),
+                            z: jstream_protocol::Finite32::new(0.0).unwrap(),
+                        },
+                        target: jstream_protocol::Vec3 {
+                            x: jstream_protocol::Finite32::new(96.0).unwrap(),
+                            y: jstream_protocol::Finite32::new(56.0).unwrap(),
+                            z: jstream_protocol::Finite32::new(0.0).unwrap(),
+                        },
+                        fov_deg: jstream_protocol::Finite32::new(36.0).unwrap(),
+                        ..jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas {
+                            width: w,
+                            height: h,
+                        })
+                    }),
+                },
+                Edit::FilterAdd {
+                    owner: FilterOwner::Scene {
+                        scene_id: main.clone(),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("ws_bloom"),
+                    kind: "depth_bloom".into(),
+                    settings: [
+                        ("threshold", serde_json::json!(2.0)),
+                        ("strength", serde_json::json!(0.6)),
+                        ("radius_px", serde_json::json!(18.0)),
+                        ("depth_px", serde_json::json!(200.0)),
+                        ("far_px", serde_json::json!(0.0)),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_owned(), v))
+                    .collect(),
+                    enabled: Some(true),
+                    index: None,
+                },
+            ],
+        );
+        let blank = Frame::new(1, 1, &[0, 0, 0, 255], 4).expect("1x1");
+        let sky = jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Environment,
+            color: [1.0, 1.0, 1.0],
+            intensity: 2.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.3,
+            environment: Some(jstream_sources::ShownEnvironment {
+                sky: [0.15, 0.25, 0.55],
+                horizon: [0.35, 0.45, 0.7],
+                ground: [0.02, 0.02, 0.04],
+                image: None,
+                backdrop: true,
+                stars: 1.0,
+                star_brightness: 8.0,
+                nebula: 0.4,
+                nebula_colors: [[0.4, 0.1, 0.6], [0.1, 0.3, 0.7]],
+                galaxy: 0.5,
+                sky_seed: 4127,
+                warp: 1.0,
+                warp_ramp_s: 0.0,
+                warp_aim: jstream_sources::WarpAim::Sky,
+                warp_look_deg: 180.0,
+                sky_pictures: None,
+                sky_picture_deg: 100.0,
+                sky_picture_light: 0.6,
+            }),
+        };
+        let lamp = jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Directional,
+            color: [1.0, 1.0, 1.0],
+            intensity: 4.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.0,
+            environment: None,
+        };
+        // `plume_on` is the second model. Hiding it leaves the ship alone, which keeps
+        // its own layer and does not run the shared pass.
+        let shot_of = |bloom: bool, plume_on: bool| {
+            let mut graph = graph.clone();
+            let mut edits = Vec::new();
+            if !bloom {
+                edits.push(Edit::FilterSetEnabled {
+                    owner: FilterOwner::Scene {
+                        scene_id: main.clone(),
+                    },
+                    filter_id: FilterId::new("ws_bloom"),
+                    enabled: false,
+                });
+            }
+            if !plume_on {
+                edits.push(Edit::ItemSetVisible {
+                    item_id: ItemId::new("logo"),
+                    scene_id: None,
+                    visible: false,
+                });
+            }
+            if !edits.is_empty() {
+                apply(&mut graph, edits);
+            }
+            snapshot::plan_with(
+                &graph,
+                Some(&main),
+                None,
+                &mut |id| {
+                    let frame = match id.as_str() {
+                        "cam" => blank.clone().with_model(Some(ship.clone())),
+                        "logo" => blank.clone().with_model(Some(plume.clone())),
+                        "lamp" => blank.clone().with_light(Some(lamp.clone())),
+                        "sky" => blank.clone().with_light(Some(sky.clone())),
+                        _ => blank.clone(),
+                    };
+                    Some(Look::frame(frame, None))
+                },
+                &FilterAssets::default(),
+            )
+            .shot
+        };
+        let mut render = |shot: &snapshot::Shot| {
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            let mut pixels = Vec::new();
+            // The second frame is the one a live show settles on: the first can clear
+            // a layer the second only wipes inside the box it recorded.
+            for _ in 0..2 {
+                cache.begin_frame();
+                let canvas = shot.canvas().expect("canvas");
+                let output = snapshot::compose(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (shot, MediaTime::zero(Timebase::MILLIS)),
+                    snapshot::View::default(),
+                    &LiveParams::default(),
+                    &NoCaptures,
+                    snapshot::DrawAt::read(canvas),
+                )
+                .expect("compose");
+                pixels = output.pixels().expect("read back").rgba().to_vec();
+                drop(cache.end_frame(&compositor));
+            }
+            pixels
+        };
+        let off = render(&shot_of(false, true));
+        let on = render(&shot_of(true, true));
+        let lone = render(&shot_of(true, false));
+        let lone_off = render(&shot_of(false, false));
+        let at = |buf: &[u8], x: u32, y: u32| {
+            let i = ((y * w + x) * 4) as usize;
+            [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+        };
+        let luma = |p: [u8; 4]| u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2]);
+        let mut darker_than_off = 0u32;
+        let mut darker_than_lone = 0u32;
+        let mut base_darker = 0u32;
+        let mut thinner = 0u32;
+        let mut samples = Vec::new();
+        for y in (2..h).step_by(4) {
+            for x in (2..w).step_by(4) {
+                let a = at(&off, x, y);
+                let b = at(&on, x, y);
+                let c = at(&lone, x, y);
+                let d = at(&lone_off, x, y);
+                let hole = a[3] > 20 && u32::from(b[3]) + 8 < u32::from(a[3]);
+                let dark_off = luma(a) > 20 && luma(b) + 15 < luma(a);
+                let dark_lone = luma(c) > 40 && luma(b) + 20 < luma(c);
+                // The shared picture, bloom or not, must not be a darkened copy of the
+                // ship on its own. That is the rectangle an sRGB decode paints.
+                if luma(d) > luma(a) + 40 && luma(a) < 160 {
+                    base_darker += 1;
+                }
+                if hole {
+                    thinner += 1;
+                }
+                if dark_off {
+                    darker_than_off += 1;
+                }
+                if dark_lone {
+                    darker_than_lone += 1;
+                }
+                if (hole || dark_off || dark_lone || luma(d) > luma(a) + 40) && samples.len() < 8 {
+                    samples.push(((x, y), a, b, c));
+                }
+            }
+        }
+        let centre = (at(&off, 96, 54), at(&on, 96, 54), at(&lone_off, 96, 54));
+        assert!(
+            darker_than_off == 0 && thinner == 0 && base_darker < 40 && darker_than_lone < 80,
+            "ws_bloom rectangle: darker than bloom-off {darker_than_off}, thinner {thinner}, base darker than lone {base_darker}, bloom darker than lone {darker_than_lone}, centre off/on/lone-off {centre:?} samples {samples:?}"
+        );
+    }
+
     /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition
     /// switches to that scene too, not only once it has landed.
     #[test]
@@ -7051,8 +7600,9 @@ mod tests {
             .....WWWW.......
             .....WWW?.......
             ";
-        // The last row's `?` is the plane's slanted near corner, which the model's
-        // 4x multisampling (ADR-0242, the default) blends with the black around it.
+        // One model keeps its layer, so the last row's `?` is the plane's slanted near
+        // corner, which the layer's 4x multisampling (ADR-0242) blends with the black
+        // around it. Two models in one scene take the shared pass, which is one sample.
         assert_golden(
             &model_shot(&graph, "plane"),
             expected,

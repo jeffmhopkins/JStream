@@ -5,9 +5,9 @@
 use jstream_media::FrameSize;
 use jstream_media::model::shapes::Shape;
 use jstream_media::model::{AlphaMode, Material, Model, ModelTexture, TextureColor, TextureRef};
-use jstream_protocol::{Canvas, Finite32, ItemGeometry, SceneCamera, Size, Vec2, Vec3};
+use jstream_protocol::{Canvas, Finite32, FitMode, ItemGeometry, SceneCamera, Size, Vec2, Vec3};
 
-use super::{LightKind, Lighting, MAX_SCENE_LIGHTS, ModelDraw, SceneLight};
+use super::{LightKind, Lighting, MAX_SCENE_LIGHTS, ModelDraw, SceneLight, SharedModel};
 use crate::tests::open;
 use crate::{Color, Compositor, Crop, Item, Placement, Scene, Snapshot};
 
@@ -663,6 +663,582 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
         let want = if card_wins { [255, 255, 255] } else { FRONT };
         assert_near(rgb(&shot, 80, 50), want, (80, 50));
     }
+}
+
+/// ADR-0257: two models in one camera are one depth. A rod through a cube hides and is
+/// hidden per pixel whichever centre sorts nearer. A blended rod, an additive rod, and
+/// a faint additive rod show only where they are in front of the cube.
+#[test]
+fn models_in_one_scene_occlude_each_other_per_pixel() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let framing = SceneCamera::framing(canvas());
+    // Off to the side, so the rod's length along depth crosses the picture.
+    let camera = SceneCamera {
+        position: Vec3::new(110.0, 24.0, 150.0).expect("finite"),
+        ..framing
+    };
+    let view = camera.view(canvas()).expect("a view");
+    let cube = unlit_shape(Shape::Cube, [1.0, 0.0, 0.0, 1.0], false);
+    let rod = unlit_shape(Shape::Cylinder, [0.0, 0.4, 1.0, 1.0], false);
+    let glass = unlit_shape(Shape::Cylinder, [0.0, 1.0, 0.0, 0.75], true);
+    let cube_geo = boxed(80.0, 50.0, 36.0);
+    let red = |pixel: [u8; 3]| pixel[0] > 240 && pixel[1] < 20 && pixel[2] < 20;
+    let blue = |pixel: [u8; 3]| pixel[2] > 200 && pixel[0] < 40 && pixel[1] > 120;
+    // `0.35` along the rod is in front of the cube's near face, `-0.35` is behind it,
+    // for both centre depths. Centre sort alone would paint one model over the other.
+    for depth in [24.0_f32, -24.0] {
+        let geometry = rod_through(depth);
+        let shot = composite_models(
+            compositor,
+            &camera,
+            &[
+                (&cube, cube_geo, 1.0, crate::BlendMode::Normal),
+                (&rod, geometry, 1.0, crate::BlendMode::Normal),
+            ],
+        );
+        let behind = rod_pixel(&shot, &rod, geometry, &view, -0.35);
+        let front = rod_pixel(&shot, &rod, geometry, &view, 0.35);
+        assert!(
+            red(behind.1),
+            "depth {depth}: the cube hides the rod's far end at {:?}: {:?}",
+            behind.0,
+            behind.1
+        );
+        assert!(
+            blue(front.1),
+            "depth {depth}: the rod's near end shows at {:?}: {:?}",
+            front.0,
+            front.1
+        );
+    }
+    for (blend, name) in [
+        (crate::BlendMode::Normal, "blended"),
+        (crate::BlendMode::Additive, "additive"),
+    ] {
+        for depth in [24.0_f32, -24.0] {
+            let geometry = rod_through(depth);
+            let shot = composite_models(
+                compositor,
+                &camera,
+                &[
+                    (&cube, cube_geo, 1.0, crate::BlendMode::Normal),
+                    (&glass, geometry, 1.0, blend),
+                ],
+            );
+            let behind = rod_pixel(&shot, &glass, geometry, &view, -0.35);
+            let front = rod_pixel(&shot, &glass, geometry, &view, 0.35);
+            assert!(
+                red(behind.1),
+                "{name} depth {depth}: the cube hides the far end at {:?}: {:?}",
+                behind.0,
+                behind.1
+            );
+            assert!(
+                front.1[1] > 80,
+                "{name} depth {depth}: the near end shows at {:?}: {:?}",
+                front.0,
+                front.1
+            );
+        }
+    }
+    // A faint additive rod. Its fragments are under half opacity, so a depth copied
+    // from a layer that drops those fragments would hide the part in front of the cube.
+    for depth in [24.0_f32, -24.0] {
+        let geometry = rod_through(depth);
+        let shot = composite_models(
+            compositor,
+            &camera,
+            &[
+                (&cube, cube_geo, 1.0, crate::BlendMode::Normal),
+                (&rod, geometry, 0.2, crate::BlendMode::Additive),
+            ],
+        );
+        let behind = rod_pixel(&shot, &rod, geometry, &view, -0.35);
+        let front = rod_pixel(&shot, &rod, geometry, &view, 0.35);
+        assert!(
+            red(behind.1),
+            "faint depth {depth}: the cube hides the far end at {:?}: {:?}",
+            behind.0,
+            behind.1
+        );
+        assert!(
+            front.1[2] > 60,
+            "faint depth {depth}: the near end shows at {:?}: {:?}",
+            front.0,
+            front.1
+        );
+    }
+}
+
+/// ADR-0257: transparent primitives of two models are sorted together, far to near.
+/// One model has a far red plane and a near blue plane; the other has a green plane
+/// between them. Only that order leaves blue above green above red.
+#[test]
+fn transparent_models_interleave_per_primitive() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = SceneCamera::framing(canvas());
+    let glass = |color: [f32; 4], z: f32| {
+        let plane = Shape::Plane
+            .model(Material {
+                base_color: color,
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..Material::default()
+            })
+            .expect("the plane builds");
+        let mut primitive = plane.primitives()[0].clone();
+        for vertex in &mut primitive.vertices {
+            vertex.position[2] += z;
+        }
+        primitive
+    };
+    let mut far = glass([1.0, 0.0, 0.0, 0.5], -0.35);
+    let mut near = glass([0.0, 0.0, 1.0, 0.5], 0.35);
+    far.material = 0;
+    near.material = 1;
+    let split = Model::new(
+        vec![far, near],
+        vec![
+            Material {
+                base_color: [1.0, 0.0, 0.0, 0.5],
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..Material::default()
+            },
+            Material {
+                base_color: [0.0, 0.0, 1.0, 0.5],
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..Material::default()
+            },
+        ],
+        vec![],
+    )
+    .expect("the model builds");
+    let mid = Shape::Plane
+        .model(Material {
+            base_color: [0.0, 1.0, 0.0, 0.5],
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..Material::default()
+        })
+        .expect("the plane builds");
+    let geometry = boxed(80.0, 50.0, 60.0);
+    let shot = composite_models(
+        compositor,
+        &camera,
+        &[
+            (&split, geometry, 1.0, crate::BlendMode::Normal),
+            (&mid, geometry, 1.0, crate::BlendMode::Normal),
+        ],
+    );
+    let pixel = rgb(&shot, 80, 50);
+    assert!(
+        pixel[2] > pixel[1] && pixel[1] > pixel[0],
+        "the near blue plane is in front of the green, which is in front of the far red: {pixel:?}"
+    );
+}
+
+/// A hull with a glass primitive still occludes. The glass must not stop the hull
+/// writing depth, and a faint additive plume is tested, not discarded as far.
+#[test]
+fn a_hull_with_glass_occludes_a_plume_and_a_faint_plume_in_front_shows() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let framing = SceneCamera::framing(canvas());
+    let camera = SceneCamera {
+        position: Vec3::new(110.0, 24.0, 150.0).expect("finite"),
+        ..framing
+    };
+    let view = camera.view(canvas()).expect("a view");
+    let cube = unlit_shape(Shape::Cube, [1.0, 0.0, 0.0, 1.0], false);
+    let mut hull = cube.primitives()[0].clone();
+    hull.material = 0;
+    let mut glass = cube.primitives()[0].clone();
+    for vertex in &mut glass.vertices {
+        // The left of the hull. The rod's centre samples stay on the opaque face.
+        vertex.position[0] = vertex.position[0] * 0.4 - 0.3;
+    }
+    glass.material = 1;
+    let ship = Model::new(
+        vec![hull, glass],
+        vec![
+            Material {
+                base_color: [1.0, 0.0, 0.0, 1.0],
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..Material::default()
+            },
+            Material {
+                base_color: [0.0, 1.0, 0.0, 0.4],
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..Material::default()
+            },
+        ],
+        vec![],
+    )
+    .expect("the ship builds");
+    let plume = unlit_shape(Shape::Cylinder, [0.0, 0.4, 1.0, 1.0], false);
+    let cube_geo = boxed(80.0, 50.0, 36.0);
+    let red = |pixel: [u8; 3]| pixel[0] > 200 && pixel[2] < 40;
+    for depth in [24.0_f32, -24.0] {
+        let geometry = rod_through(depth);
+        let shot = composite_models(
+            compositor,
+            &camera,
+            &[
+                (&ship, cube_geo, 1.0, crate::BlendMode::Normal),
+                (&plume, geometry, 1.0, crate::BlendMode::Additive),
+            ],
+        );
+        let behind = rod_pixel(&shot, &plume, geometry, &view, -0.35);
+        let front = rod_pixel(&shot, &plume, geometry, &view, 0.35);
+        assert!(
+            red(behind.1),
+            "depth {depth}: the hull hides the plume behind it at {:?}: {:?}",
+            behind.0,
+            behind.1
+        );
+        assert!(
+            front.1[2] > 60,
+            "depth {depth}: the plume in front of the hull shows at {:?}: {:?}",
+            front.0,
+            front.1
+        );
+        let faint = composite_models(
+            compositor,
+            &camera,
+            &[
+                (&ship, cube_geo, 1.0, crate::BlendMode::Normal),
+                (&plume, geometry, 0.2, crate::BlendMode::Additive),
+            ],
+        );
+        let behind = rod_pixel(&faint, &plume, geometry, &view, -0.35);
+        let front = rod_pixel(&faint, &plume, geometry, &view, 0.35);
+        assert!(
+            red(behind.1),
+            "faint depth {depth}: the hull hides the plume at {:?}: {:?}",
+            behind.0,
+            behind.1
+        );
+        assert!(
+            front.1[2] > 40,
+            "faint depth {depth}: the plume in front shows at {:?}: {:?}",
+            front.0,
+            front.1
+        );
+    }
+}
+
+/// Many models, many frames, one depth. A leak of a depth texture or a bind group
+/// would fail here, and the hull must still hide a plume after the run.
+#[test]
+fn many_models_share_one_depth_across_many_frames() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let framing = SceneCamera::framing(canvas());
+    let camera = SceneCamera {
+        position: Vec3::new(110.0, 24.0, 150.0).expect("finite"),
+        ..framing
+    };
+    let view = camera.view(canvas()).expect("a view");
+    let cube = unlit_shape(Shape::Cube, [1.0, 0.0, 0.0, 1.0], false);
+    let mut hull = cube.primitives()[0].clone();
+    hull.material = 0;
+    let mut glass = cube.primitives()[0].clone();
+    for vertex in &mut glass.vertices {
+        vertex.position[0] = vertex.position[0] * 0.4 - 0.3;
+    }
+    glass.material = 1;
+    let ship = Model::new(
+        vec![hull, glass],
+        vec![
+            Material {
+                base_color: [1.0, 0.0, 0.0, 1.0],
+                unlit: true,
+                ..Material::default()
+            },
+            Material {
+                base_color: [0.0, 1.0, 0.0, 0.3],
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..Material::default()
+            },
+        ],
+        vec![],
+    )
+    .expect("the ship builds");
+    let plume = unlit_shape(Shape::Cylinder, [0.0, 0.4, 1.0, 1.0], true);
+    let mut uploaded = Vec::new();
+    uploaded.push(compositor.upload_model(&ship).expect("ship"));
+    for _ in 0..19 {
+        uploaded.push(compositor.upload_model(&plume).expect("plume"));
+    }
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let ship_geo = boxed(80.0, 50.0, 36.0);
+    let plume_geo = rod_through(24.0);
+    for _frame in 0..30 {
+        let shared: Vec<SharedModel<'_>> = uploaded
+            .iter()
+            .enumerate()
+            .map(|(i, model)| SharedModel {
+                draw: ModelDraw {
+                    model,
+                    geometry: if i == 0 { ship_geo } else { plume_geo },
+                    camera: Some(camera),
+                    lighting: Lighting::Unlit,
+                    lights: None,
+                    shadows: &[],
+                    environment: None,
+                    floor: None,
+                    materials: &[],
+                    textures: &[],
+                    reflection: None,
+                    probe: None,
+                },
+                opacity: if i == 0 { 1.0 } else { 0.2 },
+                blend: if i == 0 {
+                    crate::BlendMode::Normal
+                } else {
+                    crate::BlendMode::Additive
+                },
+            })
+            .collect();
+        compositor
+            .draw_shared_models(&layer, &shared)
+            .expect("the frame draws");
+    }
+    let shown = [crate::tests::item(
+        &layer,
+        Placement::Legacy(crate::LegacyTransform::IDENTITY),
+        Crop::NONE,
+        1.0,
+    )];
+    let shot = render(compositor, &shown);
+    let behind = rod_pixel(&shot, &plume, plume_geo, &view, -0.35);
+    let front = rod_pixel(&shot, &plume, plume_geo, &view, 0.35);
+    assert!(
+        behind.1[0] > 200 && behind.1[2] < 40,
+        "after many frames the hull still hides the plume at {:?}: {:?}",
+        behind.0,
+        behind.1
+    );
+    assert!(
+        front.1[2] > 40,
+        "after many frames the plume in front still shows at {:?}: {:?}",
+        front.0,
+        front.1
+    );
+}
+
+/// ADR-0257: a card seen through the same camera tests the depth the shared pass wrote.
+/// A nearer model hides it. An item with no camera is not in that space.
+#[test]
+fn a_shared_model_hides_a_farther_card() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = SceneCamera::framing(canvas());
+    let white = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
+    let mut geometry = boxed(80.0, 50.0, 30.0);
+    geometry.depth_px = finite(40.0);
+    let shared = [SharedModel {
+        draw: ModelDraw {
+            model: &cube,
+            geometry,
+            camera: Some(camera),
+            lighting: Lighting::Unlit,
+            lights: None,
+            shadows: &[],
+            environment: None,
+            floor: None,
+            materials: &[],
+            textures: &[],
+            reflection: None,
+            probe: None,
+        },
+        opacity: 1.0,
+        blend: crate::BlendMode::Normal,
+    }];
+    let canvas = FrameSize::new(WIDTH, HEIGHT).expect("non-zero");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_shared_models(&layer, &shared)
+        .expect("the model draws");
+    let card = [Item {
+        camera: Some(camera),
+        ..crate::tests::item(
+            &white,
+            Placement::Geometry(boxed(80.0, 50.0, 60.0)),
+            Crop::NONE,
+            1.0,
+        )
+    }];
+    compositor
+        .render_over(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &card,
+            },
+            &layer,
+        )
+        .expect("the card draws");
+    let shown = [crate::tests::item(
+        &layer,
+        Placement::Legacy(crate::LegacyTransform::IDENTITY),
+        Crop::NONE,
+        1.0,
+    )];
+    let shot = render(compositor, &shown);
+    assert_near(rgb(&shot, 80, 50), FRONT, (80, 50));
+    compositor
+        .draw_shared_models(&layer, &shared)
+        .expect("the model draws");
+    let screen = [Item {
+        camera: None,
+        ..crate::tests::item(
+            &white,
+            Placement::Geometry(boxed(80.0, 50.0, 60.0)),
+            Crop::NONE,
+            1.0,
+        )
+    }];
+    compositor
+        .render_over(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &screen,
+            },
+            &layer,
+        )
+        .expect("the screen item draws");
+    let shown = [crate::tests::item(
+        &layer,
+        Placement::Legacy(crate::LegacyTransform::IDENTITY),
+        Crop::NONE,
+        1.0,
+    )];
+    let shot = render(compositor, &shown);
+    assert_near(rgb(&shot, 80, 50), [255, 255, 255], (80, 50));
+}
+
+/// An unlit built-in shape. `blended` is a blended material, so the item does not occlude.
+fn unlit_shape(shape: Shape, color: [f32; 4], blended: bool) -> Model {
+    shape
+        .model(Material {
+            base_color: color,
+            unlit: true,
+            alpha_mode: if blended {
+                AlphaMode::Blend
+            } else {
+                AlphaMode::Opaque
+            },
+            ..Material::default()
+        })
+        .expect("the shape builds")
+}
+
+/// A thin rod on the cube's centre, `depth` along the view, tilted flat along that axis.
+fn rod_through(depth: f32) -> ItemGeometry {
+    let mut geometry = ItemGeometry::try_new(
+        Vec2::new(80.0, 50.0).expect("finite"),
+        Size::try_new(8.0, 150.0).expect("positive"),
+    )
+    .expect("a box");
+    geometry.tilt_deg = finite(90.0);
+    geometry.depth_px = finite(depth);
+    // Stretch, so the long box axis is the rod's length. Fit would scale it down to
+    // the short side and the rod would be a disc.
+    geometry.fit_mode = FitMode::Stretch;
+    geometry
+}
+
+/// The colour where the rod's axis at local `y` (−0.5 to 0.5) lands on `shot`.
+fn rod_pixel(
+    shot: &Snapshot,
+    model: &Model,
+    geometry: ItemGeometry,
+    view: &jstream_protocol::CameraView,
+    y: f32,
+) -> ((u32, u32), [u8; 3]) {
+    let bounds = model.bounds();
+    let solid = geometry
+        .solid(
+            jstream_protocol::SolidBounds {
+                min: bounds.min,
+                max: bounds.max,
+            },
+            Some(view),
+        )
+        .expect("placed");
+    let jstream_protocol::Placed::At(at) = solid.place([0.0, y, 0.0]) else {
+        panic!("the sample is behind the camera");
+    };
+    let px = (at.x.round() as u32, at.y.round() as u32);
+    (px, rgb(shot, px.0, px.1))
+}
+
+/// Draws every model into one colour and depth target (ADR-0257), then reads that
+/// target over black. `opacity` and `blend` are the item's.
+fn composite_models(
+    compositor: &mut Compositor,
+    camera: &SceneCamera,
+    models: &[(&Model, ItemGeometry, f32, crate::BlendMode)],
+) -> Snapshot {
+    let uploaded: Vec<_> = models
+        .iter()
+        .map(|(model, _, _, _)| compositor.upload_model(model).expect("uploads"))
+        .collect();
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let shared: Vec<SharedModel<'_>> = models
+        .iter()
+        .enumerate()
+        .map(|(i, (_, geometry, opacity, blend))| SharedModel {
+            draw: ModelDraw {
+                model: &uploaded[i],
+                geometry: *geometry,
+                camera: Some(*camera),
+                lighting: Lighting::Unlit,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+                materials: &[],
+                textures: &[],
+                reflection: None,
+                probe: None,
+            },
+            opacity: *opacity,
+            blend: *blend,
+        })
+        .collect();
+    compositor
+        .draw_shared_models(&layer, &shared)
+        .expect("the models draw");
+    let items = [crate::tests::item(
+        &layer,
+        Placement::Legacy(crate::LegacyTransform::IDENTITY),
+        Crop::NONE,
+        1.0,
+    )];
+    render(compositor, &items)
 }
 
 /// ADR-0107 decision 7 (#1601): a card seen through the camera, drawn after a nearer

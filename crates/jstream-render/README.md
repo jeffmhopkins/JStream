@@ -15,7 +15,7 @@ a single canvas.
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "crates/jstream-platform/README.md#gpu-frames"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0257-models-in-one-scene-are-one-depth.md", "crates/jstream-platform/README.md#gpu-frames"]
 -->
 
 One scene, composited on the GPU with wgpu
@@ -63,7 +63,12 @@ and calls this crate.
   ([ADR-0242](../../docs/adr/0242-3d-models-are-drawn-multisampled.md)).
   The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
-  at the model's centre.
+  at the model's centre, or over the part of the canvas the layer holds
+  ([ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)).
+  When another model in the scene is drawn the same way, those models are not drawn into
+  their layers: they share the scene's colour and depth
+  ([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)). One that keeps
+  the layer is tested when the scene composites it, as that record describes.
 - A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
   `Compositor::draw_sky(sky, target)` draws a scene's environment sky (`SkyDraw`: the
   `Environment`, the camera, the stars, the deep sky, the warp and travel, and an opacity) into a canvas-sized layer, every
@@ -419,7 +424,7 @@ steps stay in
 ## Design
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
-depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
+depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0257-models-in-one-scene-are-one-depth.md"]
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -567,17 +572,28 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    texels its polygon's bounding box covers (a texel of margin, clipped) are copied
    into the backdrop, a grow-only `Rgba16Float` texture, and a new pass draws the item,
    whose `fs_<mode>` loads the backdrop at its own pixel and writes the W3C composite
-   with blending off, and the items after it (ADR-0082). No depth buffer, unless an
-   item carries a model's depth (`Item::depth`, ADR-0107 decision 7): then `load` sets
+   with blending off, and the items after it (ADR-0082).    No depth buffer, unless an
+   item carries a model's depth (`Item::depth`, ADR-0107 decision 7), or the pass resumes
+   over models drawn into the scene depth (ADR-0257): then `load` sets
    `depth_on`, makes the scene depth target (`Depth32Float`, kept per canvas size) and,
    the first time, `DepthPipelines` (every blend pipeline in both spaces again, tested
-   `GreaterEqual` or `Always`, and `depth_writer`). The pass clears it to 0 (it starts
-   cleared rather than wiped then), the model's layer draws untested and then
-   `fs_write_depth` writes `NEAR_W` times its depth image's `1 / w` where that isn't 0,
-   loaded texel for texel, and every other item seen through a camera (an item with no
-   camera is on the screen, outside the models' space, and draws untested) tests its own `NEAR_W / w` (the vertex
-   shader's clip z, `min(NEAR_W, w)`) against it without writing
-   (`golden_model_a_card_behind_a_model_is_hidden_by_its_depth`). Otherwise
+   `GreaterEqual` or `Always`, the same again as `fs_model` for a model layer that shares
+   the depth, writing it or only testing, and `depth_writer`). A pass that starts the
+   target clears the depth to 0. One that resumes over models already drawn into it
+   (`Compositor::render_over`) loads the colour and the depth. Models that share the scene
+   were drawn into both by `Compositor::draw_shared_models` before that resume (ADR-0257):
+   opaque primitives of every one, then transparent primitives far to near. The layer
+   then names no content box (`Image::mark_everywhere`): the models can cover any texel,
+   so a filter reads the whole picture rather than the cards drawn over them. A model that
+   kept its layer is drawn by `fs_model`, which loads its view depth texel for texel and
+   writes `NEAR_W` times that `1 / w` (0, the far plane, where the texel is empty, including
+   a blended fragment under half opacity) as `frag_depth`. An occluder writes it; a blended
+   or additive layer only tests. Every other item seen through a camera (an item with no
+   camera is on the screen, outside the models' space, and draws untested) tests its own
+   `NEAR_W / w` (the vertex shader's clip z, `min(NEAR_W, w)`) against the scene depth
+   without writing
+   (`a_shared_model_hides_a_farther_card`,
+   `models_in_one_scene_occlude_each_other_per_pixel`). Otherwise
    stacking order is draw order, except that `prepare` sorts each run of consecutive
    items that share one camera with `depth_sort` on and one `Item.depth_run` (a
    transition gives a stinger's items their own), far to near by the depth of their
@@ -1002,7 +1018,11 @@ where two lie in one plane both pass the equal test and the later draw replaces 
 earlier, so that order shows the first of them, as before (inside one primitive the
 triangles still draw in index order, so of two of its own in one plane the later shows)
 (`golden_model_opaque_primitives_show_the_nearest_in_any_order_and_the_first_in_a_plane`).
-Blended primitives follow, far to near by their centres, testing without writing. There
+Blended primitives follow, far to near by their centres, testing without writing. Across
+models that share a scene, that order is one list: every model's opaque primitives, then
+every transparent primitive far to near, into the scene's colour and depth (ADR-0257).
+A model that keeps a layer of its own still has this depth to itself, and the scene
+tests the layer afterwards, as ADR-0257 records for that path. There
 is no cull: a mirrored map (`Solid::mirrored`) swaps which face is the front, so the
 shader discards back faces itself unless the material is double-sided. A back face of a
 double-sided material turns its normal and tangent over together, so a normal map tilts

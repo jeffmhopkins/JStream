@@ -129,8 +129,8 @@ they judge each scene by its frame rate and mean frame time, and leave the share
 frames over budget at 100%, because that share flips for any scene drawing near the
 33 ms budget. The base scene has a tighter frame-time bar, so a regression in a frame's
 fixed cost shows there first. The scenes that software rendering makes slow (a 1080p
-blur, glow, shadow, outline, sharpen, key or scroll, the models, many item effects, a
-scene chain, six scenes nested in browser-style blending) have their own looser limits. An unknown key fails, so a typo can't turn
+blur, glow, shadow, outline, sharpen, key or scroll, a 1080p apply_lut, the models, many item effects, a
+scene chain, six scenes nested in browser-style blending) have their own looser limits. An apply_lut still draws at about 15 fps on a fast runner and under the default 10 on a slow one, the same ratio as the one-colour baseline, so its floor is 7 fps, under that slow run. An unknown key fails, so a typo can't turn
 a limit off.
 
 `bench/gates-lavapipe.json` holds the `--bench` gates for the same runner: the bench's
