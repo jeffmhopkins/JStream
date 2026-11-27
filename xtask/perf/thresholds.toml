@@ -90,5 +90,5 @@ max_frame_ms = 250
 # (8 ms, then 12 ms). The default floor of 10 fails the slow runner. Half of that slow
 # run still catches a scene that stops drawing.
 [scene.vf_apply_lut]
-min_fps = 5
-max_frame_ms = 250
+min_fps = 7
+max_frame_ms = 200

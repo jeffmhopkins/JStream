@@ -2712,16 +2712,17 @@ map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
 the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
-model that shares the scene is not drawn again there: its opaque fragments are already in the
-scene depth, and `Compositor::blend_scene_depth` max-blends that into the view depth
-afterwards
-([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)), so it is not drawn
-again for the filters. It does not carry `Item::depth`. That image is allocated and never
-drawn, and copying it would paint the model's screen bounds with undefined depth. The box
-step marks the model's own layer empty (`Image::mark_undrawn`) for the same reason, and
-draws the shadow maps then, before a later chain replaces the pictures they read. After
-the shared pass the composite names no content box, so a scene filter reads the whole
-picture
+model that shares the scene does not carry `Item::depth`, so the view depth is not a
+copy of its private depth image. `draw_model_depth` poses the mesh into the view depth,
+and `Compositor::blend_scene_depth` max-blends the scene depth under that
+([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)). That draw stays
+in linear light even when the canvas blends in sRGB. An sRGB pass decodes its target
+when it finishes, and decoding the models' linear texels would darken the scene under
+a bloom (`warp_show_bloom_does_not_darken_a_rectangle_over_the_ship`, when the warp
+models are on disk). The private layer and depth are cleared to transparent. The box
+step draws the shadow maps then, before a later chain replaces the pictures they read.
+After the shared pass the composite names no content box, so a scene filter reads the
+whole picture
 (`a_scene_filter_ignores_an_additive_plumes_undrawn_depth`). A model that keeps a layer carries its `GpuKey::ModelDepth` at any
 opacity (`Item::depth`), so the composite can test it
 ([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)), and

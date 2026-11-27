@@ -216,7 +216,8 @@ struct DepthPipelines {
 /// while a later submit still holds the view is a use of a freed GPU resource.
 struct SceneDepth {
     size: (u32, u32),
-    /// The view keeps its texture alive for every submit that attaches it.
+    /// wgpu 30's `TextureView` owns its `Texture` (`texture_view.rs`), so the view
+    /// keeps the image alive for every submit that attaches it.
     view: wgpu::TextureView,
 }
 
