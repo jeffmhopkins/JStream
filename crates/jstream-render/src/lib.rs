@@ -4,7 +4,7 @@
 //! Layer 2: no `unsafe`. The scene graph is the same layer, so the engine builds the
 //! [`Scene`] snapshot and calls in.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, crates/jstream-render/README.md#purpose, crates/jstream-render/README.md#design, crates/jstream-render/README.md#filters, crates/jstream-render/README.md#testing, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0107-3d-models.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, crates/jstream-render/README.md#purpose, crates/jstream-render/README.md#design, crates/jstream-render/README.md#filters, crates/jstream-render/README.md#testing, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0107-3d-models.md, docs/adr/0256-models-in-one-scene-share-a-depth.md
 
 #![forbid(unsafe_code)]
 

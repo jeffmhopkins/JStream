@@ -293,6 +293,7 @@ fn cards(images: &[Image]) -> Vec<Item<'_>> {
                 camera: Some(camera),
                 depth_run: 0,
                 depth: None,
+                occludes: false,
             }
         })
         .collect()

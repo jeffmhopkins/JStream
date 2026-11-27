@@ -2219,7 +2219,7 @@ The engine keeps the keyframe each placed scene is switched to
 ## Snapshots
 <!-- @section
 covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
-depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
+depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry", "docs/adr/0256-models-in-one-scene-share-a-depth.md"]
 -->
 
 `video.snapshot` returns the program mix as a PNG
@@ -2711,8 +2711,11 @@ map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
 the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
-model's item carries its `GpuKey::ModelDepth` layer there (`Item::depth`), and
-`Compositor::render_view_depth` writes that layer into the view depth, so the model's
+model's item carries its `GpuKey::ModelDepth` layer at any opacity (`Item::depth`), so the
+composite can test a faded model against the others
+([ADR-0256](../../docs/adr/0256-models-in-one-scene-share-a-depth.md)), and
+`Compositor::render_view_depth` writes that layer into the view depth only at half opacity
+or more, so the model's
 geometry, drawn once into that layer with its colour, isn't drawn a second time for the
 scene's filters; a shadow map and a floor reflection, which see it through another
 camera, draw it posed as its layer is (`depth_models`). `Chains::drew_depth`

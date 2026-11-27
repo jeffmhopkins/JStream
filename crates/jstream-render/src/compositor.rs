@@ -37,6 +37,7 @@ const MINIFIED: f32 = 1.15;
 /// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
 const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 
+#[derive(Clone)]
 struct Draw {
     index: usize,
     first_vertex: u32,
@@ -202,6 +203,11 @@ struct Backdrop {
 struct DepthPipelines {
     tested: [BlendPipelines; 2],
     untested: [BlendPipelines; 2],
+    /// Model layers that share the scene depth and write it (ADR-0256): opaque models.
+    share_write: [BlendPipelines; 2],
+    /// Model layers that share the scene depth and only test it: blended, additive,
+    /// or under full opacity.
+    share_test: [BlendPipelines; 2],
     writer: wgpu::RenderPipeline,
 }
 
@@ -2321,6 +2327,9 @@ impl Compositor {
                 reach,
             });
         }
+        // Opaque models first, so a blended or additive model drawn after them is
+        // tested against every occluder, whichever centre sorts nearer (ADR-0256).
+        self.pull_occluders_forward(scene);
         let limit = self.gpu.max_texture_dimension_2d;
         let width = scene.canvas.width();
         let height = scene.canvas.height();
@@ -2333,6 +2342,40 @@ impl Compositor {
             });
         }
         Ok(())
+    }
+
+    /// Draws occluding models before the other items of their depth run (ADR-0256).
+    /// Far-to-near order is kept within each group, so two solids still meet nearest-wins
+    /// and a card keeps its place among the items that do not occlude.
+    fn pull_occluders_forward(&mut self, scene: &Scene<'_>) {
+        let occluder = |draw: &Draw| {
+            let item = &scene.items[draw.index];
+            item.depth.is_some()
+                && item.camera.is_some()
+                && item.occludes
+                && item.blend == BlendMode::Normal
+                && item.opacity >= 1.0
+        };
+        let mut start = 0;
+        while start < self.draws.len() {
+            let item = &scene.items[self.draws[start].index];
+            let run = (item.camera, item.depth_run);
+            let mut end = start + 1;
+            while end < self.draws.len() {
+                let other = &scene.items[self.draws[end].index];
+                if (other.camera, other.depth_run) != run {
+                    break;
+                }
+                end += 1;
+            }
+            if self.draws[start..end].iter().any(occluder) {
+                let mut ranked = self.draws[start..end].to_vec();
+                // Stable, so equal keys keep the far-to-near order already in the run.
+                ranked.sort_by_key(|draw| usize::from(!occluder(draw)));
+                self.draws[start..end].clone_from_slice(&ranked);
+            }
+            start = end;
+        }
     }
 
     fn stage_sources(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
@@ -2755,9 +2798,13 @@ impl Compositor {
                 [false, true]
                     .map(|encoded| BlendPipelines::new(device, &layouts(encoded), Some(compare)))
             };
+            let share =
+                |encoded, write| BlendPipelines::sharing_depth(device, &layouts(encoded), write);
             self.depth_pipelines = Some(DepthPipelines {
                 tested: set(wgpu::CompareFunction::GreaterEqual),
                 untested: set(wgpu::CompareFunction::Always),
+                share_write: [false, true].map(|encoded| share(encoded, true)),
+                share_test: [false, true].map(|encoded| share(encoded, false)),
                 writer: blend::depth_writer(device, &layouts(false)),
             });
         }
@@ -2986,17 +3033,25 @@ impl Compositor {
             let encoded = self.blending == Blending::Srgb;
             let item = &scene.items[draw.index];
             let model_depth = item.depth;
-            // With a depth target, a model's own layer draws untested and every other
-            // item seen through a camera tests against the models drawn before it
-            // (ADR-0107 decision 7). An item on the screen itself (no camera) isn't in
-            // the models' space, so a near model never hides it.
-            let untested = model_depth.is_some() || item.camera.is_none();
+            // A model seen through the camera shares the scene depth (ADR-0256): its
+            // colour is tested per texel against the models drawn before it. One not
+            // seen through a camera, and an item on the screen itself, is not in that
+            // space. A card is tested against the occluders already drawn (ADR-0107
+            // decision 7) and does not write.
+            let share = model_depth.filter(|_| item.camera.is_some());
+            let writes = share.is_some()
+                && item.occludes
+                && item.blend == BlendMode::Normal
+                && item.opacity >= 0.5;
+            let untested = share.is_none() && (model_depth.is_some() || item.camera.is_none());
             let depths = self.depth_pipelines.as_ref().filter(|_| self.depth_on);
-            let blends = match depths {
-                Some(depths) if untested => &depths.untested[usize::from(encoded)],
-                Some(depths) => &depths.tested[usize::from(encoded)],
-                None if encoded => &self.encoded_blends,
-                None => &self.blends,
+            let blends = match (depths, share.is_some(), writes) {
+                (Some(depths), true, true) => &depths.share_write[usize::from(encoded)],
+                (Some(depths), true, false) => &depths.share_test[usize::from(encoded)],
+                (Some(depths), false, _) if untested => &depths.untested[usize::from(encoded)],
+                (Some(depths), false, _) => &depths.tested[usize::from(encoded)],
+                (None, _, _) if encoded => &self.encoded_blends,
+                (None, _, _) => &self.blends,
             };
             let Ok(steps) = blends.steps(draw.blend) else {
                 continue;
@@ -3006,6 +3061,11 @@ impl Compositor {
                     for pipeline in pipelines {
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, bind_group, &[]);
+                        if let Some(depth) = share {
+                            // Group 1 is unused colour, so group 2 can be the depth.
+                            pass.set_bind_group(1, bind_group, &[]);
+                            pass.set_bind_group(2, depth.bind_group(), &[]);
+                        }
                         pass.draw(vertices.clone(), 0..1);
                     }
                 }
@@ -3016,11 +3076,18 @@ impl Compositor {
                     pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, bind_group, &[]);
                     pass.set_bind_group(1, &backdrop.bind, &[]);
+                    if let Some(depth) = share {
+                        pass.set_bind_group(2, depth.bind_group(), &[]);
+                    }
                     pass.draw(vertices.clone(), 0..1);
                 }
             }
-            // Then the model's depth, over the same triangles, for what draws after it.
-            if let (Some(depths), Some(model_depth)) = (depths, model_depth) {
+            // A model that shares the depth already wrote it with its colour, where it
+            // occludes. One that does not (no camera) still writes afterwards, so a card
+            // drawn later can test it (ADR-0107 decision 7).
+            if share.is_none()
+                && let (Some(depths), Some(model_depth)) = (depths, model_depth)
+            {
                 pass.set_pipeline(&depths.writer);
                 pass.set_bind_group(0, model_depth.bind_group(), &[]);
                 pass.draw(vertices, 0..1);

@@ -202,10 +202,17 @@ pub struct Item<'a> {
     /// When a scene has one, its pass gets a depth target: this item writes the model's
     /// depth there after drawing, and every item seen through a camera that draws after
     /// it is hidden where the model is nearer. An item with no camera (drawn on the
-    /// screen itself) isn't tested either. A model's layer itself isn't tested, so
-    /// models still order among themselves by their centres. `None` for every other
-    /// item, and in a scene with none of them nothing changes.
+    /// screen itself) isn't tested either. Models in one 3D scene test this per pixel
+    /// against one depth (ADR-0256), so two that pass through each other hide each
+    /// other where each is nearer. `None` for every other item, and in a scene with
+    /// none of them nothing changes.
     pub depth: Option<&'a Image>,
+    /// Whether a model with [`Self::depth`] writes that depth. A solid model in
+    /// `normal` does: its opaque surfaces occlude other models and the cards drawn
+    /// after it. A model with a blended material, or a blend other than `normal`
+    /// (an additive plume), does not: it is drawn after the occluders, tested
+    /// against them, and does not hide what follows. Ignored when `depth` is `None`.
+    pub occludes: bool,
 }
 
 /// One scene: a canvas, its clear colour, and items bottom-first.

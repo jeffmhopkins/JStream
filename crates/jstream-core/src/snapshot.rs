@@ -27,7 +27,7 @@ use jstream_graph::{
     Filter, Graph, Item as GraphItem, Output as GraphOutput, Placement as GraphPlacement,
     Scene as GraphScene, Source, State,
 };
-use jstream_media::model::Lighting;
+use jstream_media::model::{AlphaMode, Lighting};
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
@@ -7125,6 +7125,7 @@ pub(crate) fn compose_metered(
                             camera: None,
                             depth_run: 0,
                             depth: None,
+                            occludes: false,
                         }
                     })
                     .collect();
@@ -7761,6 +7762,7 @@ fn draw_box(
         camera: None,
         depth_run: 0,
         depth: None,
+        occludes: false,
     }];
     let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
         what: "item box",
@@ -7883,6 +7885,7 @@ fn light_card(
                 camera: None,
                 depth_run: 0,
                 depth: None,
+                occludes: false,
             }];
             let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
                 what: "item box",
@@ -9902,6 +9905,7 @@ fn sky_item(image: &jstream_render::Image) -> Item<'_> {
         camera: None,
         depth_run: 0,
         depth: None,
+        occludes: false,
     }
 }
 
@@ -9933,6 +9937,7 @@ fn layer_item<'a>(
         camera,
         depth_run: 0,
         depth: posed.depth,
+        occludes: posed.occludes,
     })
 }
 
@@ -9950,6 +9955,8 @@ struct LayerPose<'a> {
     blend: BlendMode,
     /// A model's own depth layer, as [`Item::depth`] carries it.
     depth: Option<&'a jstream_render::Image>,
+    /// Whether that depth occludes other models (ADR-0256).
+    occludes: bool,
 }
 
 /// [`LayerPose`] of `layer`; `None` for a layer that draws nothing at `at`. `extent` is
@@ -9983,6 +9990,7 @@ fn layer_pose<'a>(
             opacity: sampled.opacity,
             blend: sampled.blend,
             depth: None,
+            occludes: false,
         });
     }
     let (placement, crop) = live.apply(layer);
@@ -9990,14 +9998,17 @@ fn layer_pose<'a>(
     let (item, modifiers) = &layer.motion.to;
     let by = shot.motion_at(item, modifiers, at);
     let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
-    // A model's own depth, in a 3D scene, when it is at least half opaque, as the
-    // view depth takes it (ADR-0107 decision 7).
+    // A model's own depth, in a 3D scene (ADR-0107 decision 7, ADR-0256). Carried at
+    // any opacity so a faded plume is still tested against the hull; the view depth
+    // and a scene-depth write still require half opacity, where those passes check.
     let depth = match (&layer.boxed, layer.image.boxed_item(), camera) {
-        (Some(boxed), Some((scene, item)), Some(_)) if boxed.model && opacity >= 0.5 => {
+        (Some(boxed), Some((scene, item)), Some(_)) if boxed.model => {
             cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
         }
         _ => None,
     };
+    let occludes =
+        depth.is_some() && layer.blend == BlendMode::Normal && model_occludes(shot, &layer.image);
     let (placement, crop) = match &layer.boxed {
         // A model's layer is in the canvas's pixels; it sorts by the model's pose.
         Some(boxed) if boxed.model => match placement {
@@ -10028,7 +10039,33 @@ fn layer_pose<'a>(
         opacity,
         blend: layer.blend,
         depth,
+        occludes,
     })
+}
+
+/// Whether the model `image` places writes depth (ADR-0256): it has no blended
+/// material. A missing model is treated as solid. The item's blend and opacity are
+/// checked where the layer is drawn.
+fn model_occludes(shot: &Shot, image: &GpuKey) -> bool {
+    let Some((scene, item)) = image.boxed_item() else {
+        return true;
+    };
+    let blended = shot
+        .boxes
+        .get(&ChainOwner::Item(scene.clone(), item.clone()))
+        .and_then(|boxed| match &boxed.source {
+            SourceRef::Frame(id) => shot.frames.get(id),
+            _ => None,
+        })
+        .and_then(|frame| frame.model.as_ref())
+        .is_some_and(|shown| {
+            shown
+                .model
+                .materials()
+                .iter()
+                .any(|material| matches!(material.alpha_mode, AlphaMode::Blend))
+        });
+    !blended
 }
 
 /// A show scene item's pose at `at` on a canvas of `size`, on its way in or out by
@@ -10625,6 +10662,7 @@ fn fill_tracks<'a>(
                     // A stinger's items sort on their own, over the scenes under them.
                     depth_run: transition.cameras.depth_run(track, *seen),
                     depth: None,
+                    occludes: false,
                 })
             }),
     );
@@ -10781,6 +10819,7 @@ fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> It
         camera: None,
         depth_run: 0,
         depth: None,
+        occludes: false,
     }
 }
 
