@@ -2719,7 +2719,8 @@ and `Compositor::blend_scene_depth` max-blends the scene depth under that
 in linear light even when the canvas blends in sRGB. An sRGB pass decodes its target
 when it finishes, and decoding the models' linear texels would darken the scene under
 a bloom (`warp_show_bloom_does_not_darken_a_rectangle_over_the_ship`, when the warp
-models are on disk). The private layer and depth are cleared to transparent. The box
+models are on disk). The private layer and depth are cleared to transparent, and the
+layer names an empty box, so a composite draws none of it. The box
 step draws the shadow maps then, before a later chain replaces the pictures they read.
 After the shared pass the composite names no content box, so a scene filter reads the
 whole picture

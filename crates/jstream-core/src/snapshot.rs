@@ -8404,6 +8404,10 @@ fn clear_skipped_model(
         && let Some(scene) = blank(layer)
     {
         compositor.render_into(&scene, layer)?;
+        // An empty scene that the layer already holds is left as it is, and the
+        // `mark_everywhere` above would then leave the layer covering the whole frame.
+        // An empty box is what a composite trims away.
+        layer.mark_undrawn();
     }
     let ChainOwner::Item(_, item_id) = owner else {
         return Ok(());
