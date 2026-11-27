@@ -778,6 +778,203 @@ fn transparent_models_interleave_per_primitive() {
     );
 }
 
+/// A hull with a glass primitive still occludes. The glass must not stop the hull
+/// writing depth, and a faint additive plume is tested, not discarded as far.
+#[test]
+fn a_hull_with_glass_occludes_a_plume_and_a_faint_plume_in_front_shows() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let framing = SceneCamera::framing(canvas());
+    let camera = SceneCamera {
+        position: Vec3::new(110.0, 24.0, 150.0).expect("finite"),
+        ..framing
+    };
+    let view = camera.view(canvas()).expect("a view");
+    let cube = unlit_shape(Shape::Cube, [1.0, 0.0, 0.0, 1.0], false);
+    let mut hull = cube.primitives()[0].clone();
+    hull.material = 0;
+    let mut glass = cube.primitives()[0].clone();
+    for vertex in &mut glass.vertices {
+        // The left of the hull. The rod's centre samples stay on the opaque face.
+        vertex.position[0] = vertex.position[0] * 0.4 - 0.3;
+    }
+    glass.material = 1;
+    let ship = Model::new(
+        vec![hull, glass],
+        vec![
+            Material {
+                base_color: [1.0, 0.0, 0.0, 1.0],
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..Material::default()
+            },
+            Material {
+                base_color: [0.0, 1.0, 0.0, 0.4],
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..Material::default()
+            },
+        ],
+        vec![],
+    )
+    .expect("the ship builds");
+    let plume = unlit_shape(Shape::Cylinder, [0.0, 0.4, 1.0, 1.0], false);
+    let cube_geo = boxed(80.0, 50.0, 36.0);
+    let red = |pixel: [u8; 3]| pixel[0] > 200 && pixel[2] < 40;
+    for depth in [24.0_f32, -24.0] {
+        let geometry = rod_through(depth);
+        let shot = composite_models(
+            compositor,
+            &camera,
+            &[
+                (&ship, cube_geo, 1.0, crate::BlendMode::Normal),
+                (&plume, geometry, 1.0, crate::BlendMode::Additive),
+            ],
+        );
+        let behind = rod_pixel(&shot, &plume, geometry, &view, -0.35);
+        let front = rod_pixel(&shot, &plume, geometry, &view, 0.35);
+        assert!(
+            red(behind.1),
+            "depth {depth}: the hull hides the plume behind it at {:?}: {:?}",
+            behind.0,
+            behind.1
+        );
+        assert!(
+            front.1[2] > 60,
+            "depth {depth}: the plume in front of the hull shows at {:?}: {:?}",
+            front.0,
+            front.1
+        );
+        let faint = composite_models(
+            compositor,
+            &camera,
+            &[
+                (&ship, cube_geo, 1.0, crate::BlendMode::Normal),
+                (&plume, geometry, 0.2, crate::BlendMode::Additive),
+            ],
+        );
+        let behind = rod_pixel(&faint, &plume, geometry, &view, -0.35);
+        let front = rod_pixel(&faint, &plume, geometry, &view, 0.35);
+        assert!(
+            red(behind.1),
+            "faint depth {depth}: the hull hides the plume at {:?}: {:?}",
+            behind.0,
+            behind.1
+        );
+        assert!(
+            front.1[2] > 40,
+            "faint depth {depth}: the plume in front shows at {:?}: {:?}",
+            front.0,
+            front.1
+        );
+    }
+}
+
+/// Many models, many frames, one depth. A leak of a depth texture or a bind group
+/// would fail here, and the hull must still hide a plume after the run.
+#[test]
+fn many_models_share_one_depth_across_many_frames() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let framing = SceneCamera::framing(canvas());
+    let camera = SceneCamera {
+        position: Vec3::new(110.0, 24.0, 150.0).expect("finite"),
+        ..framing
+    };
+    let view = camera.view(canvas()).expect("a view");
+    let cube = unlit_shape(Shape::Cube, [1.0, 0.0, 0.0, 1.0], false);
+    let mut hull = cube.primitives()[0].clone();
+    hull.material = 0;
+    let mut glass = cube.primitives()[0].clone();
+    for vertex in &mut glass.vertices {
+        vertex.position[0] = vertex.position[0] * 0.4 - 0.3;
+    }
+    glass.material = 1;
+    let ship = Model::new(
+        vec![hull, glass],
+        vec![
+            Material {
+                base_color: [1.0, 0.0, 0.0, 1.0],
+                unlit: true,
+                ..Material::default()
+            },
+            Material {
+                base_color: [0.0, 1.0, 0.0, 0.3],
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..Material::default()
+            },
+        ],
+        vec![],
+    )
+    .expect("the ship builds");
+    let plume = unlit_shape(Shape::Cylinder, [0.0, 0.4, 1.0, 1.0], true);
+    let mut uploaded = Vec::new();
+    uploaded.push(compositor.upload_model(&ship).expect("ship"));
+    for _ in 0..19 {
+        uploaded.push(compositor.upload_model(&plume).expect("plume"));
+    }
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let ship_geo = boxed(80.0, 50.0, 36.0);
+    let plume_geo = rod_through(24.0);
+    for _frame in 0..30 {
+        let shared: Vec<SharedModel<'_>> = uploaded
+            .iter()
+            .enumerate()
+            .map(|(i, model)| SharedModel {
+                draw: ModelDraw {
+                    model,
+                    geometry: if i == 0 { ship_geo } else { plume_geo },
+                    camera: Some(camera),
+                    lighting: Lighting::Unlit,
+                    lights: None,
+                    shadows: &[],
+                    environment: None,
+                    floor: None,
+                    materials: &[],
+                    texture: None,
+                    reflection: None,
+                    probe: None,
+                },
+                opacity: if i == 0 { 1.0 } else { 0.2 },
+                blend: if i == 0 {
+                    crate::BlendMode::Normal
+                } else {
+                    crate::BlendMode::Additive
+                },
+            })
+            .collect();
+        compositor
+            .draw_shared_models(&layer, &shared)
+            .expect("the frame draws");
+    }
+    let shown = [crate::tests::item(
+        &layer,
+        Placement::Legacy(crate::LegacyTransform::IDENTITY),
+        Crop::NONE,
+        1.0,
+    )];
+    let shot = render(compositor, &shown);
+    let behind = rod_pixel(&shot, &plume, plume_geo, &view, -0.35);
+    let front = rod_pixel(&shot, &plume, plume_geo, &view, 0.35);
+    assert!(
+        behind.1[0] > 200 && behind.1[2] < 40,
+        "after many frames the hull still hides the plume at {:?}: {:?}",
+        behind.0,
+        behind.1
+    );
+    assert!(
+        front.1[2] > 40,
+        "after many frames the plume in front still shows at {:?}: {:?}",
+        front.0,
+        front.1
+    );
+}
+
 /// ADR-0257: a card seen through the same camera tests the depth the shared pass wrote.
 /// A nearer model hides it. An item with no camera is not in that space.
 #[test]

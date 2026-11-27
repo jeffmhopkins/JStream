@@ -605,8 +605,20 @@ impl GpuModel {
         self.inner.bounds
     }
 
-    /// `(view depth, primitive)` of the primitives a shared pass draws as transparent.
-    /// `force` includes the opaque materials, for an item that is itself transparent.
+    /// Whether any primitive is opaque or masked. Those write the shared depth even
+    /// when the model also has a blended material (ADR-0257).
+    pub(crate) fn has_opaque(&self) -> bool {
+        self.inner.primitives.iter().any(|primitive| {
+            !self
+                .inner
+                .materials
+                .get(primitive.material)
+                .is_some_and(|material| material.blended)
+        })
+    }
+
+    /// `(view depth, primitive)` of the blended primitives a shared pass draws after
+    /// the opaque ones. `force` includes the opaque materials too.
     pub(crate) fn transparent_order(&self, solid: &Solid, force: bool) -> Vec<(f64, usize)> {
         self.inner
             .primitives
@@ -638,20 +650,12 @@ impl std::fmt::Debug for GpuModel {
 pub struct SharedModel<'a> {
     /// The model, its pose and its lighting, as [`crate::Compositor::draw_model`] takes them.
     pub draw: ModelDraw<'a>,
-    /// The item's opacity, 0 to 4. Below 1 the model is transparent: it is depth tested
-    /// at each fragment and does not write depth.
+    /// The item's opacity, 0 to 4. It scales every fragment. Opaque primitives still
+    /// write depth; blended ones are only tested.
     pub opacity: f32,
     /// The item's blend. [`BlendMode::Additive`] adds the fragment; other modes composite
     /// it source-over.
     pub blend: BlendMode,
-}
-
-impl SharedModel<'_> {
-    /// Whether its opaque materials write the shared depth. A blended material, an
-    /// opacity below 1, or a blend other than `normal` is drawn in the transparent pass.
-    pub(crate) fn writes_depth(&self) -> bool {
-        self.opacity >= 1.0 && self.blend == BlendMode::Normal
-    }
 }
 
 /// One placement of a model: what [`crate::Compositor::draw_model`] draws.
@@ -2435,7 +2439,14 @@ impl ModelRuntime {
             // Inside one primitive its triangles still draw in index order, so of two
             // of its own triangles in one plane the later now shows.
             if draw_opaque && !matches!(phase, Some(SharePhase::Prepass)) {
-                pass.set_pipeline(opaque);
+                // An additive item's opaque parts (a hull copy on a plume) add their
+                // colour at the depth the prepass wrote, instead of replacing it.
+                let pipeline = if share.is_some_and(|share| share.blend == BlendMode::Additive) {
+                    &pipelines.additive_opaque
+                } else {
+                    opaque
+                };
+                pass.set_pipeline(pipeline);
                 for p in model.primitives.iter().rev().filter(is_opaque) {
                     draw_one(&mut pass, p);
                 }
@@ -2525,7 +2536,7 @@ impl ModelRuntime {
     /// Records the view depth of the model whose layer's pass just tested `depth` into
     /// `target` (ADR-0143 decision 4), as [`Self::draw_depth`] would draw it: the
     /// opaque primitives' nearest depth read from the tested one, then the blended
-    /// primitives at least half opaque drawn over it, the nearest kept, since the layer's
+    /// primitives drawn over it wherever they cover, the nearest kept, since the layer's
     /// pass tests them but writes no depth for them. Seen without a camera it holds
     /// nothing, as `draw_depth` draws nothing.
     fn record_view_depth(
@@ -2989,6 +3000,8 @@ struct LayerPipelines {
     /// Transparent primitives composited additively, depth tested and not written
     /// (ADR-0257). The plain blended pipeline is source-over.
     additive: wgpu::RenderPipeline,
+    /// Opaque primitives of an additive item, shaded where the prepass left them.
+    additive_opaque: wgpu::RenderPipeline,
 }
 
 /// The layer's pipelines drawn with `samples` (ADR-0242), of the model shader and its
@@ -3007,6 +3020,8 @@ fn layer_pipelines(
         Opaque,
         Blended,
         Additive,
+        /// Additive colour where the prepass left this primitive's depth.
+        AdditiveOpaque,
     }
     // With `surface`, the pass also has a surface buffer's three targets, which only
     // the opaque shading writes (`fs_with_surface`, ADR-0170 decision 4).
@@ -3028,7 +3043,7 @@ fn layer_pipelines(
         };
         let blend = match kind {
             Kind::Prepass => None,
-            Kind::Additive => Some(wgpu::BlendState {
+            Kind::Additive | Kind::AdditiveOpaque => Some(wgpu::BlendState {
                 color: wgpu::BlendComponent {
                     src_factor: wgpu::BlendFactor::One,
                     dst_factor: wgpu::BlendFactor::One,
@@ -3062,6 +3077,7 @@ fn layer_pipelines(
                 (Kind::Opaque, false) => "jstream-render-model-opaque",
                 (Kind::Blended, false) => "jstream-render-model-blended",
                 (Kind::Additive, _) => "jstream-render-model-additive",
+                (Kind::AdditiveOpaque, _) => "jstream-render-model-additive-opaque",
                 (Kind::Prepass, true) => "jstream-render-model-prepass-surface",
                 (Kind::Opaque, true) => "jstream-render-model-opaque-surface",
                 (Kind::Blended, true) => "jstream-render-model-blended-surface",
@@ -3097,7 +3113,7 @@ fn layer_pipelines(
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
                 depth_write_enabled: Some(kind == Kind::Prepass),
-                depth_compare: Some(if kind == Kind::Opaque {
+                depth_compare: Some(if kind == Kind::Opaque || kind == Kind::AdditiveOpaque {
                     wgpu::CompareFunction::Equal
                 } else {
                     wgpu::CompareFunction::Greater
@@ -3139,6 +3155,7 @@ fn layer_pipelines(
             pipeline(Kind::Blended, true),
         ],
         additive: pipeline(Kind::Additive, false),
+        additive_opaque: pipeline(Kind::AdditiveOpaque, false),
     }
 }
 
