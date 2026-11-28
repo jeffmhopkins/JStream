@@ -60,7 +60,21 @@ pub enum UserFolder {
     Documents,
     /// Downloads: screenshots are saved there, where a browser's download goes.
     Downloads,
+    /// Videos (`Movies` on macOS): the engine's own recordings folder is in it
+    /// (ADR-0262).
+    Videos,
 }
+
+/// The engine's own recordings folder, inside the person's Videos folder (ADR-0262):
+/// `Videos\JStream` on Windows, `~/Movies/JStream` on macOS, `~/Videos/JStream` (or
+/// `XDG_VIDEOS_DIR`'s) on Linux. A folder recording output with an empty folder records
+/// there.
+pub const RECORDINGS_DIR: &str = "JStream";
+
+/// The file in the data folder that keeps the encoding of the last recording the engine
+/// made, which a recording output with no encoder profile of its own records with
+/// (ADR-0262).
+pub const LAST_RECORDING_FILE: &str = "last-recording.json";
 
 /// Whether the exe in `exe_dir` is portable: a [`PORTABLE_MARKER`] file sits beside it.
 /// A portable JStream keeps its default project in its data folder too, so the whole
@@ -74,10 +88,10 @@ pub fn is_portable(exe_dir: Option<&Path>) -> bool {
 /// `None` on Windows, whose known-folder call finds it instead, and when `HOME` isn't
 /// absolute.
 ///
-/// macOS: `~/Documents` or `~/Downloads`. Linux: `XDG_DOCUMENTS_DIR` or
-/// `XDG_DOWNLOAD_DIR` in `$XDG_CONFIG_HOME/user-dirs.dirs` (else
-/// `~/.config/user-dirs.dirs`), as `xdg-user-dirs` writes them, else `~/Documents` or
-/// `~/Downloads`. A line that names the home folder itself, which the spec uses for a
+/// macOS: `~/Documents`, `~/Downloads` or `~/Movies`. Linux: `XDG_DOCUMENTS_DIR`,
+/// `XDG_DOWNLOAD_DIR` or `XDG_VIDEOS_DIR` in `$XDG_CONFIG_HOME/user-dirs.dirs` (else
+/// `~/.config/user-dirs.dirs`), as `xdg-user-dirs` writes them, else `~/Documents`,
+/// `~/Downloads` or `~/Videos`. A line that names the home folder itself, which the spec uses for a
 /// folder turned off, or a path that isn't absolute, is ignored.
 pub fn user_folder_for(
     folder: UserFolder,
@@ -93,8 +107,14 @@ pub fn user_folder_for(
     let (name, key) = match folder {
         UserFolder::Documents => ("Documents", "XDG_DOCUMENTS_DIR"),
         UserFolder::Downloads => ("Downloads", "XDG_DOWNLOAD_DIR"),
+        UserFolder::Videos => ("Videos", "XDG_VIDEOS_DIR"),
     };
     if cfg!(target_os = "macos") {
+        let name = if folder == UserFolder::Videos {
+            "Movies"
+        } else {
+            name
+        };
         return Some(home.join(name));
     }
     let config = var("XDG_CONFIG_HOME")
@@ -287,6 +307,10 @@ mod tests {
             user_folder_for(UserFolder::Downloads, env(&[("HOME", "/Users/me")]), none),
             Some(std::path::PathBuf::from("/Users/me/Downloads"))
         );
+        assert_eq!(
+            user_folder_for(UserFolder::Videos, env(&[("HOME", "/Users/me")]), none),
+            Some(std::path::PathBuf::from("/Users/me/Movies"))
+        );
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -302,7 +326,8 @@ mod tests {
         };
         let dirs = "# written by xdg-user-dirs-update\n\
                     XDG_DOCUMENTS_DIR=\"$HOME/Dokumente\"\n\
-                    XDG_DOWNLOAD_DIR=\"/mnt/dl\"\n";
+                    XDG_DOWNLOAD_DIR=\"/mnt/dl\"\n\
+                    XDG_VIDEOS_DIR=\"$HOME/Filme\"\n";
         assert_eq!(
             user_folder_for(UserFolder::Documents, &home, file(dirs)),
             Some(PathBuf::from("/h/Dokumente"))
@@ -310,6 +335,14 @@ mod tests {
         assert_eq!(
             user_folder_for(UserFolder::Downloads, &home, file(dirs)),
             Some(PathBuf::from("/mnt/dl"))
+        );
+        assert_eq!(
+            user_folder_for(UserFolder::Videos, &home, file(dirs)),
+            Some(PathBuf::from("/h/Filme"))
+        );
+        assert_eq!(
+            user_folder_for(UserFolder::Videos, &home, file("")),
+            Some(PathBuf::from("/h/Videos"))
         );
         // No file, a folder turned off (the home folder itself) or a relative path: the
         // usual name under home.

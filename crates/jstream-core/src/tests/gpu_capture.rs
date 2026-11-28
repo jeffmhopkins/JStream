@@ -2356,6 +2356,7 @@ fn an_output_started_after_a_gpu_fallback_reads_back_and_fails_nothing() {
                     kind: OutputKind::Record {
                         path: path.to_str().expect("a UTF-8 temp path").into(),
                         container: RecordContainer::Mp4,
+                        folder: false,
                     },
                 },
                 Edit::EncoderCreate {

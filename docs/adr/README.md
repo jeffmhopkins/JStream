@@ -262,4 +262,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0257](0257-models-in-one-scene-are-one-depth.md) | Models in one 3D scene are one depth | superseded | agent | [ADR-0259](0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md) |
 | [ADR-0258](0258-a-native-crash-writes-a-local-minidump-on-windows.md) | A native crash writes a local minidump on Windows | accepted | agent |  |
 | [ADR-0259](0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md) | Faded and additive models in the shared pass are transparent | accepted | agent |  |
+| [ADR-0262](0262-a-recording-output-records-into-a-folder.md) | A recording output records into a folder | accepted | agent |  |
 <!-- @generated end adr-index -->

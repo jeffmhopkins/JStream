@@ -9,7 +9,9 @@ use crate::audio;
 use crate::deps::{self, Node};
 use crate::keyframe;
 use crate::model::{Chains, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
-use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem};
+use crate::target::{
+    broadcast_id_problem, record_folder_problem, record_path_problem, rtmp_url_problem,
+};
 use crate::touched::Touched;
 use jstream_anim::Value as KeyValue;
 use jstream_protocol::{
@@ -1077,8 +1079,12 @@ fn apply_edit(
             }
             match kind {
                 OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
-                OutputKind::Record { path, container } => {
-                    check_record(path, *container, at)?;
+                OutputKind::Record {
+                    path,
+                    container,
+                    folder,
+                } => {
+                    check_record(path, *container, *folder, at)?;
                 }
                 OutputKind::VirtualCam => {}
                 OutputKind::Unknown => {
@@ -1125,16 +1131,24 @@ fn apply_edit(
                 .outputs
                 .get_mut(output_id)
                 .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
-            if let Some(problem) = record_path_problem(path) {
-                return Err(invalid(at, "path", problem));
-            }
-            let OutputKind::Record { path: current, .. } = &mut output.kind else {
+            let OutputKind::Record {
+                path: current,
+                folder,
+                ..
+            } = &mut output.kind
+            else {
+                if let Some(problem) = record_path_problem(path) {
+                    return Err(invalid(at, "path", problem));
+                }
                 return Err(invalid(
                     at,
                     "output_id",
                     "the output is not a recording output",
                 ));
             };
+            if let Some(problem) = record_target_problem(path, *folder) {
+                return Err(invalid(at, "path", problem));
+            }
             let old = std::mem::replace(current, path.clone());
             Ok(vec![Edit::OutputSetPath {
                 output_id: output_id.clone(),
@@ -1288,7 +1302,12 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
 }
 
 /// Checks a recording output's path and container.
-fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(), ProtocolError> {
+fn check_record(
+    path: &str,
+    container: RecordContainer,
+    folder: bool,
+    at: usize,
+) -> Result<(), ProtocolError> {
     match container {
         RecordContainer::Mp4 => {}
         RecordContainer::Unknown => {
@@ -1300,9 +1319,19 @@ fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(),
         }
         _ => return Err(unsupported(at, "kind.container", "this container")),
     }
-    match record_path_problem(path) {
+    match record_target_problem(path, folder) {
         Some(problem) => Err(invalid(at, "kind.path", problem)),
         None => Ok(()),
+    }
+}
+
+/// Why `path` is not acceptable for a recording output: a folder's rules when `folder`,
+/// else a file's.
+fn record_target_problem(path: &str, folder: bool) -> Option<&'static str> {
+    if folder {
+        record_folder_problem(path)
+    } else {
+        record_path_problem(path)
     }
 }
 

@@ -20,7 +20,7 @@ function audioRows(page) {
 
 /** Adds a recording through the Outputs panel's dialog; it gets the first free `output-N`. */
 async function addRecording(page) {
-  await addOutput(page, 'record', '/tmp/show.mp4');
+  await addOutput(page, 'record', '/tmp/shows');
 }
 
 const KINDS = [

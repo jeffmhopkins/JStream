@@ -1114,6 +1114,7 @@ mod tests {
             OutputKind::Record {
                 path: "/tmp/show.mp4".into(),
                 container: RecordContainer::Mp4,
+                folder: false,
             },
             state,
         )

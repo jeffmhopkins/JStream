@@ -66,6 +66,7 @@ mod projects;
 mod ptz;
 mod quality;
 mod reactive;
+mod recordings;
 mod rendering_file;
 mod resolution;
 mod runtime;

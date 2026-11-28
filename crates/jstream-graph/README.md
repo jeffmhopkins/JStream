@@ -116,7 +116,8 @@ protocol's types (`Overrides`).
 - `VideoMix`: a video mix, an ID, a name and the protocol's `VideoMix` (an input, a
   resolution and a divisor of the base frame rate).
 - `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL or to a YouTube
-  broadcast by its ID, a recording to an MP4 file, or the virtual camera, which has
+  broadcast by its ID, a recording into a folder, a new file each start, or to one MP4
+  file ([ADR-0262](../../docs/adr/0262-a-recording-output-records-into-a-folder.md)), or the virtual camera, which has
   nothing to check), the encoder profile it uses, if not the default (a virtual
   camera encodes nothing, so it ignores its profile), and the video mix it shows, if
   not the program (a virtual camera keeps the mix it names but shows the program). Whether it
@@ -288,10 +289,13 @@ that does not want to change the graph it has.
   `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`, in any case and with or without an extension,
   so `nul.mp4` too, by the rule of an asset path's last component), which Windows opens
   in place of a file; whether it is absolute on the engine's own machine, and
-  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
+  whether the file can be written, is the engine's check at `output.start`. A folder
+  recording's `path` (with `folder`, ADR-0262) is checked the same way, except that it
+  may be empty (the engine's own recordings folder), end in a separator or be a drive's
+  root, and only a DOS device name is refused as its last segment. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `output.set_path` (#1072) replaces a
-  recording's path, checked as in `output.create`, and fails with `invalid_argument` on
+  recording's path or folder, checked as in `output.create` by its own kind's rules, and fails with `invalid_argument` on
   any other output; it is undone by the previous path, and touches the output's target
   like `output.set_target`. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them, or

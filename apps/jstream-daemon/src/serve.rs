@@ -59,6 +59,26 @@ use {
 /// When the collection file can't be read, loaded or created, and where it is live,
 /// when a backend can't be created (the QPC or Mach clock, on macOS a release below
 /// the floor, on Linux neither PipeWire nor ALSA).
+/// The person's Videos folder: the shell's known folder on Windows, the environment's
+/// elsewhere. `None` when it can't be found.
+fn videos_folder() -> Option<std::path::PathBuf> {
+    let folder = jstream_platform::paths::UserFolder::Videos;
+    #[cfg(windows)]
+    {
+        match jstream_platform_windows::user_folder(folder) {
+            Ok(path) => Some(path),
+            Err(error) => {
+                tracing::warn!(%error, "could not find the Videos folder");
+                None
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        jstream_platform::paths::user_folder(folder)
+    }
+}
+
 pub fn engine(
     options: &Options,
     audit: Arc<dyn AuditSink>,
@@ -71,7 +91,14 @@ pub fn engine(
     if let Some(dir) = jstream_platform::paths::data_dir() {
         engine = engine
             .with_warm_file(dir.join(jstream_platform::paths::WARM_SCENES_FILE))
-            .with_rendering_file(dir.join(jstream_platform::paths::RENDERING_FILE));
+            .with_rendering_file(dir.join(jstream_platform::paths::RENDERING_FILE))
+            .with_last_recording_file(dir.join(jstream_platform::paths::LAST_RECORDING_FILE));
+    }
+    // A folder recording with no folder of its own records into `JStream` in the
+    // person's Videos folder (ADR-0262), as in the desktop app.
+    if let Some(videos) = videos_folder() {
+        engine =
+            engine.with_recordings_folder(videos.join(jstream_platform::paths::RECORDINGS_DIR));
     }
     if let Some(path) = &options.collection {
         // The error names the file and what is wrong with it.

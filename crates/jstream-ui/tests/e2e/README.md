@@ -100,8 +100,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Browse** (`browse.spec.js`): with the desktop global stubbed, an image file's
   Browse… stores a path under the collection folder as a collection path and a path
   outside it as absolute, hides the button for app assets, and leaves the field when
-  the stub cancels; a recording's add-output dialog and its settings dialog ask for a save dialog
-  and a stream has no button; Install plugin asks for a folder dialog and fills the path and
+  the stub cancels; a recording's add-output dialog and its settings dialog ask for a folder dialog
+  (each start records a new file into it, ADR-0262) and a stream has no button; Install plugin asks for a folder dialog and fills the path and
   the suggested id. A page with no desktop global has no Browse button. The native
   dialog itself is not opened: the stub returns the path.
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
@@ -150,7 +150,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): the panel is a
   compact list (health in its header, no form or library under the rows; a stream's row
   shows its host and encoder, the plain-rtmp ⚠ with the warning on hover, and why it
-  can't start; a double-click opens its settings); adding a stream and a recording
+  can't start; a double-click opens its settings; a recording's shows its folder and
+  "Last recording's" for its encoder); adding a stream and a recording into a folder
   through the add-output dialog, a stream added with its key starting at once; a stream can't start or go live until its key is set
   in its settings; the key never appears in the page, and a set key reads "Saved" with
   Replace…; a new output's Name field starting at output-1 and Stream picked;
@@ -170,9 +171,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   recordings but not a stream without its key (then off), Stop all beside it while they
   run, with a running row's stats
   line from a `stats.tick` (`statsTicks`) and none once stopped; Duplicate adding a copy
-  without the stream key and opening its settings, and a recording's copy writing to
-  "a (2).mp4"; an open dialog following another
-  client's path change until the person types their own; a second client sees outputs
+  without the stream key and opening its settings, and a recording's copy recording into
+  the same folder; an open dialog following another
+  client's folder change until the person types their own; a second client sees outputs
   created, started and deleted.
 - **Codec downloads** (`codec-downloads.spec.js`, in the Outputs panel's Encoders & mixes
   dialog): the mock

@@ -4981,6 +4981,7 @@ mod tests {
                     OutputKind::Record {
                         path: "/tmp/a.mp4".into(),
                         container: RecordContainer::Mp4,
+                        folder: false,
                     },
                 ),
                 output("cam", OutputKind::VirtualCam),

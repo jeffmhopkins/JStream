@@ -16,8 +16,8 @@ use std::fmt;
 
 /// What an output is and where it sends. Serialized with an internal `type` tag.
 ///
-/// RTMP(S) to a generic URL or a YouTube broadcast, recording to a file and the
-/// virtual camera are configurable so far.
+/// RTMP(S) to a generic URL or a YouTube broadcast, recording into a folder or to a
+/// file, and the virtual camera are configurable so far.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -27,10 +27,26 @@ pub enum OutputKind {
         /// The ingest server it publishes to.
         target: RtmpTarget,
     },
-    /// A recording to a file on the engine's machine.
+    /// A recording on the engine's machine: into a folder, a new file each start (since
+    /// 0.200, ADR-0262), or to one file.
     Record {
-        /// Where the finished recording goes: an absolute path on the engine's
-        /// machine, ending in a file name. While recording, the file is written as
+        /// Where the finished recordings go: with `folder`, the folder each start
+        /// writes a new file into, else the one file the recording writes. An absolute
+        /// path on the engine's machine.
+        ///
+        /// A folder output's start names its file `JStream_<date>_<time>.<ext>`
+        /// (`JStream_2026-11-28_10-17-30.mp4`), stamped with the engine machine's local
+        /// time when it starts, with `_2`, `_3`, … before the extension when that name
+        /// or its `.part` name is taken, so a recording never overwrites an earlier one.
+        /// The start makes the folder, and any missing parent, when it isn't there, and
+        /// fails with `action_failed` when it can't, or can't write the file there. An
+        /// empty `path` names the engine's own recordings folder: `JStream` in the
+        /// person's Videos folder (`Movies` on macOS), and a start fails with
+        /// `action_failed` on an engine that has none. Folder paths follow the file
+        /// rules below, but may end in a separator or name a drive's root, and their
+        /// last segment is not a file name, so only a DOS device name is refused there.
+        ///
+        /// Without `folder`: while recording, the file is written as
         /// `<path>.part` and renamed to `path` when the output stops. A recording never
         /// overwrites: `output.start` fails with `action_failed` when `path` or its
         /// `.part` name exists; `output.set_path` (since 0.74) points it at a new file.
@@ -46,6 +62,11 @@ pub enum OutputKind {
         path: String,
         /// The file format.
         container: RecordContainer,
+        /// Whether `path` is a folder that each start records a new file into (since
+        /// 0.200, ADR-0262). Absent means `false`, a single file, as from a client or
+        /// server older than 0.200, which reads a folder output's `path` as a file's.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        folder: bool,
     },
     /// The virtual camera: the program video, offered to other apps on the engine's
     /// machine as a webcam. Video only: it has no audio, no target and no stream key.
@@ -480,6 +501,7 @@ mod tests {
         let kind = OutputKind::Record {
             path: "/home/me/Videos/show.mp4".into(),
             container: RecordContainer::Mp4,
+            folder: false,
         };
         let wire = json!({
             "type": "record",
@@ -523,6 +545,7 @@ mod tests {
             Some(OutputKind::Record {
                 path: "/a.mkv".into(),
                 container: RecordContainer::Unknown,
+                folder: false,
             })
         );
     }

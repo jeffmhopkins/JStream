@@ -1943,6 +1943,7 @@ fn a_master_or_output_filters_asset_is_loaded_for_its_chain() {
                 kind: OutputKind::Record {
                     path: dir.join("show.mp4").display().to_string(),
                     container: RecordContainer::Mp4,
+                    folder: false,
                 },
             },
             grade(FilterOwner::Master),

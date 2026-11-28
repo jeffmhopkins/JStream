@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 23;
+pub const SCHEMA_VERSION: u32 = 24;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -65,8 +65,74 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
     v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16, v16_to_v17, v17_to_v18,
-    v18_to_v19, v19_to_v20, v20_to_v21, v21_to_v22, v22_to_v23,
+    v18_to_v19, v19_to_v20, v20_to_v21, v21_to_v22, v22_to_v23, v23_to_v24,
 ];
+
+/// Version 24 records into folders (ADR-0262): a recording output's `folder`. A version
+/// 23 recording output names one file, which can be recorded to only once, so each
+/// becomes a folder output into the file's folder, and a file with no recording output
+/// gains the default one ([`DEFAULT_RECORDING`](crate::DEFAULT_RECORDING), into the
+/// engine's own recordings folder), as a new collection has. A version 23 output that
+/// already has `folder` is refused, as version 23 refused it.
+fn v23_to_v24(value: &mut Value) -> Result<(), String> {
+    let Some(outputs) = value.as_object_mut().map(|file| {
+        file.entry("outputs")
+            .or_insert_with(|| Value::Array(Vec::new()))
+    }) else {
+        return Ok(());
+    };
+    let Some(outputs) = outputs.as_array_mut() else {
+        return Ok(());
+    };
+    let mut recordings = 0;
+    for output in outputs.iter_mut() {
+        let Some(kind) = output.get_mut("kind").and_then(Value::as_object_mut) else {
+            continue;
+        };
+        if kind.get("type").and_then(Value::as_str) != Some("record") {
+            continue;
+        }
+        if kind.contains_key("folder") {
+            return Err("a version 23 recording output has no `folder`".into());
+        }
+        recordings += 1;
+        if let Some(path) = kind.get("path").and_then(Value::as_str) {
+            let folder = parent_folder(path);
+            kind.insert("path".into(), Value::String(folder));
+        }
+        kind.insert("folder".into(), Value::Bool(true));
+    }
+    let taken = outputs
+        .iter()
+        .any(|o| o.get("id").and_then(Value::as_str) == Some(crate::DEFAULT_RECORDING));
+    if recordings == 0 && !taken {
+        let kind = serde_json::to_value(crate::default_recording_kind())
+            .map_err(|err| format!("the default recording output: {err}"))?;
+        let mut output = serde_json::Map::new();
+        output.insert("id".into(), Value::String(crate::DEFAULT_RECORDING.into()));
+        output.insert("kind".into(), kind);
+        outputs.push(Value::Object(output));
+    }
+    Ok(())
+}
+
+/// The folder a version 23 recording's file is in: `path` up to its last separator,
+/// keeping a root's (`/show.mp4` is in `/`, `C:\show.mp4` in `C:\`). A path with no
+/// separator, which no engine stored, is the engine's own recordings folder.
+fn parent_folder(path: &str) -> String {
+    match path.rfind(['/', '\\']) {
+        Some(at) => {
+            let folder = &path[..at];
+            let root = folder.is_empty() || (folder.len() == 2 && folder.ends_with(':'));
+            if root {
+                path[..=at].to_owned()
+            } else {
+                folder.to_owned()
+            }
+        }
+        None => String::new(),
+    }
+}
 
 /// Version 23 adds a scene's own folders (ADR-0222): a folder's `scene`, a keyframe
 /// scene's `folder` and a timeline's `folder`. A version 22 file has none of them, so it

@@ -26,6 +26,7 @@ mod organise;
 mod persist;
 mod plan;
 mod read;
+mod record;
 mod show;
 mod target;
 mod timeline;
@@ -44,6 +45,7 @@ pub use motion::{
     anim_modifiers, camera_anim_modifiers, effect_anim_modifiers, source_anim_modifiers,
 };
 pub use persist::{LoadError, SCHEMA_VERSION};
+pub use record::{DEFAULT_RECORDING, default_recording_kind};
 pub use touched::Touched;
 pub use value::{ValueRange, value_edit};
 

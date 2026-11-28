@@ -56,7 +56,9 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`;
+  `youtube_chat` preset open pages in), `with_recordings_folder` and
+  `with_last_recording_file` (folder recordings' own folder and the last recording's
+  encoding, `recordings.rs`, ADR-0262; see *Outputs*) and `with_collection_file`;
   `move_collection_file` (a host's default project moving, ADR-0163); `set_process_cpu`
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel`,
   `stop_jtunnel` and `jtunnel_stats` (the JTunnel receiver, off until a host starts
@@ -1036,7 +1038,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   a publish opener connecting that fake server on every start (start, media, stop,
   twice) and one that cannot connect, a recording output writing MP4 to a temp dir
   (renamed into place on stop, refused when the file exists or the path is not
-  absolute on this machine, no `.part` file left by a failed start), recording while
+  absolute on this machine, no `.part` file left by a failed start), a folder recording
+  output (ADR-0262) making its folder and recording each start to a new
+  `JStream_…mp4`, an empty folder recording into the engine's own folder or failing
+  without one, and a recording with no profile taking the last recording's encoding
+  (so no longer sharing the stream's session) and saving it to its file, recording while
   streaming on one shared encoder session (and separate sessions on separate
   profiles, and on a half-rate video mix held to its rate without being starved), a
   quality probe's checks (an unknown output, too many frames, a stopped output) and,
@@ -1386,7 +1392,9 @@ the tree under tokio with the same `all` feature), `png`
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
 source scopes), `blake3` (the digests a quarantine keeps of each blamed
 shader, ADR-0097, and a project's stream-key scope, a hash of its path, ADR-0121;
-already in the tree through `jstream-server`), `tracing` (see *Logging*) and, on Windows only,
+already in the tree through `jstream-server`), `jiff` (the local date and time a folder
+recording's file is named after, ADR-0262; already in the tree through
+`jstream-sources`), `tracing` (see *Logging*) and, on Windows only,
 `jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
 log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
 `src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
@@ -4323,7 +4331,16 @@ collection: it starts `stopped`, has no target and stays known whatever the coll
 holds. A live host reads a collection output's target with `output_kind` when its
 publish opener runs, as `jstream-daemon` does on Windows
 ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)). A recording output
-(`OutputKind::Record`) never calls the opener or takes a one-shot target.
+(`OutputKind::Record`) never calls the opener or takes a one-shot target. A folder
+recording output (`folder`, [ADR-0262](../../docs/adr/0262-a-recording-output-records-into-a-folder.md))
+names its file when its start opens, outside the engine's locks (`src/recordings.rs`
+and `jstream_outputs::record::new_recording_in`): it makes the folder, then takes the
+first free `JStream_<date>_<time>.mp4` there in the machine's local time, with `_2`,
+`_3`, … when the name or its `.part` name is taken, and logs the path at `info`. An
+empty folder is the engine's own, which the host names with `with_recordings_folder`;
+an engine without one, or a folder that is not absolute on this machine, fails the
+start with `action_failed` before the output goes `starting`, and a folder that can't
+be made or written fails it after.
 
 **Stream keys.** `with_key_store` injects the OS credential store
 (`jstream_platform::StreamKeyStore`). `output.set_key` checks that the output is in the
@@ -4352,7 +4369,10 @@ entries.
 
 **Encoder profiles.** An output's `encoder_profile` (collection state, set with
 `output.set_encoder`) picks the encoding its next start opens, or the protocol's
-`EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
+`EncoderProfile::DEFAULT` when it has none. A recording output with none takes the
+encoding the last recording started with instead (ADR-0262), which
+`with_last_recording_file` keeps in the host's file: each recording that becomes
+active saves its encoding there when it changed, and the engine reads it at startup. Running outputs share an encoder session
 when they have the same key: the video mix (or none, for the program at the canvas
 size and base rate), its resolution and rate, and the profile ID and its settings, all
 as they were at start. An output with its own video chain (`Output::has_video_chain`:
@@ -4933,7 +4953,11 @@ params); each sender's names (ADR-0181) are a leaf mutex, which `Receiver::set_n
 takes under the collection lock and the receiver's thread alone; its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
 lock held; `midi.last_controls` takes that leaf lock under the collection lock to read
-the inputs' latest control changes. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
+the inputs' latest control changes. Folder recordings' state (`Shared::recordings`,
+ADR-0262: the engine's own recordings folder and the last recording's encoding) is a
+leaf lock: `output.start` takes it alone for the fallback encoding, then under the
+collection and gate locks to resolve an empty folder, and alone again to note the
+encoding once the recording is active, writing the file after releasing it. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
 receiver's thread takes it alone to put a state message and set the watches on its key,
 `data.list` and `data.get` take it alone, outside the collection lock, a `grid`
 source's painter takes it under its own drawing lock to read its keys (on the paint
@@ -5193,7 +5217,8 @@ covers = ["crates/jstream-core/src/collection.rs", "crates/jstream-core/src/priv
 and replaces the engine's collection and `rev` with it; the outputs' runtime state
 follows, so a loaded output is `stopped`. With no file at `path` it saves the current
 collection there at once, with `Graph::with_sample_labels`'s four labels when it has
-none, still at its `rev`, and keeps that as the engine's collection, so the file and the
+none and `Graph::with_default_recording`'s `recording` output when it has no recording
+output (ADR-0262), still at its `rev`, and keeps that as the engine's collection, so the file and the
 engine agree and an unwritable path fails at startup rather than at the first change.
 A file that doesn't read or load is refused with `CollectionFileError` (`Read`, `Load`
 or `Create`, each naming the path but never the contents) and left as it is. A loaded
@@ -5226,7 +5251,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
 `collection.save_as` switch the file the engine saves to, and `collection.info` reports
 it; without one they answer `unsupported`. Each holds the collection file's mutex for the
 whole call. An open reads and loads the file into a graph with the engine's kinds and a
-new loads an empty one with the sample labels. Then the open file is saved, and a save
+new loads an empty one with the sample labels and the default `recording` output. Then the open file is saved, and a save
 that fails refuses the call. Then the new collection is written to its path before
 anything stops (a new one with `CollectionFile::create_new`, which never replaces a file),
 so a file that can't be read, loaded or written leaves everything as it was. Then pending

@@ -19,13 +19,13 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
 
   // A recording, which needs no stream key, started from the Outputs panel.
   await showPanel(page, 'Outputs');
-  await addOutput(page, 'record', '/tmp/stats.mp4');
+  await addOutput(page, 'record', '/tmp/stats');
   const row = outputRow(page, 'output-1');
   await expect(row.locator('.output-row-state')).toHaveText('Stopped');
 
   await expect(stats.locator('.stats-pill')).toHaveText('Ready');
   await expect(stats.locator('.stats-uptime')).toHaveText('--:--:--');
-  await expect(stats.locator('.stats-title')).toHaveAttribute('title', 'Record to /tmp/stats.mp4');
+  await expect(stats.locator('.stats-title')).toHaveAttribute('title', 'Record into /tmp/stats');
   await expect(stats).toContainText('H.264 · 8000 kbps CBR');
 
   await row.getByRole('button', { name: 'Start' }).click();

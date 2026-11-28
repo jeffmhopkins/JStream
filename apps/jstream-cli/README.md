@@ -171,7 +171,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
   which is the whole target of a generic RTMP output. `output.set_path <output-id>
-  <file-path>` points a recording output at another file (protocol 0.74). The CLI has
+  <path>` points a recording output at another file (protocol 0.74), or a folder
+  recording output at another folder (0.200). The CLI has
   no form for creating a recording output or a YouTube-bound one yet, and none of protocol 0.23's YouTube
   actions and queries. A URL argument of `output.create` or `output.set_target` without
   an `rtmp` or `rtmps` scheme is a usage error, which leaves other spellings free for later output kinds; the engine checks

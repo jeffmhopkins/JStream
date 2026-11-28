@@ -10,6 +10,10 @@
 //! other I/O error ends the recording with a typed [`RecordError`] and keeps the
 //! `.part` file.
 //!
+//! A folder recording output (ADR-0262) records each start to a new file that
+//! [`new_recording_in`] names in its folder, `JStream_<date>_<time>.mp4`, skipping names
+//! that are taken.
+//!
 //! ```no_run
 //! use jstream_mux::fmp4::Fmp4Config;
 //! use jstream_outputs::record::Recorder;
@@ -27,7 +31,9 @@
 //! Docs: crates/jstream-outputs/README.md#purpose
 
 mod error;
+mod folder;
 mod recorder;
 
 pub use error::RecordError;
+pub use folder::{RECORDING_PREFIX, new_recording_in, recording_name};
 pub use recorder::{RecordStats, Recorder, temp_path_for};

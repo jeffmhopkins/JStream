@@ -242,32 +242,48 @@ fn unexpected(asked: &str, got: &str) -> String {
 pub enum NewKind {
     /// A stream to an RTMP(S) server.
     Rtmp,
-    /// A recording to a file on the engine's machine.
+    /// A recording into a folder on the engine's machine: a new, timestamped file each
+    /// start (ADR-0262). An empty folder is the engine's own, `JStream` in Videos.
     Record,
+    /// A recording to one file, as a client older than protocol 0.200 made it. The
+    /// form never offers it; an existing one is edited as it is.
+    RecordFile,
     /// The virtual camera: the program as a webcam other apps on the engine's machine
     /// see.
     VirtualCam,
 }
 
 impl NewKind {
-    /// Whether the form needs a target (a server URL or a path) for this kind.
-    pub fn needs_target(self) -> bool {
+    /// Whether the output has a target (a server URL, a path or a folder) for this kind.
+    pub fn has_target(self) -> bool {
         !matches!(self, NewKind::VirtualCam)
+    }
+
+    /// Whether the form needs a target typed for this kind: a folder recording may
+    /// leave its folder empty for the engine's own.
+    pub fn needs_target(self) -> bool {
+        matches!(self, NewKind::Rtmp | NewKind::RecordFile)
+    }
+
+    /// Whether this kind is a recording.
+    pub fn is_record(self) -> bool {
+        matches!(self, NewKind::Record | NewKind::RecordFile)
     }
 }
 
-/// The `output.create` edit for a new output. `target` is the RTMP server URL or the
-/// recording's path, as the form took it; the engine validates it. A virtual camera
-/// takes none, so `target` is ignored.
+/// The `output.create` edit for a new output. `target` is the RTMP server URL, the
+/// recording's folder or its file's path, as the form took it; the engine validates it.
+/// A virtual camera takes none, so `target` is ignored.
 pub fn create_edit(output_id: OutputId, kind: NewKind, target: &str) -> Edit {
     let target = target.trim().to_owned();
     let kind = match kind {
         NewKind::Rtmp => OutputKind::Rtmp {
             target: RtmpTarget::Generic { url: target },
         },
-        NewKind::Record => OutputKind::Record {
+        NewKind::Record | NewKind::RecordFile => OutputKind::Record {
             path: target,
             container: RecordContainer::Mp4,
+            folder: kind == NewKind::Record,
         },
         NewKind::VirtualCam => OutputKind::VirtualCam,
     };
@@ -503,7 +519,8 @@ pub fn duplicate_edits(
     outputs: &[OutputInfo],
 ) -> Option<Vec<Edit>> {
     let mut draft = OutputDraft::of(info)?;
-    if draft.kind == NewKind::Record {
+    // A folder recording's copy can share its folder: each start makes a new file.
+    if draft.kind == NewKind::RecordFile {
         let taken = outputs.iter().filter_map(|o| match &o.kind {
             OutputKind::Record { path, .. } => Some(path.as_str()),
             _ => None,
@@ -540,6 +557,12 @@ pub fn describe_kind(kind: &OutputKind) -> String {
             target: RtmpTarget::Generic { url },
         } => format!("Stream to {url}"),
         OutputKind::Rtmp { .. } => "Stream (a target this page doesn't know)".into(),
+        OutputKind::Record {
+            path, folder: true, ..
+        } if path.is_empty() => "Record into the JStream folder in Videos".into(),
+        OutputKind::Record {
+            path, folder: true, ..
+        } => format!("Record into {path}"),
         OutputKind::Record { path, .. } => format!("Record to {path}"),
         OutputKind::VirtualCam => "Virtual camera: the program as a webcam".into(),
         _ => "An output kind this page doesn't know".into(),
@@ -744,7 +767,8 @@ pub fn new_kind(kind: &OutputKind) -> Option<NewKind> {
         OutputKind::Rtmp {
             target: RtmpTarget::Generic { .. },
         } => Some(NewKind::Rtmp),
-        OutputKind::Record { .. } => Some(NewKind::Record),
+        OutputKind::Record { folder: true, .. } => Some(NewKind::Record),
+        OutputKind::Record { .. } => Some(NewKind::RecordFile),
         OutputKind::VirtualCam => Some(NewKind::VirtualCam),
         _ => None,
     }
@@ -763,7 +787,8 @@ pub fn target_of(kind: &OutputKind) -> String {
 }
 
 /// Where an output sends, short enough for its row: the server's host, the
-/// recording's file name, or "Webcam" for the virtual camera. The full URL or path is
+/// recording's folder or file name ("Videos" for the engine's own folder), or "Webcam"
+/// for the virtual camera. The full URL or path is
 /// in the row's tooltip and its settings.
 pub fn target_summary(kind: &OutputKind) -> String {
     match kind {
@@ -779,6 +804,9 @@ pub fn target_summary(kind: &OutputKind) -> String {
             }
         }
         OutputKind::Rtmp { .. } => "Stream".into(),
+        OutputKind::Record {
+            path, folder: true, ..
+        } if path.is_empty() => "Videos".into(),
         OutputKind::Record { path, .. } => path
             .rsplit(['/', '\\'])
             .find(|part| !part.is_empty())
@@ -789,10 +817,22 @@ pub fn target_summary(kind: &OutputKind) -> String {
     }
 }
 
-/// The name of the encoder profile an output uses, or "Engine default".
-pub fn encoder_name(encoders: &[EncoderProfileInfo], chosen: Option<&EncoderProfileId>) -> String {
+/// The name of the encoder profile an output uses, or with none "Engine default", or
+/// for a recording "Last recording's", whose encoding a recording with no profile of
+/// its own takes (ADR-0262).
+pub fn encoder_name(
+    encoders: &[EncoderProfileInfo],
+    chosen: Option<&EncoderProfileId>,
+    recording: bool,
+) -> String {
     chosen.map_or_else(
-        || "Engine default".to_owned(),
+        || {
+            if recording {
+                "Last recording's".to_owned()
+            } else {
+                "Engine default".to_owned()
+            }
+        },
         |id| {
             encoders
                 .iter()
@@ -890,9 +930,9 @@ pub fn draft_edits(
         }
         Some(info) => {
             let target = draft.target.trim();
-            if draft.kind.needs_target() && target != target_of(&info.kind) {
+            if draft.kind.has_target() && target != target_of(&info.kind) {
                 edits.push(match draft.kind {
-                    NewKind::Record => Edit::OutputSetPath {
+                    NewKind::Record | NewKind::RecordFile => Edit::OutputSetPath {
                         output_id: output_id.clone(),
                         path: target.to_owned(),
                     },
@@ -1662,9 +1702,10 @@ fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
                 if matches!(row.info.kind, OutputKind::VirtualCam) {
                     target
                 } else {
-                    let encoder = panel
-                        .encoders
-                        .with(|e| encoder_name(e, row.info.encoder_profile.as_ref()));
+                    let encoder = panel.encoders.with(|e| {
+                        let recording = matches!(row.info.kind, OutputKind::Record { .. });
+                        encoder_name(e, row.info.encoder_profile.as_ref(), recording)
+                    });
                     format!("{target} · {encoder}")
                 }
             })
@@ -2076,7 +2117,8 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
                             <div class="prop-row">
                                 <label class="prop-label" for="output-target">
                                     {move || match kind() {
-                                        NewKind::Record => "File path",
+                                        NewKind::Record => "Folder",
+                                        NewKind::RecordFile => "File path",
                                         NewKind::Rtmp | NewKind::VirtualCam => "Server URL",
                                     }}
                                 </label>
@@ -2089,11 +2131,23 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
                                             on:input=set_target
                                             disabled=running
                                             placeholder=move || match kind() {
-                                                NewKind::Record => "/home/me/Videos/show.mp4",
+                                                NewKind::Record => "Videos › JStream",
+                                                NewKind::RecordFile => "/home/me/Videos/show.mp4",
                                                 NewKind::Rtmp | NewKind::VirtualCam => "rtmps://live.example.com/app",
                                             }
                                         />
                                         <Show when=move || kind() == NewKind::Record && !running()>
+                                            {crate::browse::browse_button(
+                                                crate::browse::BrowseKind::Folder,
+                                                Vec::new(),
+                                                "Choose the recordings folder".into(),
+                                                || true,
+                                                String::new,
+                                                move || draft.with(|d| d.target.trim().to_owned()),
+                                                move |picked| draft.update(|d| d.target = picked),
+                                            )}
+                                        </Show>
+                                        <Show when=move || kind() == NewKind::RecordFile && !running()>
                                             {crate::browse::browse_button(
                                                 crate::browse::BrowseKind::Save,
                                                 vec!["mp4".into()],
@@ -2112,7 +2166,8 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
                                     <p class="help">
                                         {move || match (running(), kind()) {
                                             (true, _) => "Stop the output to change where it sends.",
-                                            (false, NewKind::Record) => "On the engine's machine.",
+                                            (false, NewKind::Record) => "On the engine's machine. Each recording is a new file, named for when it starts. Leave it empty for the JStream folder in Videos.",
+                                            (false, NewKind::RecordFile) => "On the engine's machine.",
                                             (false, _) => "Without the stream key.",
                                         }}
                                     </p>
@@ -2715,7 +2770,9 @@ mod tests {
         };
         now(control.hello(hello)).expect("hello");
         assert!(!NewKind::VirtualCam.needs_target());
-        assert!(NewKind::Rtmp.needs_target() && NewKind::Record.needs_target());
+        assert!(NewKind::Rtmp.needs_target() && NewKind::RecordFile.needs_target());
+        // A folder recording may leave its folder empty: the engine's own (ADR-0262).
+        assert!(!NewKind::Record.needs_target() && NewKind::Record.has_target());
         let id = OutputId::new("output-1");
         let create = create_edit(id.clone(), NewKind::VirtualCam, "ignored");
         assert_eq!(
@@ -2979,13 +3036,21 @@ mod tests {
         let hq = with_encoder(&control);
 
         let id = OutputId::new("output-1");
-        let mut draft = OutputDraft::new(NewKind::Record);
-        assert!(!draft.ready(), "a recording needs its path");
+        assert!(
+            OutputDraft::new(NewKind::Record).ready(),
+            "a folder recording may record into the engine's own folder"
+        );
+        let mut draft = OutputDraft::new(NewKind::RecordFile);
+        assert!(!draft.ready(), "a file recording needs its path");
         draft.target = " /tmp/show.mp4 ".into();
         assert!(draft.ready());
         assert_eq!(
             draft_edits(&id, None, &draft),
-            vec![create_edit(id.clone(), NewKind::Record, "/tmp/show.mp4")],
+            vec![create_edit(
+                id.clone(),
+                NewKind::RecordFile,
+                "/tmp/show.mp4"
+            )],
             "the defaults need no edits of their own"
         );
         draft.encoder = Some(hq.clone());
@@ -3074,12 +3139,33 @@ mod tests {
         let record = |path: &str| OutputKind::Record {
             path: path.into(),
             container: RecordContainer::Mp4,
+            folder: false,
         };
         assert_eq!(
             target_summary(&record("/home/me/Videos/show.mp4")),
             "show.mp4"
         );
         assert_eq!(target_summary(&record("C:\\Videos\\show.mp4")), "show.mp4");
+        let folder = |path: &str| OutputKind::Record {
+            path: path.into(),
+            container: RecordContainer::Mp4,
+            folder: true,
+        };
+        assert_eq!(target_summary(&folder("")), "Videos");
+        assert_eq!(target_summary(&folder("D:\\Shows\\")), "Shows");
+        assert_eq!(
+            describe_kind(&folder("")),
+            "Record into the JStream folder in Videos"
+        );
+        assert_eq!(
+            describe_kind(&folder("/srv/shows")),
+            "Record into /srv/shows"
+        );
+        assert_eq!(super::new_kind(&folder("")), Some(NewKind::Record));
+        assert_eq!(
+            super::new_kind(&record("/srv/show.mp4")),
+            Some(NewKind::RecordFile)
+        );
         assert_eq!(target_summary(&OutputKind::VirtualCam), "Webcam");
 
         let engine = MockEngine::new();
@@ -3091,10 +3177,11 @@ mod tests {
         now(control.hello(hello)).expect("hello");
         let hq = with_encoder(&control);
         let encoders = now(load(&control)).expect("load").encoders;
-        assert_eq!(encoder_name(&encoders, None), "Engine default");
-        assert_eq!(encoder_name(&encoders, Some(&hq)), encoders[0].name);
+        assert_eq!(encoder_name(&encoders, None, false), "Engine default");
+        assert_eq!(encoder_name(&encoders, None, true), "Last recording's");
+        assert_eq!(encoder_name(&encoders, Some(&hq), true), encoders[0].name);
         let gone = EncoderProfileId::new("gone");
-        assert_eq!(encoder_name(&encoders, Some(&gone)), "gone");
+        assert_eq!(encoder_name(&encoders, Some(&gone), false), "gone");
     }
 
     /// The header's health is a word or two, with the detail on hover.
@@ -3380,6 +3467,7 @@ mod tests {
         record.info.kind = OutputKind::Record {
             path: "/tmp/a.mp4".into(),
             container: jstream_control::protocol::RecordContainer::Mp4,
+            folder: false,
         };
         let rows = [
             rtmp("output-1", OutputState::Failed, true),

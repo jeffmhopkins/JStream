@@ -1126,11 +1126,20 @@ fn startup_collection(
     let recent = data.join(jstream_platform::paths::RECENT_COLLECTIONS_FILE);
     let warm = data.join(jstream_platform::paths::WARM_SCENES_FILE);
     let rendering = data.join(jstream_platform::paths::RENDERING_FILE);
+    let last_recording = data.join(jstream_platform::paths::LAST_RECORDING_FILE);
+    // The engine's own recordings folder (ADR-0262): `JStream` in the person's Videos.
+    let recordings = crate::folders::user_folder(jstream_platform::paths::UserFolder::Videos)
+        .map(|videos| videos.join(jstream_platform::paths::RECORDINGS_DIR));
     let engine = || {
-        Engine::new()
+        let engine = Engine::new()
             .with_audit(Arc::clone(audit))
             .with_warm_file(&warm)
             .with_rendering_file(&rendering)
+            .with_last_recording_file(&last_recording);
+        match &recordings {
+            Some(folder) => engine.with_recordings_folder(folder),
+            None => engine,
+        }
     };
     if let Some(last) = jstream_core::recent_collections(&recent).into_iter().next()
         && last.is_file()

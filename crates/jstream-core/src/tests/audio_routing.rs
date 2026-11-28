@@ -704,6 +704,7 @@ fn an_output_tap_runs_the_output_chain() {
                 kind: OutputKind::Record {
                     path: "/tmp/rec.mp4".into(),
                     container: RecordContainer::Mp4,
+                    folder: false,
                 },
             },
             gain(rec_owner(), "g", -6.0),

@@ -429,6 +429,7 @@ fn output_kind() -> BoxedStrategy<OutputKind> {
             OutputKind::Record {
                 path: p.into(),
                 container: RecordContainer::Mp4,
+                folder: false,
             }
         }),
         1 => Just(OutputKind::VirtualCam),

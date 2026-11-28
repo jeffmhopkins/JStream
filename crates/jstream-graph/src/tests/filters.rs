@@ -498,6 +498,7 @@ fn the_master_and_outputs_have_audio_chains() {
             kind: OutputKind::Record {
                 path: "/home/me/show.mp4".into(),
                 container: RecordContainer::Mp4,
+                folder: false,
             },
         }],
     );
@@ -569,6 +570,7 @@ fn the_master_and_outputs_have_video_chains() {
                 kind: OutputKind::Record {
                     path: "/home/me/show.mp4".into(),
                     container: RecordContainer::Mp4,
+                    folder: false,
                 },
             },
         ],

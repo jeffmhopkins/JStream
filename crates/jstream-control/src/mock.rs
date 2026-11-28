@@ -2850,7 +2850,11 @@ impl Collection {
                 }
                 match &kind {
                     OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
-                    OutputKind::Record { path, container } => check_record(path, *container, at)?,
+                    OutputKind::Record {
+                        path,
+                        container,
+                        folder,
+                    } => check_record(path, *container, *folder, at)?,
                     OutputKind::VirtualCam => {}
                     OutputKind::Unknown => {
                         return Err(invalid(
@@ -2882,16 +2886,24 @@ impl Collection {
                 let Some(kind) = self.outputs.get_mut(&output_id) else {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 };
-                if let Some(problem) = record_path_problem(&path) {
-                    return Err(invalid(at, "path", problem));
-                }
-                let OutputKind::Record { path: current, .. } = kind else {
+                let OutputKind::Record {
+                    path: current,
+                    folder,
+                    ..
+                } = kind
+                else {
+                    if let Some(problem) = record_path_problem(&path) {
+                        return Err(invalid(at, "path", problem));
+                    }
                     return Err(invalid(
                         at,
                         "output_id",
                         "the output is not a recording output",
                     ));
                 };
+                if let Some(problem) = record_target_problem(&path, *folder) {
+                    return Err(invalid(at, "path", problem));
+                }
                 let old = std::mem::replace(current, path);
                 vec![Edit::OutputSetPath {
                     output_id,
@@ -4139,7 +4151,12 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
 }
 
 /// Checks a recording output's container and path, as `jstream-graph` does.
-fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(), ProtocolError> {
+fn check_record(
+    path: &str,
+    container: RecordContainer,
+    folder: bool,
+    at: usize,
+) -> Result<(), ProtocolError> {
     match container {
         RecordContainer::Mp4 => {}
         RecordContainer::Unknown => {
@@ -4151,9 +4168,37 @@ fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(),
         }
         _ => return Err(unimplemented_by_mock("this container")),
     }
-    match record_path_problem(path) {
+    match record_target_problem(path, folder) {
         Some(problem) => Err(invalid(at, "kind.path", problem)),
         None => Ok(()),
+    }
+}
+
+/// Why `path` is not acceptable for a recording output, as in `jstream-graph`: a
+/// folder's rules when `folder` (ADR-0262), else a file's.
+fn record_target_problem(path: &str, folder: bool) -> Option<&'static str> {
+    if folder {
+        record_folder_problem(path)
+    } else {
+        record_path_problem(path)
+    }
+}
+
+/// Why `path` is not an acceptable folder for a folder recording output, as in
+/// `jstream-graph`: empty (the engine's own folder) passes; otherwise a file path's
+/// checks, except that it may end in a separator or be a root, and only a DOS device
+/// name is refused as its last segment.
+fn record_folder_problem(path: &str) -> Option<&'static str> {
+    if path.is_empty() {
+        return None;
+    }
+    if let Some(problem) = path_shape_problem(path) {
+        return Some(problem);
+    }
+    let last = path.split(['/', '\\']).rfind(|segment| !segment.is_empty());
+    match last {
+        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
+        _ => None,
     }
 }
 
@@ -4169,6 +4214,18 @@ fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
         return Some("must not be empty");
     }
+    if let Some(problem) = path_shape_problem(path) {
+        return Some(problem);
+    }
+    match path.split(['/', '\\']).next_back() {
+        Some("" | ".") | None => Some("must end in a file name"),
+        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
+        Some(_) => None,
+    }
+}
+
+/// The checks a recording's file and folder paths share, as in `jstream-graph`.
+fn path_shape_problem(path: &str) -> Option<&'static str> {
     if path.len() > MAX_PATH_LEN {
         return Some("must be at most 4096 bytes");
     }
@@ -4193,15 +4250,10 @@ fn record_path_problem(path: &str) -> Option<&'static str> {
     if rest.contains(['?', '*']) {
         return Some("must not contain `?` or `*`");
     }
-    let mut segments = path.split(['/', '\\']);
-    if segments.clone().any(|segment| segment == "..") {
+    if path.split(['/', '\\']).any(|segment| segment == "..") {
         return Some("must not contain a `..` segment");
     }
-    match segments.next_back() {
-        Some("" | ".") | None => Some("must end in a file name"),
-        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
-        Some(_) => None,
-    }
+    None
 }
 
 /// Whether Win32 opens the path component `name` as a DOS device, as in `jstream-graph`:
@@ -5121,6 +5173,7 @@ mod tests {
                 kind: OutputKind::Record {
                     path: "/home/me/show.mp4".into(),
                     container: RecordContainer::Mp4,
+                    folder: false,
                 },
             },
             grade(FilterOwner::Master),

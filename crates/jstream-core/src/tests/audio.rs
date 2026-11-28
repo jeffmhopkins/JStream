@@ -1359,6 +1359,7 @@ fn a_master_clap_filter_runs_one_host_per_bus_that_feeds_an_output() {
                     kind: OutputKind::Record {
                         path: path.to_str().expect("a UTF-8 temp path").into(),
                         container: RecordContainer::Mp4,
+                        folder: false,
                     },
                 },
                 Edit::OutputSetAudioBuses {

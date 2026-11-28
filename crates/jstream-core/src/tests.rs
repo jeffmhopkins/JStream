@@ -5527,6 +5527,7 @@ mod cpu_pipeline {
                 kind: OutputKind::Record {
                     path: path.to_str().expect("a UTF-8 temp path").into(),
                     container: RecordContainer::Mp4,
+                    folder: false,
                 },
             }]),
         )
@@ -5643,6 +5644,161 @@ mod cpu_pipeline {
         assert_eq!(boxes(&std::fs::read(&take2).expect("take 2"))[0], "ftyp");
     }
 
+    /// `rec` as a folder recording output (ADR-0262) into `folder`.
+    fn record_into(control: &InProcessControl, folder: &str) {
+        batch(
+            control,
+            edits(vec![
+                Edit::OutputDelete {
+                    output_id: OutputId::new("rec"),
+                },
+                Edit::OutputCreate {
+                    output_id: OutputId::new("rec"),
+                    kind: OutputKind::Record {
+                        path: folder.into(),
+                        container: RecordContainer::Mp4,
+                        folder: true,
+                    },
+                },
+            ]),
+        )
+        .expect("a folder recording output");
+    }
+
+    /// The files in `folder`, by name.
+    fn files_in(folder: &std::path::Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(folder)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        names.sort();
+        names
+    }
+
+    /// ADR-0262: a folder recording output makes its folder, missing parents too, and
+    /// each start records to a new `JStream_<date>_<time>.mp4` there, so a second start
+    /// right after the first never overwrites it.
+    #[test]
+    fn a_folder_recording_records_each_start_to_a_new_file() {
+        let dir = TempDir::new("folder");
+        let folder = dir.join("Videos").join("shows");
+        let fakes = fakes();
+        let (engine, control, mut events) =
+            recording_engine(&fakes, cpu_draw(), &dir.join("unused.mp4"));
+        record_into(&control, folder.to_str().expect("a UTF-8 temp path"));
+        drain(&mut events);
+        let record = |on| block_on(control.call(output_call("rec", on)));
+        let media = || {
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats()
+                    .is_some_and(|stats| stats.video_subscriber.delivered >= 10)
+            })
+        };
+        for take in 1..=2 {
+            record(true).expect("start");
+            assert!(media(), "media never reached take {take}");
+            record(false).expect("stop");
+        }
+        let files = files_in(&folder);
+        assert_eq!(files.len(), 2, "{files:?}");
+        for name in &files {
+            assert!(
+                name.starts_with("JStream_") && name.ends_with(".mp4"),
+                "{name}"
+            );
+            assert_eq!(
+                boxes(&std::fs::read(folder.join(name)).expect("a take"))[0],
+                "ftyp"
+            );
+        }
+    }
+
+    /// ADR-0262: an empty folder is the engine's own recordings folder, which the host
+    /// names; an engine without one fails the start, before it begins.
+    #[test]
+    fn an_empty_folder_records_into_the_engines_own() {
+        let dir = TempDir::new("own-folder");
+        let fakes = fakes();
+        let (engine, control, mut events) =
+            recording_engine(&fakes, cpu_draw(), &dir.join("unused.mp4"));
+        record_into(&control, "");
+        drain(&mut events);
+        let err = block_on(control.call(output_call("rec", true))).expect_err("no folder");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert!(err.to_string().contains("no recordings folder"), "{err}");
+        assert_eq!(output_state(&control, "rec"), OutputState::Stopped);
+
+        let own = dir.join("JStream");
+        let _engine = engine.with_recordings_folder(&own);
+        block_on(control.call(output_call("rec", true))).expect("start");
+        block_on(control.call(output_call("rec", false))).expect("stop");
+        assert_eq!(files_in(&own).len(), 1, "{:?}", files_in(&own));
+    }
+
+    /// ADR-0262: a recording with no encoder profile of its own records with the
+    /// encoding of the last recording, which the engine keeps in its file: after one on
+    /// another profile it no longer shares the stream's default session.
+    #[test]
+    fn a_recording_takes_the_last_recordings_encoding() {
+        let dir = TempDir::new("last-encoding");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &dir.join("unused.mp4"));
+        let file = dir.join("last-recording.json");
+        let engine = engine.with_last_recording_file(&file);
+        let folder = dir.join("takes");
+        record_into(&control, folder.to_str().expect("a UTF-8 temp path"));
+        let mut profile = EncoderProfile::DEFAULT;
+        profile.video.rate_control = RateControl::Cbr { kbps: 6000 };
+        batch(
+            &control,
+            edits(vec![
+                Edit::EncoderCreate {
+                    profile_id: EncoderProfileId::new("hq"),
+                    name: "Recording".into(),
+                    profile,
+                },
+                Edit::OutputSetEncoder {
+                    output_id: OutputId::new("rec"),
+                    profile_id: Some(EncoderProfileId::new("hq")),
+                },
+            ]),
+        )
+        .expect("encoder edits");
+        drain(&mut events);
+        block_on(control.call(output_call("rec", true))).expect("start on hq");
+        block_on(control.call(output_call("rec", false))).expect("stop");
+        assert_eq!(crate::recordings::load(&file), Some(profile));
+
+        batch(
+            &control,
+            edits(vec![Edit::OutputSetEncoder {
+                output_id: OutputId::new("rec"),
+                profile_id: None,
+            }]),
+        )
+        .expect("no profile of its own");
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (state, encoder, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(state, OutputState::Active);
+        assert_eq!(
+            encoder.map(|e| e.shared_with),
+            Some(Vec::new()),
+            "the recording kept the last recording's encoding"
+        );
+        assert_eq!(sessions, 2);
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+        drop(engine);
+    }
+
     /// A recording never overwrites: a start whose path is taken fails with
     /// `action_failed`, settles `failed`, and leaves the existing file as it was.
     #[test]
@@ -5750,6 +5906,7 @@ mod cpu_pipeline {
                 kind: OutputKind::Record {
                     path: path.to_str().expect("a UTF-8 temp path").into(),
                     container: RecordContainer::Mp4,
+                    folder: false,
                 },
             }]),
         )
@@ -6812,6 +6969,7 @@ mod cpu_pipeline {
                     kind: OutputKind::Record {
                         path: path.to_str().expect("a UTF-8 temp path").into(),
                         container: RecordContainer::Mp4,
+                        folder: false,
                     },
                 },
                 Edit::VideoMixCreate {

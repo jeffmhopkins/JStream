@@ -233,14 +233,18 @@ Contents:
   `paths::WARM_SCENES_FILE` the one that keeps the warm budget, which both hosts name
   (ADR-0117 §7), and `paths::RENDERING_FILE` the one that keeps the 3D rendering
   switches, which both hosts name too
-  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)).
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)), and
+  `paths::LAST_RECORDING_FILE` the one that keeps the last recording's encoding
+  ([ADR-0262](../../docs/adr/0262-a-recording-output-records-into-a-folder.md)).
 - **The person's folders** (`paths.rs`,
   [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
-  `paths::user_folder` finds Documents and Downloads (`UserFolder`), where the desktop app
-  keeps its default project (`paths::PROJECTS_DIR`, `paths::DEFAULT_PROJECT`) and saves
-  screenshots. On macOS they are `~/Documents` and `~/Downloads`; on Linux,
-  `XDG_DOCUMENTS_DIR` and `XDG_DOWNLOAD_DIR` from `user-dirs.dirs`, else those names under
-  home. It answers `None` on Windows, where `jstream-platform-windows` asks the shell for
+  `paths::user_folder` finds Documents, Downloads and Videos (`UserFolder`), where the desktop app
+  keeps its default project (`paths::PROJECTS_DIR`, `paths::DEFAULT_PROJECT`), saves
+  screenshots, and both hosts put the engine's own recordings folder
+  (`paths::RECORDINGS_DIR`, `JStream` in Videos, ADR-0262). On macOS they are
+  `~/Documents`, `~/Downloads` and `~/Movies`; on Linux, `XDG_DOCUMENTS_DIR`,
+  `XDG_DOWNLOAD_DIR` and `XDG_VIDEOS_DIR` from `user-dirs.dirs`, else `Documents`,
+  `Downloads` and `Videos` under home. It answers `None` on Windows, where `jstream-platform-windows` asks the shell for
   the known folders. `paths::is_portable` tells a portable exe, which keeps its project
   in its data folder.
 - **Shared backend helpers** (`mailbox.rs`, `nv12.rs`, `yuv.rs`): safe, platform-independent code

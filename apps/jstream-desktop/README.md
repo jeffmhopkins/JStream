@@ -270,6 +270,13 @@ folder, and its log `logs\cef.log`.
   kept by the engine in `rendering.json` in the data folder
   (`Engine::with_rendering_file`, in `startup_collection`), the file the daemon names
   too, so they hold whatever project opens.
+- **Recordings** ([ADR-0262](../../docs/adr/0262-a-recording-output-records-into-a-folder.md)):
+  a folder recording output with no folder of its own records into `JStream` in the
+  person's Videos folder (the shell's known folder on Windows,
+  `Engine::with_recordings_folder`, in `startup_collection`), and the last recording's
+  encoding is kept in `last-recording.json` in the data folder
+  (`Engine::with_last_recording_file`), the file the daemon names too, so a recording in
+  any project takes the settings last recorded with.
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start by a
   new, user-only file (a protected DACL for SYSTEM and the user on Windows, mode `0600`
   on Unix, in a folder created `0700`, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
