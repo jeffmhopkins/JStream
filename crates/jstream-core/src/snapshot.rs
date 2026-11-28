@@ -10153,14 +10153,19 @@ pub(crate) fn claim_layers(
             ChainStep::Box(owner) => {
                 if let (ChainOwner::Item(scene, item), Some(boxed)) = (owner, shot.boxes.get(owner))
                 {
-                    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
+                    let key = GpuKey::ItemBox(scene.clone(), item.clone());
+                    // A model's layer that holds only its part of the canvas (ADR-0251)
+                    // is kept at its own size, with its depth. Claimed at the box's
+                    // size, it would be replaced by a blank layer of the whole canvas
+                    // after the model was drawn, and the model would vanish (#1834).
+                    let windowed = cache
+                        .get(&key)
+                        .filter(|layer| layer.window().is_some())
+                        .map(|layer| [layer.width(), layer.height()]);
+                    let [width, height] =
+                        windowed.unwrap_or_else(|| boxed.boxed.pixels(chains.model_percent.get()));
                     // One that can't be made fails its item when the chains next draw.
-                    let _ = cache.layer(
-                        compositor,
-                        &GpuKey::ItemBox(scene.clone(), item.clone()),
-                        width,
-                        height,
-                    );
+                    let _ = cache.layer(compositor, &key, width, height);
                     if boxed.boxed.model && boxed.camera.is_some() {
                         let _ = cache.depth_layer(
                             compositor,
