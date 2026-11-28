@@ -364,6 +364,36 @@ mod tests {
         assert_eq!(seen.lock().expect("lock").errors, 1);
     }
 
+    /// #1845: there is no fan-out. A second `open` takes the page's audio from the first
+    /// stream, which hears nothing after it, even while it stays open; the second hears
+    /// every packet from then on, its positions continuing the page's.
+    #[test]
+    fn a_second_listener_takes_the_audio_from_the_first() {
+        let audio = PageAudio::new();
+        let (first, heard_first) = recorder();
+        let first_stream = audio.open(first);
+        for _ in 0..3 {
+            audio.push_planar(&[&[0.1; 480]], 480, None);
+        }
+        let (second, heard_second) = recorder();
+        let _second_stream = audio.open(second);
+        for _ in 0..5 {
+            audio.push_planar(&[&[0.1; 480]], 480, None);
+        }
+        let first = heard_first.lock().expect("lock");
+        assert_eq!(first.packets.len(), 3);
+        let second = heard_second.lock().expect("lock");
+        assert_eq!(second.packets.len(), 5);
+        let positions: Vec<u64> = second.packets.iter().map(|p| p.1).collect();
+        assert_eq!(positions, vec![1440, 1920, 2400, 2880, 3360]);
+        drop((first, second));
+        // The first stream's drop leaves the second attached.
+        drop(first_stream);
+        audio.push_planar(&[&[0.1; 480]], 480, None);
+        assert_eq!(heard_second.lock().expect("lock").packets.len(), 6);
+        assert_eq!(heard_first.lock().expect("lock").packets.len(), 3);
+    }
+
     #[test]
     fn a_packet_meeting_the_lock_is_dropped_and_counted() {
         let audio = PageAudio::new();
