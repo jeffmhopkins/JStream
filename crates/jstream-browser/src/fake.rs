@@ -12,8 +12,8 @@ use jstream_media::VideoFrame;
 use jstream_platform::{GpuContext, GpuFrame};
 
 use crate::{
-    BrowserBackend, BrowserError, BrowserPage, PageAudio, PageData, PageSpec, RequestPolicy,
-    Verdict,
+    BrowserBackend, BrowserError, BrowserPage, PageAudio, PageData, PageSpec, RefusedLog,
+    RefusedRequest, RequestPolicy, Verdict,
 };
 
 /// A browser that opens pages in memory.
@@ -39,6 +39,7 @@ pub struct FakePageState {
     hidden: AtomicBool,
     audio: Arc<PageAudio>,
     policy: RequestPolicy,
+    refused: RefusedLog,
     closed: AtomicBool,
     cpu: bool,
     painted: Mutex<Option<Arc<VideoFrame>>>,
@@ -86,8 +87,16 @@ impl FakePageState {
     }
 
     /// Makes a request as the page would, and says whether its policy let it through.
+    /// A refused one is described as an `image` request
+    /// ([`refused_requests`](crate::BrowserPage::refused_requests)).
     pub fn request(&self, url: &str) -> bool {
-        self.policy.check(url) == Verdict::Allow
+        match self.policy.check(url) {
+            Verdict::Allow => true,
+            Verdict::Deny(reason) => {
+                self.refused.push(RefusedRequest::new("image", url, reason));
+                false
+            }
+        }
     }
 
     /// Whether the page was dropped.
@@ -142,6 +151,7 @@ impl BrowserBackend for FakeBrowser {
             hidden: AtomicBool::new(false),
             audio: PageAudio::new(),
             policy: RequestPolicy::for_page(spec),
+            refused: RefusedLog::default(),
             closed: AtomicBool::new(false),
             cpu: state.cpu,
             painted: Mutex::new(None),
@@ -206,6 +216,10 @@ impl BrowserPage for FakePage {
         self.0.policy.denied()
     }
 
+    fn refused_requests(&self) -> Vec<RefusedRequest> {
+        self.0.refused.list()
+    }
+
     fn send_data(&mut self, data: PageData) {
         if self.0.spec.page_api.is_none() || data.is_empty() {
             return;
@@ -221,5 +235,40 @@ impl BrowserPage for FakePage {
 impl Drop for FakePage {
     fn drop(&mut self) {
         self.0.closed.store(true, Ordering::Release);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use jstream_media::FrameSize;
+
+    use super::*;
+    use crate::PageLocation;
+
+    /// A refused request is counted and described by its scheme and reason, never its
+    /// path.
+    #[test]
+    fn a_refused_request_is_counted_and_described() {
+        let browser = FakeBrowser::new();
+        let page = browser
+            .open(&PageSpec {
+                location: PageLocation::File(PathBuf::from("/overlay/page/index.html")),
+                size: FrameSize::new(64, 36).expect("size"),
+                fps: 30,
+                css: String::new(),
+                local_network: false,
+                page_api: None,
+            })
+            .expect("opened");
+        let state = &browser.pages()[0];
+        assert!(!state.request("file:///overlay/outside.svg"));
+        assert_eq!(page.denied_requests(), 1);
+        let refused = page.refused_requests();
+        assert_eq!(refused.len(), 1);
+        assert_eq!(refused[0].kind, "image");
+        assert_eq!(refused[0].scheme, "file");
+        assert!(!format!("{refused:?}").contains("overlay"));
     }
 }

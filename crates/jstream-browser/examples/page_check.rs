@@ -17,8 +17,10 @@
 //! page new custom CSS that sets `--jstream-tone: 880` on `:root`; the page reads that
 //! property and moves its right channel to 880 Hz, which shows the CSS reached it. The
 //! page also loads one image beside it and one from the folder above, which its request
-//! policy refuses, so the check reports one refused request. Then the page is closed and
-//! the backend dropped, which shuts the helper down.
+//! policy refuses. The check lists each refused request by its kind, its URL's scheme
+//! and the policy's reason (never its URL, which the helper doesn't send, ADR-0048), and
+//! fails if that image isn't among them. Then the page is closed and the backend
+//! dropped, which shuts the helper down.
 
 #[cfg(windows)]
 fn main() -> std::process::ExitCode {
@@ -378,10 +380,26 @@ setInterval(() => {
             "audio packets dropped while attaching: {}",
             page.audio().dropped()
         ));
+        let denied = page.denied_requests();
+        let refused = page.refused_requests();
         line(format_args!(
-            "requests refused: {} (the built-in page expects 1: ../outside.svg)",
-            page.denied_requests()
+            "requests refused: {denied} (the built-in page expects an image outside its folder)"
         ));
+        for request in &refused {
+            line(format_args!("  {request}"));
+        }
+        if denied > refused.len() as u64 {
+            line(format_args!(
+                "  and {} more, not described",
+                denied - refused.len() as u64
+            ));
+        }
+        // `../outside.svg`: an image from a file outside the page's folder.
+        let outside = refused.iter().any(|request| {
+            request.kind == "image"
+                && request.scheme == "file"
+                && request.reason.contains("outside the page's folder")
+        });
 
         let closing = Instant::now();
         drop(page);
@@ -392,6 +410,9 @@ setInterval(() => {
         ));
         if seen.frames == 0 {
             return Err("no frame arrived".into());
+        }
+        if args.url.is_none() && !outside {
+            return Err("the built-in page's ../outside.svg was not refused".into());
         }
         Ok(())
     }

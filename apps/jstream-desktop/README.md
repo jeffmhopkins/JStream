@@ -769,5 +769,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   writes `logs\crash-<pid>-<n>.dmp` there, thread stacks and the module list, and the
   newest three are kept
   ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)).
-  The filter cannot build the report file's DACL, so a dump keeps the process's
-  default one. Linux and macOS still write nothing for a native crash.
+  Each dump gets the report's protected DACL for SYSTEM and the user, built once at
+  install, outside the filter
+  ([ADR-0260](../../docs/adr/0260-a-native-crash-dump-is-user-only-on-windows.md)).
+  Linux and macOS still write nothing for a native crash.

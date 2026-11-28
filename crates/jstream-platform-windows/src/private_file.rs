@@ -45,10 +45,7 @@ use crate::vcam::shared::{SecurityAttributes, user_sid};
 /// SYSTEM and this process's user. Fails with [`io::ErrorKind::AlreadyExists`] if a file
 /// is already there, like `OpenOptions::create_new`; it never replaces one.
 pub fn create_private_file(path: &Path) -> io::Result<File> {
-    let sid = user_sid().map_err(io::Error::other)?;
-    let sddl = sddl_user_only(&sid)
-        .ok_or_else(|| io::Error::other("this user's SID can't be written as a DACL"))?;
-    let sa = SecurityAttributes::from_sddl(&sddl).map_err(io::Error::other)?;
+    let sa = user_only_attributes()?;
     // SAFETY: `CreateFileW(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD,
     // HANDLE) -> HANDLE`: the name is a valid wide string for the call, and `sa` (whose
     // descriptor it copies onto the new file) outlives it; no template file.
@@ -69,6 +66,17 @@ pub fn create_private_file(path: &Path) -> io::Result<File> {
     Ok(File::from(unsafe {
         OwnedHandle::from_raw_handle(handle.0)
     }))
+}
+
+/// Security attributes whose descriptor is a protected DACL for SYSTEM and this
+/// process's user ([`sddl_user_only`]), for a `CreateFileW` that makes a user-only file.
+/// Looks up the user's SID, so it is built ahead of time where a caller can't afford
+/// that, as the native-crash filter can't (`dump.rs`).
+pub(crate) fn user_only_attributes() -> io::Result<SecurityAttributes> {
+    let sid = user_sid().map_err(io::Error::other)?;
+    let sddl = sddl_user_only(&sid)
+        .ok_or_else(|| io::Error::other("this user's SID can't be written as a DACL"))?;
+    SecurityAttributes::from_sddl(&sddl).map_err(io::Error::other)
 }
 
 /// Whether `file` may hold a secret: `Err` says why not, as a phrase ("it is owned by

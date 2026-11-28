@@ -94,7 +94,7 @@ pub use page::{
     css_script,
 };
 pub use page_api::{MAX_PAGE_DATA_BYTES, PageApi, PageData};
-pub use request::{RequestPolicy, Verdict};
+pub use request::{MAX_REFUSED_REQUESTS, RefusedLog, RefusedRequest, RequestPolicy, Verdict};
 
 use jstream_media::VideoFrame;
 use jstream_platform::{GpuContext, GpuFrame};
@@ -175,6 +175,13 @@ pub trait BrowserPage: Send {
     /// file page reaching outside its folder, a web page reaching for a local file, or
     /// a scheme no page may load.
     fn denied_requests(&self) -> u64;
+
+    /// The page's first [`MAX_REFUSED_REQUESTS`] refused requests, oldest first, each
+    /// described by its kind, scheme and the policy's reason, never its URL (ADR-0048).
+    /// Empty for a backend that doesn't describe them (the default).
+    fn refused_requests(&self) -> Vec<RefusedRequest> {
+        Vec::new()
+    }
 
     /// Sends the page an update to its `window.jstream` (ADR-0102), split as
     /// [`PageData::split`] does. Nothing for a page opened without a

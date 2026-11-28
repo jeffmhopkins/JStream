@@ -8,6 +8,12 @@
 //! module list, not the process's heap.
 //! The filter builds the file name on the stack. It does not allocate, lock,
 //! or call back into JStream.
+//!
+//! The dump gets the crash report's protected DACL for SYSTEM and the user
+//! (ADR-0260). Building it looks up the user's SID, which the filter must not
+//! do, so [`install`] builds it once and keeps it for the process; the filter
+//! only passes it to `CreateFileW`. If it can't be built, install says so and
+//! dumps keep the process's default DACL, as before.
 
 use std::io;
 use std::os::windows::ffi::OsStrExt;
@@ -15,8 +21,9 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use windows::Win32::Foundation::ERROR_FILE_EXISTS;
 use windows::Win32::Storage::FileSystem::{
-    CREATE_ALWAYS, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ,
+    CREATE_NEW, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ,
 };
 use windows::Win32::System::Diagnostics::Debug::{
     EXCEPTION_POINTERS, MINIDUMP_EXCEPTION_INFORMATION, MiniDumpNormal, MiniDumpWithThreadInfo,
@@ -27,6 +34,9 @@ use windows::Win32::System::Threading::{
 };
 use windows::core::PCWSTR;
 
+use crate::private_file::user_only_attributes;
+use crate::vcam::shared::SecurityAttributes;
+
 /// How many dumps the folder keeps. Each is larger than a panic report, and the
 /// next crash needs a free name, so install drops the oldest past this.
 const MAX_DUMPS: usize = 3;
@@ -34,12 +44,27 @@ const MAX_DUMPS: usize = 3;
 /// A path the filter can extend without allocating. `MAX_PATH` wide characters.
 const MAX_WIDE: usize = 260;
 
-/// The folder, as UTF-16 with a trailing `\`, set once by [`install`].
+/// How many names the filter tries before it gives up: a name already taken (a
+/// dump left by an earlier process with the same id) is skipped, not replaced,
+/// because replacing a file keeps its old DACL.
+const NAME_TRIES: u32 = 8;
+
+/// The folder, as UTF-16 with a trailing `\`, and the dump's security
+/// attributes, set once by [`install`].
 struct Prefix {
     wide: [u16; MAX_WIDE],
     /// Characters of `wide` that are the directory, including the trailing `\`.
     dir_len: usize,
+    /// The user-and-SYSTEM DACL, or `None` when it could not be built.
+    attributes: Option<SecurityAttributes>,
 }
+
+// SAFETY: `attributes` holds a security descriptor that is written once, when it
+// is built, and only read after that (by `CreateFileW`, which copies it). Nothing
+// frees it while the process runs: the `Prefix` in `PREFIX` is never dropped.
+unsafe impl Send for Prefix {}
+// SAFETY: as above; sharing it only shares reads of an immutable descriptor.
+unsafe impl Sync for Prefix {}
 
 /// The folder the filter writes into. Set once; the OS callback has no other
 /// place to keep it (ADR-0258).
@@ -51,10 +76,20 @@ static SEQUENCE: AtomicU32 = AtomicU32::new(0);
 /// Registers the unhandled-exception filter to write dumps into `dir`, and
 /// drops the oldest dumps there past [`MAX_DUMPS`]. `false` when `dir` does not
 /// fit in `MAX_PATH` or a filter was already installed. The folder must exist.
+///
+/// The dump's DACL is built here, outside the filter. If that fails, the
+/// failure is logged and dumps keep the process's default DACL.
 pub fn install(dir: &Path) -> bool {
-    let Some(prefix) = Prefix::from_dir(dir) else {
+    let Some(mut prefix) = Prefix::from_dir(dir) else {
         return false;
     };
+    match user_only_attributes() {
+        Ok(attributes) => prefix.attributes = Some(attributes),
+        Err(error) => tracing::warn!(
+            %error,
+            "native crash dumps get the default DACL: the user-only one could not be built"
+        ),
+    }
     prune(dir);
     if PREFIX.set(prefix).is_err() {
         return false;
@@ -87,7 +122,11 @@ impl Prefix {
             wide[len] = b'\\' as u16;
             len += 1;
         }
-        Some(Self { wide, dir_len: len })
+        Some(Self {
+            wide,
+            dir_len: len,
+            attributes: None,
+        })
     }
 }
 
@@ -102,18 +141,56 @@ unsafe extern "system" fn on_exception(info: *const EXCEPTION_POINTERS) -> i32 {
     CONTINUE_SEARCH
 }
 
-/// Writes one dump of this process into `dir`. `info` is the exception the
-/// filter was given, or null for a dump of the running process (the test).
-/// Only the test calls it; the filter goes through `write_at` with the prefix
-/// `install` kept.
+/// Writes one dump of this process into `dir`, with the user-only DACL as
+/// [`install`] builds it. `info` is the exception the filter was given, or null
+/// for a dump of the running process (the test). Only the test calls it; the
+/// filter goes through `write_at` with the prefix `install` kept.
 #[cfg(test)]
 pub(crate) fn write_dump(dir: &Path, info: *const EXCEPTION_POINTERS) -> io::Result<()> {
-    let prefix =
+    let mut prefix =
         Prefix::from_dir(dir).ok_or_else(|| io::Error::other("the dump path is too long"))?;
+    prefix.attributes = Some(user_only_attributes()?);
     write_at(&prefix, info)
 }
 
 fn write_at(prefix: &Prefix, info: *const EXCEPTION_POINTERS) -> io::Result<()> {
+    let attributes = prefix.attributes.as_ref().map(SecurityAttributes::as_ptr);
+    let mut tries = 1;
+    let file = loop {
+        let wide = dump_name(prefix)?;
+        // SAFETY: `CreateFileW(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD,
+        // DWORD, HANDLE) -> HANDLE`. `wide` is null-terminated and lives for the
+        // call. `attributes`, when set, points into `prefix` (the one `install`
+        // kept for the process, or the test's), alive for the call; CreateFileW
+        // copies its descriptor onto the new file. Without it the file keeps the
+        // process's default DACL. `CREATE_NEW` never replaces a file, because a
+        // replaced file would keep its old DACL.
+        let created = unsafe {
+            CreateFileW(
+                PCWSTR(wide.as_ptr()),
+                0x4000_0000 | 0x8000_0000, // GENERIC_WRITE | GENERIC_READ
+                FILE_SHARE_READ,
+                attributes,
+                CREATE_NEW,
+                FILE_ATTRIBUTE_NORMAL,
+                None,
+            )
+        };
+        match created {
+            Ok(file) => break file,
+            // A dump an earlier process with this id left: the next number.
+            Err(error) if error.code() == ERROR_FILE_EXISTS.to_hresult() && tries < NAME_TRIES => {
+                tries += 1;
+            }
+            Err(error) => return Err(io::Error::other(error.to_string())),
+        }
+    };
+    write_into(file, info)
+}
+
+/// The next `crash-<pid>-<n>.dmp` in the folder, null-terminated, built on the
+/// stack.
+fn dump_name(prefix: &Prefix) -> io::Result<[u16; MAX_WIDE]> {
     let mut wide = prefix.wide;
     let mut len = prefix.dir_len;
     for unit in "crash-".encode_utf16() {
@@ -135,22 +212,14 @@ fn write_at(prefix: &Prefix, info: *const EXCEPTION_POINTERS) -> io::Result<()> 
         push(&mut wide, &mut len, unit)?;
     }
     push(&mut wide, &mut len, 0)?;
-    // SAFETY: `CreateFileW(LPCWSTR, ...) -> HANDLE`. `wide` is null-terminated
-    // and lives for the call. `CREATE_ALWAYS` replaces a same-named dump. No
-    // security descriptor: the file inherits the log folder's ACL, which the
-    // apps already restrict.
-    let file = unsafe {
-        CreateFileW(
-            PCWSTR(wide.as_ptr()),
-            0x4000_0000 | 0x8000_0000, // GENERIC_WRITE | GENERIC_READ
-            FILE_SHARE_READ,
-            None,
-            CREATE_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL,
-            None,
-        )
-    }
-    .map_err(|error| io::Error::other(error.to_string()))?;
+    Ok(wide)
+}
+
+/// Writes the dump into `file`, then closes it.
+fn write_into(
+    file: windows::Win32::Foundation::HANDLE,
+    info: *const EXCEPTION_POINTERS,
+) -> io::Result<()> {
     let exception = (!info.is_null()).then_some(MINIDUMP_EXCEPTION_INFORMATION {
         // SAFETY: `GetCurrentThreadId() -> DWORD`. No pointer, no failure.
         ThreadId: unsafe { GetCurrentThreadId() },
@@ -243,9 +312,11 @@ fn prune(dir: &Path) {
 mod tests {
     use super::*;
 
-    /// A dump of this process is a minidump: the file starts with `MDMP`.
+    /// A dump of this process is a minidump: the file starts with `MDMP`. Its DACL
+    /// is protected and lets in only SYSTEM and this user, as a crash report's
+    /// (ADR-0260).
     #[test]
-    fn a_dump_of_this_process_is_a_minidump() {
+    fn a_dump_of_this_process_is_a_minidump_only_its_user_may_open() {
         let dir = std::env::temp_dir().join(format!("jstream-dump-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("the temp folder");
@@ -261,6 +332,29 @@ mod tests {
             "a minidump starts with MDMP, got {:?}",
             &bytes[..bytes.len().min(4)]
         );
+        let opened = std::fs::File::open(file.path()).expect("open the dump");
+        assert_eq!(crate::check_private_file(&opened), Ok(()));
+        let sddl = crate::security::sddl_of(
+            windows::Win32::Foundation::HANDLE(std::os::windows::io::AsRawHandle::as_raw_handle(
+                &opened,
+            )),
+            windows::Win32::Security::Authorization::SE_FILE_OBJECT,
+        )
+        .expect("the dump's descriptor");
+        let dacl = &sddl[sddl.find("D:").expect("a DACL")..];
+        assert!(dacl.starts_with("D:P"), "a protected DACL, got {sddl}");
+        let entries: Vec<&str> = dacl
+            .split('(')
+            .skip(1)
+            .map(|entry| entry.trim_end_matches(')'))
+            .collect();
+        // The other entry is the user's: `check_private_file` lets no one else in.
+        assert_eq!(entries.len(), 2, "only SYSTEM and the user, got {sddl}");
+        assert!(
+            entries.iter().any(|entry| entry.ends_with(";;;SY")),
+            "SYSTEM is let in, got {sddl}"
+        );
+        drop(opened);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
