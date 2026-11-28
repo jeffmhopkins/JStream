@@ -1,5 +1,5 @@
 //! The person's own folders the desktop app saves into (ADR-0163): Documents, for the
-//! default project, Downloads, for screenshots, and Videos, for recordings (ADR-0260). They are known folders, which a
+//! default project, Downloads, for screenshots, and Videos, for recordings (ADR-0262). They are known folders, which a
 //! person or OneDrive's backup can move (Documents is often under `OneDrive`), so they
 //! are asked of the shell rather than built from `USERPROFILE`.
 //!

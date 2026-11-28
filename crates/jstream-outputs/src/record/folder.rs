@@ -1,4 +1,4 @@
-//! The file a folder recording output's start records to (ADR-0260): a new,
+//! The file a folder recording output's start records to (ADR-0262): a new,
 //! timestamped name in the output's folder, never one that is taken.
 
 use std::io;

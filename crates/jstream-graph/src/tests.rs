@@ -843,7 +843,7 @@ fn folder_create(id: &str, path: &str) -> Edit {
     }
 }
 
-/// A folder output's folder (ADR-0260) may be empty, end in a separator or be a root,
+/// A folder output's folder (ADR-0262) may be empty, end in a separator or be a root,
 /// but is otherwise checked as a file's path is, and `output.set_path` keeps it a
 /// folder output, checked by the folder rules.
 #[test]

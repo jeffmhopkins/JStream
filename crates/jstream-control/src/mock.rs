@@ -4175,7 +4175,7 @@ fn check_record(
 }
 
 /// Why `path` is not acceptable for a recording output, as in `jstream-graph`: a
-/// folder's rules when `folder` (ADR-0260), else a file's.
+/// folder's rules when `folder` (ADR-0262), else a file's.
 fn record_target_problem(path: &str, folder: bool) -> Option<&'static str> {
     if folder {
         record_folder_problem(path)

@@ -68,7 +68,7 @@ const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v18_to_v19, v19_to_v20, v20_to_v21, v21_to_v22, v22_to_v23, v23_to_v24,
 ];
 
-/// Version 24 records into folders (ADR-0260): a recording output's `folder`. A version
+/// Version 24 records into folders (ADR-0262): a recording output's `folder`. A version
 /// 23 recording output names one file, which can be recorded to only once, so each
 /// becomes a folder output into the file's folder, and a file with no recording output
 /// gains the default one ([`DEFAULT_RECORDING`](crate::DEFAULT_RECORDING), into the

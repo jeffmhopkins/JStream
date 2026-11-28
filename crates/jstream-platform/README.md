@@ -235,13 +235,13 @@ Contents:
   switches, which both hosts name too
   ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)), and
   `paths::LAST_RECORDING_FILE` the one that keeps the last recording's encoding
-  ([ADR-0260](../../docs/adr/0260-a-recording-output-records-into-a-folder.md)).
+  ([ADR-0262](../../docs/adr/0262-a-recording-output-records-into-a-folder.md)).
 - **The person's folders** (`paths.rs`,
   [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
   `paths::user_folder` finds Documents, Downloads and Videos (`UserFolder`), where the desktop app
   keeps its default project (`paths::PROJECTS_DIR`, `paths::DEFAULT_PROJECT`), saves
   screenshots, and both hosts put the engine's own recordings folder
-  (`paths::RECORDINGS_DIR`, `JStream` in Videos, ADR-0260). On macOS they are
+  (`paths::RECORDINGS_DIR`, `JStream` in Videos, ADR-0262). On macOS they are
   `~/Documents`, `~/Downloads` and `~/Movies`; on Linux, `XDG_DOCUMENTS_DIR`,
   `XDG_DOWNLOAD_DIR` and `XDG_VIDEOS_DIR` from `user-dirs.dirs`, else `Documents`,
   `Downloads` and `Videos` under home. It answers `None` on Windows, where `jstream-platform-windows` asks the shell for

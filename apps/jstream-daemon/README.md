@@ -773,7 +773,7 @@ folder another process is using, so the daemon couldn't start pages while the ap
   `Engine::with_rendering_file`), the file the desktop app names too. With no data
   directory they live in memory.
 - **Recordings** (`serve.rs`,
-  [ADR-0260](../../docs/adr/0260-a-recording-output-records-into-a-folder.md)). A folder
+  [ADR-0262](../../docs/adr/0262-a-recording-output-records-into-a-folder.md)). A folder
   recording output with no folder of its own records into `JStream` in the person's
   Videos folder (`jstream_platform::paths::RECORDINGS_DIR`; the shell's known folder on
   Windows, `Engine::with_recordings_folder`), and the engine keeps the last recording's

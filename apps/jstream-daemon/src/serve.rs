@@ -95,7 +95,7 @@ pub fn engine(
             .with_last_recording_file(dir.join(jstream_platform::paths::LAST_RECORDING_FILE));
     }
     // A folder recording with no folder of its own records into `JStream` in the
-    // person's Videos folder (ADR-0260), as in the desktop app.
+    // person's Videos folder (ADR-0262), as in the desktop app.
     if let Some(videos) = videos_folder() {
         engine =
             engine.with_recordings_folder(videos.join(jstream_platform::paths::RECORDINGS_DIR));

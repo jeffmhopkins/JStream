@@ -1,4 +1,4 @@
-//! Folder recordings (ADR-0260): where a folder recording output's start records to,
+//! Folder recordings (ADR-0262): where a folder recording output's start records to,
 //! and the encoding of the last recording, which a recording output with no encoder
 //! profile of its own records with. Both are per machine and never in the collection,
 //! so they hold whatever collection is open: the engine's own recordings folder is the

@@ -160,7 +160,7 @@ audio-only).
   that; a crash between the two steps leaves an empty destination beside the complete
   `.part` file.
 - **A new file each start** (`record::new_recording_in`,
-  [ADR-0260](../../docs/adr/0260-a-recording-output-records-into-a-folder.md)): a folder
+  [ADR-0262](../../docs/adr/0262-a-recording-output-records-into-a-folder.md)): a folder
   recording output's start names its file in its folder, which it makes with any missing
   parent: `JStream_<stamp>.mp4` (`record::recording_name`, `record::RECORDING_PREFIX`),
   with the start's local date and time as the caller gives it, then `_2` to `_99` when

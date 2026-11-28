@@ -5644,7 +5644,7 @@ mod cpu_pipeline {
         assert_eq!(boxes(&std::fs::read(&take2).expect("take 2"))[0], "ftyp");
     }
 
-    /// `rec` as a folder recording output (ADR-0260) into `folder`.
+    /// `rec` as a folder recording output (ADR-0262) into `folder`.
     fn record_into(control: &InProcessControl, folder: &str) {
         batch(
             control,
@@ -5679,7 +5679,7 @@ mod cpu_pipeline {
         names
     }
 
-    /// ADR-0260: a folder recording output makes its folder, missing parents too, and
+    /// ADR-0262: a folder recording output makes its folder, missing parents too, and
     /// each start records to a new `JStream_<date>_<time>.mp4` there, so a second start
     /// right after the first never overwrites it.
     #[test]
@@ -5718,7 +5718,7 @@ mod cpu_pipeline {
         }
     }
 
-    /// ADR-0260: an empty folder is the engine's own recordings folder, which the host
+    /// ADR-0262: an empty folder is the engine's own recordings folder, which the host
     /// names; an engine without one fails the start, before it begins.
     #[test]
     fn an_empty_folder_records_into_the_engines_own() {
@@ -5740,7 +5740,7 @@ mod cpu_pipeline {
         assert_eq!(files_in(&own).len(), 1, "{:?}", files_in(&own));
     }
 
-    /// ADR-0260: a recording with no encoder profile of its own records with the
+    /// ADR-0262: a recording with no encoder profile of its own records with the
     /// encoding of the last recording, which the engine keeps in its file: after one on
     /// another profile it no longer shares the stream's default session.
     #[test]

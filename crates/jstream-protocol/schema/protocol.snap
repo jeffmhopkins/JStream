@@ -6244,7 +6244,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Changes where a recording output writes its file (since 0.74, #1072), or the\nfolder a folder output records into (since 0.198), keeping its container,\nencoder profile, mix, bus and filters, and whether it is a folder output. A\nrunning output keeps writing where it started; the new path applies from its\nnext `output.start`, which still never overwrites. The path is checked as in\n`output.create`'s [`OutputKind::Record`](crate::OutputKind::Record), by the\nfolder rules for a folder output. An output that isn't a recording is\n`invalid_argument`. Inverse: `output.set_path` with the previous path.",
+          "description": "Changes where a recording output writes its file (since 0.74, #1072), or the\nfolder a folder output records into (since 0.200), keeping its container,\nencoder profile, mix, bus and filters, and whether it is a folder output. A\nrunning output keeps writing where it started; the new path applies from its\nnext `output.start`, which still never overwrites. The path is checked as in\n`output.create`'s [`OutputKind::Record`](crate::OutputKind::Record), by the\nfolder rules for a folder output. An output that isn't a recording is\n`invalid_argument`. Inverse: `output.set_path` with the previous path.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -12553,14 +12553,14 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A recording on the engine's machine: into a folder, a new file each start (since\n0.198, ADR-0260), or to one file.",
+          "description": "A recording on the engine's machine: into a folder, a new file each start (since\n0.200, ADR-0262), or to one file.",
           "properties": {
             "container": {
               "$ref": "#/$defs/RecordContainer",
               "description": "The file format."
             },
             "folder": {
-              "description": "Whether `path` is a folder that each start records a new file into (since\n0.198, ADR-0260). Absent means `false`, a single file, as from a client or\nserver older than 0.198, which reads a folder output's `path` as a file's.",
+              "description": "Whether `path` is a folder that each start records a new file into (since\n0.200, ADR-0262). Absent means `false`, a single file, as from a client or\nserver older than 0.200, which reads a folder output's `path` as a file's.",
               "type": "boolean"
             },
             "path": {
@@ -21046,5 +21046,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.198"
+  "title": "JStream protocol 0.200"
 }

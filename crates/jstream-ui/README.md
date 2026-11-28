@@ -1648,7 +1648,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `output-N` and sends one batch (`duplicate_edits`: the create, the encoder, mix and
   bus, and each filter's `filter.add` with its settings; a folder recording's copy
   records into the same folder, and a one-file recording's (`NewKind::RecordFile`, from a
-  client older than 0.199) gets a free path beside the original's, `copy_path`; never the stream key), then opens the copy's
+  client older than 0.200) gets a free path beside the original's, `copy_path`; never the stream key), then opens the copy's
   settings. Delete… asks first and is off while the output runs.
   An output's settings dialog (Settings…, a double-click, or "+ Add output" with a kind
   picker and a Name field) edits a draft (`OutputDraft`) on a property grid (C16) and
@@ -1664,7 +1664,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   refuses those moves; a new mix or encoder applies when it starts again. In the
   desktop app a recording's folder has a Browse… button, opening a folder dialog (a
   folder recording may leave it empty for the engine's own, `NewKind::needs_target`,
-  ADR-0260), and a one-file recording's path one opening a save dialog for an `.mp4`. A
+  ADR-0262), and a one-file recording's path one opening a save dialog for an `.mp4`. A
   recording with no profile of its own shows "Last recording's" as its encoder
   (`encoder_name`), since it records with the last recording's encoding. The Video section has an Edit… link (named Edit mix…) and the Encoder section
   one (Edit encoder…), each only while a mix or profile is picked, and New… (New

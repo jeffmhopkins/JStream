@@ -10,7 +10,7 @@
 //! other I/O error ends the recording with a typed [`RecordError`] and keeps the
 //! `.part` file.
 //!
-//! A folder recording output (ADR-0260) records each start to a new file that
+//! A folder recording output (ADR-0262) records each start to a new file that
 //! [`new_recording_in`] names in its folder, `JStream_<date>_<time>.mp4`, skipping names
 //! that are taken.
 //!

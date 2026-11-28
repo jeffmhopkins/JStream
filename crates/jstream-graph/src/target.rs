@@ -14,7 +14,7 @@
 //! A recording path is checked for its shape only, the same on every platform:
 //! absolute in either Unix or Windows form, not a UNC or device path, with no `..`
 //! segment, and ending in a file name that is not a DOS device name. A folder output's
-//! folder (ADR-0260) is checked the same way, but may be empty (the engine's own
+//! folder (ADR-0262) is checked the same way, but may be empty (the engine's own
 //! recordings folder) and need not end in a file name. Whether it is
 //! absolute on the engine's own machine, whether its directory exists, and whether a
 //! file is already there, is checked by `output.start`, when the recording is opened.
@@ -50,7 +50,7 @@ pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
     }
 }
 
-/// Why `path` is not an acceptable folder for a folder recording output (ADR-0260), or
+/// Why `path` is not an acceptable folder for a folder recording output (ADR-0262), or
 /// `None` when it is. Empty is the engine's own recordings folder. Otherwise the rules
 /// of [`record_path_problem`], except that the path may end in a separator or be a
 /// drive's root (`/`, `C:\`), and its last segment is a folder's name, which must

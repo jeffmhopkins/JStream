@@ -243,9 +243,9 @@ pub enum NewKind {
     /// A stream to an RTMP(S) server.
     Rtmp,
     /// A recording into a folder on the engine's machine: a new, timestamped file each
-    /// start (ADR-0260). An empty folder is the engine's own, `JStream` in Videos.
+    /// start (ADR-0262). An empty folder is the engine's own, `JStream` in Videos.
     Record,
-    /// A recording to one file, as a client older than protocol 0.199 made it. The
+    /// A recording to one file, as a client older than protocol 0.200 made it. The
     /// form never offers it; an existing one is edited as it is.
     RecordFile,
     /// The virtual camera: the program as a webcam other apps on the engine's machine
@@ -819,7 +819,7 @@ pub fn target_summary(kind: &OutputKind) -> String {
 
 /// The name of the encoder profile an output uses, or with none "Engine default", or
 /// for a recording "Last recording's", whose encoding a recording with no profile of
-/// its own takes (ADR-0260).
+/// its own takes (ADR-0262).
 pub fn encoder_name(
     encoders: &[EncoderProfileInfo],
     chosen: Option<&EncoderProfileId>,
@@ -2771,7 +2771,7 @@ mod tests {
         now(control.hello(hello)).expect("hello");
         assert!(!NewKind::VirtualCam.needs_target());
         assert!(NewKind::Rtmp.needs_target() && NewKind::RecordFile.needs_target());
-        // A folder recording may leave its folder empty: the engine's own (ADR-0260).
+        // A folder recording may leave its folder empty: the engine's own (ADR-0262).
         assert!(!NewKind::Record.needs_target() && NewKind::Record.has_target());
         let id = OutputId::new("output-1");
         let create = create_edit(id.clone(), NewKind::VirtualCam, "ignored");

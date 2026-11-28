@@ -1127,7 +1127,7 @@ fn startup_collection(
     let warm = data.join(jstream_platform::paths::WARM_SCENES_FILE);
     let rendering = data.join(jstream_platform::paths::RENDERING_FILE);
     let last_recording = data.join(jstream_platform::paths::LAST_RECORDING_FILE);
-    // The engine's own recordings folder (ADR-0260): `JStream` in the person's Videos.
+    // The engine's own recordings folder (ADR-0262): `JStream` in the person's Videos.
     let recordings = crate::folders::user_folder(jstream_platform::paths::UserFolder::Videos)
         .map(|videos| videos.join(jstream_platform::paths::RECORDINGS_DIR));
     let engine = || {

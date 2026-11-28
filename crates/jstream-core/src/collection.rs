@@ -66,7 +66,7 @@ impl CollectionFile {
     /// sources), or, when there is no file there, creates it: `graph` with the sample
     /// labels when it has none yet ([`Graph::with_sample_labels`]) and the default
     /// recording output when it has no recording output
-    /// ([`Graph::with_default_recording`], ADR-0260), saved there.
+    /// ([`Graph::with_default_recording`], ADR-0262), saved there.
     pub(crate) fn open(
         path: PathBuf,
         graph: &Graph,

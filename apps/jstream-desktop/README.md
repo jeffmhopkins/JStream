@@ -270,7 +270,7 @@ folder, and its log `logs\cef.log`.
   kept by the engine in `rendering.json` in the data folder
   (`Engine::with_rendering_file`, in `startup_collection`), the file the daemon names
   too, so they hold whatever project opens.
-- **Recordings** ([ADR-0260](../../docs/adr/0260-a-recording-output-records-into-a-folder.md)):
+- **Recordings** ([ADR-0262](../../docs/adr/0262-a-recording-output-records-into-a-folder.md)):
   a folder recording output with no folder of its own records into `JStream` in the
   person's Videos folder (the shell's known folder on Windows,
   `Engine::with_recordings_folder`, in `startup_collection`), and the last recording's

@@ -61,11 +61,11 @@ pub enum UserFolder {
     /// Downloads: screenshots are saved there, where a browser's download goes.
     Downloads,
     /// Videos (`Movies` on macOS): the engine's own recordings folder is in it
-    /// (ADR-0260).
+    /// (ADR-0262).
     Videos,
 }
 
-/// The engine's own recordings folder, inside the person's Videos folder (ADR-0260):
+/// The engine's own recordings folder, inside the person's Videos folder (ADR-0262):
 /// `Videos\JStream` on Windows, `~/Movies/JStream` on macOS, `~/Videos/JStream` (or
 /// `XDG_VIDEOS_DIR`'s) on Linux. A folder recording output with an empty folder records
 /// there.
@@ -73,7 +73,7 @@ pub const RECORDINGS_DIR: &str = "JStream";
 
 /// The file in the data folder that keeps the encoding of the last recording the engine
 /// made, which a recording output with no encoder profile of its own records with
-/// (ADR-0260).
+/// (ADR-0262).
 pub const LAST_RECORDING_FILE: &str = "last-recording.json";
 
 /// Whether the exe in `exe_dir` is portable: a [`PORTABLE_MARKER`] file sits beside it.

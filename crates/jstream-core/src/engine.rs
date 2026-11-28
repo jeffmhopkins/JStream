@@ -145,7 +145,7 @@ struct Shared {
     /// The 3D rendering switches' file (ADR-0170 decision 1), once the host names it.
     /// Taken before the collection lock, as the warm budget's file is.
     rendering_file: Mutex<Option<PathBuf>>,
-    /// Folder recordings (ADR-0260): the engine's own recordings folder and the last
+    /// Folder recordings (ADR-0262): the engine's own recordings folder and the last
     /// recording's encoding, with its file. A leaf lock, taken alone or last.
     recordings: Mutex<crate::recordings::Recordings>,
     /// The open collection file's stream-key scope (ADR-0121 §5), derived from its path,
@@ -428,7 +428,7 @@ impl Engine {
     }
 
     /// Records folder recording outputs with an empty folder into `folder`, the
-    /// engine's own recordings folder (ADR-0260): `JStream` in the person's Videos
+    /// engine's own recordings folder (ADR-0262): `JStream` in the person's Videos
     /// folder. Without one, such an output's start fails.
     #[must_use]
     pub fn with_recordings_folder(self, folder: impl Into<PathBuf>) -> Self {
@@ -436,7 +436,7 @@ impl Engine {
         self
     }
 
-    /// Keeps the last recording's encoding in the file at `path` (ADR-0260): a recording
+    /// Keeps the last recording's encoding in the file at `path` (ADR-0262): a recording
     /// output with no encoder profile of its own records with it, and every recording
     /// that starts with another saves it there. A file that can't be read is logged and
     /// replaced by the next recording.
@@ -3495,7 +3495,7 @@ impl Engine {
             },
             None => None,
         };
-        // What a recording with no encoder profile of its own records with (ADR-0260).
+        // What a recording with no encoder profile of its own records with (ADR-0262).
         let fallback = lock(&self.shared.recordings).fallback();
         let mut wake = Vec::new();
         let (parts, publish, generation, program, key, own_audio, hardware_held) = loop {
@@ -3652,7 +3652,7 @@ impl Engine {
         };
         wake_all(std::mem::take(&mut wake));
         // A recording that starts is the last recording, whose encoding a recording with
-        // no profile of its own takes next (ADR-0260).
+        // no profile of its own takes next (ADR-0262).
         let recorded =
             matches!(publish, Target::Record(_) | Target::RecordInto(_)).then_some(key.2);
 
@@ -4417,7 +4417,7 @@ impl Drop for SettleOnDrop<'_> {
 /// itself when it has its own video chain, so it shares with no one (ADR-0080 §3). An
 /// output with no mix, or one the host declared, gets the program at the program
 /// stage's size and base rate; one with no profile the engine's default, or a recording
-/// with none `fallback`, the last recording's encoding (ADR-0260).
+/// with none `fallback`, the last recording's encoding (ADR-0262).
 fn encode_key(graph: &Graph, output_id: &OutputId, fallback: EncoderProfile) -> EncodeKey {
     let state = graph.state();
     let output = state.output(output_id);
@@ -4466,7 +4466,7 @@ fn encodes_own_audio(graph: &Graph, output_id: &OutputId) -> bool {
 enum OwnTarget {
     /// A recording, to this file.
     Record(PathBuf),
-    /// A folder recording (ADR-0260), into the folder its `path` names: empty for the
+    /// A folder recording (ADR-0262), into the folder its `path` names: empty for the
     /// engine's own.
     RecordInto(String),
     /// The virtual camera, at the canvas size.
@@ -4523,7 +4523,7 @@ enum Target {
     Ready(Box<dyn LivePublish>),
     Open(OpenPublish),
     Record(PathBuf),
-    /// A folder recording (ADR-0260): a new file in this folder, named when it opens.
+    /// A folder recording (ADR-0262): a new file in this folder, named when it opens.
     RecordInto(PathBuf),
     Vcam(VcamOut, FrameSize),
     /// A `youtube` output: the ingest is read from the Live API when it opens.

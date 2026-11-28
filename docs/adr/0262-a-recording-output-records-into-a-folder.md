@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0260"
+id = "ADR-0262"
 title = "A recording output records into a folder"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0260: A recording output records into a folder
+# ADR-0262: A recording output records into a folder
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -29,7 +29,7 @@ The protocol only grows by additions ([R-API-001](../RULES.md#R-API-001)), so
 ## Decision
 
 1. **A `record` output can name a folder.** `OutputKind::Record` gains `folder`
-   (protocol 0.199). With it, `path` is a folder, and each `output.start` records
+   (protocol 0.200). With it, `path` is a folder, and each `output.start` records
    to a new file there: `JStream_<date>_<time>.<ext>`, such as
    `JStream_2026-11-28_10-17-30.mp4`, stamped with the engine machine's local time
    when it starts. When that name or its `.part` name is taken, `_2`, `_3`, … go
@@ -69,7 +69,7 @@ The protocol only grows by additions ([R-API-001](../RULES.md#R-API-001)), so
   none, so the two may no longer share an encoder session after a recording on
   another profile ([ADR-0080](0080-program-master-and-output-chains-v2.md)). Give both
   the same profile to share one.
-- A client older than 0.199 reads a folder output as a file output with that path.
+- A client older than 0.200 reads a folder output as a file output with that path.
   Its `output.set_path` on one is checked by the folder rules.
 - The file name pattern is not configurable. A prefix or format setting can be added
   later as another optional field.

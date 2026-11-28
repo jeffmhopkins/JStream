@@ -1,4 +1,4 @@
-//! The recording output a collection starts with (ADR-0260): a folder output into the
+//! The recording output a collection starts with (ADR-0262): a folder output into the
 //! engine's own recordings folder, so Record works before anything is set up.
 
 use crate::model::{Chains, Graph, Output};

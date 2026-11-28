@@ -139,7 +139,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - RTMP server URLs in `output.create` and `output.set_target` (`jstream-graph`'s
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
-  - recording paths and a folder recording's folder (ADR-0260: may be empty, end in a
+  - recording paths and a folder recording's folder (ADR-0262: may be empty, end in a
     separator or be a root) in `output.create` (`jstream-graph`'s platform-independent rule and
     reasons), and in `output.set_path`, by the output's own kind's rules, which refuses any output but a recording,
     `output.set_target` on a recording or virtual-camera output (the mock

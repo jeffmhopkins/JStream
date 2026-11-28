@@ -745,8 +745,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74 and `folder`, a new timestamped
-  file each start into a folder, from 0.199
-  ([ADR-0260](adr/0260-a-recording-output-records-into-a-folder.md)), and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  file each start into a folder, from 0.200
+  ([ADR-0262](adr/0262-a-recording-output-records-into-a-folder.md)), and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box, and
   `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89),
   and `canvas.set_blending` the space blend modes mix in (ADR-0126, protocol 0.101)
@@ -1913,7 +1913,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   a marker naming a scene the file doesn't hold, or one something shows, is dropped on load.
   Version 23 (ADR-0222) adds a folder's `scene`, a keyframe scene's `folder` and a
   timeline's `folder`, refused the same way; a scene's own folders are made after the
-  scenes, then every folder is put back in file order. Version 24 (ADR-0260) adds a
+  scenes, then every folder is put back in file order. Version 24 (ADR-0262) adds a
   recording output's `folder`, refused the same way, and moves each older recording
   output into its file's folder, and a file with no recording output gains the
   `recording` output that a new collection starts with, into the engine's own folder.
@@ -1984,7 +1984,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 - **Last recording's encoding:** `last-recording.json` (version 1) in the data
   directory, the encoder profile the last recording started with, which a recording
   output with no profile of its own records with
-  ([ADR-0260](adr/0260-a-recording-output-records-into-a-folder.md)). The desktop app
+  ([ADR-0262](adr/0262-a-recording-output-records-into-a-folder.md)). The desktop app
   and the daemon name it (`Engine::with_last_recording_file`); `jstream-core` reads it
   at startup and replaces it atomically when a recording starts with another encoding.
   A file it can't read, or one whose encoding it can't open, is logged and read as

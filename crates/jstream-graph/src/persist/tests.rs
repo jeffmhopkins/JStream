@@ -120,7 +120,7 @@ const V23: &str = include_str!("fixtures/v23.json");
 
 /// A collection file at schema version 24, the current one: version 23 with the
 /// recording output `rec` recording into its file's folder, `/home/me/Videos`
-/// (ADR-0260), as every older fixture's `rec` loads. The same rule applies once version
+/// (ADR-0262), as every older fixture's `rec` loads. The same rule applies once version
 /// 25 exists.
 const V24: &str = include_str!("fixtures/v24.json");
 
@@ -644,7 +644,7 @@ fn fixture_graph() -> Graph {
 }
 
 /// Output `rec` as a file from before version 24 loads it: recording into its file's
-/// folder (ADR-0260). No edit turns a file output into a folder output, so the state is
+/// folder (ADR-0262). No edit turns a file output into a folder output, so the state is
 /// changed directly.
 fn record_into_its_folder(graph: &mut Graph) {
     let Some(rec) = graph.state.outputs.get_mut(&OutputId::new("rec")) else {
@@ -1115,7 +1115,7 @@ fn the_v24_fixture_loads_exactly() {
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
 }
 
-/// Version 24 records into folders (ADR-0260): a version 23 recording output records
+/// Version 24 records into folders (ADR-0262): a version 23 recording output records
 /// into its file's folder, a root's included, a file with no recording output gains the
 /// default one, and a version 23 `folder` is refused, as version 23 refused it.
 #[test]
@@ -3063,7 +3063,7 @@ fn a_preset_saved_by_another_kind_version_is_refused() {
 #[test]
 fn folders_labels_and_metadata_round_trip() {
     let mut graph = fixture_graph();
-    // A recording output's `"folder": true` (ADR-0260) is not a folder ID.
+    // A recording output's `"folder": true` (ADR-0262) is not a folder ID.
     let plain = graph.to_collection_json().replace("\"folder\": true", "");
     for field in [
         "folders",

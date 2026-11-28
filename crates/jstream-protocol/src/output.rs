@@ -28,7 +28,7 @@ pub enum OutputKind {
         target: RtmpTarget,
     },
     /// A recording on the engine's machine: into a folder, a new file each start (since
-    /// 0.199, ADR-0260), or to one file.
+    /// 0.200, ADR-0262), or to one file.
     Record {
         /// Where the finished recordings go: with `folder`, the folder each start
         /// writes a new file into, else the one file the recording writes. An absolute
@@ -63,8 +63,8 @@ pub enum OutputKind {
         /// The file format.
         container: RecordContainer,
         /// Whether `path` is a folder that each start records a new file into (since
-        /// 0.199, ADR-0260). Absent means `false`, a single file, as from a client or
-        /// server older than 0.199, which reads a folder output's `path` as a file's.
+        /// 0.200, ADR-0262). Absent means `false`, a single file, as from a client or
+        /// server older than 0.200, which reads a folder output's `path` as a file's.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         folder: bool,
     },

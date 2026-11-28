@@ -1107,7 +1107,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             }),
             invalid("edits.0.kind.path", "must not end in a DOS device name"),
         ),
-        // A folder output's folder (ADR-0260) may end in a separator, but is otherwise
+        // A folder output's folder (ADR-0262) may end in a separator, but is otherwise
         // checked as a file's path is.
         (
             Batch::single(Edit::OutputCreate {
