@@ -2220,7 +2220,7 @@ The engine keeps the keyframe each placed scene is switched to
 ## Snapshots
 <!-- @section
 covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
-depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry", "docs/adr/0257-models-in-one-scene-are-one-depth.md"]
+depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry", "docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md"]
 -->
 
 `video.snapshot` returns the program mix as a PNG
@@ -2723,12 +2723,13 @@ it, it draws a surface, its camera has depth of field or its box can't be told
 [ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)).
 A scene with two or more models that can share one depth draws those into the scene
 instead of into those layers
-([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)); a model alone keeps
+([ADR-0259](../../docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md)); a model alone keeps
 its window. That draw stays in linear light even when the canvas blends in sRGB. An sRGB
 pass decodes its target when it finishes, and decoding the models' linear texels would
 darken the scene under a bloom
-(`warp_show_bloom_does_not_darken_a_rectangle_over_the_ship`, when the warp models are
-on disk). A model that shares does not carry `Item::depth`, so the view depth is not a
+(`a_depth_bloom_does_not_darken_a_rectangle_over_shared_models`). A faded or additive
+model in that draw writes no depth, and a model whose blend reads the picture under it
+keeps its layer. Program's own layer is used for that draw only when its scene shares. A model that shares does not carry `Item::depth`, so the view depth is not a
 copy of its private depth image. `draw_model_depth` poses the mesh into the view depth,
 and `Compositor::blend_scene_depth` max-blends the scene depth under that. The private
 layer and depth are cleared to transparent, the layer names an empty box so a composite

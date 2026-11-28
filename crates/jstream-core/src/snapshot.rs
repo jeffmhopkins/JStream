@@ -7396,23 +7396,26 @@ pub(crate) fn compose_metered(
                 let took = meter.phase_since(Phase::Passes, started);
                 meter.composite(took);
             }
+            // Only a pass whose models share one depth needs a layer of its own to draw
+            // them into first (ADR-0259). Every other frame the size of the canvas is
+            // composited straight to the output.
             None if direct
-                && drawn_pass.is_none_or(|pass| {
-                    !pass.layers.iter().any(|layer| {
-                        layer.boxed.is_some_and(|boxed| boxed.model) && drawn_camera.is_some()
-                    })
-                }) =>
+                && drawn_pass
+                    .is_none_or(|pass| sharing_models(shot, &pass.scene, drawn_camera) < 2) =>
             {
                 let shown = scene(output, clear, &items);
                 return composite_from(compositor, meter, &shown, readback, started);
             }
             None => {
+                // Claimed for a pass that can share (`claim_frame`); a camera that moved
+                // into sharing this frame takes a layer for this frame only.
                 let owned;
-                let layer = if direct {
-                    owned = compositor.layer(canvas.width(), canvas.height())?;
-                    &owned
-                } else {
-                    image(cache, &GpuKey::Program)?
+                let layer = match cache.get(&GpuKey::Program) {
+                    Some(layer) => layer,
+                    None => {
+                        owned = compositor.layer(canvas.width(), canvas.height())?;
+                        &owned
+                    }
                 };
                 render_models(
                     compositor,
@@ -7674,7 +7677,7 @@ fn run_chains(
                     && let Some(image) = cache.get(depth)
                 {
                     // The shared pass wrote geometric depth. Fold it into the view
-                    // depth under the cards `draw_view_depth` just placed (ADR-0257).
+                    // depth under the cards `draw_view_depth` just placed (ADR-0259).
                     compositor.blend_scene_depth(image)?;
                 }
                 profile::gpu_part(compositor, None);
@@ -8053,7 +8056,7 @@ fn track_camera(
     transition.camera(&cameras, (key, track, *seen), elapsed)
 }
 
-/// Whether `owner`'s model is drawn into its scene's shared colour and depth (ADR-0257)
+/// Whether `owner`'s model is drawn into its scene's shared colour and depth (ADR-0259)
 /// rather than a layer of its own. A model with item filters, source filters, depth of
 /// field, or a screen-space reflection keeps its layer: those passes need an image of
 /// the model alone. A 2D scene has no shared depth.
@@ -8077,7 +8080,7 @@ fn model_layer_shares(shot: &Shot, image: &GpuKey, camera: Option<SceneCamera>) 
     else {
         return false;
     };
-    // A model alone in its scene keeps its layer and its depth (ADR-0257 decision 1):
+    // A model alone in its scene keeps its layer and its depth (ADR-0259 decision 1):
     // only two or more share.
     model_shares(shot, &owner, camera, shown) && sharing_models(shot, scene, camera) >= 2
 }
@@ -8094,10 +8097,21 @@ fn model_shares(
     if camera.blur_px.get() > 0.0 || camera.fixed_aperture {
         return false;
     }
-    let ChainOwner::Item(scene, _) = owner else {
+    let ChainOwner::Item(scene, item) = owner else {
         return false;
     };
     if shot.chains.contains_key(owner) || shot.shown_chain(owner).is_some() {
+        return false;
+    }
+    // The shared pass draws `normal` source-over and `additive` added. Any other blend
+    // reads the picture under the whole model, so it keeps its layer (ADR-0259).
+    let blend = scene_pass(shot, scene).and_then(|pass| {
+        pass.layers
+            .iter()
+            .find(|layer| layer.image.boxed_item().is_some_and(|(_, id)| id == item))
+            .map(|layer| layer.blend)
+    });
+    if blend.is_some_and(|blend| !matches!(blend, BlendMode::Normal | BlendMode::Additive)) {
         return false;
     }
     let reflects = shown.lighting == Lighting::Scene && shown.reflections;
@@ -8109,7 +8123,7 @@ fn model_shares(
 
 /// How many models of scene `scene` [`model_shares`]. One model keeps its own layer,
 /// which may be only the part of the canvas it covers (ADR-0251). Two or more share
-/// the scene depth (ADR-0257).
+/// the scene depth (ADR-0259).
 fn sharing_models(shot: &Shot, scene: &SceneId, camera: Option<SceneCamera>) -> usize {
     let Some(pass) = scene_pass(shot, scene) else {
         return 0;
@@ -8557,7 +8571,7 @@ fn draw_model(
     // A model a transition's track draws is seen through that track's camera, which a
     // Move moves, so both sides of a glide draw it the same (ADR-0180).
     // A transition's track composites this layer, so it is drawn even when the scene
-    // pass draws the model into the shared depth instead (ADR-0257).
+    // pass draws the model into the shared depth instead (ADR-0259).
     let tracked = track_camera(shot, owner, at, chains, (live, captures));
     let camera = tracked.or_else(|| {
         moved_camera(
@@ -10196,7 +10210,24 @@ pub(crate) fn claim_layers(
             canvas.height(),
         )?;
     }
-    if output != canvas && !staged {
+    // Program's layer: for an output of another size, or for a 3D scene whose models
+    // share one depth and are drawn into it before it is placed (ADR-0259).
+    let shares = || {
+        let program = shot
+            .show_of(mix)
+            .map(|(root, _)| root)
+            .or_else(|| passes.last());
+        program.is_some_and(|pass| {
+            let camera = pass.camera.as_ref().and_then(|camera| {
+                camera
+                    .own
+                    .or_else(|| camera.parent.as_ref().and_then(|(_, parent)| *parent))
+                    .or(camera.supplied)
+            });
+            sharing_models(shot, &pass.scene, camera) >= 2
+        })
+    };
+    if !staged && (output != canvas || shares()) {
         cache.layer(
             compositor,
             &GpuKey::Program,
@@ -10804,7 +10835,7 @@ fn layer_pose<'a>(
     })
 }
 
-/// Whether the model `image` places writes depth (ADR-0257): it has an opaque or
+/// Whether the model `image` places writes depth (ADR-0259): it has an opaque or
 /// masked material. A canopy does not stop the hull writing depth. A missing model
 /// is treated as solid. A model whose every material is blended only tests.
 fn model_occludes(shot: &Shot, image: &GpuKey) -> bool {
