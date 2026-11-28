@@ -2724,6 +2724,10 @@ canvas its box is in, a step of 64, 96, 128 and so on each way, unless filters r
 it, it draws a surface, its camera has depth of field or its box can't be told
 (`model_window`, `GpuModel::seen_box`,
 [ADR-0251](../../docs/adr/0251-a-models-layer-holds-only-its-part-of-the-canvas.md)).
+`claim_layers`, which runs after the models are drawn, keeps such a layer and its depth
+at the size they have. Claimed at the box's size, they would be replaced by blank layers
+of the whole canvas and the model would not show
+(`a_small_model_draws_live_as_a_snapshot_does_from_every_side`).
 A scene with two or more models that can share one depth draws those into the scene
 instead of into those layers
 ([ADR-0259](../../docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md)); a model alone keeps

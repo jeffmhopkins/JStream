@@ -8825,4 +8825,126 @@ mod tests {
         assert_eq!(pixels, [WHITE]);
         assert_eq!(chains.len(), 0);
     }
+
+    /// #1834: a model drawn into a layer that holds only its part of the canvas
+    /// (ADR-0251), as the program and the preview draw it, looks as it does drawn into
+    /// a layer of the whole canvas, as a snapshot draws it, from every side and far off.
+    #[test]
+    fn a_small_model_draws_live_as_a_snapshot_does_from_every_side() {
+        use jstream_sources::SourceKind as _;
+        let (width, height) = (640_u32, 360_u32);
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("cube"));
+        let cube = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model")
+            .model();
+        let block = Frame::new(1, 1, &[255; 4], 4)
+            .expect("invariant: 1x1 RGBA8")
+            .with_model(cube);
+        let clear = Frame::new(1, 1, &[0; 4], 5).expect("invariant: 1x1 RGBA8");
+        let mut graph = placed(&[("cam", (320.0, 180.0), (40.0, 40.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![Edit::CanvasSetSize { width, height }, hide("logo")],
+        );
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut live = ResourceCache::new();
+        live.draw_uploads_small(true);
+        let mut live_chains = Chains::default();
+        let mut whole = ResourceCache::new();
+        let mut whole_chains = Chains::default();
+        let points: Vec<(u32, u32)> = (0..height / 4)
+            .flat_map(|y| (0..width / 4).map(move |x| (x * 4 + 1, y * 4 + 1)))
+            .collect();
+        let mut failures = Vec::new();
+        for fov in [45.0_f32, 40.0] {
+            for distance in [400.0_f32, 1200.0, 1950.0] {
+                for step in 0..24 {
+                    let angle = (step as f32 * 15.0).to_radians();
+                    let target = jstream_protocol::Vec3::new(320.0, 180.0, 0.0).expect("finite");
+                    let position = jstream_protocol::Vec3::new(
+                        320.0 + distance * angle.sin(),
+                        180.0 - distance * 0.2,
+                        distance * angle.cos(),
+                    )
+                    .expect("finite");
+                    let camera = jstream_protocol::SceneCamera {
+                        position,
+                        target,
+                        fov_deg: jstream_protocol::Finite32::new(fov).expect("finite"),
+                        ..jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas {
+                            width,
+                            height,
+                        })
+                    };
+                    apply(
+                        &mut graph,
+                        vec![Edit::SceneSetCamera {
+                            scene_id: SceneId::new("main"),
+                            camera: Some(camera),
+                        }],
+                    );
+                    let shot = snapshot::plan_with(
+                        &graph,
+                        Some(&SceneId::new("main")),
+                        None,
+                        &mut |id| {
+                            Some(Look::frame(
+                                if id.as_str() == "cam" {
+                                    block.clone()
+                                } else {
+                                    clear.clone()
+                                },
+                                None,
+                            ))
+                        },
+                        &FilterAssets::default(),
+                    )
+                    .shot;
+                    let a = draw_points(
+                        &mut compositor,
+                        (&mut whole, &mut whole_chains),
+                        (&shot, &LiveParams::default()),
+                        &points,
+                    );
+                    let b = draw_points(
+                        &mut compositor,
+                        (&mut live, &mut live_chains),
+                        (&shot, &LiveParams::default()),
+                        &points,
+                    );
+                    let held = live
+                        .get(&GpuKey::ItemBox(SceneId::new("main"), ItemId::new("cam")))
+                        .and_then(|layer| layer.window());
+                    assert!(held.is_some(), "the live layer holds a part of the canvas");
+                    let lit = |p: &[[u8; 4]]| {
+                        p.iter().filter(|c| c[3] > 0 && c[..3] != [0, 0, 0]).count()
+                    };
+                    assert!(lit(&a) > 0, "the cube shows in the snapshot");
+                    let differ = a
+                        .iter()
+                        .zip(&b)
+                        .filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 8))
+                        .count();
+                    if differ > 0 {
+                        failures.push(format!(
+                            "fov {fov} distance {distance} angle {}: {differ} differ, whole {} live {}",
+                            step * 15,
+                            lit(&a),
+                            lit(&b)
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }
