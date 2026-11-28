@@ -2448,6 +2448,29 @@ fn a_material_drive_adds_within_ranges_and_nothing_when_it_adds_nothing() {
         ..none
     });
     assert_eq!(&off[4..7], &[0.0, 0.0, 0.0]);
+    // A set strength replaces the multiplier, the last one wins, and drives then add to
+    // it (ADR-0259): 0 turns the glow off, 3 triples it.
+    let set = |to: f32| super::MaterialDrive {
+        set_emissive_strength: Some(to),
+        ..none
+    };
+    let unlit = drive(set(0.0));
+    assert_eq!(&unlit[4..7], &[0.0, 0.0, 0.0]);
+    let tripled = super::driven_values(
+        &values,
+        "a",
+        &[
+            set(9.0),
+            set(2.0),
+            super::MaterialDrive {
+                emissive_strength: 1.0,
+                ..none
+            },
+        ],
+    )
+    .expect("it drives");
+    assert!((tripled[4] - 6.0).abs() < 1e-5, "{tripled:?}");
+    assert!((drive(set(1000.0))[4] - 128.0).abs() < 1e-3);
     // Black is as dark as a colour goes, and alpha stays.
     let dark = drive(super::MaterialDrive {
         color: -1.0,
