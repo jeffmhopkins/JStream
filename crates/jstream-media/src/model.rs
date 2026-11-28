@@ -428,9 +428,30 @@ impl Bounds {
     pub fn size(&self) -> [f32; 3] {
         [0, 1, 2].map(|i| self.max[i] - self.min[i])
     }
+
+    /// The box around both.
+    pub fn union(self, other: Self) -> Self {
+        Self {
+            min: [0, 1, 2].map(|i| self.min[i].min(other.min[i])),
+            max: [0, 1, 2].map(|i| self.max[i].max(other.max[i])),
+        }
+    }
 }
 
 static NEXT_VERSION: AtomicU64 = AtomicU64::new(1);
+
+/// The most objects [`Model::objects`] lists. A file with more lists the first ones.
+pub const MAX_OBJECTS: usize = 256;
+
+/// One named object of a model: the primitives drawn for one name of its file, a node's
+/// or, for a node with none, its mesh's, and the box around them in the model's space.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Object {
+    /// Its name in the file.
+    pub name: String,
+    /// The box around the vertices its triangles use, where the rest pose puts them.
+    pub bounds: Bounds,
+}
 
 /// A checked model: its primitives, materials and textures, its bounds, and a version
 /// that is new for every model built, so a GPU upload can be cached by it.
@@ -440,6 +461,7 @@ pub struct Model {
     materials: Vec<Material>,
     textures: Vec<ModelTexture>,
     bounds: Bounds,
+    objects: Arc<[Object]>,
     rig: Option<Arc<rig::Rig>>,
     version: u64,
     picker: pick::Picker,
@@ -501,6 +523,7 @@ impl Model {
         let mut bytes: u64 = textures.iter().map(ModelTexture::bytes).sum();
         let mut min = [f32::INFINITY; 3];
         let mut max = [f32::NEG_INFINITY; 3];
+        let mut objects: Vec<Object> = Vec::new();
         for (primitive, p) in primitives.iter().enumerate() {
             if p.material >= materials.len() {
                 return Err(ModelError::Material {
@@ -543,12 +566,31 @@ impl Model {
             }
             // Only vertices that a triangle uses count toward the bounds, where the rest
             // pose places them.
+            let mut own = Bounds {
+                min: [f32::INFINITY; 3],
+                max: [f32::NEG_INFINITY; 3],
+            };
             for &i in &p.indices {
                 let v = &p.vertices[i as usize];
                 let at = rig::skin(&rest, v.joints, v.weights, v.position);
-                for c in 0..3 {
-                    min[c] = min[c].min(at[c]);
-                    max[c] = max[c].max(at[c]);
+                for (c, at) in at.iter().enumerate() {
+                    own.min[c] = own.min[c].min(*at);
+                    own.max[c] = own.max[c].max(*at);
+                }
+            }
+            for c in 0..3 {
+                min[c] = min[c].min(own.min[c]);
+                max[c] = max[c].max(own.max[c]);
+            }
+            // Its object: the first name it is drawn for, its node's, else its mesh's.
+            if let Some(name) = p.names.first().filter(|_| !p.indices.is_empty()) {
+                if let Some(object) = objects.iter_mut().find(|object| &object.name == name) {
+                    object.bounds = object.bounds.union(own);
+                } else if objects.len() < MAX_OBJECTS {
+                    objects.push(Object {
+                        name: name.clone(),
+                        bounds: own,
+                    });
                 }
             }
             triangles += p.indices.len() as u64 / 3;
@@ -568,6 +610,7 @@ impl Model {
             materials,
             textures,
             bounds: Bounds { min, max },
+            objects: objects.into(),
             rig,
             version: NEXT_VERSION.fetch_add(1, Ordering::Relaxed),
             picker: pick::Picker::default(),
@@ -592,6 +635,14 @@ impl Model {
     /// The box around the vertices its triangles use.
     pub fn bounds(&self) -> Bounds {
         self.bounds
+    }
+
+    /// Its named objects, in the order the file draws them, which `source.sizes` lists
+    /// (protocol 0.198): at most
+    /// [`MAX_OBJECTS`]. Empty for a model whose primitives have no names, a built-in
+    /// shape's.
+    pub fn objects(&self) -> &Arc<[Object]> {
+        &self.objects
     }
 
     /// Its rig, for a model that can be posed (ADR-0151 decision 7).
@@ -714,6 +765,40 @@ mod tests {
         let b = a.with_materials(|m| m.unlit = true);
         assert_ne!(a.version(), b.version());
         assert!(b.materials()[0].unlit);
+    }
+
+    /// A model lists each name its primitives are drawn for once, with the box
+    /// around all of that name's primitives, in the order the file draws them.
+    #[test]
+    fn a_model_lists_its_named_objects_with_their_bounds() {
+        let named = |name: &str, dx: f32| {
+            let mut p = triangle(0);
+            for v in &mut p.vertices {
+                v.position[0] += dx;
+            }
+            p.names = vec![name.to_owned(), format!("{name}_mesh")];
+            p
+        };
+        let model = Model::new(
+            vec![
+                named("hull", 0.0),
+                named("wing", 2.0),
+                named("hull", 5.0),
+                triangle(0),
+            ],
+            vec![Material::default()],
+            vec![],
+        )
+        .unwrap();
+        let objects = model.objects();
+        assert_eq!(objects.len(), 2);
+        assert_eq!(objects[0].name, "hull");
+        assert_eq!(objects[0].bounds.min, [0.0, 0.0, 0.0]);
+        assert_eq!(objects[0].bounds.max, [6.0, 1.0, 0.0]);
+        assert_eq!(objects[1].name, "wing");
+        assert_eq!(objects[1].bounds.min, [2.0, 0.0, 0.0]);
+        let plain = Model::new(vec![triangle(0)], vec![Material::default()], vec![]).unwrap();
+        assert!(plain.objects().is_empty());
     }
 
     #[test]

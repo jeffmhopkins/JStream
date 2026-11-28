@@ -207,7 +207,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
   `MAX_PSNR_DB`), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
-  `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
+  `CaptureTargetInfo`, `FontInfo`, `SourceSize` (with `ModelObject`) and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES`,
   `MAX_ACTIVITY_SUMMARY_CHARS` and `HOTKEYS_CLIENT_NAME`, the desktop hotkeys' client name
   that Agent activity leaves out). `state.get` carries the `Canvas` and the `Blending` (since 0.101), and
@@ -411,7 +411,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.197 because `profile.get`'s units give their GPU time apart
+`PROTOCOL_VERSION` is 0.198 because `source.sizes` and `source.size_changed` list a
+3D model's named objects (`SourceSize`'s `objects`: each object's name and its box, in
+fractions of the model's own); 0.197 because `profile.get`'s units give their GPU time apart
 by part (`UnitProfile`'s `gpu_parts`: a 3D model's draw, a model's or a scene's view
 depth, a scene's surface buffer and shadow maps, and each of a chain's first `GPU_PART_FILTERS` filters); 0.196
 because the rendering switches gain `model_antialiasing`,
@@ -2369,7 +2371,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `duration_ms`, one play's length in milliseconds: from its container, or once a play
   has reached its end (`source.size_changed` announces it when it becomes known). A file
   with no video stream reports it beside the 1×1 `size` above. Omitted for every other
-  source and while the length isn't known.
+  source and while the length isn't known. Since 0.198 a 3D model whose file has two or
+  more named objects also lists them, as `objects` (`ModelObject`: its glTF node's name,
+  else its mesh's, and its box as `min` and `max` fractions 0 to 1 of the model's own
+  box, x right, y down, z toward the viewer as `depth` is), up to 256 in file order, so
+  an editor can list a model's parts and outline one. Omitted when it has none.
 - `activity.list {after_seq?, limit?}`: the engine's recent activity, newest first
   ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)): one
   `ActivityEntry` for each batch, undo, redo and action the audit log records (not
@@ -2742,7 +2748,7 @@ After `welcome`, the server pushes every event to every client.
 - `privacy.changed {on, client_id, request_id?}`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so the engine never sends it. Added in 0.33.
-- `source.size_changed {source_id, size?, depth?, duration_ms?}` says a source's size changed: it became
+- `source.size_changed {source_id, size?, depth?, duration_ms?, objects?}` says a source's size changed: it became
   known (the first frame), changed, or became unknown (`size` omitted: the source
   stopped, failed or was deleted; a deletion's comes after its `state.changed`). The
   size is the one `source.sizes` reports, which a client reads once and then follows
@@ -2750,7 +2756,8 @@ After `welcome`, the server pushes every event to every client.
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
   `depth`, as `source.sizes` reports it, since 0.157; `duration_ms`, likewise, since
   0.177: a length becoming known (once a play reaches the end of a file whose container
-  didn't say) is a change too, even when the size stays the same.
+  didn't say) is a change too, even when the size stays the same; `objects`, as
+  `source.sizes` reports them, since 0.198.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

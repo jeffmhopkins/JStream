@@ -1197,12 +1197,13 @@ impl Compositor {
         self.draw_model_beside(draw, target, (None, None))
     }
 
-    /// Draws every model in `models` into `target` with one depth (ADR-0257). Opaque
+    /// Draws every model in `models` into `target` with one depth (ADR-0259). Opaque
     /// materials of a fully opaque `normal` item are drawn first, depth tested and
-    /// written, across all of them. Transparent fragments — blended materials, an item
-    /// opacity below 1, or a blend other than `normal` — follow, far to near by each
-    /// primitive's centre, depth tested at that fragment and not written. The scene
-    /// depth is left for a later pass to test cards against; it is not cleared there.
+    /// written, across all of them. Transparent fragments — blended materials, and every
+    /// primitive of an item under full opacity or with the `additive` blend — follow,
+    /// far to near by each primitive's centre, depth tested at that fragment and not
+    /// written. The scene depth is left for a later pass to test cards against; it is
+    /// not cleared there.
     ///
     /// # Errors
     /// What [`Self::draw_model`] reports for a model, or a target this compositor did
@@ -1229,7 +1230,7 @@ impl Compositor {
     }
 
     /// Folds the scene depth into `target`, a depth layer of the same size, keeping
-    /// whichever is nearer at each texel (ADR-0257). Nothing happens when this
+    /// whichever is nearer at each texel (ADR-0259). Nothing happens when this
     /// compositor has no scene depth, or it is a different size.
     ///
     /// # Errors
@@ -1254,7 +1255,7 @@ impl Compositor {
         Ok(())
     }
 
-    /// Composites `scene` over `target` without clearing it or its depth (ADR-0257).
+    /// Composites `scene` over `target` without clearing it or its depth (ADR-0259).
     /// Cards test the depth [`Self::draw_shared_models`] left. Items with no camera are
     /// not tested, as in [`Self::render_into`].
     ///
@@ -1312,7 +1313,7 @@ impl Compositor {
                 phase,
                 opacity: model.opacity,
                 blend: model.blend,
-                force_transparent: false,
+                force_transparent: model.is_transparent(),
                 prims,
             };
             let chains: Vec<Option<Arc<Mips>>> = model
@@ -1358,7 +1359,11 @@ impl Compositor {
                 share,
             )
         };
-        for model in models.iter().filter(|model| model.draw.model.has_opaque()) {
+        // A faded or additive item writes no depth, even where its materials are
+        // opaque: a model behind it must still be shaded there (ADR-0259).
+        let occludes =
+            |model: &&SharedModel<'_>| !model.is_transparent() && model.draw.model.has_opaque();
+        for model in models.iter().filter(occludes) {
             step(
                 self,
                 model,
@@ -1370,7 +1375,7 @@ impl Compositor {
             color_cleared = true;
             depth_cleared = true;
         }
-        for model in models.iter().filter(|model| model.draw.model.has_opaque()) {
+        for model in models.iter().filter(occludes) {
             step(
                 self,
                 model,
@@ -1399,7 +1404,11 @@ impl Compositor {
                     what: "placement",
                     detail: err.to_string(),
                 })?;
-            for (depth, prim) in model.draw.model.transparent_order(&solid, false) {
+            for (depth, prim) in model
+                .draw
+                .model
+                .transparent_order(&solid, model.is_transparent())
+            {
                 order.push((depth, index, prim));
             }
         }
@@ -3912,7 +3921,7 @@ enum Start {
     Clear(wgpu::Color),
     /// Loaded, transparent outside the region, and made transparent over it.
     Wipe(Region),
-    /// Colour and depth loaded: a pass continuing one that already drew (ADR-0257).
+    /// Colour and depth loaded: a pass continuing one that already drew (ADR-0259).
     Load,
 }
 

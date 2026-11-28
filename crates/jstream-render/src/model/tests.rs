@@ -665,7 +665,7 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
     }
 }
 
-/// ADR-0257: two models in one camera are one depth. A rod through a cube hides and is
+/// ADR-0259: two models in one camera are one depth. A rod through a cube hides and is
 /// hidden per pixel whichever centre sorts nearer. A blended rod, an additive rod, and
 /// a faint additive rod show only where they are in front of the cube.
 #[test]
@@ -773,7 +773,7 @@ fn models_in_one_scene_occlude_each_other_per_pixel() {
     }
 }
 
-/// ADR-0257: transparent primitives of two models are sorted together, far to near.
+/// ADR-0259: transparent primitives of two models are sorted together, far to near.
 /// One model has a far red plane and a near blue plane; the other has a green plane
 /// between them. Only that order leaves blue above green above red.
 #[test]
@@ -843,6 +843,58 @@ fn transparent_models_interleave_per_primitive() {
         pixel[2] > pixel[1] && pixel[1] > pixel[0],
         "the near blue plane is in front of the green, which is in front of the far red: {pixel:?}"
     );
+}
+
+/// ADR-0259 decision 2: a faded item, or an additive one, writes no depth even where
+/// its materials are opaque. Where it is in front of another model, that model still
+/// shows through it, rather than the backdrop.
+#[test]
+fn a_faded_or_additive_opaque_model_lets_the_model_behind_show() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let framing = SceneCamera::framing(canvas());
+    let camera = SceneCamera {
+        position: Vec3::new(110.0, 24.0, 150.0).expect("finite"),
+        ..framing
+    };
+    let view = camera.view(canvas()).expect("a view");
+    let cube = unlit_shape(Shape::Cube, [1.0, 0.0, 0.0, 1.0], false);
+    let rod = unlit_shape(Shape::Cylinder, [0.0, 0.4, 1.0, 1.0], false);
+    let cube_geo = boxed(80.0, 50.0, 36.0);
+    for (opacity, blend, name) in [
+        (0.5, crate::BlendMode::Normal, "faded"),
+        (1.0, crate::BlendMode::Additive, "additive"),
+    ] {
+        for depth in [24.0_f32, -24.0] {
+            let geometry = rod_through(depth);
+            let shot = composite_models(
+                compositor,
+                &camera,
+                &[
+                    (&cube, cube_geo, 1.0, crate::BlendMode::Normal),
+                    (&rod, geometry, opacity, blend),
+                ],
+            );
+            let behind = rod_pixel(&shot, &rod, geometry, &view, -0.35);
+            // Just in front of the cube's near face (18 px in front of its centre), so
+            // the cube is behind it on the picture.
+            let front = rod_pixel(&shot, &rod, geometry, &view, (26.0 - depth) / 150.0);
+            assert!(
+                behind.1[0] > 240 && behind.1[2] < 20,
+                "{name} depth {depth}: the cube hides the rod's far end at {:?}: {:?}",
+                behind.0,
+                behind.1
+            );
+            assert!(
+                front.1[0] > 80 && front.1[2] > 60,
+                "{name} depth {depth}: the cube shows through the rod's near end at {:?}: {:?}",
+                front.0,
+                front.1
+            );
+        }
+    }
 }
 
 /// A hull with a glass primitive still occludes. The glass must not stop the hull
@@ -1042,7 +1094,7 @@ fn many_models_share_one_depth_across_many_frames() {
     );
 }
 
-/// ADR-0257: a card seen through the same camera tests the depth the shared pass wrote.
+/// ADR-0259: a card seen through the same camera tests the depth the shared pass wrote.
 /// A nearer model hides it. An item with no camera is not in that space.
 #[test]
 fn a_shared_model_hides_a_farther_card() {
@@ -1195,7 +1247,7 @@ fn rod_pixel(
     (px, rgb(shot, px.0, px.1))
 }
 
-/// Draws every model into one colour and depth target (ADR-0257), then reads that
+/// Draws every model into one colour and depth target (ADR-0259), then reads that
 /// target over black. `opacity` and `blend` are the item's.
 fn composite_models(
     compositor: &mut Compositor,
