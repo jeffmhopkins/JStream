@@ -1061,6 +1061,14 @@ impl LiveSources {
         ))
     }
 
+    /// The named objects of the model `source_id`'s running instance shows (protocol
+    /// 0.198), beside [`Self::depth`].
+    pub(crate) fn objects(&self, source_id: &SourceId) -> Option<crate::snapshot::Objects> {
+        let running = self.entries.get(source_id)?.running.as_ref()?;
+        running.size?;
+        crate::snapshot::model_objects(&running.source.model()?)
+    }
+
     /// How long one play of `source_id`'s running instance lasts in milliseconds, for a
     /// kind with a length ([`Source::duration`]): a `media` file's.
     pub(crate) fn duration_ms(&self, source_id: &SourceId) -> Option<u64> {

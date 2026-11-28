@@ -12,9 +12,9 @@ use jstream_control::ControlError;
 use jstream_control::protocol::{
     Action, Batch, BusInfo, Call, CallResult, Canvas, Chord, DeleteTarget, Edit, Event,
     FilterChains, FilterOwner, FolderId, FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride,
-    KindDescriptor, KindSummary, LabelInfo, OutputId, OutputInfo, OverrideField, PlacementForm,
-    Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
-    SourceSize, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
+    KindDescriptor, KindSummary, LabelInfo, ModelObject, OutputId, OutputInfo, OverrideField,
+    PlacementForm, Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo,
+    SourceKind, SourceSize, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -465,6 +465,19 @@ pub type Sizes = HashMap<SourceId, (u32, u32)>;
 /// other source is absent.
 pub type SourceDepths = HashMap<SourceId, u32>;
 
+/// The named objects of each 3D model source that has two or more, as `source.sizes`
+/// and `source.size_changed` list them (protocol 0.198). Every other source is absent.
+pub type SourceObjects = HashMap<SourceId, Vec<ModelObject>>;
+
+/// The objects a `source.sizes` result lists, for the models with two or more.
+pub fn objects_of(sources: &[SourceSize]) -> SourceObjects {
+    sources
+        .iter()
+        .filter(|s| s.objects.len() >= 2)
+        .map(|s| (s.source_id.clone(), s.objects.clone()))
+        .collect()
+}
+
 /// The sizes a `source.sizes` result reports.
 pub fn sizes_of(sources: Vec<SourceSize>) -> Sizes {
     sources
@@ -822,6 +835,12 @@ pub struct Studio {
     pub sizes: RwSignal<Sizes>,
     /// Each source's depth, for a source with depth, as the engine last reported it.
     pub depths: RwSignal<SourceDepths>,
+    /// The named objects of each model source with two or more, as the engine last
+    /// listed them: the Sources panel lists them under the model's item.
+    pub objects: RwSignal<SourceObjects>,
+    /// The object of a model item the pointer is over in the Sources panel, by its
+    /// index in [`Self::objects`]: the canvas shows that object's box.
+    pub hovered_object: RwSignal<Option<(ItemId, usize)>>,
     /// Whether the canvas is in crop mode, where every handle crops (CV-08). The canvas
     /// and the item menu toggle it.
     pub crop_mode: RwSignal<bool>,
@@ -932,6 +951,8 @@ impl Studio {
             selection: RwSignal::new(Selection::default()),
             sizes: RwSignal::new(Sizes::new()),
             depths: RwSignal::new(SourceDepths::new()),
+            objects: RwSignal::new(SourceObjects::new()),
+            hovered_object: RwSignal::new(None),
             crop_mode: RwSignal::new(false),
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
@@ -959,6 +980,7 @@ impl Studio {
         self.selection.set(Selection::default());
         self.sizes.set(Sizes::new());
         self.depths.set(SourceDepths::new());
+        self.objects.set(SourceObjects::new());
         self.crop_mode.set(false);
         self.kinds.set(None);
         self.descriptors.set(HashMap::new());
@@ -1145,8 +1167,25 @@ impl Studio {
                 source_id,
                 size,
                 depth,
+                objects,
                 ..
             } => {
+                let listed = objects.len() >= 2;
+                let same = self
+                    .objects
+                    .with_untracked(|known| match known.get(source_id) {
+                        Some(known) => listed && known == objects,
+                        None => !listed,
+                    });
+                if !same {
+                    self.objects.update(|known| {
+                        if listed {
+                            known.insert(source_id.clone(), objects.clone());
+                        } else {
+                            known.remove(source_id);
+                        }
+                    });
+                }
                 // Only a change of depth touches the depths, so a resize of a flat
                 // source doesn't re-lay the canvas twice.
                 let known = self.depths.with_untracked(|d| d.get(source_id).copied());
@@ -1245,6 +1284,7 @@ impl Studio {
         match query(session, Query::SourceSizes).await {
             Ok(QueryResult::SourceSizes { sources }) => {
                 self.depths.set(depths_of(&sources));
+                self.objects.set(objects_of(&sources));
                 self.sizes.set(sizes_of(sources));
             }
             Ok(other) => self.report(&unexpected(other.name())),
@@ -1566,7 +1606,7 @@ fn unexpected(what: &str) -> ControlError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Collection, Selection, Studio, apply, followed_scene, fresh_id, list_kinds,
+        Collection, Selection, Studio, apply, followed_scene, fresh_id, list_kinds, objects_of,
         optimistic_program, optimistic_timeline, plan_summary, query, reset_edits, scene_click,
         sizes_of,
     };
@@ -1714,6 +1754,38 @@ mod tests {
         assert_eq!(Collection::from_result(other), None);
     }
 
+    /// Protocol 0.198: only a model with two or more objects lists them, so a model of
+    /// one object has no caret in the Sources panel.
+    #[test]
+    fn a_model_with_several_objects_lists_them() {
+        let object = |name: &str| jstream_control::protocol::ModelObject {
+            name: name.into(),
+            min: [0.0; 3],
+            max: [1.0; 3],
+        };
+        let size = |id: &str, objects: Vec<jstream_control::protocol::ModelObject>| SourceSize {
+            source_id: SourceId::new(id),
+            size: Some(jstream_control::protocol::PixelSize {
+                width: 100,
+                height: 100,
+            }),
+            depth: Some(100),
+            duration_ms: None,
+            objects,
+        };
+        let listed = objects_of(&[
+            size("ship", vec![object("hull"), object("canopy")]),
+            size("rock", vec![object("rock")]),
+            size("cube", Vec::new()),
+        ]);
+        assert_eq!(listed.len(), 1);
+        let names: Vec<&str> = listed[&SourceId::new("ship")]
+            .iter()
+            .map(|o| o.name.as_str())
+            .collect();
+        assert_eq!(names, ["hull", "canopy"]);
+    }
+
     #[test]
     fn source_sizes_come_from_the_engine_or_the_canvas_for_a_scene() {
         let c = collection();
@@ -1726,12 +1798,14 @@ mod tests {
                 }),
                 depth: None,
                 duration_ms: None,
+                objects: Vec::new(),
             },
             SourceSize {
                 source_id: SourceId::new("dark"),
                 size: None,
                 depth: None,
                 duration_ms: None,
+                objects: Vec::new(),
             },
         ]);
         assert_eq!(sizes.len(), 1, "a source with no size is left out");

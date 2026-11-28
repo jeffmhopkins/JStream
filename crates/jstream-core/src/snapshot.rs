@@ -180,6 +180,19 @@ fn model_key(model: Option<&ShownModel>) -> Option<(u64, Lighting, bool, Option<
 /// A model's depth in the pixels of `extent`, the size its stand-in is placed at: its
 /// bounds front to back, at the scale its width and height are (ADR-0107 decision 8). A
 /// model with no width or height but some depth takes the extent's larger side.
+/// A model's whole box and its named objects in the model's space, as `source.sizes`
+/// lists them (protocol 0.198).
+pub(crate) type Objects = (
+    jstream_media::model::Bounds,
+    Arc<[jstream_media::model::Object]>,
+);
+
+/// `shown`'s [`Objects`], `None` when its model names none.
+pub(crate) fn model_objects(shown: &ShownModel) -> Option<Objects> {
+    let objects = shown.model.objects();
+    (!objects.is_empty()).then(|| (shown.model.bounds(), Arc::clone(objects)))
+}
+
 pub(crate) fn model_depth(shown: &ShownModel, extent: [u32; 2]) -> u32 {
     let [w, h, d] = shown.model.bounds().size();
     let longest = w.max(h);
@@ -296,6 +309,12 @@ impl Frame {
     /// decision 8), which `source.sizes` reports. `None` for any other frame.
     pub(crate) fn depth(&self) -> Option<u32> {
         Some(model_depth(self.model.as_ref()?, self.extent))
+    }
+
+    /// A model's named objects, which `source.sizes` lists (protocol 0.198). `None` for
+    /// any other frame, and for a model with none.
+    pub(crate) fn objects(&self) -> Option<Objects> {
+        model_objects(self.model.as_ref()?)
     }
 
     /// The same frame placed as if it were `extent`: a frame its source drew at a

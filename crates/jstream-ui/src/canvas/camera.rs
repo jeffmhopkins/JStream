@@ -10,7 +10,9 @@
 //! by the model's depth, through `ItemGeometry::solid_outline`. A 3D group (ADR-0164
 //! decision 6) is outlined by the hull of its children as they are placed through the
 //! group item's pose (`GroupPose`), hit inside any child's outline, and dragged by its
-//! own item's geometry.
+//! own item's geometry. The item under the pointer shows each model's bounds as a box in
+//! the scene, its twelve edges through the camera (`bounds_edges`), rather than that
+//! outline.
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0094-scene-cameras.md,
 //! docs/adr/0111-camera-up-at-the-poles.md, docs/adr/0164-3d-groups-share-their-scenes-space.md
@@ -18,7 +20,7 @@
 use crate::canvas::transform::Point;
 use jstream_control::protocol::{
     CameraView, Canvas, CanvasPoint, ContentRect, Finite32, GroupPose, ItemGeometry, MAX_FOV_DEG,
-    MIN_FOV_DEG, SceneCamera, SceneId, Size, SolidBounds, Vec2, Vec3,
+    MIN_FOV_DEG, Placed, SceneCamera, SceneId, Size, SolidBounds, Vec2, Vec3,
 };
 
 /// The camera a move of a 3D scene's camera shows while it is unsaved ([`Unsaved`]), and
@@ -315,6 +317,86 @@ pub fn topmost_at<'a, T>(
         }
     }
     best.map(|(_, id)| id)
+}
+
+/// The twelve edges of `drawn`, a box in the space of a model whose bounds are
+/// `bounds`, as `view` sees that model placed at `geometry`: pairs
+/// of corners of [`jstream_control::protocol::Solid::corners`] that differ in one axis.
+/// `None` when a corner is behind the camera or isn't finite.
+fn box_edges(
+    geometry: &ItemGeometry,
+    (bounds, drawn): (SolidBounds, SolidBounds),
+    view: &CameraView,
+) -> Option<[(Point, Point); 12]> {
+    let solid = geometry.solid(bounds, Some(view)).ok()?;
+    let mut corners = [Point { x: 0.0, y: 0.0 }; 8];
+    for (corner, placed) in corners.iter_mut().zip(solid.corners(drawn)) {
+        match placed {
+            Placed::At(at) if at.x.is_finite() && at.y.is_finite() => {
+                *corner = Point { x: at.x, y: at.y };
+            }
+            _ => return None,
+        }
+    }
+    // Corner `i` takes x from bit 0, y from bit 1 and z from bit 2. An edge joins two
+    // corners one bit apart: four along each axis.
+    let mut edges = [(corners[0], corners[0]); 12];
+    let mut at = 0;
+    for bit in [1, 2, 4] {
+        for from in (0..8).filter(|i| i & bit == 0) {
+            edges[at] = (corners[from], corners[from | bit]);
+            at += 1;
+        }
+    }
+    Some(edges)
+}
+
+/// The edges of every model's bounds an item draws, as a 3D box through the camera
+/// (ADR-0107 decision 8), as SVG path data: one box for a model item, one for each model
+/// a 3D group places. `None` when the item draws no model, or a model's box reaches
+/// behind the camera, so the caller outlines it as before.
+pub fn bounds_edges(geometry: &ItemGeometry, shape: &Shape, view: &CameraView) -> Option<String> {
+    let mut path = String::new();
+    let mut whole = true;
+    each_piece(geometry, shape, &mut |g, solid| {
+        let Some(bounds) = solid else {
+            return;
+        };
+        match box_edges(g, (bounds, bounds), view) {
+            Some(edges) => {
+                for (a, b) in edges {
+                    path.push_str(&format!("M{},{} L{},{} ", a.x, a.y, b.x, b.y));
+                }
+            }
+            None => whole = false,
+        }
+    });
+    (whole && !path.is_empty()).then_some(path)
+}
+
+/// The box of one object of a model item (protocol 0.198), as SVG path data like
+/// [`bounds_edges`]: `min` and `max` are fractions of the model's `bounds` on each axis,
+/// as `source.sizes` lists them. `None` when the item draws no single model, or the box
+/// reaches behind the camera.
+pub fn object_edges(
+    geometry: &ItemGeometry,
+    shape: &Shape,
+    (min, max): ([f32; 3], [f32; 3]),
+    view: &CameraView,
+) -> Option<String> {
+    let Shape::Model(bounds) = shape else {
+        return None;
+    };
+    let at = |t: f32, axis: usize| bounds.min[axis] + t * (bounds.max[axis] - bounds.min[axis]);
+    let drawn = SolidBounds {
+        min: [0, 1, 2].map(|axis| at(min[axis], axis)),
+        max: [0, 1, 2].map(|axis| at(max[axis], axis)),
+    };
+    let edges = box_edges(geometry, (*bounds, drawn), view)?;
+    Some(edges.iter().fold(String::new(), |mut path, (a, b)| {
+        path.push_str(&format!("M{},{} L{},{} ", a.x, a.y, b.x, b.y));
+        path
+    }))
 }
 
 /// The outline of the part of the box in front of the camera as SVG `points`, or empty
@@ -1178,6 +1260,88 @@ mod tests {
             canvas: CANVAS,
             parts,
         }
+    }
+
+    /// A model under the pointer shows its bounds as a box: twelve edges, each ending at
+    /// a projected corner of its bounds. A plain card, and a model reaching behind the
+    /// camera, draw none, so they keep their outline.
+    #[test]
+    fn a_model_shows_its_bounds_as_twelve_edges() {
+        let seen = framing();
+        let mut g = item(960.0, 540.0, 400.0, 200.0, 0.0);
+        g.turn_deg = Finite32::new(30.0).expect("finite");
+        let bounds = SolidBounds::of_size(400.0, 200.0, 160.0);
+        let path = bounds_edges(&g, &Shape::Model(bounds), &seen).expect("a box");
+        assert_eq!(path.matches('M').count(), 12, "{path}");
+        let corners: Vec<CanvasPoint> = g
+            .solid(bounds, Some(&seen))
+            .expect("placed")
+            .corners(bounds)
+            .iter()
+            .map(|placed| match placed {
+                Placed::At(at) => *at,
+                _ => panic!("in front"),
+            })
+            .collect();
+        let hull = g.solid_outline(bounds, Some(&seen)).expect("an outline");
+        // A turned box has corners inside its outline: the edges the outline hides.
+        assert!(hull.len() < corners.len());
+        for corner in &corners {
+            assert!(
+                path.contains(&format!("{},{}", corner.x, corner.y)),
+                "corner {corner:?} is an end of an edge: {path}"
+            );
+        }
+        assert!(bounds_edges(&g, &Shape::Box, &seen).is_none());
+        // A hundred times deeper than wide: its near corners land behind the camera.
+        let deep = SolidBounds::of_size(1.0, 1.0, 100.0);
+        let g = item(960.0, 540.0, 400.0, 400.0, 0.0);
+        assert!(bounds_edges(&g, &Shape::Model(deep), &seen).is_none());
+    }
+
+    /// An object's box is its share of the model's box, placed as the model is: the
+    /// whole model's fractions give the model's own box, and half of it a smaller one.
+    #[test]
+    fn an_objects_box_is_its_share_of_the_models() {
+        let seen = framing();
+        let mut g = item(960.0, 540.0, 400.0, 200.0, 0.0);
+        g.turn_deg = Finite32::new(20.0).expect("finite");
+        let shape = Shape::Model(SolidBounds::of_size(400.0, 200.0, 160.0));
+        let whole = object_edges(&g, &shape, ([0.0; 3], [1.0; 3]), &seen).expect("a box");
+        assert_eq!(Some(whole.clone()), bounds_edges(&g, &shape, &seen));
+        let half = object_edges(&g, &shape, ([0.0; 3], [0.5, 1.0, 1.0]), &seen).expect("a box");
+        assert_eq!(half.matches('M').count(), 12);
+        assert_ne!(half, whole);
+        assert!(object_edges(&g, &Shape::Box, ([0.0; 3], [1.0; 3]), &seen).is_none());
+    }
+
+    /// A 3D group shows a box for each model it places, and none for its cards.
+    #[test]
+    fn a_3d_group_shows_a_box_for_each_model() {
+        let seen = framing();
+        let group = Shape::Group {
+            canvas: CANVAS,
+            parts: vec![
+                (
+                    item(600.0, 540.0, 200.0, 200.0, 0.0),
+                    Shape::Model(SolidBounds::of_size(200.0, 200.0, 200.0)),
+                ),
+                (item(960.0, 540.0, 200.0, 200.0, 0.0), Shape::Box),
+                (
+                    item(1320.0, 540.0, 200.0, 200.0, 0.0),
+                    Shape::Model(SolidBounds::of_size(200.0, 200.0, 100.0)),
+                ),
+            ],
+        };
+        let whole = item(
+            CANVAS.width as f32 / 2.0,
+            CANVAS.height as f32 / 2.0,
+            CANVAS.width as f32,
+            CANVAS.height as f32,
+            0.0,
+        );
+        let path = bounds_edges(&whole, &group, &seen).expect("boxes");
+        assert_eq!(path.matches('M').count(), 24, "{path}");
     }
 
     /// ADR-0164 decision 6 (#1596): a 3D group is outlined by the hull of its children as
