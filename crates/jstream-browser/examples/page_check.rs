@@ -19,7 +19,8 @@
 //! page also loads one image beside it and one from the folder above, which its request
 //! policy refuses. The check lists each refused request by its kind, its URL's scheme
 //! and the policy's reason (never its URL, which the helper doesn't send, ADR-0048), and
-//! fails if that image isn't among them. Then the page is closed and the backend
+//! fails if that image isn't among them or anything else is refused. Chromium asks for
+//! the refused image more than once, so it may be listed more than once. Then the page is closed and the backend
 //! dropped, which shuts the helper down.
 
 #[cfg(windows)]
@@ -395,11 +396,16 @@ setInterval(() => {
             ));
         }
         // `../outside.svg`: an image from a file outside the page's folder.
-        let outside = refused.iter().any(|request| {
+        // `../outside.svg`: an image from a file outside the page's folder. Chromium asks
+        // for a refused image more than once (run #341 refused it twice), so the built-in
+        // page expects one or more of these and nothing else.
+        let is_outside = |request: &jstream_browser::RefusedRequest| {
             request.kind == "image"
                 && request.scheme == "file"
                 && request.reason.contains("outside the page's folder")
-        });
+        };
+        let outside = refused.iter().any(is_outside);
+        let unexpected = refused.iter().filter(|r| !is_outside(r)).count();
 
         let closing = Instant::now();
         drop(page);
@@ -413,6 +419,11 @@ setInterval(() => {
         }
         if args.url.is_none() && !outside {
             return Err("the built-in page's ../outside.svg was not refused".into());
+        }
+        if args.url.is_none() && unexpected > 0 {
+            return Err(format!(
+                "the built-in page had {unexpected} other request(s) refused, listed above"
+            ));
         }
         Ok(())
     }

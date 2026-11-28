@@ -73,8 +73,9 @@ helper out in the build's folder as it ships (CEF's `bootstrap.exe` copied as
 (or `--url`) through the CEF backend on a device of the media adapter and the QPC clock,
 as the daemon's pages do before a program stage lends its own context, and reports the frames and audio that
 arrive, a custom-CSS change the page reacts to, the requests refused, each listed by kind,
-scheme and reason (the built-in page loads one image from outside its folder, and the
-check fails if that image isn't among them), and the shutdown time. It runs on Windows only.
+scheme and reason (the built-in page loads one image from outside its folder, which
+Chromium asks for more than once; the check fails if that image isn't among them or
+anything else is refused), and the shutdown time. It runs on Windows only.
 
 **The Linux check.** `tests/linux_page.rs` (feature `cef`, ignored by default) opens a
 file page through the real helper named by `JSTREAM_BROWSER_HELPER`, as `cargo xtask
