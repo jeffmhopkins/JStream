@@ -743,8 +743,8 @@ milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
 release = "alpha.1"
-prs = [283, 289, 298, 326]
-note = "the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again"
+prs = [283, 289, 298, 326, 1844]
+note = "the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), and page_check now lists each refusal's kind, scheme and reason (#1844), so #341's step runs again to name the second one; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again"
 needs = ["build", "hardware"]
 
 [[item]]
