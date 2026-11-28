@@ -426,6 +426,7 @@ fn capture_sources_report_their_captures_sizes() {
         size,
         depth: None,
         duration_ms: None,
+        objects: Vec::new(),
     };
     let size_events = |events: &mut jstream_control::EventStream| {
         let mut out: Vec<Event> = drain(events)

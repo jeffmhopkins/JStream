@@ -1259,7 +1259,7 @@ pub struct PixelSize {
 }
 
 /// One source's current size, in a `source.sizes` result.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SourceSize {
     /// The source.
     pub source_id: SourceId,
@@ -1278,6 +1278,23 @@ pub struct SourceSize {
     /// source and while the length isn't known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
+    /// The named objects of a 3D model, in the order its file draws them (since 0.198):
+    /// each node, or a mesh with no node name, and the box around it, at most 256.
+    /// Omitted for every other source, a model with no names, and while `size` is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objects: Vec<ModelObject>,
+}
+
+/// One named object of a 3D model, in a [`SourceSize`] (since 0.198).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ModelObject {
+    /// Its name in the model's file.
+    pub name: String,
+    /// The smallest x, y and z of its box, each from 0 to 1 across the model's own box
+    /// (x right, y down, z toward the viewer), so it scales with `size` and `depth`.
+    pub min: [f32; 3],
+    /// The largest x, y and z of its box, in the same terms.
+    pub max: [f32; 3],
 }
 
 /// One scene in a `scene.list` result.

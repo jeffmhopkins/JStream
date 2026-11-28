@@ -1370,7 +1370,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 ## GPU pipeline
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "crates/jstream-platform-macos/src/gpu/**"]
-depends_on = ["docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0063-macos-platform-support.md", "docs/adr/0257-models-in-one-scene-are-one-depth.md"]
+depends_on = ["docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0063-macos-platform-support.md", "docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md"]
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -1452,13 +1452,15 @@ keeps a stinger's items over the scenes under them), far to near by the depth of
 centre, stacking order breaking ties; cards have no depth buffer of their own. A 3D
 scene pass has a reversed `Depth32Float` target. When two or more models can share it,
 they are drawn into it together
-([ADR-0257](adr/0257-models-in-one-scene-are-one-depth.md)): opaque primitives of every
-such model, depth tested and written, then transparent primitives far to near, tested
-and not written, each fragment at the depth the rasterizer gives it. One model, and a
-model that keeps a layer (filters, depth of field, a screen-space reflection), still
+([ADR-0259](adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md)): opaque primitives of every
+such model at full opacity with the `normal` blend, depth tested and written, then
+transparent primitives far to near (blended materials, and all of a faded or additive
+model), tested and not written, each fragment at the depth the rasterizer gives it. One
+model, and a model that keeps a layer (filters, depth of field, a screen-space
+reflection, a blend that reads the picture under it), still
 carries its view depth
 ([ADR-0107](adr/0107-3d-models.md) decision 7) and the composite tests that layer, with the
-half-opacity limit [ADR-0257](adr/0257-models-in-one-scene-are-one-depth.md) records. A card is tested against the same depth, so one that sorts in front of a model but
+half-opacity limit [ADR-0259](adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md) records. A card is tested against the same depth, so one that sorts in front of a model but
 passes behind it is hidden where the model is nearer. A scene with no model has no depth
 target. In a Fade between
 two scenes each side's items keep their own camera, a Move between two 3D scenes

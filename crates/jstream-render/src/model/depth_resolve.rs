@@ -11,7 +11,7 @@ const SOURCE: &str = include_str!("depth_resolve.wgsl");
 pub(super) struct DepthResolve {
     single: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     multi: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
-    /// Keeps the nearer of the scene depth and what `target` already holds (ADR-0257).
+    /// Keeps the nearer of the scene depth and what `target` already holds (ADR-0259).
     max: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
 }
 

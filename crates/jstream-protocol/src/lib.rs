@@ -184,8 +184,8 @@ pub use quality::{
 };
 pub use query::{
     CameraControlInfo, CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget,
-    DeviceInfo, FontInfo, ItemInfo, MasterInfo, PixelSize, Query, QueryResult, SceneInfo,
-    SceneOptions, SceneSummary, SourceInfo, SourceSize,
+    DeviceInfo, FontInfo, ItemInfo, MasterInfo, ModelObject, PixelSize, Query, QueryResult,
+    SceneInfo, SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
 pub use rendering::{
     MODEL_ANTIALIASING, MODEL_RESOLUTION_RANGE, MODEL_RESOLUTIONS, PROBE_RESOLUTIONS,
