@@ -384,6 +384,9 @@ pub struct MaterialDrive<'a> {
     /// Replaces the glow's colour, straight sRGB 0 to 1, at its own brightness, before
     /// `emissive` adds to it.
     pub set_emissive: Option<[f32; 3]>,
+    /// Replaces the glow's strength, the multiplier that is 1 at rest, before
+    /// `emissive_strength` adds to it (ADR-0260). The last drive that sets one wins.
+    pub set_emissive_strength: Option<f32>,
 }
 
 /// The most a [`MaterialDrive`] multiplies a material's glow by.
@@ -412,6 +415,7 @@ fn driven_values(
         add.emissive_strength += d.emissive_strength;
         add.set_color = d.set_color.or(add.set_color);
         add.set_emissive = d.set_emissive.or(add.set_emissive);
+        add.set_emissive_strength = d.set_emissive_strength.or(add.set_emissive_strength);
     }
     if add == MaterialDrive::default() {
         return None;
@@ -433,9 +437,11 @@ fn driven_values(
             *v = srgb_to_linear(c.clamp(0.0, 1.0)) * peak;
         }
     }
+    let strength = (add.set_emissive_strength.unwrap_or(1.0) + add.emissive_strength)
+        .clamp(0.0, MAX_EMISSIVE_STRENGTH);
     for v in &mut out[4..7] {
         let lifted = srgb_to_linear((linear_to_srgb(*v / peak) + add.emissive).clamp(0.0, 1.0));
-        *v = lifted * peak * (1.0 + add.emissive_strength).clamp(0.0, MAX_EMISSIVE_STRENGTH);
+        *v = lifted * peak * strength;
     }
     out[8] = (out[8] + add.metallic).clamp(0.0, 1.0);
     out[9] = (out[9] + add.roughness).clamp(0.0, 1.0);

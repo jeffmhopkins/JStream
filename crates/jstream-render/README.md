@@ -1123,7 +1123,9 @@ to metallic and roughness, each within 0 and 1; to the glow's strength, a multip
 at rest within 0 and `MAX_EMISSIVE_STRENGTH` (64); and by name to the glow's colour,
 scaled by its own brightness. A drive can also set the base colour (`set_color`) or the
 glow's colour at its own brightness (`set_emissive`) before the others add, the last
-one that sets winning (ADR-0171 decision 5). The draw writes each changed material's uniform before it
+one that sets winning (ADR-0171 decision 5), and set the glow's strength
+(`set_emissive_strength`, for a `replace` modifier,
+[ADR-0260](../../docs/adr/0260-a-replace-sets-a-models-glow-strength.md)) the same way. The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of
 the same model draws it as it is. A material with a live texture binds a uniform of its
 own for each slot, which is driven the same way
