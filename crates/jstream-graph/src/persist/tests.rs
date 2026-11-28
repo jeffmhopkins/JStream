@@ -5,8 +5,8 @@ use crate::Graph;
 use jstream_protocol::{
     Action, BlendMode, Blending, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FilterChain,
     FilterId, FilterOwner, FolderId, ItemId, KindCategory, KindDescriptor, LabelId, OutputId,
-    OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions,
-    SceneRole, SourceId, SourceKind, SourceMeta, parity,
+    OutputKind, ParamDescriptor, ParamType, ProtocolError, RecordContainer, Rev, SceneId,
+    SceneMeta, SceneOptions, SceneRole, SourceId, SourceKind, SourceMeta, parity,
 };
 use serde_json::{Value, json};
 
@@ -112,11 +112,17 @@ const V21: &str = include_str!("fixtures/v21.json");
 /// loading as version 1 must.
 const V22: &str = include_str!("fixtures/v22.json");
 
-/// A collection file at schema version 23, the current one: version 22 with scene
-/// `a`'s own folders (ADR-0222), `looks` and `intro` inside it, keyframe `k` filed in
-/// `intro` and the sequence `power_up` in `looks`, and a scene-list folder `shows` after
-/// them in folder order. The same rule applies once version 24 exists.
+/// A collection file at schema version 23: version 22 with scene `a`'s own folders
+/// (ADR-0222), `looks` and `intro` inside it, keyframe `k` filed in `intro` and the
+/// sequence `power_up` in `looks`, and a scene-list folder `shows` after them in folder
+/// order. It must keep loading as version 1 must.
 const V23: &str = include_str!("fixtures/v23.json");
+
+/// A collection file at schema version 24, the current one: version 23 with the
+/// recording output `rec` recording into its file's folder, `/home/me/Videos`
+/// (ADR-0260), as every older fixture's `rec` loads. The same rule applies once version
+/// 25 exists.
+const V24: &str = include_str!("fixtures/v24.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -633,7 +639,22 @@ fn fixture_graph() -> Graph {
         None,
     );
     assert!(applied.is_ok(), "{applied:?}");
+    record_into_its_folder(&mut graph);
     graph
+}
+
+/// Output `rec` as a file from before version 24 loads it: recording into its file's
+/// folder (ADR-0260). No edit turns a file output into a folder output, so the state is
+/// changed directly.
+fn record_into_its_folder(graph: &mut Graph) {
+    let Some(rec) = graph.state.outputs.get_mut(&OutputId::new("rec")) else {
+        panic!("the parity collection has `rec`");
+    };
+    rec.kind = OutputKind::Record {
+        path: "/home/me/Videos".into(),
+        container: RecordContainer::Mp4,
+        folder: true,
+    };
 }
 
 fn load(json: &str) -> Result<Graph, LoadError> {
@@ -1083,7 +1104,79 @@ fn v23_graph() -> Graph {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v23_graph().to_collection_json(), V23);
+    assert_eq!(v23_graph().to_collection_json(), V24);
+}
+
+#[test]
+fn the_v24_fixture_loads_exactly() {
+    let expected = v23_graph();
+    let loaded = load(V24);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(21)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 24 records into folders (ADR-0260): a version 23 recording output records
+/// into its file's folder, a root's included, a file with no recording output gains the
+/// default one, and a version 23 `folder` is refused, as version 23 refused it.
+#[test]
+fn a_version_23_recording_records_into_its_folder() {
+    let older = |edit: &dyn Fn(&mut Value)| {
+        let mut file: Value = serde_json::from_str(V23).expect("the v23 fixture");
+        edit(&mut file);
+        load(&file.to_string())
+    };
+    let rec = |graph: &Graph| {
+        graph
+            .state()
+            .output(&OutputId::new("rec"))
+            .map(|o| o.kind().clone())
+    };
+    let folder = |path: &str| OutputKind::Record {
+        path: path.into(),
+        container: RecordContainer::Mp4,
+        folder: true,
+    };
+    for (file, expected) in [
+        ("/show.mp4", "/"),
+        ("C:\\show.mp4", "C:\\"),
+        ("C:/Videos/show.mp4", "C:/Videos"),
+        ("D:\\Videos\\Shows\\show.mp4", "D:\\Videos\\Shows"),
+    ] {
+        let loaded = older(&|file_json| {
+            for output in file_json["outputs"].as_array_mut().into_iter().flatten() {
+                if output["id"] == "rec" {
+                    output["kind"]["path"] = json!(file);
+                }
+            }
+        });
+        assert_eq!(
+            loaded.as_ref().ok().and_then(rec),
+            Some(folder(expected)),
+            "{file}"
+        );
+    }
+    let none = older(&|file| {
+        let outputs = file["outputs"].as_array_mut().expect("outputs");
+        outputs.retain(|o| o["id"] != "rec");
+    });
+    let default = none.as_ref().ok().and_then(|graph| {
+        graph
+            .state()
+            .output(&OutputId::new(crate::DEFAULT_RECORDING))
+            .map(|o| o.kind().clone())
+    });
+    assert_eq!(default, Some(crate::default_recording_kind()));
+    let refused = older(&|file| {
+        for output in file["outputs"].as_array_mut().into_iter().flatten() {
+            if output["id"] == "rec" {
+                output["kind"]["folder"] = json!(true);
+            }
+        }
+    });
+    assert!(
+        matches!(refused, Err(LoadError::Migration { from: 23, .. })),
+        "{refused:?}"
+    );
 }
 
 #[test]
@@ -2970,7 +3063,8 @@ fn a_preset_saved_by_another_kind_version_is_refused() {
 #[test]
 fn folders_labels_and_metadata_round_trip() {
     let mut graph = fixture_graph();
-    let plain = graph.to_collection_json();
+    // A recording output's `"folder": true` (ADR-0260) is not a folder ID.
+    let plain = graph.to_collection_json().replace("\"folder\": true", "");
     for field in [
         "folders",
         "labels",

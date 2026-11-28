@@ -145,6 +145,9 @@ struct Shared {
     /// The 3D rendering switches' file (ADR-0170 decision 1), once the host names it.
     /// Taken before the collection lock, as the warm budget's file is.
     rendering_file: Mutex<Option<PathBuf>>,
+    /// Folder recordings (ADR-0260): the engine's own recordings folder and the last
+    /// recording's encoding, with its file. A leaf lock, taken alone or last.
+    recordings: Mutex<crate::recordings::Recordings>,
     /// The open collection file's stream-key scope (ADR-0121 §5), derived from its path,
     /// or `None` without a file. Set whenever the file changes; a leaf lock, taken alone
     /// or last.
@@ -253,6 +256,7 @@ impl Default for Engine {
                     recent: Mutex::new(None),
                     warm_file: Mutex::new(None),
                     rendering_file: Mutex::new(None),
+                    recordings: Mutex::new(crate::recordings::Recordings::default()),
                     key_scope: Mutex::new(None),
                     audio_scopes,
                     youtube: Mutex::new(None),
@@ -420,6 +424,32 @@ impl Engine {
             }
         }
         *lock(&self.shared.rendering_file) = Some(path);
+        self
+    }
+
+    /// Records folder recording outputs with an empty folder into `folder`, the
+    /// engine's own recordings folder (ADR-0260): `JStream` in the person's Videos
+    /// folder. Without one, such an output's start fails.
+    #[must_use]
+    pub fn with_recordings_folder(self, folder: impl Into<PathBuf>) -> Self {
+        lock(&self.shared.recordings).folder = Some(folder.into());
+        self
+    }
+
+    /// Keeps the last recording's encoding in the file at `path` (ADR-0260): a recording
+    /// output with no encoder profile of its own records with it, and every recording
+    /// that starts with another saves it there. A file that can't be read is logged and
+    /// replaced by the next recording.
+    #[must_use]
+    pub fn with_last_recording_file(self, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        let last = crate::recordings::load(&path);
+        let mut recordings = lock(&self.shared.recordings);
+        if last.is_some() {
+            recordings.last = last;
+        }
+        recordings.file = Some(path);
+        drop(recordings);
         self
     }
 
@@ -1136,7 +1166,7 @@ impl Engine {
             if fs_exists(&target) {
                 return Err(file_exists(path));
             }
-            empty.with_sample_labels()
+            empty.with_sample_labels().with_default_recording()
         } else {
             CollectionFile::read(&target, empty).map_err(|err| ProtocolError::ActionFailed {
                 reason: err.to_string(),
@@ -3465,6 +3495,8 @@ impl Engine {
             },
             None => None,
         };
+        // What a recording with no encoder profile of its own records with (ADR-0260).
+        let fallback = lock(&self.shared.recordings).fallback();
         let mut wake = Vec::new();
         let (parts, publish, generation, program, key, own_audio, hardware_held) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
@@ -3506,7 +3538,7 @@ impl Engine {
                     ),
                 });
             }
-            let key = encode_key(&state.graph, &output_id);
+            let key = encode_key(&state.graph, &output_id, fallback);
             let own_audio = encodes_own_audio(&state.graph, &output_id);
             let publish = match (
                 own_target(&state.graph, &output_id),
@@ -3514,6 +3546,13 @@ impl Engine {
                 &youtube,
             ) {
                 (Some(OwnTarget::Record(path)), _, _) => Target::Record(path),
+                (Some(OwnTarget::RecordInto(path)), _, _) => {
+                    let folder = lock(&self.shared.recordings).folder_for(&path);
+                    match folder {
+                        Ok(folder) => Target::RecordInto(folder),
+                        Err(reason) => return Err(ProtocolError::ActionFailed { reason }),
+                    }
+                }
                 (Some(OwnTarget::Vcam(canvas)), _, _) => {
                     let sink = lock(&host.vcam).take();
                     let Some(sink) = sink else {
@@ -3612,6 +3651,10 @@ impl Engine {
             );
         };
         wake_all(std::mem::take(&mut wake));
+        // A recording that starts is the last recording, whose encoding a recording with
+        // no profile of its own takes next (ADR-0260).
+        let recorded =
+            matches!(publish, Target::Record(_) | Target::RecordInto(_)).then_some(key.2);
 
         // Cleared once this start settles, or on drop if the start is cancelled.
         let mut inflight = Inflight {
@@ -3787,6 +3830,12 @@ impl Engine {
             StartOutcome::Active => {
                 if let Some(watch) = health {
                     self.watch_health(&output_id, watch);
+                }
+                if let Some(profile) = recorded {
+                    let file = lock(&self.shared.recordings).started_with(profile);
+                    if let Some(file) = file {
+                        crate::recordings::save(&file, profile);
+                    }
                 }
                 Ok(CallResult::action())
             }
@@ -4367,14 +4416,20 @@ impl Drop for SettleOnDrop<'_> {
 /// size and rate now, its profile with that profile's encoding now, and the output
 /// itself when it has its own video chain, so it shares with no one (ADR-0080 §3). An
 /// output with no mix, or one the host declared, gets the program at the program
-/// stage's size and base rate; one with no profile the engine's default.
-fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
+/// stage's size and base rate; one with no profile the engine's default, or a recording
+/// with none `fallback`, the last recording's encoding (ADR-0260).
+fn encode_key(graph: &Graph, output_id: &OutputId, fallback: EncoderProfile) -> EncodeKey {
     let state = graph.state();
     let output = state.output(output_id);
     let profile_id = output.and_then(|output| output.encoder_profile()).cloned();
-    let profile = state
-        .encoding_of(output_id)
-        .unwrap_or(EncoderProfile::DEFAULT);
+    let recording = output.is_some_and(|output| matches!(output.kind(), OutputKind::Record { .. }));
+    let profile = if recording && profile_id.is_none() {
+        fallback
+    } else {
+        state
+            .encoding_of(output_id)
+            .unwrap_or(EncoderProfile::DEFAULT)
+    };
     let mix = output
         .and_then(|output| crate::snapshot::shown_mix(state, output))
         .and_then(|id| state.video_mix(&id))
@@ -4411,6 +4466,9 @@ fn encodes_own_audio(graph: &Graph, output_id: &OutputId) -> bool {
 enum OwnTarget {
     /// A recording, to this file.
     Record(PathBuf),
+    /// A folder recording (ADR-0260), into the folder its `path` names: empty for the
+    /// engine's own.
+    RecordInto(String),
     /// The virtual camera, at the canvas size.
     Vcam(FrameSize),
 }
@@ -4429,7 +4487,13 @@ fn own_target(graph: &Graph, output_id: &OutputId) -> Option<OwnTarget> {
         OutputKind::Record {
             path,
             container: RecordContainer::Mp4,
+            folder: false,
         } => Some(OwnTarget::Record(PathBuf::from(path))),
+        OutputKind::Record {
+            path,
+            container: RecordContainer::Mp4,
+            folder: true,
+        } => Some(OwnTarget::RecordInto(path.clone())),
         OutputKind::VirtualCam => {
             let canvas = graph.state().canvas();
             // The graph keeps both sides above zero, so this always succeeds.
@@ -4459,6 +4523,8 @@ enum Target {
     Ready(Box<dyn LivePublish>),
     Open(OpenPublish),
     Record(PathBuf),
+    /// A folder recording (ADR-0260): a new file in this folder, named when it opens.
+    RecordInto(PathBuf),
     Vcam(VcamOut, FrameSize),
     /// A `youtube` output: the ingest is read from the Live API when it opens.
     YouTube {
@@ -4500,6 +4566,18 @@ impl Target {
                 .map(|publish| (Opened::Muxed(Destination::Publish(publish)), None))
                 .map_err(|err| format!("opening the publish target: {err}")),
             Target::Record(path) => Ok((Opened::Muxed(Destination::Record(path)), None)),
+            Target::RecordInto(folder) => {
+                let stamp = crate::recordings::stamp_now();
+                let path = jstream_outputs::record::new_recording_in(&folder, &stamp, "mp4")
+                    .map_err(|err| {
+                        format!(
+                            "making a new recording in the folder `{}`: {err}",
+                            folder.display()
+                        )
+                    })?;
+                tracing::info!(path = %path.display(), "a new recording in the output's folder");
+                Ok((Opened::Muxed(Destination::Record(path)), None))
+            }
             Target::Vcam(vcam, canvas) => Ok((Opened::Vcam(vcam, canvas), None)),
             Target::YouTube {
                 broadcast_id,

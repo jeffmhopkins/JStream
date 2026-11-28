@@ -744,7 +744,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0183](adr/0183-virtual-control-channels.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  0.9, with `output.set_path` to change its file from 0.74 and `folder`, a new timestamped
+  file each start into a folder, from 0.198
+  ([ADR-0260](adr/0260-a-recording-output-records-into-a-folder.md)), and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box, and
   `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89),
   and `canvas.set_blending` the space blend modes mix in (ADR-0126, protocol 0.101)
@@ -1909,7 +1911,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   a marker naming a scene the file doesn't hold, or one something shows, is dropped on load.
   Version 23 (ADR-0222) adds a folder's `scene`, a keyframe scene's `folder` and a
   timeline's `folder`, refused the same way; a scene's own folders are made after the
-  scenes, then every folder is put back in file order. A chord or trigger
+  scenes, then every folder is put back in file order. Version 24 (ADR-0260) adds a
+  recording output's `folder`, refused the same way, and moves each older recording
+  output into its file's folder, and a file with no recording output gains the
+  `recording` output that a new collection starts with, into the engine's own folder.
+  A chord or trigger
   with several actions (ADR-0208) is stored as one entry per action with no version
   bump: an older file loads as before, and an older engine refuses a newer file that
   repeats a chord with `already_exists`, as it does any collection it can't rebuild.
@@ -1973,6 +1979,17 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   file it can't read is logged and read as the defaults (every switch on but
   screen-space reflections), a switch it leaves out takes its default, a cap it leaves
   out is the largest face size, and steps it leaves out are 16.
+- **Last recording's encoding:** `last-recording.json` (version 1) in the data
+  directory, the encoder profile the last recording started with, which a recording
+  output with no profile of its own records with
+  ([ADR-0260](adr/0260-a-recording-output-records-into-a-folder.md)). The desktop app
+  and the daemon name it (`Engine::with_last_recording_file`); `jstream-core` reads it
+  at startup and replaces it atomically when a recording starts with another encoding.
+  A file it can't read, or one whose encoding it can't open, is logged and read as
+  none: the engine's default.
+- **Recordings:** a folder recording output with no folder of its own records into
+  `JStream` in the person's Videos folder (`Movies` on macOS), which the apps name
+  (`Engine::with_recordings_folder`); each start makes a new `JStream_<date>_<time>.mp4`.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

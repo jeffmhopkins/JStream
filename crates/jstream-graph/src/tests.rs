@@ -221,6 +221,7 @@ fn record_create(id: &str, path: &str) -> Edit {
         kind: OutputKind::Record {
             path: path.into(),
             container: RecordContainer::Mp4,
+            folder: false,
         },
     }
 }
@@ -761,6 +762,7 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                 kind: OutputKind::Record {
                     path: path.clone(),
                     container: RecordContainer::Mp4,
+                    folder: false,
                 },
                 encoder_profile: None,
                 filters: Default::default(),
@@ -815,6 +817,7 @@ fn recording_paths_are_validated() {
             OutputKind::Record {
                 path: "/Videos/show.mkv".into(),
                 container: RecordContainer::Unknown,
+                folder: false,
             },
             "edits.0.kind.container",
         ),
@@ -827,6 +830,70 @@ fn recording_paths_are_validated() {
         assert_eq!(got, field, "{reason}");
     }
     assert_eq!(graph.state().outputs().len(), 0);
+}
+
+fn folder_create(id: &str, path: &str) -> Edit {
+    Edit::OutputCreate {
+        output_id: OutputId::new(id),
+        kind: OutputKind::Record {
+            path: path.into(),
+            container: RecordContainer::Mp4,
+            folder: true,
+        },
+    }
+}
+
+/// A folder output's folder (ADR-0260) may be empty, end in a separator or be a root,
+/// but is otherwise checked as a file's path is, and `output.set_path` keeps it a
+/// folder output, checked by the folder rules.
+#[test]
+fn recording_folders_are_validated() {
+    let mut graph = Graph::new();
+    for (n, path) in ["", "/", "C:\\", "/Videos/", "D:/Shows/Week 1", "\\Videos"]
+        .into_iter()
+        .enumerate()
+    {
+        apply_ok(&mut graph, vec![folder_create(&format!("r{n}"), path)]);
+    }
+    for path in [
+        "Videos",
+        "/Videos/..",
+        "\\\\host\\share",
+        "C:\\a:b",
+        "/Videos/NUL",
+        "/Videos/con/",
+        "/Videos/a\nb",
+    ] {
+        let (field, reason) = invalid_reason(apply_err(&mut graph, vec![folder_create("x", path)]));
+        assert_eq!(field, "edits.0.kind.path", "{path:?}: {reason}");
+    }
+    let moved = Edit::OutputSetPath {
+        output_id: OutputId::new("r0"),
+        path: "/home/me/Videos/".into(),
+    };
+    apply_ok(&mut graph, vec![moved]);
+    assert_eq!(
+        graph
+            .state()
+            .output(&OutputId::new("r0"))
+            .map(|o| o.kind().clone()),
+        Some(OutputKind::Record {
+            path: "/home/me/Videos/".into(),
+            container: RecordContainer::Mp4,
+            folder: true,
+        })
+    );
+    let emptied = Edit::OutputSetPath {
+        output_id: OutputId::new("r0"),
+        path: String::new(),
+    };
+    apply_ok(&mut graph, vec![emptied]);
+    let file = Edit::OutputSetPath {
+        output_id: OutputId::new("r0"),
+        path: "/Videos/NUL".into(),
+    };
+    let (field, _) = invalid_reason(apply_err(&mut graph, vec![file]));
+    assert_eq!(field, "edits.0.path");
 }
 
 #[test]

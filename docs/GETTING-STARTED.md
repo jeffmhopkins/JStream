@@ -218,12 +218,18 @@ create the broadcast in YouTube Studio and stream to it with its key.
 depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#outputs"]
 -->
 
-In **Outputs**, press **+ Add output**, pick **Record** and give it the file path
-to write. In the desktop app, **Browse…** beside that field opens a save dialog; a
-browser page keeps the path as text. Then press **Record** at the top. **Stop
-recording** finishes the file. A recording runs on its own, whether or not you are live.
-It never overwrites a file, so for another take, open its settings (double-click its
-row) and give it a new file name. Browse… is there too.
+Press **Record** at the top. A new project already has a recording output,
+`recording`, which records into the `JStream` folder in your Videos folder (`Movies` on
+a Mac). **Stop recording** finishes the file. Each time you press Record you get a new
+file named for when it started, such as `JStream_2026-11-28_10-17-30.mp4`, so a take
+never overwrites an earlier one. A recording runs on its own, whether or not you are
+live, and uses the encoder settings you last recorded with.
+
+To record somewhere else, open the output's settings in **Outputs** (double-click its
+row) and give it another **Folder**. In the desktop app, **Browse…** beside that field
+opens a folder dialog; a browser page keeps the folder as text. Leave it empty for the
+`JStream` folder in Videos. **+ Add output** › **Record** adds another recording output
+the same way.
 
 <a id="show"></a>
 ## Run a show (optional)

@@ -297,6 +297,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             kind: OutputKind::Record {
                 path: "/home/me/Videos/show.mp4".into(),
                 container: RecordContainer::Mp4,
+                folder: false,
             },
         },
         Edit::OutputSetPath {
@@ -1939,6 +1940,7 @@ fn output_infos() -> Vec<OutputInfo> {
             kind: OutputKind::Record {
                 path: "/home/me/Videos/show.mp4".into(),
                 container: RecordContainer::Mp4,
+                folder: false,
             },
             encoder_profile: Some(EncoderProfileId::new("enc_rec")),
             filters: FilterChains {

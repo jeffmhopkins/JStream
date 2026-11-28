@@ -118,7 +118,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | ✅ | Built from `stats.tick`: the frame rate is the program's over the last tick's interval, and shows only while an output runs, since the program stage draws nothing otherwise; "N dropped" counts video frames dropped while an output, a recording or the virtual camera runs (the camera isn't in `stats.tick`'s outputs, so its active state counts too, #1698), from when outputs began running, and shows only then: what the pipeline drops for the previews alone is no stream's loss, so it never shows (#1690); CPU is the engine process's share of every logical CPU, as Task Manager counts it, "<1%" below half a percent (protocol 0.48's `load`). The daemon and the desktop app tick about once a second while idle too. CPU shows on Windows and macOS; elsewhere the engine can't read it and the readout leaves it out. |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
 | HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ✅ | A page setting, since the engine has no studio-mode switch: off at first, kept by the browser, and pressed (blue) while on. On, the canvas becomes the preview side of a two-up, with the studio controls and the live program beside it ([TR-06](#transitions)), and a click on a scene puts it on preview ([SC-10](#scenes)); turning it on puts the scene the canvas shows on preview. Off, a click puts it on program, the canvas stands for program and follows every program change ([CV-02](#canvas)), and turning it off shows the program scene. |
-| HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
+| HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. A new collection has one, `recording`, into the JStream folder in Videos, and each start records to a new timestamped file, so Record works out of the box and never fails on a taken name ([ADR-0260](adr/0260-a-recording-output-records-into-a-folder.md)). |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
 | HD-10 | Help menu and About | Beyond the prototype: a Help menu with the project's pages and an About dialog. | ✅ | Help links to the documentation (the README), Getting started, the release notes and a new issue on GitHub, each in a new tab (the desktop app hands them to the system browser), then Check for updates, then About JStream. Check for updates is on in the desktop app only: in a browser it is off, with the tooltip "Available in the desktop app", and opens nothing. It compares the version the UI was built as with GitHub's public releases list, pre-releases included, which the desktop app fetches. It says "You're up to date" or names the newer version and links its release page. Nothing is downloaded. A failure (offline, or a reply that can't be read) is shown in the dialog. File › Settings… ([HD-01](#header)) has, on its General page, the "Check for updates" toggle (at launch), off until the user turns it on, kept in the page's storage, and in the desktop app the "Global hotkeys" toggle (heard while another app has the focus), on until the user turns it off, kept on the engine's machine as the UI setting `hotkeys.global` ([ADR-0112](adr/0112-assignable-camera-zoom-bindings.md) §6, [KB-07](#keyboard)). When it is on, the desktop app's main window checks once as the workspace opens and shows a dismissable notice under the header only when a newer release exists; a failure shows nothing. `updates.rs`. About shows the app icon, the version the UI was built as (the workspace's), the build (the commit CI built it from, or "local build"), the protocol the engine speaks, the licence, each installed third-party codec (Cisco's OpenH264 on Linux, with Cisco's notice, licence link and full licence text, folded, as Cisco's licence asks wherever licensing information is shown), and links to the source, the documentation and the issues. Since C22 the facts sit on the property grid's columns, in plain text, and the links are one muted row over the secondary Close. `about.rs`. |
@@ -434,8 +434,10 @@ which starts every stopped output that can start, of any kind (a stream without 
 left; off when none can), with a red "Stop all" beside it while any output runs, which
 stops every running one. The program's row comes first, then one row per output: a dot
 for its state (grey stopped, amber starting or stopping, red live, pink failed), its ID,
-and a sub line with a one-line summary (the server's host, the recording's file name or
-"Webcam", then the encoder profile's name) and the state in words ("Stopped", "Live", red
+and a sub line with a one-line summary (the server's host, the recording's folder name,
+"Videos" for the engine's own folder, or "Webcam", then the encoder profile's name, or
+"Last recording's" for a recording with none, which records with the last recording's
+encoding, [ADR-0260](adr/0260-a-recording-output-records-into-a-folder.md)) and the state in words ("Stopped", "Live", red
 while live), a ⚠ when the engine says the key would cross the network unencrypted (the
 full warning on hover), Start (▶, off with the reason under the name, such as "Set a
 stream key first.") or a red Stop (■), its FX button (a funnel) and a ⋯ menu (Settings…,
@@ -443,13 +445,16 @@ Duplicate, Delete…, the same on a right-click). A live row is tinted red, and 
 `stats.tick`'s `outputs`: its bitrate, what it dropped this run (frames and packets) and
 its uptime ("2.45 Mbps · 0 dropped · 00:12:34"). Duplicate adds a copy under the first free
 ID in one batch (the kind, target, encoder, mix, bus and filters, but not the stream key,
-which the page never has; a recording's copy writes beside it under a free name, such as
-"show (2).mp4") and opens the copy's settings. A stream to a target this page doesn't
+which the page never has; a recording's copy records into the same folder, since each
+start makes a new file, and a one-file recording's copy, from a client older than protocol
+0.198, writes beside it under a free name, such as "show (2).mp4") and opens the copy's settings. A stream to a target this page doesn't
 know can't be copied: "This page can't copy this output yet." Under the rows, a line, then
 "+ Add output" as a link on the left and "Encoders & mixes…" on the right open dialogs.
 
 An output's settings dialog (Settings…, or a double-click on its row), titled "Output settings" over the output's ID, kind and state, is a property grid (C16) with General (its Name, the output's ID), Destination (the
-server URL or the recording's path, with Browse… in the desktop app, each with one help line, and the stream key),
+server URL, or the recording's Folder, with Browse… in the desktop app, each with one help line, and the stream key;
+a recording's help says each recording is a new file named for when it starts, and that an empty
+folder is the JStream folder in Videos; a one-file recording shows its File path and a save dialog instead),
 Video (Shows: the mix, or "Program (canvas size)", with an Edit… link while a mix is picked), Encoder (the profile, with
 an Edit… link while one is picked, and New…, which open the Encoders & mixes
 dialog on that profile or on a new one) and Audio (Bus). Nothing applies until Save, which sends what changed

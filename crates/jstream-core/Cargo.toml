@@ -54,6 +54,8 @@ jstream-protocol.workspace = true
 jstream-render.workspace = true
 # The built-in source kinds and their descriptors (ADR-0140, ADR-0025).
 jstream-sources.workspace = true
+# The local date and time a folder recording's file is named after (ADR-0260).
+jiff.workspace = true
 # PNG for `video.snapshot` (ADR-0140). Encoding only; deflate stays pure Rust.
 png.workspace = true
 # The installed WASM plugins' file (`plugins.json`, ADR-0076).

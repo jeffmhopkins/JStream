@@ -473,6 +473,7 @@ fn a_stopping_holder_still_holds_its_hardware_session() {
                 kind: OutputKind::Record {
                     path: second.to_str().expect("a UTF-8 temp path").into(),
                     container: RecordContainer::Mp4,
+                    folder: false,
                 },
             },
             set("rec", "soft"),

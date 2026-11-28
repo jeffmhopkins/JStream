@@ -130,11 +130,11 @@ test('a stream added with its key can start at once', async ({ page, daemon }) =
 
 test('a recording starts and stops on its own row', async ({ page, daemon }) => {
   await openOutputs(page, daemon);
-  await addOutput(page, 'record', '/tmp/show.mp4');
+  await addOutput(page, 'record', '/tmp/shows');
 
   const recording = outputRow(page, 'output-1');
-  await expect(recording.locator('.output-row-target')).toContainText('show.mp4');
-  await expect(recording.locator('.output-row-main')).toHaveAttribute('title', 'Record to /tmp/show.mp4');
+  await expect(recording.locator('.output-row-target')).toContainText("shows · Last recording's");
+  await expect(recording.locator('.output-row-main')).toHaveAttribute('title', 'Record into /tmp/shows');
   const dialog = await openOutputSettings(page, 'output-1');
   await expect(dialog.getByLabel('Stream key')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -190,7 +190,7 @@ test('an output carries the bus its Audio select picks', async ({ page, daemon }
   await expect(buses.locator('.strip .strip-name')).toHaveText(['Master', 'Stream']);
 
   await showPanel(page, 'Outputs');
-  await addOutput(page, 'record', '/tmp/a.mp4');
+  await addOutput(page, 'record', '/tmp/a');
   let dialog = await openOutputSettings(page, 'output-1');
   const audio = dialog.getByLabel('Bus');
   await expect(audio.locator('option:checked')).toHaveText('Master');
@@ -205,7 +205,7 @@ test('an output carries the bus its Audio select picks', async ({ page, daemon }
 
 test('an encoder profile and a vertical video mix are made, used and kept', async ({ page, daemon }) => {
   await openOutputs(page, daemon);
-  await addOutput(page, 'record', '/tmp/a.mkv');
+  await addOutput(page, 'record', '/tmp/archive');
 
   // A list on the left, the editor of the one picked on the right.
   let library = await openEncoders(page);
@@ -310,8 +310,8 @@ test('Start all starts every output that can start, Stop all stops what runs, an
   const stopAll = head.getByRole('button', { name: 'Stop all' });
   await expect(all).toBeDisabled();
   await expect(stopAll).toHaveCount(0);
-  await addOutput(page, 'record', '/tmp/a.mp4');
-  await addOutput(page, 'record', '/tmp/b.mp4');
+  await addOutput(page, 'record', '/tmp/a');
+  await addOutput(page, 'record', '/tmp/b');
   // A stream without its key can't start, so Start all leaves it.
   await addOutput(page, 'rtmp', 'rtmps://live.example.com/app');
   await expect(all).toBeEnabled();
@@ -340,7 +340,7 @@ test('Start all starts every output that can start, Stop all stops what runs, an
   await expect(all).toBeEnabled();
 });
 
-test('Duplicate adds a copy without the stream key, a recording\'s under a free path, and opens its settings', async ({ page, daemon }) => {
+test('Duplicate adds a copy without the stream key, a recording\'s into the same folder, and opens its settings', async ({ page, daemon }) => {
   await openOutputs(page, daemon);
   await addOutput(page, 'rtmp', 'rtmps://live.example.com/app');
   let dialog = await openOutputSettings(page, 'output-1');
@@ -360,13 +360,13 @@ test('Duplicate adds a copy without the stream key, a recording\'s under a free 
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(outputRow(page, 'output-2').locator('.output-row-note')).toHaveText('Set a stream key first.');
 
-  // A recording's copy writes beside it under a free name, so both can run.
-  await addOutput(page, 'record', '/tmp/a.mp4');
+  // A recording's copy records into the same folder: each start makes a new file.
+  await addOutput(page, 'record', '/tmp/a');
   await outputRow(page, 'output-3').getByRole('button', { name: 'More for output-3' }).click();
   await page.getByRole('menuitem', { name: 'Duplicate' }).click();
   await expect(dialog.locator('.modal-title')).toHaveText('Output settings');
   await expect(dialog.locator('.modal-sub')).toContainText('output-4 · ');
-  await expect(dialog.getByLabel('File path')).toHaveValue('/tmp/a (2).mp4');
+  await expect(dialog.getByLabel('Folder')).toHaveValue('/tmp/a');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
 
@@ -374,26 +374,26 @@ test('an open dialog follows another client\'s change to a field it left alone',
   const other = await context.newPage();
   await openOutputs(page, daemon);
   await openOutputs(other, daemon);
-  await addOutput(page, 'record', '/tmp/a.mp4');
+  await addOutput(page, 'record', '/tmp/take-a');
 
   const dialog = await openOutputSettings(page, 'output-1');
-  const path = dialog.getByLabel('File path');
-  await expect(path).toHaveValue('/tmp/a.mp4');
+  const path = dialog.getByLabel('Folder');
+  await expect(path).toHaveValue('/tmp/take-a');
   const change = async (to) => {
     const theirs = await openOutputSettings(other, 'output-1');
-    await theirs.getByLabel('File path').fill(to);
+    await theirs.getByLabel('Folder').fill(to);
     await theirs.getByRole('button', { name: 'Save' }).click();
     await expect(theirs).toHaveCount(0);
   };
-  await change('/tmp/b.mp4');
-  await expect(path).toHaveValue('/tmp/b.mp4');
+  await change('/tmp/take-b');
+  await expect(path).toHaveValue('/tmp/take-b');
   // A field the person changed keeps what they typed.
-  await path.fill('/tmp/mine.mp4');
-  await change('/tmp/c.mp4');
-  await expect(outputRow(page, 'output-1').locator('.output-row-target')).toContainText('c.mp4');
-  await expect(path).toHaveValue('/tmp/mine.mp4');
+  await path.fill('/tmp/take-mine');
+  await change('/tmp/take-c');
+  await expect(outputRow(page, 'output-1').locator('.output-row-target')).toContainText('take-c');
+  await expect(path).toHaveValue('/tmp/take-mine');
   await dialog.getByRole('button', { name: 'Save' }).click();
-  await expect(outputRow(other, 'output-1').locator('.output-row-target')).toContainText('mine.mp4');
+  await expect(outputRow(other, 'output-1').locator('.output-row-target')).toContainText('take-mine');
 });
 
 test('another client sees outputs come and go', async ({ page, context, daemon }) => {
@@ -401,8 +401,8 @@ test('another client sees outputs come and go', async ({ page, context, daemon }
   await openOutputs(page, daemon);
   await openOutputs(other, daemon);
 
-  await addOutput(page, 'record', '/tmp/a.mp4');
-  await expect(outputRow(other, 'output-1').locator('.output-row-main')).toHaveAttribute('title', 'Record to /tmp/a.mp4');
+  await addOutput(page, 'record', '/tmp/a');
+  await expect(outputRow(other, 'output-1').locator('.output-row-main')).toHaveAttribute('title', 'Record into /tmp/a');
   await outputRow(other, 'output-1').getByRole('button', { name: 'Start' }).click();
   await expect(outputRow(page, 'output-1').locator('.output-row-state')).toHaveText('Live');
   await outputRow(page, 'output-1').getByRole('button', { name: 'Stop' }).click();

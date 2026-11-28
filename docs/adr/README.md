@@ -261,4 +261,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0256](0256-models-in-one-scene-share-a-depth.md) | Models in one 3D scene share a depth | superseded | agent | [ADR-0257](0257-models-in-one-scene-are-one-depth.md) |
 | [ADR-0257](0257-models-in-one-scene-are-one-depth.md) | Models in one 3D scene are one depth | accepted | agent |  |
 | [ADR-0258](0258-a-native-crash-writes-a-local-minidump-on-windows.md) | A native crash writes a local minidump on Windows | accepted | agent |  |
+| [ADR-0260](0260-a-recording-output-records-into-a-folder.md) | A recording output records into a folder | accepted | agent |  |
 <!-- @generated end adr-index -->

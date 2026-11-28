@@ -2899,6 +2899,7 @@ dependencies = [
  "blake3",
  "futures-core",
  "insta",
+ "jiff 1.0.3",
  "jstream-anim",
  "jstream-audio",
  "jstream-browser",

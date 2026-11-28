@@ -1643,8 +1643,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   A running row's second line is its bitrate, drops and uptime from `stats.tick`'s
   `outputs` (`live_line`). Duplicate reads the outputs again, picks the first free
   `output-N` and sends one batch (`duplicate_edits`: the create, the encoder, mix and
-  bus, and each filter's `filter.add` with its settings; a recording's copy gets a free
-  path beside the original's, `copy_path`; never the stream key), then opens the copy's
+  bus, and each filter's `filter.add` with its settings; a folder recording's copy
+  records into the same folder, and a one-file recording's (`NewKind::RecordFile`, from a
+  client older than 0.198) gets a free path beside the original's, `copy_path`; never the stream key), then opens the copy's
   settings. Delete… asks first and is off while the output runs.
   An output's settings dialog (Settings…, a double-click, or "+ Add output" with a kind
   picker and a Name field) edits a draft (`OutputDraft`) on a property grid (C16) and
@@ -1658,8 +1659,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   open, another client's change reaches the fields still as the dialog started them
   (`OutputDraft::reseed`). A running output's target and bus are off, as the engine
   refuses those moves; a new mix or encoder applies when it starts again. In the
-  desktop app a recording's path has a Browse… button, opening a save dialog for an
-  `.mp4`. The Video section has an Edit… link (named Edit mix…) and the Encoder section
+  desktop app a recording's folder has a Browse… button, opening a folder dialog (a
+  folder recording may leave it empty for the engine's own, `NewKind::needs_target`,
+  ADR-0260), and a one-file recording's path one opening a save dialog for an `.mp4`. A
+  recording with no profile of its own shows "Last recording's" as its encoder
+  (`encoder_name`), since it records with the last recording's encoding. The Video section has an Edit… link (named Edit mix…) and the Encoder section
   one (Edit encoder…), each only while a mix or profile is picked, and New… (New
   encoder…), which open the Encoders & mixes dialog
   (`encoders.rs`) on that mix or profile or on a new one (`LibraryPick`). That dialog

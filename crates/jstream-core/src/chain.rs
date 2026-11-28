@@ -8324,6 +8324,7 @@ mod tests {
             kind: OutputKind::Record {
                 path: format!("/home/me/{id}.mp4"),
                 container: RecordContainer::Mp4,
+                folder: false,
             },
         }
     }

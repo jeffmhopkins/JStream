@@ -7507,7 +7507,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL or a YouTube broadcast, recording to a file and the\nvirtual camera are configurable so far.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL or a YouTube broadcast, recording into a folder or to a\nfile, and the virtual camera are configurable so far.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -7528,14 +7528,18 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A recording to a file on the engine's machine.",
+                "description": "A recording on the engine's machine: into a folder, a new file each start (since\n0.198, ADR-0260), or to one file.",
                 "properties": {
                   "container": {
                     "$ref": "#/$defs/RecordContainer",
                     "description": "The file format."
                   },
+                  "folder": {
+                    "description": "Whether `path` is a folder that each start records a new file into (since\n0.198, ADR-0260). Absent means `false`, a single file, as from a client or\nserver older than 0.198, which reads a folder output's `path` as a file's.",
+                    "type": "boolean"
+                  },
                   "path": {
-                    "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists; `output.set_path` (since 0.74) points it at a new file.\nThe engine rejects, with `invalid_argument`, an empty or relative path\n(absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one that starts with two\nseparators (a Windows UNC or device path, `\\\\host\\share\\…`, `\\\\.\\…` or\n`\\\\?\\…`), one with `:` other than a drive letter's, `?`, `*`,\ncontrol characters or a `..` segment, one that ends in a separator or names\nno file, and one whose file name is a DOS device name, in any case and with\nor without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,\n`LPT1`, …), which Windows opens in place of a file. `output.start` also fails\nwhen the path is not absolute on the engine's own machine.",
+                    "description": "Where the finished recordings go: with `folder`, the folder each start\nwrites a new file into, else the one file the recording writes. An absolute\npath on the engine's machine.\n\nA folder output's start names its file `JStream_<date>_<time>.<ext>`\n(`JStream_2026-11-28_10-17-30.mp4`), stamped with the engine machine's local\ntime when it starts, with `_2`, `_3`, … before the extension when that name\nor its `.part` name is taken, so a recording never overwrites an earlier one.\nThe start makes the folder, and any missing parent, when it isn't there, and\nfails with `action_failed` when it can't, or can't write the file there. An\nempty `path` names the engine's own recordings folder: `JStream` in the\nperson's Videos folder (`Movies` on macOS), and a start fails with\n`action_failed` on an engine that has none. Folder paths follow the file\nrules below, but may end in a separator or name a drive's root, and their\nlast segment is not a file name, so only a DOS device name is refused there.\n\nWithout `folder`: while recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists; `output.set_path` (since 0.74) points it at a new file.\nThe engine rejects, with `invalid_argument`, an empty or relative path\n(absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one that starts with two\nseparators (a Windows UNC or device path, `\\\\host\\share\\…`, `\\\\.\\…` or\n`\\\\?\\…`), one with `:` other than a drive letter's, `?`, `*`,\ncontrol characters or a `..` segment, one that ends in a separator or names\nno file, and one whose file name is a DOS device name, in any case and with\nor without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,\n`LPT1`, …), which Windows opens in place of a file. `output.start` also fails\nwhen the path is not absolute on the engine's own machine.",
                     "type": "string"
                   },
                   "type": {
@@ -7705,14 +7709,14 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Changes where a recording output writes its file (since 0.74, #1072), keeping its\ncontainer, encoder profile, mix, bus and filters. A running output keeps writing\nwhere it started; the new path applies from its next `output.start`, which still\nnever overwrites. The path is checked as in `output.create`'s\n[`OutputKind::Record`](crate::OutputKind::Record). An output that isn't a\nrecording is `invalid_argument`. Inverse: `output.set_path` with the previous\npath.",
+                "description": "Changes where a recording output writes its file (since 0.74, #1072), or the\nfolder a folder output records into (since 0.198), keeping its container,\nencoder profile, mix, bus and filters, and whether it is a folder output. A\nrunning output keeps writing where it started; the new path applies from its\nnext `output.start`, which still never overwrites. The path is checked as in\n`output.create`'s [`OutputKind::Record`](crate::OutputKind::Record), by the\nfolder rules for a folder output. An output that isn't a recording is\n`invalid_argument`. Inverse: `output.set_path` with the previous path.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
                     "description": "The recording output to change."
                   },
                   "path": {
-                    "description": "Where the finished recording goes: an absolute path on the engine's machine,\nending in a file name.",
+                    "description": "Where the finished recording goes: an absolute path on the engine's machine,\nending in a file name, or for a folder output the folder (empty for the\nengine's own recordings folder).",
                     "type": "string"
                   },
                   "type": {

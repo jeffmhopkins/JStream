@@ -593,19 +593,21 @@ pub enum Edit {
         /// The new target, validated as in `output.create`.
         target: RtmpTarget,
     },
-    /// Changes where a recording output writes its file (since 0.74, #1072), keeping its
-    /// container, encoder profile, mix, bus and filters. A running output keeps writing
-    /// where it started; the new path applies from its next `output.start`, which still
-    /// never overwrites. The path is checked as in `output.create`'s
-    /// [`OutputKind::Record`](crate::OutputKind::Record). An output that isn't a
-    /// recording is `invalid_argument`. Inverse: `output.set_path` with the previous
-    /// path.
+    /// Changes where a recording output writes its file (since 0.74, #1072), or the
+    /// folder a folder output records into (since 0.198), keeping its container,
+    /// encoder profile, mix, bus and filters, and whether it is a folder output. A
+    /// running output keeps writing where it started; the new path applies from its
+    /// next `output.start`, which still never overwrites. The path is checked as in
+    /// `output.create`'s [`OutputKind::Record`](crate::OutputKind::Record), by the
+    /// folder rules for a folder output. An output that isn't a recording is
+    /// `invalid_argument`. Inverse: `output.set_path` with the previous path.
     #[serde(rename = "output.set_path")]
     OutputSetPath {
         /// The recording output to change.
         output_id: OutputId,
         /// Where the finished recording goes: an absolute path on the engine's machine,
-        /// ending in a file name.
+        /// ending in a file name, or for a folder output the folder (empty for the
+        /// engine's own recordings folder).
         path: String,
     },
     /// Changes the canvas: every scene's coordinate space, in whole pixels (ADR-0022).

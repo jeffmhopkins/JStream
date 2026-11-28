@@ -102,7 +102,7 @@ test('picking a file stores a collection path, and an outside file stays absolut
   expect(log[2]).toMatchObject({ kind: 'open' });
 });
 
-test('a recording uses a save dialog, and a stream does not', async ({ page, daemon }) => {
+test('a recording uses a folder dialog, and a stream does not', async ({ page, daemon }) => {
   await asDesktop(page, daemon);
   await showPanel(page, 'Outputs');
   await page.getByRole('button', { name: '+ Add output' }).click();
@@ -112,21 +112,21 @@ test('a recording uses a save dialog, and a stream does not', async ({ page, dae
   const browse = dialog.getByRole('button', { name: 'Browse…' });
   await expect(browse).toBeVisible();
 
-  await queuePick(page, 'C:\\videos\\show.mp4');
+  await queuePick(page, 'C:\\videos');
   await browse.click();
-  await expect(dialog.getByLabel('File path')).toHaveValue('C:\\videos\\show.mp4');
+  await expect(dialog.getByLabel('Folder')).toHaveValue('C:\\videos');
   const log = await page.evaluate(() => window.__browseLog);
-  expect(log[0]).toMatchObject({ kind: 'save', accept: ['mp4'], title: 'Save the recording' });
+  expect(log[0]).toMatchObject({ kind: 'folder', title: 'Choose the recordings folder' });
 
   await dialog.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   const row = outputRow(page, 'output-1');
-  await expect(row.locator('.output-row-main')).toHaveAttribute('title', 'Record to C:\\videos\\show.mp4');
+  await expect(row.locator('.output-row-main')).toHaveAttribute('title', 'Record into C:\\videos');
   const settings = await openOutputSettings(page, 'output-1');
   await expect(settings.getByRole('button', { name: 'Browse…' })).toBeVisible();
-  await queuePick(page, 'C:\\videos\\show-2.mp4');
+  await queuePick(page, 'C:\\shows');
   await settings.getByRole('button', { name: 'Browse…' }).click();
-  await expect(settings.getByLabel('File path')).toHaveValue('C:\\videos\\show-2.mp4');
+  await expect(settings.getByLabel('Folder')).toHaveValue('C:\\shows');
 });
 
 /** Answers plugin.list and plugin.install from `plugins`, and records each action. */

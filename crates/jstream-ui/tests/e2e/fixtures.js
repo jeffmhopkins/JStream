@@ -92,7 +92,7 @@ export function outputRow(page, id) {
 }
 
 /** Adds an output through the Outputs panel's "+ Add output" dialog: `kind` is `rtmp`,
- * `record` or `virtual_cam`, and `target` its server URL or file path. It gets the first
+ * `record` or `virtual_cam`, and `target` its server URL or a recording's folder. It gets the first
  * free `output-N`. */
 export async function addOutput(page, kind, target) {
   await page.getByRole('button', { name: '+ Add output' }).click();
@@ -100,7 +100,7 @@ export async function addOutput(page, kind, target) {
   const kinds = { rtmp: 'Stream', record: 'Record', virtual_cam: 'Virtual camera' };
   await dialog.getByRole('group', { name: 'Kind' }).getByRole('button', { name: kinds[kind], exact: true }).click();
   if (target !== undefined) {
-    await dialog.getByLabel(kind === 'record' ? 'File path' : 'Server URL').fill(target);
+    await dialog.getByLabel(kind === 'record' ? 'Folder' : 'Server URL').fill(target);
   }
   await dialog.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(dialog).toHaveCount(0);

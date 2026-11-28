@@ -13,7 +13,9 @@
 //!
 //! A recording path is checked for its shape only, the same on every platform:
 //! absolute in either Unix or Windows form, not a UNC or device path, with no `..`
-//! segment, and ending in a file name that is not a DOS device name. Whether it is
+//! segment, and ending in a file name that is not a DOS device name. A folder output's
+//! folder (ADR-0260) is checked the same way, but may be empty (the engine's own
+//! recordings folder) and need not end in a file name. Whether it is
 //! absolute on the engine's own machine, whether its directory exists, and whether a
 //! file is already there, is checked by `output.start`, when the recording is opened.
 
@@ -36,6 +38,41 @@ pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
         return Some("must not be empty");
     }
+    if let Some(problem) = path_shape_problem(path) {
+        return Some(problem);
+    }
+    match path.split(['/', '\\']).next_back() {
+        Some("" | ".") | None => Some("must end in a file name"),
+        // On Windows `C:\x\NUL.mp4` writes to the null device and `COM1.mp4` to a
+        // serial port, in any folder (#503).
+        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
+        Some(_) => None,
+    }
+}
+
+/// Why `path` is not an acceptable folder for a folder recording output (ADR-0260), or
+/// `None` when it is. Empty is the engine's own recordings folder. Otherwise the rules
+/// of [`record_path_problem`], except that the path may end in a separator or be a
+/// drive's root (`/`, `C:\`), and its last segment is a folder's name, which must
+/// still not be a DOS device name: Win32 would open `C:\x\NUL\…` as the device.
+pub(crate) fn record_folder_problem(path: &str) -> Option<&'static str> {
+    if path.is_empty() {
+        return None;
+    }
+    if let Some(problem) = path_shape_problem(path) {
+        return Some(problem);
+    }
+    let last = path.split(['/', '\\']).rfind(|segment| !segment.is_empty());
+    match last {
+        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
+        _ => None,
+    }
+}
+
+/// The checks a recording's file and folder paths share: length, control characters,
+/// absolute, no UNC or device prefix, no `:` but a drive letter's, no `?` or `*`, and no
+/// `..` segment. `path` is not empty.
+fn path_shape_problem(path: &str) -> Option<&'static str> {
     if path.len() > MAX_PATH_LEN {
         return Some("must be at most 4096 bytes");
     }
@@ -66,17 +103,10 @@ pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
         // (`\??\UNC\host\…`, `\??\GLOBALROOT\Device\…`).
         return Some("must not contain `?` or `*`");
     }
-    let mut segments = path.split(['/', '\\']);
-    if segments.clone().any(|segment| segment == "..") {
+    if path.split(['/', '\\']).any(|segment| segment == "..") {
         return Some("must not contain a `..` segment");
     }
-    match segments.next_back() {
-        Some("" | ".") | None => Some("must end in a file name"),
-        // On Windows `C:\x\NUL.mp4` writes to the null device and `COM1.mp4` to a
-        // serial port, in any folder (#503).
-        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
-        Some(_) => None,
-    }
+    None
 }
 
 /// Whether Win32 opens the path component `name` as a DOS device rather than a file:

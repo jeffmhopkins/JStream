@@ -1107,6 +1107,32 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             }),
             invalid("edits.0.kind.path", "must not end in a DOS device name"),
         ),
+        // A folder output's folder (ADR-0260) may end in a separator, but is otherwise
+        // checked as a file's path is.
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record_folder("Videos/"),
+            }),
+            invalid(
+                "edits.0.kind.path",
+                "must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record_folder("C:\\Videos\\NUL\\"),
+            }),
+            invalid("edits.0.kind.path", "must not end in a DOS device name"),
+        ),
+        (
+            Batch::single(Edit::OutputSetPath {
+                output_id: OutputId::new("rec"),
+                path: "/home/me/Videos/".into(),
+            }),
+            invalid("edits.0.path", "must end in a file name"),
+        ),
         (
             Batch::single(Edit::OutputSetPath {
                 output_id: OutputId::new("rec"),
@@ -2392,6 +2418,15 @@ fn record(path: &str) -> OutputKind {
     OutputKind::Record {
         path: path.into(),
         container: RecordContainer::Mp4,
+        folder: false,
+    }
+}
+
+fn record_folder(path: &str) -> OutputKind {
+    OutputKind::Record {
+        path: path.into(),
+        container: RecordContainer::Mp4,
+        folder: true,
     }
 }
 

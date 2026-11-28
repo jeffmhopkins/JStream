@@ -1,5 +1,5 @@
 //! The person's own folders the desktop app saves into (ADR-0163): Documents, for the
-//! default project, and Downloads, for screenshots. They are known folders, which a
+//! default project, Downloads, for screenshots, and Videos, for recordings (ADR-0260). They are known folders, which a
 //! person or OneDrive's backup can move (Documents is often under `OneDrive`), so they
 //! are asked of the shell rather than built from `USERPROFILE`.
 //!
@@ -10,7 +10,7 @@ use jstream_platform::paths::UserFolder;
 use std::path::PathBuf;
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::UI::Shell::{
-    FOLDERID_Documents, FOLDERID_Downloads, KF_FLAG_DEFAULT, SHGetKnownFolderPath,
+    FOLDERID_Documents, FOLDERID_Downloads, FOLDERID_Videos, KF_FLAG_DEFAULT, SHGetKnownFolderPath,
 };
 
 /// Where `folder` is for the current user, as Explorer shows it.
@@ -21,6 +21,7 @@ pub fn user_folder(folder: UserFolder) -> Result<PathBuf, PlatformError> {
     let id = match folder {
         UserFolder::Documents => &FOLDERID_Documents,
         UserFolder::Downloads => &FOLDERID_Downloads,
+        UserFolder::Videos => &FOLDERID_Videos,
     };
     // SAFETY: a known-folder GUID constant and no token: the current user's folder.
     let path = unsafe { SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None) }

@@ -1072,6 +1072,7 @@ fn measure(
             kind: OutputKind::Record {
                 path: path.display().to_string(),
                 container: RecordContainer::Mp4,
+                folder: false,
             },
         }],
     )?;

@@ -159,6 +159,13 @@ audio-only).
   instead creates the destination exclusively as an empty placeholder and renames over
   that; a crash between the two steps leaves an empty destination beside the complete
   `.part` file.
+- **A new file each start** (`record::new_recording_in`,
+  [ADR-0260](../../docs/adr/0260-a-recording-output-records-into-a-folder.md)): a folder
+  recording output's start names its file in its folder, which it makes with any missing
+  parent: `JStream_<stamp>.mp4` (`record::recording_name`, `record::RECORDING_PREFIX`),
+  with the start's local date and time as the caller gives it, then `_2` to `_99` when
+  that name or its `.part` name is taken. `Recorder::create` checks again, so a file made
+  in between fails that start rather than being replaced.
 - **Crash safety:** each fragment is written as one buffer and then synced
   (`sync_data`), so a crash or power loss loses at most the fragment being built, and
   the `.part` file is readable up to its last complete fragment. Dropping a recorder

@@ -772,6 +772,16 @@ folder another process is using, so the daemon couldn't start pages while the ap
   `rendering.json` in the data directory (`jstream_platform::paths::RENDERING_FILE`,
   `Engine::with_rendering_file`), the file the desktop app names too. With no data
   directory they live in memory.
+- **Recordings** (`serve.rs`,
+  [ADR-0260](../../docs/adr/0260-a-recording-output-records-into-a-folder.md)). A folder
+  recording output with no folder of its own records into `JStream` in the person's
+  Videos folder (`jstream_platform::paths::RECORDINGS_DIR`; the shell's known folder on
+  Windows, `Engine::with_recordings_folder`), and the engine keeps the last recording's
+  encoding in `last-recording.json` in the data directory
+  (`jstream_platform::paths::LAST_RECORDING_FILE`, `Engine::with_last_recording_file`),
+  the file the desktop app names too. With no Videos folder such an output's start
+  fails; with no data directory the encoding lives in memory. A collection the daemon
+  creates (`--collection` naming no file yet) starts with the `recording` output.
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`

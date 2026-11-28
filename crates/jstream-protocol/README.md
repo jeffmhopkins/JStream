@@ -122,7 +122,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   chain), and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
   master stage as `state.get` reports it
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
-- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record`, into a `folder` or to one file, and `virtual_cam` so far), `RtmpTarget`
   (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo` (with the `video_mix` it shows), and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). `OutputKind::key_server` names the
@@ -411,7 +411,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.197 because `profile.get`'s units give their GPU time apart
+`PROTOCOL_VERSION` is 0.198 because a `record` output can name a folder (`folder`) that
+each `output.start` records a new, timestamped file into, and an empty folder means the
+engine's own recordings folder ([Outputs](#outputs),
+[ADR-0260](../../docs/adr/0260-a-recording-output-records-into-a-folder.md)); 0.197 because `profile.get`'s units give their GPU time apart
 by part (`UnitProfile`'s `gpu_parts`: a 3D model's draw, a model's or a scene's view
 depth, a scene's surface buffer and shadow maps, and each of a chain's first `GPU_PART_FILTERS` filters); 0.196
 because the rendering switches gain `model_antialiasing`,
@@ -865,7 +868,7 @@ covers = ["crates/jstream-protocol/src/schema.rs", "crates/jstream-protocol/src/
   canvas, legacy items, one geometry item (flipped left to right), two RTMP outputs, a virtual camera, a recording output, two
   encoder profiles, two video mixes, two hotkeys and two controller bindings, one of each rebound, and a show set twice), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path, encoder profile, video mix, hotkey and binding checks, a hotkey
+  URL, recording path and folder, encoder profile, video mix, hotkey and binding checks, a hotkey
 binding's labels, `label.members` of a missing label, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
@@ -1428,7 +1431,20 @@ so `output.set_target` refuses it with `invalid_argument`. `output.set_path
 {output_id, path}` (0.74, #1072) points it at another file, checked like `path` above,
 keeping its container, encoder profile, mix, bus and filters; a running recording keeps
 its file, and the new path applies from the next `output.start`. On any other output it
-is `invalid_argument`, and its inverse is `output.set_path` with the previous path. A `virtual_cam` output (0.18) has no fields: it offers the program
+is `invalid_argument`, and its inverse is `output.set_path` with the previous path.
+A `record` output with `folder` (0.198,
+[ADR-0260](../../docs/adr/0260-a-recording-output-records-into-a-folder.md)) names a
+folder instead, and each `output.start` records a new file into it, named
+`JStream_<date>_<time>.<ext>` in the engine machine's local time
+(`JStream_2026-11-28_10-17-30.mp4`), with `_2`, `_3`, … added when that name is taken.
+The start makes a missing folder, and fails with `action_failed` when it can't or can't
+write there. An empty folder `path` is the engine's own recordings folder, `JStream` in
+the person's Videos folder (`Movies` on macOS), and `output.set_path` changes the folder.
+A folder path follows the file rules above except that it may end in a separator or be
+a drive's root, and only a DOS device name is refused as its last segment. A recording
+output with no encoder profile records with the encoding of the last recording this
+engine made, which it keeps in its data folder, or the default before its first. A
+client older than 0.198 reads a folder output as a file output with that path. A `virtual_cam` output (0.18) has no fields: it offers the program
 video to other apps on the engine's machine as a webcam, with no audio, at the canvas
 size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
 the engine has no virtual camera, the camera isn't registered on the machine, or it
@@ -3268,7 +3284,10 @@ after 1.0:
   break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
   0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
   exists (the whole response fails, and `WsControl` ends the session). Whether that
-  counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
+  counts as a minor bump is part of open question 8. A `record` output's `folder`
+  (0.198, ADR-0260) is an added field, so a client older than 0.198 parses the output
+  and reads its folder as a file's path; it never sends `folder`, so what it creates
+  still records to one file. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
   than 0.13, which sends none, never reads it. 0.19 adds `bus` the same way: only an error answering a bus or send edit
   (`bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`,
