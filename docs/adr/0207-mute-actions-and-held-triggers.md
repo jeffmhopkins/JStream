@@ -104,9 +104,7 @@ the new one over the block, so a mute set between two blocks fades in one block 
    `bool` setting: on at one half or more, applied as a live value through the shown
    graph, never stored. A mute set this way is heard as any mute is; a visibility set
    this way cuts, with no appear or disappear effect, since it is a live value and not an
-   `item.show`. Since 0.198 a fourth switch, `filter_enabled { owner, filter_id }`,
-   turns a filter on any chain on or off as `filter.set_enabled` would, so a sequence's
-   Switches lane can drive it (#1819).
+   `item.show`.
 6. **Bindings name what they mute.** `named_objects` names the source or bus, so deleting
    it removes the bindings with it (`bus.delete` now does this too, as
    [ADR-0040 §3](0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md) has

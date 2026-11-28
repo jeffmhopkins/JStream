@@ -1567,7 +1567,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Whether a filter runs, a switch: on at one half or more (ADR-0207, since 0.198),\nas `filter.set_enabled` would set it, on any chain `filter_setting` reaches. A\nfilter switched off this way is bypassed and keeps its settings.",
+                "description": "Whether a filter runs, a switch like ADR-0207's: on at one half or more (since\n0.198), as `filter.set_enabled` would set it, on any chain `filter_setting`\nreaches. A filter switched off this way is bypassed and keeps its settings.",
                 "properties": {
                   "filter_id": {
                     "$ref": "#/$defs/FilterId",

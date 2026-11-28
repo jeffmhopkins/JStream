@@ -732,7 +732,7 @@ stamp = { hash = "b3:ef7242fa7aa1c16e", by = "agent:claude", note = "MCP README 
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:4ac0ec1b1095115a", by = "agent:claude", note = "#1819: tools.snap gains the filter_enabled ValueTarget schema through the generated tools; the MCP section's description still holds" }
+stamp = { hash = "b3:2b257890c3be3f70", by = "agent:claude", note = "#1819: FilterEnabled's doc comment reworded (a switch like ADR-0207's, since 0.198) after dropping the edit to accepted ADR-0207; snapshots regenerated; section still holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:98ac416ebdc36dd8", by = "agent:claude", note = "design.rs gained the region guidance; ARCH mcp states nothing about model settings" }
@@ -945,7 +945,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:ced8c4bc32acc8d6", by = "agent:claude", note = "#1819: one more ValueTarget (filter_enabled) and the 0.198 bump; the protocol summary names no value target list, so it still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:44d65b7eea385b72", by = "agent:claude", note = "#1819: one more ValueTarget (filter_enabled) and the 0.198 bump; the protocol summary names no value target list, so it still holds" }
+stamp = { hash = "b3:63d98471d867a8e4", by = "agent:claude", note = "#1819: FilterEnabled's doc comment reworded (a switch like ADR-0207's, since 0.198) after dropping the edit to accepted ADR-0207; snapshots regenerated; section still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -957,7 +957,7 @@ stamp = { hash = "b3:138243dd2b7d1475", by = "agent:claude-settings", note = "Re
 stamp = { hash = "b3:bdb32f0b9832d17f", by = "agent:claude", note = "Re-read in full after merging the train. Checked against the code: version.rs is 0.187; protocol.snap has source.mute, bus.mute, output.toggle, source.restart and plugin.uninstall; binding.rs has the SourceMute, BusMute and ItemVisible value targets beside the train's PtzAxis; Action::on_release is in command.rs and core's action_bindings.rs uses it for held MIDI triggers." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:fe01e4cb8a35e9fc", by = "agent:claude", note = "#1819: one more ValueTarget (filter_enabled) and the 0.198 bump; the protocol summary names no value target list, so it still holds" }
+stamp = { hash = "b3:6873f872b249f167", by = "agent:claude", note = "#1819: FilterEnabled's doc comment reworded (a switch like ADR-0207's, since 0.198) after dropping the edit to accepted ADR-0207; snapshots regenerated; section still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/camera_aim.rs"]
 stamp = { hash = "b3:308cc15f74393559", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the live-aim bullet beside PTZ cameras; the rest of the protocol section holds; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -4764,7 +4764,7 @@ stamp = { hash = "b3:90465e14077d637b", by = "agent:r9bzj2", note = "New section
 stamp = { hash = "b3:a37bba619c95806a", by = "agent:release-alpha8", note = "Added value bindings: ValueBinding, ValueTarget, set_value/clear_value checks, left in place, midi.last_controls, against binding.rs and value.rs. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: ADR-0178 as merged (schema 19 after #1609's 18, at most 256, five target types, left in place when the target goes, learn via midi.last_controls) matches the value-binding paragraph CC PR 3 value bindings added, and ValueBinding::problem agrees with binding.rs." }
 
 ["CRATE-jstream-protocol#bindings"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:fe01e4cb8a35e9fc", by = "agent:claude", note = "#1819: ValueTarget list gains filter_enabled {owner, filter_id} since 0.198, a switch as filter.set_enabled sets it on any chain filter_setting reaches" }
+stamp = { hash = "b3:6873f872b249f167", by = "agent:claude", note = "#1819: FilterEnabled's doc comment reworded (a switch like ADR-0207's, since 0.198) after dropping the edit to accepted ADR-0207; snapshots regenerated; section still holds" }
 
 ["CRATE-jstream-protocol#calls"."body"]
 stamp = { hash = "b3:b06218b261a54303", by = "agent:mute-thread", note = "Added that a few actions stand for an edit (item.show/hide/toggle, source.mute and bus.mute), moving rev by one while staying non-undoable and non-batchable, so keys and triggers can make them." }
@@ -4809,7 +4809,7 @@ stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:ced8c4bc32acc8d6", by = "agent:claude", note = "#1819: 0.198 adds ValueTarget filter_enabled on the same terms as 0.182/0.187: an older client can't parse state.get once a binding switches a filter; snapshots regenerated" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:44d65b7eea385b72", by = "agent:claude", note = "#1819: 0.198 adds ValueTarget filter_enabled on the same terms as 0.182/0.187: an older client can't parse state.get once a binding switches a filter; snapshots regenerated" }
+stamp = { hash = "b3:63d98471d867a8e4", by = "agent:claude", note = "#1819: FilterEnabled's doc comment reworded (a switch like ADR-0207's, since 0.198) after dropping the edit to accepted ADR-0207; snapshots regenerated; section still holds" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
@@ -5106,7 +5106,7 @@ stamp = { hash = "b3:138243dd2b7d1475", by = "agent:claude-settings", note = "Re
 stamp = { hash = "b3:bdb32f0b9832d17f", by = "agent:claude", note = "Re-read after merging the alpha.13 train: the envelope, history and live-values bullets are the train's and name nothing of the mute work; the 0.187 renumber of the mute types doesn't touch them" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:fe01e4cb8a35e9fc", by = "agent:claude", note = "#1819: binding.rs gains ValueTarget::FilterEnabled, fixtures add a blur_on example, PROTOCOL_VERSION 0.198; the crate's purpose is unchanged" }
+stamp = { hash = "b3:6873f872b249f167", by = "agent:claude", note = "#1819: FilterEnabled's doc comment reworded (a switch like ADR-0207's, since 0.198) after dropping the edit to accepted ADR-0207; snapshots regenerated; section still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/camera_aim.rs"]
 stamp = { hash = "b3:308cc15f74393559", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; re-read: nothing in this section names what changed (the new actions, query, endpoints or flags), and it still holds; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }

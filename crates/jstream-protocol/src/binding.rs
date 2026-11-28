@@ -483,9 +483,9 @@ pub enum ValueTarget {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
-    /// Whether a filter runs, a switch: on at one half or more (ADR-0207, since 0.198),
-    /// as `filter.set_enabled` would set it, on any chain `filter_setting` reaches. A
-    /// filter switched off this way is bypassed and keeps its settings.
+    /// Whether a filter runs, a switch like ADR-0207's: on at one half or more (since
+    /// 0.198), as `filter.set_enabled` would set it, on any chain `filter_setting`
+    /// reaches. A filter switched off this way is bypassed and keeps its settings.
     FilterEnabled {
         /// What owns the filter.
         owner: FilterOwner,
