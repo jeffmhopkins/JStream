@@ -62,7 +62,7 @@ use jstream_media::{FrameSize, MediaTime, VideoFrame};
 use jstream_platform::{GpuFrame, MediaClock, PlatformError};
 
 use crate::wire::{self, ToEngine, ToHelper};
-use crate::{BrowserError, BrowserPage, PageAudio, PageData, PageSpec};
+use crate::{BrowserError, BrowserPage, PageAudio, PageData, PageSpec, RefusedLog, RefusedRequest};
 
 /// How long the helper may take to answer an open.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -232,6 +232,8 @@ struct PageLink {
     audio: Arc<PageAudio>,
     frames: Box<dyn PageFrames>,
     denied: AtomicU64,
+    /// The first refused requests, as the helper described them.
+    refused: RefusedLog,
     /// Answered when the helper confirms or refuses the open.
     opened: Mutex<Option<SyncSender<Result<(), String>>>>,
     /// The reload hold. A paint holds it while it stores its frame, so a reload can't
@@ -404,6 +406,7 @@ impl Link {
             audio: PageAudio::new(),
             frames: self.frames.page(spec.size),
             denied: AtomicU64::new(0),
+            refused: RefusedLog::default(),
             opened: Mutex::new(Some(tx)),
             hold: Mutex::new(Hold {
                 reloads: 0,
@@ -575,14 +578,27 @@ impl Link {
                     state.audio.fail(&lost(reason));
                 }
             }
-            ToEngine::Denied { page, count } => {
+            ToEngine::Denied {
+                page,
+                count,
+                refused,
+            } => {
                 if let Some(state) = self.page(page) {
-                    // The helper names no URL, which may be a local path: only the count.
+                    // The helper names no URL, which may be a local path: the count, and
+                    // the request's kind, scheme and reason (ADR-0048). Each is cut short
+                    // here, as the helper is not trusted to.
+                    let refused = refused.bounded();
+                    let RefusedRequest {
+                        kind,
+                        scheme,
+                        reason,
+                    } = &refused;
                     if state.denied.fetch_max(count, Ordering::Relaxed) == 0 {
-                        tracing::warn!(denied = count, "a browser page's request was refused");
+                        tracing::warn!(denied = count, %kind, %scheme, %reason, "a browser page's request was refused");
                     } else {
-                        tracing::debug!(denied = count, "a browser page's request was refused");
+                        tracing::debug!(denied = count, %kind, %scheme, %reason, "a browser page's request was refused");
                     }
+                    state.refused.push(refused);
                 }
             }
             ToEngine::Warning { message } => {
@@ -709,6 +725,10 @@ impl BrowserPage for LinkPage {
 
     fn denied_requests(&self) -> u64 {
         self.page.denied.load(Ordering::Relaxed)
+    }
+
+    fn refused_requests(&self) -> Vec<RefusedRequest> {
+        self.page.refused.list()
     }
 
     fn send_data(&mut self, data: PageData) {
@@ -950,7 +970,15 @@ mod tests {
             page: 1,
             samples: vec![0.5; 960],
         });
-        helper.say(&ToEngine::Denied { page: 1, count: 3 });
+        helper.say(&ToEngine::Denied {
+            page: 1,
+            count: 3,
+            refused: RefusedRequest {
+                kind: "x".repeat(500),
+                scheme: "C:\\Users\\someone".into(),
+                reason: "the file is outside the page's folder".into(),
+            },
+        });
         // Messages for a page the engine doesn't know are ignored, but a frame's slot
         // is still released.
         helper.say(&ToEngine::Audio {
@@ -966,6 +994,12 @@ mod tests {
         });
         assert_eq!(helper.expect(), ToHelper::Released { page: 9, slot: 0 });
         eventually(|| page.denied_requests() == 3);
+        // The description is kept, cut short, and a scheme that isn't one is dropped.
+        let refused = page.refused_requests();
+        assert_eq!(refused.len(), 1);
+        assert_eq!(refused[0].kind.chars().count(), 96);
+        assert_eq!(refused[0].scheme, "none");
+        assert_eq!(refused[0].reason, "the file is outside the page's folder");
         {
             let heard = lock(&heard);
             assert_eq!(heard.samples, vec![0.5; 960]);

@@ -500,10 +500,10 @@ wrap_resource_request_handler! {
                     }
                     ReturnValue::CONTINUE
                 }
-                crate::Verdict::Deny(_) => {
+                crate::Verdict::Deny(reason) => {
                     // The URL may be a local path, which the engine's logs must never
-                    // name: it gets the count.
-                    page.denied();
+                    // name: it gets the count, the request's kind and the URL's scheme.
+                    page.denied(resource_kind(request.resource_type()), &url, reason);
                     ReturnValue::CANCEL
                 }
             }
@@ -550,8 +550,8 @@ wrap_resource_request_handler! {
             };
             let page = &self.page.0;
             let target = new_url.to_string();
-            let main_frame =
-                request.is_some_and(|r| r.resource_type() == ResourceType::MAIN_FRAME);
+            let resource = request.map(|r| r.resource_type());
+            let main_frame = resource == Some(ResourceType::MAIN_FRAME);
             let own_load = main_frame && self.own_load.load(Ordering::Acquire);
             let verdict = if main_frame {
                 page.policy
@@ -570,17 +570,52 @@ wrap_resource_request_handler! {
                         page.policy.expect_own_load(&target);
                     }
                 }
-                crate::Verdict::Deny(_) => {
+                crate::Verdict::Deny(reason) => {
                     // Counted only once the target is really replaced: `try_set` fails
                     // only when CEF passed no string to write into, and then nothing here
                     // can stop the redirect.
                     if new_url.try_set(REFUSED_REDIRECT) {
-                        page.denied();
+                        let kind = resource.map_or("request", resource_kind);
+                        page.denied(&format!("{kind} (redirect)"), &target, reason);
                     }
                 }
             }
         }
     }
+}
+
+/// What a refused request was, in words, for its description to the engine
+/// ([`RefusedRequest`](crate::RefusedRequest)).
+fn resource_kind(kind: ResourceType) -> &'static str {
+    const KINDS: [(ResourceType, &str); 20] = [
+        (ResourceType::MAIN_FRAME, "main frame"),
+        (ResourceType::SUB_FRAME, "frame"),
+        (ResourceType::STYLESHEET, "stylesheet"),
+        (ResourceType::SCRIPT, "script"),
+        (ResourceType::IMAGE, "image"),
+        (ResourceType::FONT_RESOURCE, "font"),
+        (ResourceType::SUB_RESOURCE, "subresource"),
+        (ResourceType::OBJECT, "object"),
+        (ResourceType::MEDIA, "media"),
+        (ResourceType::WORKER, "worker"),
+        (ResourceType::SHARED_WORKER, "shared worker"),
+        (ResourceType::PREFETCH, "prefetch"),
+        (ResourceType::FAVICON, "favicon"),
+        (ResourceType::XHR, "fetch"),
+        (ResourceType::PING, "ping"),
+        (ResourceType::SERVICE_WORKER, "service worker"),
+        (ResourceType::CSP_REPORT, "CSP report"),
+        (ResourceType::PLUGIN_RESOURCE, "plugin resource"),
+        (
+            ResourceType::NAVIGATION_PRELOAD_MAIN_FRAME,
+            "main frame preload",
+        ),
+        (ResourceType::NAVIGATION_PRELOAD_SUB_FRAME, "frame preload"),
+    ];
+    KINDS
+        .iter()
+        .find(|(known, _)| *known == kind)
+        .map_or("request", |(_, name)| name)
 }
 
 // The page given as HTML, as the response to its URL: `200`, `text/html` in UTF-8.

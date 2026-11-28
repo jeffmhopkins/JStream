@@ -861,8 +861,9 @@ folder another process is using, so the daemon couldn't start pages while the ap
   minidump in the same folder
   ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)):
   thread stacks and the module list, not the process heap, and the newest three
-  dumps are kept. The filter cannot build the report file's DACL, so a dump keeps
-  the process's default one.
+  dumps are kept. Each dump gets the report file's protected DACL for SYSTEM and
+  the user, built once at install, outside the filter
+  ([ADR-0260](../../docs/adr/0260-a-native-crash-dump-is-user-only-on-windows.md)).
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
@@ -921,9 +922,7 @@ folder another process is using, so the daemon couldn't start pages while the ap
 4. **Native crash dumps on Linux and macOS.** Windows writes a local minidump from
    an unhandled-exception filter in `jstream-platform-windows`
    ([ADR-0258](../../docs/adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)).
-   Linux and macOS still write nothing for an access violation or an abort. A dump
-   on Windows is not given the report file's user-and-SYSTEM DACL: building that
-   DACL looks up SIDs, which the filter must not do.
+   Linux and macOS still write nothing for an access violation or an abort.
 5. **Data directory.** The log directory's default is `logs` in the data directory
    (`jstream-platform`'s `paths`, which handles ADR-0066's `portable` marker), and
    `--log-dir` overrides it. The token file (question 2) and the collection

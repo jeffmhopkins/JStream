@@ -131,6 +131,108 @@ struct Folder {
     resolved: PathBuf,
 }
 
+/// How many refused requests a page keeps described ([`RefusedRequest`]): the first
+/// ones. Later refusals are still counted.
+pub const MAX_REFUSED_REQUESTS: usize = 16;
+
+/// The longest each of a [`RefusedRequest`]'s words may be, in characters.
+const MAX_REFUSAL_WORDS: usize = 96;
+
+/// One refused request of a page, described without its URL, which may be a local path
+/// that the engine and its logs must never name (ADR-0048): what kind of request it was,
+/// its URL's scheme, and the policy's reason.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RefusedRequest {
+    /// What the page asked for, as the browser classes it: `image`, `favicon`,
+    /// `main frame`, `script` and so on, with ` (redirect)` when it was a redirect's
+    /// target.
+    pub kind: String,
+    /// The URL's scheme in lower case (`file`, `https`, `chrome`), or `none` when it
+    /// has none that can be read.
+    pub scheme: String,
+    /// Why the policy refused it ([`Verdict::Deny`]'s text, which names no path).
+    pub reason: String,
+}
+
+impl RefusedRequest {
+    /// Describes a refused request for `url`: only its scheme is kept.
+    pub fn new(kind: &str, url: &str, reason: &str) -> Self {
+        Self {
+            kind: kind.to_owned(),
+            scheme: scheme_of(url),
+            reason: reason.to_owned(),
+        }
+        .bounded()
+    }
+
+    /// The same, with each field cut to a bounded length and the scheme checked again:
+    /// what the engine keeps of a description the helper sent.
+    pub(crate) fn bounded(self) -> Self {
+        fn cut(text: String) -> String {
+            match text.char_indices().nth(MAX_REFUSAL_WORDS) {
+                Some((at, _)) => text[..at].to_owned(),
+                None => text,
+            }
+        }
+        let scheme = if is_scheme(&self.scheme) {
+            self.scheme.to_ascii_lowercase()
+        } else {
+            "none".to_owned()
+        };
+        Self {
+            kind: cut(self.kind),
+            scheme,
+            reason: cut(self.reason),
+        }
+    }
+}
+
+impl std::fmt::Display for RefusedRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({}): {}", self.kind, self.scheme, self.reason)
+    }
+}
+
+/// `url`'s scheme in lower case, or `none`.
+fn scheme_of(url: &str) -> String {
+    match url.split_once(':') {
+        Some((scheme, _)) if is_scheme(scheme) => scheme.to_ascii_lowercase(),
+        _ => "none".to_owned(),
+    }
+}
+
+/// Whether `text` is a URL scheme (RFC 3986: a letter, then letters, digits, `+`, `-`
+/// or `.`) of at most 32 characters, so it can never carry a path.
+fn is_scheme(text: &str) -> bool {
+    let mut chars = text.chars();
+    text.len() <= 32
+        && chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+}
+
+/// A page's first [`MAX_REFUSED_REQUESTS`] refused requests, for a backend's
+/// [`refused_requests`](crate::BrowserPage::refused_requests).
+#[derive(Debug, Default)]
+pub struct RefusedLog(Mutex<Vec<RefusedRequest>>);
+
+impl RefusedLog {
+    /// Keeps `refused` if there is room.
+    pub fn push(&self, refused: RefusedRequest) {
+        let mut log = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if log.len() < MAX_REFUSED_REQUESTS {
+            log.push(refused);
+        }
+    }
+
+    /// The ones kept, oldest first.
+    pub fn list(&self) -> Vec<RefusedRequest> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
 /// Whether one request may go ahead.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verdict {
@@ -749,6 +851,55 @@ fn folder(policy: &RequestPolicy) -> Option<&Path> {
 mod tests {
     use super::*;
     use crate::page::file_url;
+
+    /// A refused request's description keeps its URL's scheme and never its path, host
+    /// or query (ADR-0048).
+    #[test]
+    fn a_refused_request_is_described_without_its_url() {
+        let refused = RefusedRequest::new(
+            "image",
+            "file:///C:/Users/someone/page/../outside.svg",
+            "the file is outside the page's folder",
+        );
+        assert_eq!(
+            refused,
+            RefusedRequest {
+                kind: "image".into(),
+                scheme: "file".into(),
+                reason: "the file is outside the page's folder".into(),
+            }
+        );
+        assert_eq!(
+            refused.to_string(),
+            "image (file): the file is outside the page's folder"
+        );
+        assert_eq!(
+            RefusedRequest::new("fetch", "HTTPS://192.168.1.2/x?key=1", "r").scheme,
+            "https"
+        );
+        for no_scheme in ["", "no scheme", "/a/b:c", "1abc:x", "a b:c", "C\\Users:x"] {
+            assert_eq!(RefusedRequest::new("image", no_scheme, "r").scheme, "none");
+        }
+        let long = RefusedRequest::new(&"k".repeat(200), "x:", &"é".repeat(200));
+        assert_eq!(long.kind.chars().count(), MAX_REFUSAL_WORDS);
+        assert_eq!(long.reason.chars().count(), MAX_REFUSAL_WORDS);
+    }
+
+    /// The log keeps the first [`MAX_REFUSED_REQUESTS`] refusals, oldest first.
+    #[test]
+    fn the_refused_log_keeps_the_first_ones() {
+        let log = RefusedLog::default();
+        for n in 0..MAX_REFUSED_REQUESTS + 5 {
+            log.push(RefusedRequest::new(&format!("k{n}"), "file:", "r"));
+        }
+        let list = log.list();
+        assert_eq!(list.len(), MAX_REFUSED_REQUESTS);
+        assert_eq!(list[0].kind, "k0");
+        assert_eq!(
+            list[MAX_REFUSED_REQUESTS - 1].kind,
+            format!("k{}", MAX_REFUSED_REQUESTS - 1)
+        );
+    }
 
     /// A fresh folder under the temp dir, with `page/index.html`, `page/img/a.png`,
     /// `page/a b%.css` and `secret.txt` beside `page`.

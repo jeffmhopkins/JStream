@@ -32,7 +32,10 @@ request and permission rules) is in its module's rustdoc, next to the code:
 **The seam.** `BrowserBackend` is what `jstream-sources` opens pages through, injected
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` and
 returns a `BrowserPage`: its latest frame, its audio, its custom CSS, the page API data
-the engine sends it, and how many of its requests were refused. `use_device` gives the
+the engine sends it, and how many of its requests were refused, with the first 16
+described by kind, URL scheme and the policy's reason (`RefusedRequest`; never the URL,
+which may be a local path, [ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)
+decision 5). `use_device` gives the
 backend a GPU device to copy the pages' paints onto: the host's at first, and while the
 program stage runs, the stage's own context, which the engine lends it and takes back
 ([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). A page never
@@ -69,11 +72,13 @@ helper out in the build's folder as it ships (CEF's `bootstrap.exe` copied as
 `jstream-browser-helper.exe` beside the helper's DLL), then opens the built-in test page
 (or `--url`) through the CEF backend on a device of the media adapter and the QPC clock,
 as the daemon's pages do before a program stage lends its own context, and reports the frames and audio that
-arrive, a custom-CSS change the page reacts to, the requests refused (the built-in page
-loads one image from outside its folder), and the shutdown time. Each audio listener's
-report gives when its packets arrived and the frames in each second after the page
-opened; the built-in page fails the check if its audio first arrives more than 5 s after
-the page opened (#1845). It runs on Windows only.
+arrive, a custom-CSS change the page reacts to, the requests refused, each listed by kind,
+scheme and reason (the built-in page loads one image from outside its folder, which
+Chromium asks for more than once; the check fails if that image isn't among them or
+anything else is refused), and the shutdown time. Each audio listener's report gives
+when its packets arrived and the frames in each second after the page opened; the
+built-in page fails the check if its audio first arrives more than 5 s after the page
+opened (#1845). It runs on Windows only.
 
 **The Linux check.** `tests/linux_page.rs` (feature `cef`, ignored by default) opens a
 file page through the real helper named by `JSTREAM_BROWSER_HELPER`, as `cargo xtask

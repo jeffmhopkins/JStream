@@ -1985,7 +1985,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   ([R-SEC-004](RULES.md#R-SEC-004)). On Windows the apps write
   `crash-<pid>-<n>.dmp` from an unhandled-exception filter: thread stacks and the
   module list, not the process heap
-  ([ADR-0258](adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)).
+  ([ADR-0258](adr/0258-a-native-crash-writes-a-local-minidump-on-windows.md)), in a
+  user-only file like a crash report
+  ([ADR-0260](adr/0260-a-native-crash-dump-is-user-only-on-windows.md)).
 
 <a id="packaging"></a>
 ## Packaging

@@ -13,8 +13,8 @@
 //! 1. The engine sends [`ToHelper::Start`]; the helper starts CEF and answers
 //!    [`ToEngine::Ready`] or [`ToEngine::StartFailed`].
 //! 2. [`ToHelper::Open`] is answered by [`ToEngine::Opened`] or [`ToEngine::OpenFailed`].
-//!    An open page sends frames, audio and refused-request counts until the engine
-//!    closes it.
+//!    An open page sends frames, audio and refused requests (a count and a description
+//!    with no URL) until the engine closes it.
 //! 3. Each [`ToEngine::Frame`] names one of the page's shared textures, which the helper
 //!    doesn't paint into again until the engine sends [`ToHelper::Released`] for it.
 //! 4. [`ToHelper::Shutdown`], or the pipe closing, closes every page and ends the helper.
@@ -24,7 +24,7 @@ use std::path::PathBuf;
 
 use jstream_media::FrameSize;
 
-use crate::{PageApi, PageData, PageLocation, PageSpec};
+use crate::{PageApi, PageData, PageLocation, PageSpec, RefusedRequest};
 
 /// The longest message either side sends: a page opened with at most 128 KiB of HTML and
 /// 64 KiB of CSS, with room to spare.
@@ -91,8 +91,13 @@ pub(crate) enum ToEngine {
     Audio { page: u32, samples: Vec<f32> },
     /// A page's audio stream failed.
     AudioFailed { page: u32, reason: String },
-    /// A page's refused requests so far.
-    Denied { page: u32, count: u64 },
+    /// A page's refused requests so far, and the latest one, described without its URL
+    /// (ADR-0048).
+    Denied {
+        page: u32,
+        count: u64,
+        refused: RefusedRequest,
+    },
     /// A page's browser closed.
     Closed { page: u32 },
     /// The helper took a page's [`ToHelper::Reload`]: it paints nothing of the old
@@ -505,10 +510,17 @@ impl ToEngine {
                 out.u32(*page);
                 out.str(reason)?;
             }
-            Self::Denied { page, count } => {
+            Self::Denied {
+                page,
+                count,
+                refused,
+            } => {
                 out.u8(5);
                 out.u32(*page);
                 out.u64(*count);
+                out.str(&refused.kind)?;
+                out.str(&refused.scheme)?;
+                out.str(&refused.reason)?;
             }
             Self::Closed { page } => {
                 out.u8(6);
@@ -592,6 +604,11 @@ impl ToEngine {
             5 => Self::Denied {
                 page: body.u32()?,
                 count: body.u64()?,
+                refused: RefusedRequest {
+                    kind: body.string()?,
+                    scheme: body.string()?,
+                    reason: body.string()?,
+                },
             },
             6 => Self::Closed { page: body.u32()? },
             7 => Self::StartFailed {
@@ -843,6 +860,11 @@ mod tests {
             ToEngine::Denied {
                 page: 1,
                 count: u64::MAX,
+                refused: RefusedRequest::new(
+                    "image",
+                    "file:///C:/page/../outside.svg",
+                    "the file is outside the page's folder",
+                ),
             },
             ToEngine::Closed { page: 1 },
             ToEngine::Reloading { page: 2 },

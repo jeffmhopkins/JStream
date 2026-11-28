@@ -1024,11 +1024,14 @@ impl PageShared {
         });
     }
 
-    /// A request was refused: the engine gets the new count, never the URL.
-    pub(crate) fn denied(&self) {
+    /// A request for `url` of this `kind` was refused for `reason`: the engine gets
+    /// the new count and the request's kind, scheme and reason, never the URL
+    /// (ADR-0048).
+    pub(crate) fn denied(&self, kind: &str, url: &str, reason: &str) {
         self.host.send(&ToEngine::Denied {
             page: self.id,
             count: self.policy.denied(),
+            refused: crate::RefusedRequest::new(kind, url, reason),
         });
     }
 

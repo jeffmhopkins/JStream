@@ -167,10 +167,11 @@ fn paints_red(dir: &std::path::Path, location: PageLocation) {
             let log = std::fs::read_to_string(dir.join("cef.log")).unwrap_or_default();
             panic!(
                 "no red paint within {PAINT_TIMEOUT:?} (last frame: {:?}, {} request(s) \
-                 refused)\nCEF's log:\n{log}",
+                 refused: {:?})\nCEF's log:\n{log}",
                 page.cpu_frame()
                     .map(|frame| pixel(&frame, width / 4, height / 2)),
-                page.denied_requests()
+                page.denied_requests(),
+                page.refused_requests()
             );
         }
         std::thread::sleep(Duration::from_millis(50));
