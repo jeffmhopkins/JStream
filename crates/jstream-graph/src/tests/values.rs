@@ -363,6 +363,61 @@ fn mutes_and_visibility_are_switch_targets() {
     ));
 }
 
+/// #1819: whether a filter runs is a switch, set through `filter.set_enabled`, and the
+/// filter must exist on its owner's chains.
+#[test]
+fn a_filters_on_off_is_a_switch_target() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![tint_on_cam()]);
+    let on = ValueTarget::FilterEnabled {
+        owner: FilterOwner::Source {
+            source_id: SourceId::new("cam"),
+        },
+        filter_id: FilterId::new("t1"),
+    };
+    assert_eq!(g.value_range(&on), Some(ValueRange::Switch));
+    assert_eq!(
+        value_edit(&on, ValueRange::Switch, 0.25),
+        Some(Edit::FilterSetEnabled {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("cam"),
+            },
+            filter_id: FilterId::new("t1"),
+            enabled: false,
+        })
+    );
+    apply_ok(&mut g, vec![bind("on", on.clone())]);
+    // The engine draws it off while the binding holds it there; the stored filter runs.
+    let drawn = g.with_values(&[value_edit(&on, ValueRange::Switch, 0.0).expect("an edit")]);
+    let enabled = |g: &crate::Graph| {
+        g.state()
+            .source(&SourceId::new("cam"))
+            .and_then(|s| s.filters().chain(FilterChain::Video).first())
+            .map(|f| f.enabled())
+    };
+    assert_eq!(enabled(&drawn), Some(false));
+    assert_eq!(enabled(&g), Some(true));
+    let missing = apply_err(
+        &mut g,
+        vec![bind(
+            "gone",
+            ValueTarget::FilterEnabled {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("cam"),
+                },
+                filter_id: FilterId::new("nope"),
+            },
+        )],
+    );
+    assert!(matches!(
+        missing,
+        ProtocolError::NotFound {
+            entity: EntityKind::Filter,
+            ..
+        }
+    ));
+}
+
 /// ADR-0209: a PTZ axis takes whole head counts over its protocol range, names a
 /// camera the collection can't look up (it belongs to the machine), and gives no setter
 /// edit, since the engine aims the head instead.

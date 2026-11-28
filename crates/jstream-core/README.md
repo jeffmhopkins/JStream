@@ -268,7 +268,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   item, named by its source and property, or on a scene's camera, by the scene and
   property, a value binding, by its target (a PTZ axis as the camera and axis, `Wide
   Zoom`, ADR-0209; a mute or visibility switch as `Mic Mute` or `Logo Visible`,
-  ADR-0207), or a channel's input
+  ADR-0207, a filter's on/off as its owner and kind, `Cam Blur On`), or a channel's input
   ([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), by the channel's name or
   else its ID), a reader naming the sender winning a
   slot over one naming any, a slot read twice taking `+N`, cut to 40 bytes. The engine

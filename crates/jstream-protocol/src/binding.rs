@@ -416,7 +416,8 @@ pub const MAX_VALUE_BINDINGS: usize = 256;
 /// The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in
 /// the collection that isn't an item's or a camera's, which their own motion modifiers
 /// drive, or since 0.187 a switch: a mute, or whether a placement shows its item
-/// (ADR-0207). Serialized with an internal `type` tag.
+/// (ADR-0207), and since 0.198 whether a filter runs. Serialized with an internal `type`
+/// tag.
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -481,6 +482,15 @@ pub enum ValueTarget {
         /// `scene_id`: omitted for the item's own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
+    },
+    /// Whether a filter runs, a switch: on at one half or more (ADR-0207, since 0.198),
+    /// as `filter.set_enabled` would set it, on any chain `filter_setting` reaches. A
+    /// filter switched off this way is bypassed and keeps its settings.
+    FilterEnabled {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter.
+        filter_id: FilterId,
     },
     /// One axis of a PTZ camera's position (ADR-0209, since 0.182), in the head's own
     /// counts (ADR-0146 §5): the engine aims the head there as the value moves. The
@@ -549,6 +559,7 @@ impl ValueTarget {
             | ValueTarget::SourceMute { .. }
             | ValueTarget::BusMute { .. }
             | ValueTarget::ItemVisible { .. }
+            | ValueTarget::FilterEnabled { .. }
             | ValueTarget::PtzAxis { .. } => None,
         }
     }
@@ -578,6 +589,9 @@ impl fmt::Display for ValueTarget {
                 item_id,
                 scene_id: Some(scene_id),
             } => write!(f, "whether item {item_id} shows in scene {scene_id}"),
+            ValueTarget::FilterEnabled { filter_id, .. } => {
+                write!(f, "whether filter {filter_id} runs")
+            }
             ValueTarget::PtzAxis { camera, axis } => {
                 write!(f, "the {} of PTZ camera {camera}", axis.name())
             }
@@ -827,5 +841,29 @@ mod tests {
         );
         assert_eq!(PtzAxis::Pan.range(), (-0x7_FFFF, 0x7_FFFF));
         assert_eq!(PtzAxis::Focus.range(), (0, 65535));
+    }
+
+    /// #1819: whether a filter runs is a switch target, on the wire as
+    /// `filter_enabled` with the filter's owner, and names no setting.
+    #[test]
+    fn a_value_binding_can_switch_a_filter() {
+        use super::ValueTarget;
+        use crate::filter::FilterOwner;
+        use crate::id::{FilterId, SourceId};
+        let target = ValueTarget::FilterEnabled {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("cam"),
+            },
+            filter_id: FilterId::new("blur"),
+        };
+        let wire = serde_json::to_value(&target).expect("serializes");
+        assert_eq!(wire["type"], "filter_enabled");
+        assert_eq!(wire["filter_id"], "blur");
+        assert_eq!(
+            serde_json::from_value::<ValueTarget>(wire).expect("parses"),
+            target
+        );
+        assert_eq!(target.to_string(), "whether filter blur runs");
+        assert_eq!(target.param(), None);
     }
 }

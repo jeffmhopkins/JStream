@@ -790,6 +790,18 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..value_bindings().remove(0)
             },
         },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "blur_on".into(),
+                target: ValueTarget::FilterEnabled {
+                    owner: FilterOwner::Source {
+                        source_id: SourceId::new("src_cam"),
+                    },
+                    filter_id: FilterId::new("flt_blur"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
         // A channel, then its delete (ADR-0183).
         Edit::ChannelSet {
             channel: channels().remove(0),

@@ -81,27 +81,34 @@ pub(crate) fn fit(label: &str) -> String {
 /// What a value binding's target is called.
 fn target_label(graph: &Graph, target: &ValueTarget) -> String {
     let state = graph.state();
-    let source = |id| state.source(id).map_or("", |s| s.name());
+    let source = |id: &jstream_protocol::SourceId| -> String {
+        state.source(id).map_or("", |s| s.name()).to_owned()
+    };
     let bus = |id| state.bus(id).map_or("", |b| b.name());
+    let owner_name = |owner: &FilterOwner| match owner {
+        FilterOwner::Source { source_id } => source(source_id),
+        FilterOwner::Scene { scene_id } => {
+            state.scene(scene_id).map_or("", |s| s.name()).to_owned()
+        }
+        FilterOwner::Item { item_id } => state
+            .item(item_id)
+            .map_or_else(String::new, |(_, item)| source(item.source_id())),
+        FilterOwner::Output { .. } => "Output".to_owned(),
+        FilterOwner::Master => "Master".to_owned(),
+        _ => String::new(),
+    };
     match target {
         ValueTarget::SourceSetting { source_id, param } => {
             format!("{} {}", source(source_id), words(param))
         }
         ValueTarget::FilterSetting { owner, param, .. } => {
-            let owner = match owner {
-                FilterOwner::Source { source_id } => source(source_id).to_owned(),
-                FilterOwner::Scene { scene_id } => {
-                    state.scene(scene_id).map_or("", |s| s.name()).to_owned()
-                }
-                FilterOwner::Item { item_id } => state
-                    .item(item_id)
-                    .map_or("", |(_, item)| source(item.source_id()))
-                    .to_owned(),
-                FilterOwner::Output { .. } => "Output".to_owned(),
-                FilterOwner::Master => "Master".to_owned(),
-                _ => String::new(),
-            };
-            format!("{owner} {}", words(param))
+            format!("{} {}", owner_name(owner), words(param))
+        }
+        ValueTarget::FilterEnabled { owner, filter_id } => {
+            let filter = state
+                .filter(owner, filter_id)
+                .map_or_else(|| words(filter_id.as_str()), |f| words(f.kind()));
+            format!("{} {filter} On", owner_name(owner))
         }
         ValueTarget::SourceGain { source_id } => format!("{} Volume", source(source_id)),
         ValueTarget::BusGain { bus_id } => format!("{} Volume", bus(bus_id)),
@@ -114,7 +121,7 @@ fn target_label(graph: &Graph, target: &ValueTarget) -> String {
             "{} Visible",
             state
                 .item(item_id)
-                .map_or("", |(_, item)| source(item.source_id()))
+                .map_or_else(String::new, |(_, item)| source(item.source_id()))
         ),
         ValueTarget::PtzAxis { camera, axis } => {
             let axis = axis.name();
@@ -315,5 +322,48 @@ mod tests {
                 .iter()
                 .all(String::is_empty)
         );
+    }
+
+    /// #1819: a filter's on/off is called by its owner and its kind.
+    #[test]
+    fn a_filter_switch_is_called_by_its_owner_and_kind() {
+        use jstream_protocol::{Edit, FilterChain, FilterId, Settings, SourceId, SourceKind};
+        let mut graph = Graph::new().with_kinds(crate::kinds::builtin());
+        graph
+            .apply(
+                &[
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("cam"),
+                        name: "Cam".into(),
+                        kind: SourceKind::Builtin {
+                            kind: "color".into(),
+                        },
+                        settings: Settings::default(),
+                        duplicated_from: None,
+                    },
+                    Edit::FilterAdd {
+                        owner: FilterOwner::Source {
+                            source_id: SourceId::new("cam"),
+                        },
+                        chain: FilterChain::Video,
+                        filter_id: FilterId::new("f1"),
+                        kind: "blur".into(),
+                        settings: Settings::new(),
+                        enabled: None,
+                        index: None,
+                    },
+                ],
+                None,
+            )
+            .expect("applies");
+        let target = |filter: &str| ValueTarget::FilterEnabled {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("cam"),
+            },
+            filter_id: FilterId::new(filter),
+        };
+        assert_eq!(target_label(&graph, &target("f1")), "Cam Blur On");
+        // A filter that has gone is called by its ID.
+        assert_eq!(target_label(&graph, &target("old_glow")), "Cam Old Glow On");
     }
 }

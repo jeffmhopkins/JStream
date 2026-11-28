@@ -1147,8 +1147,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sequence, then a range, `TimelineLoop::Range`, whose ends `fit_range` keeps within the
   length and shaded on the ruler), sets its length and adds a lane by `AddLaneSearch`: the
   channels, then the scene's settings and switches (`lane_offers::offers`, from the
-  sources' and filters' kind descriptors it reads as it opens, with each audio source's
-  mute and each item's visibility, ADR-0207, as switches), a setting picked making a
+  sources' and filters' kind descriptors it reads as it opens, with each filter's on/off
+  (`filter_enabled`, #1819), each audio source's mute and each item's visibility,
+  ADR-0207, as switches), a setting picked making a
   channel it follows (`learn::follows`) unless it follows one already, in the same batch
   as the lane; its trigger bar shows `starts` and `stops` as sentences
   (`trigger_text`) and each group's "+ Trigger" opens an editor beside it for each kind,

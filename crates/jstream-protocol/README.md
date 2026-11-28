@@ -411,7 +411,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.197 because `profile.get`'s units give their GPU time apart
+`PROTOCOL_VERSION` is 0.198 because a value binding can switch a filter on and off
+(`ValueTarget`'s `filter_enabled {owner, filter_id}`, on at one half or more, as
+`filter.set_enabled` sets it), so a sequence's Switches lane can drive it; 0.197 because
+`profile.get`'s units give their GPU time apart
 by part (`UnitProfile`'s `gpu_parts`: a 3D model's draw, a model's or a scene's view
 depth, a scene's surface buffer and shadow maps, and each of a chain's first `GPU_PART_FILTERS` filters); 0.196
 because the rendering switches gain `model_antialiasing`,
@@ -1712,7 +1715,9 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
   position in the head's own counts, whole numbers within `PtzAxis::range`, and since
   0.187 three switches, on at one half or more: `source_mute {source_id}`, `bus_mute
   {bus_id}` and `item_visible {item_id, scene_id?}` (which cuts, with no appear or
-  disappear effect). A `ptz_axis` names the camera by name, as a shot does;
+  disappear effect), and since 0.198 a fourth, `filter_enabled {owner, filter_id}`,
+  whether a filter on any chain `filter_setting` reaches runs, as `filter.set_enabled`
+  sets it. A `ptz_axis` names the camera by name, as a shot does;
   `ValueBinding::problem` refuses a name `ptz.*` would refuse, at `binding.target.camera`.
 - **`binding.set_value {binding}`** sets a binding by ID, whole, a new one (inverse
   `binding.clear_value`) or in place of one (inverse `binding.set_value` with the old).
@@ -3322,6 +3327,8 @@ after 1.0:
   value binding drives one. Its `MuteTo` values and `ChannelSwitch`'s `hold_on` and
   `hold_off` travel only inside actions, which hotkeys, bindings and cues hold as plain
   JSON, so they break no older client's reads.
+  0.198 adds the `ValueTarget` type `filter_enabled` on the same terms: a client older
+  than 0.198 can't parse `state.get` once a value binding switches a filter.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

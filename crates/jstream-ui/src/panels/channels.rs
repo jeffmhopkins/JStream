@@ -180,6 +180,7 @@ pub fn target_name(collection: &Collection, target: &ValueTarget) -> String {
             );
             format!("{name} · visible")
         }
+        ValueTarget::FilterEnabled { filter_id, .. } => format!("{filter_id} · on"),
         _ => "A setting".into(),
     }
 }

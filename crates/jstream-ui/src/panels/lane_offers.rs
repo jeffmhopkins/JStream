@@ -1,8 +1,8 @@
 //! What the Sequence panel's Add lane search offers beside the channels (A13, SQ-01):
 //! "Settings (makes a channel)", every live number setting of the scene's sources and
 //! their filters and each audio source's fader, and "Switches", every on/off setting of
-//! the same, each audio source's mute and whether each of the scene's items shows
-//! (ADR-0207, #1707). Picking one makes a channel the setting follows ([ADR-0183] decision 5),
+//! the same, whether each of their filters runs (#1819), each audio source's mute and
+//! whether each of the scene's items shows (ADR-0207, #1707). Picking one makes a channel the setting follows ([ADR-0183] decision 5),
 //! or reuses the channel it follows already, and gives that channel a lane.
 //!
 //! A switch lane is an ordinary lane whose points all use the `hold` curve at 0 or 1
@@ -74,9 +74,10 @@ fn sources_of<'a>(
 }
 
 /// Every setting of `scene`'s sources Add lane can give a lane, from the descriptors
-/// read so far: each live number or on/off setting of a source and of its filters, each
-/// audio source's fader and mute, and whether each item of the scene shows. A kind not
-/// yet described offers only the fader, the mute and the items.
+/// read so far: each live number or on/off setting of a source and of its filters,
+/// whether each filter runs, each audio source's fader and mute, and whether each item of
+/// the scene shows. A kind not yet described offers only its on/off (a filter's, named
+/// by its kind), the fader, the mute and the items.
 pub fn offers(
     collection: &Collection,
     scene: &SceneId,
@@ -106,7 +107,22 @@ pub fn offers(
             }
         }
         for f in source.filters.video.iter().chain(&source.filters.audio) {
-            let Some(d) = descriptors.get(&f.kind) else {
+            let owner = FilterOwner::Source {
+                source_id: source.source_id.clone(),
+            };
+            let d = descriptors.get(&f.kind);
+            let filter = d.map_or(f.kind.as_str(), |d| d.name.as_str());
+            out.push(Offer {
+                label: format!("{name} › {filter} › On"),
+                target: ValueTarget::FilterEnabled {
+                    owner: owner.clone(),
+                    filter_id: f.filter_id.clone(),
+                },
+                range: (0.0, 1.0),
+                switch: true,
+                at: f32::from(u8::from(f.enabled)),
+            });
+            let Some(d) = d else {
                 continue;
             };
             for p in &d.params {
@@ -117,9 +133,7 @@ pub fn offers(
                 out.push(Offer {
                     label: format!("{name} › {} › {}", d.name, p.label),
                     target: ValueTarget::FilterSetting {
-                        owner: FilterOwner::Source {
-                            source_id: source.source_id.clone(),
-                        },
+                        owner: owner.clone(),
                         filter_id: f.filter_id.clone(),
                         param: p.id.clone(),
                     },
@@ -647,17 +661,30 @@ mod tests {
             vec![
                 ("Title › size", false),
                 ("Title › bold", true),
+                // #1819: a filter whose kind isn't described yet still switches, by its
+                // kind's ID.
+                ("Title › blur › On", true),
                 ("Title › Visible", true)
             ]
         );
         assert_eq!(
             found[2].target,
+            ValueTarget::FilterEnabled {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("title")
+                },
+                filter_id: FilterId::new("blur")
+            }
+        );
+        assert_eq!(found[2].at, 1.0, "the filter runs now");
+        assert_eq!(
+            found[3].target,
             ValueTarget::ItemVisible {
                 item_id: ItemId::new("i"),
                 scene_id: None
             }
         );
-        assert_eq!(found[2].at, 1.0, "the item shows now");
+        assert_eq!(found[3].at, 1.0, "the item shows now");
         assert_eq!(found[0].at, 0.5, "where the size is now");
         assert!(matches(&found[0], "TITLE"));
         assert!(!matches(&found[0], "blur"));
