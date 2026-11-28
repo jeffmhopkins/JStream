@@ -1371,7 +1371,7 @@ milestone = "M3"
 title = "WASM automation plugins"
 status = "planned"
 prs = [486, 623, 642, 722, 725, 839, 843, 974, 1574]
-note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side part 1, installing, granting, events, forbidden and disabling (#839, ADR-0075), and part 2, saving installed plugins, grants held to the manifest's classes and hosts, needs_grant, memory_limit and the MCP state-text line (#843, ADR-0076), landed with wave/m3-5 (#854); the plugin.list query and the UI's Plugins section with its grant dialog landed (#974, protocol 0.58); removing a plugin, plugin.uninstall and plugin.uninstalled with the Plugins page's Remove dialog (protocol 0.163), is in review (#1574); a private data folder waits for its own design with the file imports it needs"
+note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side part 1, installing, granting, events, forbidden and disabling (#839, ADR-0075), and part 2, saving installed plugins, grants held to the manifest's classes and hosts, needs_grant, memory_limit and the MCP state-text line (#843, ADR-0076), landed with wave/m3-5 (#854); the plugin.list query and the UI's Plugins section with its grant dialog landed (#974, protocol 0.58); removing a plugin, plugin.uninstall and plugin.uninstalled with the Plugins page's Remove dialog (protocol 0.163), landed (#1574); a private data folder waits for its own design with the file imports it needs"
 needs = ["build"]
 
 [[item]]
@@ -1682,7 +1682,6 @@ note = "Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, build
 id = "SHW1"
 milestone = "M3"
 title = "Shows: a saved run order of scenes, with overlays, keyframes, sequences, audio, bookmarks and loops, run from the Show panel, keys, MIDI or an agent (ADR-0210)"
-status = "review"
-prs = [1716, 1750, 1757, 1763, 1773]
-note = "on the alpha.13 train (#1745): the protocol and ADR-0210 (#1716), the Show panel (#1750), the engine's show runner (#1757), audio clips that bring a source up with fades (#1763), and the show actions in the Keys & MIDI picker with the agent guidance (#1773)"
-needs = ["wave"]
+status = "done"
+prs = [1745, 1750, 1757, 1763, 1773]
+note = "landed with the alpha.13 train (#1745): the protocol and ADR-0210 (first opened as #1716), the Show panel (#1750), the engine's show runner (#1757), audio clips that bring a source up with fades (#1763), and the show actions in the Keys & MIDI picker with the agent guidance (#1773)"
