@@ -20087,7 +20087,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "ValueTarget": {
-      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive, or since 0.187 a switch: a mute, or whether a placement shows its item\n(ADR-0207). Serialized with an internal `type` tag.",
+      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive, or since 0.187 a switch: a mute, or whether a placement shows its item\n(ADR-0207), and since 0.199 whether a filter runs. Serialized with an internal `type`\ntag.",
       "oneOf": [
         {
           "description": "A `live` number or `bool` setting of a source, which every place that draws it\nshows.",
@@ -20261,6 +20261,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Whether a filter runs, a switch like ADR-0207's: on at one half or more (since\n0.199), as `filter.set_enabled` would set it, on any chain `filter_setting`\nreaches. A filter switched off this way is bypassed and keeps its settings.",
+          "properties": {
+            "filter_id": {
+              "$ref": "#/$defs/FilterId",
+              "description": "The filter."
+            },
+            "owner": {
+              "$ref": "#/$defs/FilterOwner",
+              "description": "What owns the filter."
+            },
+            "type": {
+              "const": "filter_enabled",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "owner",
+            "filter_id"
           ],
           "type": "object"
         },
@@ -21042,5 +21065,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.198"
+  "title": "JStream protocol 0.199"
 }

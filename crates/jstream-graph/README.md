@@ -542,7 +542,8 @@ that does not want to change the graph it has.
   replaced) after `ValueBinding::problem` (`invalid_argument` at `binding.<field>`), the
   limit of 256 (at `binding`), and its target: `not_found` for a source, filter (found as
   `filter.set_settings` finds it), bus, item or scene that doesn't exist (the switch
-  targets `source_mute`, `bus_mute` and `item_visible`, ADR-0207, need only that), and `invalid_argument` at
+  targets `source_mute`, `bus_mute` and `item_visible`, ADR-0207, and since 0.199
+  `filter_enabled`, set through `filter.set_enabled`, need only that), and `invalid_argument` at
   `binding.target.param` for a setting its kind lacks, doesn't mark `live`, or that isn't
   an `int`, `float` or `bool`. Last, the setter the engine will drive it with
   (`value_edit`) is applied to a copy of the state, and a refusal (a `scene` source's

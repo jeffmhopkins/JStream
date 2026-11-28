@@ -4,9 +4,9 @@
 //!
 //! A value binding names a source setting, a filter setting on any chain, a fader, a
 //! send, since 0.187 a switch: a source's or bus's mute, or whether a placement shows
-//! its item (ADR-0207), which take a `bool`, or (ADR-0209) one axis of a PTZ camera's
-//! position, which the engine turns into aims rather than edits ([`value_edit`] gives
-//! none). `binding.set_value` checks the target exists and takes a number: a setting its
+//! its item (ADR-0207), and since 0.199 whether a filter runs, which take a `bool`, or
+//! (ADR-0209) one axis of a PTZ camera's position, which the engine turns into aims
+//! rather than edits ([`value_edit`] gives none). `binding.set_value` checks the target exists and takes a number: a setting its
 //! kind marks `live` of type `int`, `float` or `bool`, an audio source's fader (not a
 //! `scene` source's), a bus's, or a send that exists. Unlike an action binding, a value
 //! binding is not removed with the object it names: it is left driving nothing, as a
@@ -121,6 +121,11 @@ pub fn value_edit(target: &ValueTarget, range: ValueRange, value: f64) -> Option
             item_id: item_id.clone(),
             scene_id: scene_id.clone(),
             visible: range.json(value).as_bool()?,
+        },
+        ValueTarget::FilterEnabled { owner, filter_id } => Edit::FilterSetEnabled {
+            owner: owner.clone(),
+            filter_id: filter_id.clone(),
+            enabled: range.json(value).as_bool()?,
         },
         _ => return None,
     })
@@ -377,6 +382,13 @@ fn range(
                     .scene(scene_id)
                     .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
             }
+            return Ok(ValueRange::Switch);
+        }
+        ValueTarget::FilterEnabled { owner, filter_id } => {
+            let chains = crate::filter::owner_chains(state, owner)?;
+            chains
+                .find(filter_id)
+                .ok_or_else(|| not_found(EntityKind::Filter, filter_id.as_str()))?;
             return Ok(ValueRange::Switch);
         }
         // The head's own counts (ADR-0146 §5, ADR-0209): whole numbers over the range
