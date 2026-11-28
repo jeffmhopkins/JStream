@@ -66,7 +66,9 @@ fn main() -> ExitCode {
     );
     #[cfg(windows)]
     if data.is_some() && !dumps_installed {
-        tracing::warn!("native crash dumps were not installed; the log path does not fit");
+        tracing::warn!(
+            "native crash dumps were not installed; the log path does not fit, or a filter is already installed"
+        );
     }
     let startup = match app::parse(&args) {
         Ok(options) => app::start(&options, exe_dir.as_deref(), data.as_deref(), &secrets),

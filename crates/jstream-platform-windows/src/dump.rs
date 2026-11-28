@@ -137,8 +137,8 @@ fn write_at(prefix: &Prefix, info: *const EXCEPTION_POINTERS) -> io::Result<()> 
     push(&mut wide, &mut len, 0)?;
     // SAFETY: `CreateFileW(LPCWSTR, ...) -> HANDLE`. `wide` is null-terminated
     // and lives for the call. `CREATE_ALWAYS` replaces a same-named dump. No
-    // security descriptor: the file inherits the log folder's ACL, which the
-    // apps already restrict.
+    // security descriptor is passed, so the dump keeps the process's default
+    // DACL (ADR-0258); the folder is the user's log folder.
     let file = unsafe {
         CreateFileW(
             PCWSTR(wide.as_ptr()),
