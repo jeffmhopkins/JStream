@@ -986,3 +986,69 @@ fn an_unnamed_sender_is_the_first_accepted() {
     assert!(two.sender("Other").is_err());
     assert!(accepted(&[]).sender("").is_err());
 }
+
+/// The receive socket asks for a buffer far past the system's default, so a heavy
+/// sender's burst waits in it instead of being dropped: at least the default, and on
+/// Linux all that `rmem_max` lets a program ask for (which the kernel doubles).
+#[test]
+fn the_receive_socket_asks_for_a_big_buffer() {
+    use socket2::SockRef;
+    let plain = UdpSocket::bind("127.0.0.1:0").expect("a socket");
+    let plain = SockRef::from(&plain).recv_buffer_size().expect("a size");
+    let socket = receive_socket("127.0.0.1:0".parse().expect("an address")).expect("a socket");
+    let got = SockRef::from(&socket).recv_buffer_size().expect("a size");
+    assert!(got >= plain, "{got} < the default {plain}");
+    #[cfg(target_os = "linux")]
+    if let Some(max) = std::fs::read_to_string("/proc/sys/net/core/rmem_max")
+        .ok()
+        .and_then(|m| m.trim().parse::<usize>().ok())
+    {
+        assert!(got >= 2 * RECV_BUFFER.min(max), "{got} for a max of {max}");
+    }
+}
+
+/// A burst of state, as a heavy DAW session's whole state sent at once, arrives whole:
+/// 400 messages back to back.
+#[test]
+fn a_burst_of_state_arrives_whole() {
+    use socket2::SockRef;
+    let sender = FakeSender::new();
+    let data = LiveData::new();
+    let setup = setup("Bitwig", &sender);
+    // What the system lets any socket have, asked of one of the test's own.
+    let room = {
+        let probe = UdpSocket::bind("127.0.0.1:0").expect("a socket");
+        let probe = SockRef::from(&probe);
+        let _ = probe.set_recv_buffer_size(RECV_BUFFER);
+        probe.recv_buffer_size().expect("a size")
+    };
+    // 400 messages of 1.1 KB, about twice that of the buffer as the kernel counts it:
+    // over every system's default. A system that caps the buffer below that can't hold
+    // the burst, whatever the receiver does.
+    let count = 400;
+    if room < 2 << 20 {
+        // Too small a cap here to tell anything (a Linux whose `rmem_max` is low).
+        return;
+    }
+    let receiver = Receiver::start(
+        &setup,
+        Arc::new(Clock(Instant::now())),
+        None,
+        data.clone(),
+        None,
+    )
+    .expect("a receiver");
+    let to = receiver.local_addr();
+    let body = format!("{{\"name\":\"{}\"}}", "x".repeat(1100));
+    for i in 0..count {
+        let key = format!("track/{i}");
+        let id = u32::try_from(i + 1).expect("an id");
+        sender.state(to, &piece(1, id, 0, 1, &key, body.as_bytes()));
+    }
+    assert!(
+        eventually(|| receiver.stats().state == count as u64),
+        "{} of {count} arrived",
+        receiver.stats().state
+    );
+    assert_eq!(data.list()[0].1.len(), count);
+}
