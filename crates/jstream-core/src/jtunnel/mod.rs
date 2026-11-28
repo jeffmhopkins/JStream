@@ -831,7 +831,15 @@ impl Run {
         let mut next_subscribe = Instant::now();
         let mut next_query = Instant::now();
         let mut next_expire = Instant::now() + EXPIRE_EVERY;
+        // Whether the socket was left non-blocking by a failed switch back.
+        let mut stuck = false;
         while !self.stop.load(Ordering::Acquire) {
+            if stuck {
+                stuck = self.socket.set_nonblocking(false).is_err();
+                if stuck {
+                    thread::sleep(self.wait());
+                }
+            }
             if Instant::now() >= next_subscribe {
                 self.send_all(wire::write_subscribe);
                 self.send_names();
@@ -863,7 +871,12 @@ impl Run {
                         };
                         self.take(&datagram, len, from, &mut samples);
                     }
-                    let _ = self.socket.set_nonblocking(false);
+                    if let Err(error) = self.socket.set_nonblocking(false) {
+                        // Left non-blocking, the wait below would return at once and the
+                        // thread would spin: it tries again each turn, sleeping meanwhile.
+                        tracing::warn!(%error, "the JTunnel receive socket could not be set to wait again");
+                        stuck = true;
+                    }
                 }
             }
             self.play();
