@@ -27,8 +27,8 @@
 //! policy refuses. The check lists each refused request by its kind, its URL's scheme
 //! and the policy's reason (never its URL, which the helper doesn't send, ADR-0048), and
 //! fails if that image isn't among them or anything else is refused. Chromium asks for
-//! the refused image more than once, so it may be listed more than once. Then the page is closed and the backend
-//! dropped, which shuts the helper down.
+//! the refused image more than once, so it may be listed more than once. Then the page
+//! is closed and the backend dropped, which shuts the helper down.
 
 #[cfg(windows)]
 fn main() -> std::process::ExitCode {
