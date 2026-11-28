@@ -14,11 +14,12 @@ use crate::{
     ClientMessage, Command, CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad,
     EntityKind, ErrorResponse, Event, EventMessage, FilterChain, FilterChains, FilterId,
     FilterInfo, FilterOwner, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, MasterInfo, MotionCurve, MotionMeasure, MotionMidiControl,
-    OutputHealth, OutputId, OutputInfo, OutputKind, OutputState, OutputStatsInfo, PROTOCOL_VERSION,
-    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId,
-    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString,
-    ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    ItemInfo, ItemTransform, MasterInfo, ModelObject, MotionCurve, MotionMeasure,
+    MotionMidiControl, OutputHealth, OutputId, OutputInfo, OutputKind, OutputState,
+    OutputStatsInfo, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
+    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
+    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
+    Vec2, Welcome, json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -3985,12 +3986,14 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     }),
                     depth: None,
                     duration_ms: None,
+                    objects: Vec::new(),
                 },
                 SourceSize {
                     source_id: SourceId::new("mic"),
                     size: None,
                     depth: None,
                     duration_ms: None,
+                    objects: Vec::new(),
                 },
                 SourceSize {
                     source_id: SourceId::new("teapot"),
@@ -4000,6 +4003,18 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     }),
                     depth: Some(320),
                     duration_ms: None,
+                    objects: vec![
+                        ModelObject {
+                            name: "body".into(),
+                            min: [0.0, 0.25, 0.0],
+                            max: [0.8, 1.0, 1.0],
+                        },
+                        ModelObject {
+                            name: "lid".into(),
+                            min: [0.25, 0.0, 0.3],
+                            max: [0.55, 0.25, 0.7],
+                        },
+                    ],
                 },
                 SourceSize {
                     source_id: SourceId::new("intro"),
@@ -4009,6 +4024,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     }),
                     depth: None,
                     duration_ms: Some(12_480),
+                    objects: Vec::new(),
                 },
             ],
         },
@@ -4883,12 +4899,14 @@ pub(crate) fn events() -> Vec<Event> {
         }),
         depth: None,
         duration_ms: None,
+        objects: Vec::new(),
     });
     events.push(Event::SourceSizeChanged {
         source_id: SourceId::new("window"),
         size: None,
         depth: None,
         duration_ms: None,
+        objects: Vec::new(),
     });
     events.push(Event::SourceSizeChanged {
         source_id: SourceId::new("theme"),
@@ -4898,6 +4916,7 @@ pub(crate) fn events() -> Vec<Event> {
         }),
         depth: None,
         duration_ms: Some(184_000),
+        objects: Vec::new(),
     });
     events.push(Event::SourceSizeChanged {
         source_id: SourceId::new("teapot"),
@@ -4907,6 +4926,11 @@ pub(crate) fn events() -> Vec<Event> {
         }),
         depth: Some(400),
         duration_ms: None,
+        objects: vec![ModelObject {
+            name: "body".into(),
+            min: [0.0, 0.0, 0.0],
+            max: [1.0, 1.0, 1.0],
+        }],
     });
     events.push(Event::YoutubeStats {
         stats: AudienceStatsInfo {

@@ -4,7 +4,7 @@
 //!
 //! A value binding names a source setting, a filter setting on any chain, a fader, a
 //! send, since 0.187 a switch: a source's or bus's mute, or whether a placement shows
-//! its item (ADR-0207), and since 0.198 whether a filter runs, which take a `bool`, or
+//! its item (ADR-0207), and since 0.199 whether a filter runs, which take a `bool`, or
 //! (ADR-0209) one axis of a PTZ camera's position, which the engine turns into aims
 //! rather than edits ([`value_edit`] gives none). `binding.set_value` checks the target exists and takes a number: a setting its
 //! kind marks `live` of type `int`, `float` or `bool`, an audio source's fader (not a

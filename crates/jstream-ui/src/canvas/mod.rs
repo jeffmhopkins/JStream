@@ -2252,6 +2252,18 @@ pub fn Canvas() -> impl IntoView {
         let under = hovered.get();
         let pictured = pictured();
         let seen = seen_now();
+        // The object the pointer is over in the Sources panel: its item and its box in
+        // fractions of the model's (protocol 0.198).
+        let object_over = studio.hovered_object.get().and_then(|(item, index)| {
+            let source = studio.collection.with(|c| {
+                let (_, placed) = c.as_ref()?.item(&item)?;
+                Some(placed.source_id.clone())
+            })?;
+            studio.objects.with(|known| {
+                let object = known.get(&source)?.get(index)?;
+                Some((item, object.min, object.max))
+            })
+        });
         shown()
             .into_iter()
             .filter_map(|(id, name, geometry, visible, shape)| {
@@ -2277,6 +2289,21 @@ pub fn Canvas() -> impl IntoView {
                     None => (outline(&geometry), Bounds::of(&geometry)),
                 };
                 let dash = if visible { "none" } else { "6 4" };
+                // Under the pointer, a model shows its bounds as a box in the scene, one
+                // for each model a 3D group places, instead of the outline around them.
+                let edges = (!is_selected && under.as_ref() == Some(&id))
+                    .then_some(seen.as_ref())
+                    .flatten()
+                    .and_then(|view| camera::bounds_edges(&geometry, &shape, view));
+                // An object under the pointer in the Sources panel shows its own box.
+                let object = object_over
+                    .as_ref()
+                    .filter(|(item, _, _)| item == &id)
+                    .zip(seen.as_ref())
+                    .and_then(|((_, min, max), view)| {
+                        camera::object_edges(&geometry, &shape, (*min, *max), view)
+                    });
+                let outline_stroke = if edges.is_some() { "none" } else { stroke };
                 // Just inside the box's own top-left, running along its top edge.
                 let label = name_label(&geometry, seen.as_ref(), bounds, px(4.0), px(14.0));
                 let turn = label
@@ -2287,11 +2314,34 @@ pub fn Canvas() -> impl IntoView {
                         <polygon
                             points=points
                             fill="rgba(255,255,255,0.04)"
-                            stroke=stroke
+                            stroke=outline_stroke
                             stroke-width=width
                             stroke-dasharray=dash
                             vector-effect="non-scaling-stroke"
                         />
+                        {object.map(|d| view! {
+                            <path
+                                class="object-bounds"
+                                d=d
+                                fill="none"
+                                stroke=HOVER
+                                stroke-width="2"
+                                stroke-linejoin="round"
+                                vector-effect="non-scaling-stroke"
+                            />
+                        })}
+                        {edges.map(|d| view! {
+                            <path
+                                class="model-bounds"
+                                d=d
+                                fill="none"
+                                stroke=stroke
+                                stroke-width=width
+                                stroke-dasharray=dash
+                                stroke-linejoin="round"
+                                vector-effect="non-scaling-stroke"
+                            />
+                        })}
                         <text
                             x=label.x
                             y=label.y

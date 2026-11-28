@@ -416,7 +416,7 @@ pub const MAX_VALUE_BINDINGS: usize = 256;
 /// The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in
 /// the collection that isn't an item's or a camera's, which their own motion modifiers
 /// drive, or since 0.187 a switch: a mute, or whether a placement shows its item
-/// (ADR-0207), and since 0.198 whether a filter runs. Serialized with an internal `type`
+/// (ADR-0207), and since 0.199 whether a filter runs. Serialized with an internal `type`
 /// tag.
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
@@ -484,7 +484,7 @@ pub enum ValueTarget {
         scene_id: Option<SceneId>,
     },
     /// Whether a filter runs, a switch like ADR-0207's: on at one half or more (since
-    /// 0.198), as `filter.set_enabled` would set it, on any chain `filter_setting`
+    /// 0.199), as `filter.set_enabled` would set it, on any chain `filter_setting`
     /// reaches. A filter switched off this way is bypassed and keeps its settings.
     FilterEnabled {
         /// What owns the filter.
