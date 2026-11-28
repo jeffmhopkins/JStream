@@ -2465,7 +2465,7 @@ impl Compositor {
             let seen = item.camera.and(view.as_ref()).map(|(_, view)| view);
             let mut shape = place::shape_seen(width, height, item.placement, item.crop, seen)?;
             // A model's layer that holds a part of the canvas is placed over that part
-            // (ADR-0250).
+            // (ADR-0251).
             if let (Placement::Layer(_), Some(window), Some(shape)) =
                 (item.placement, item.image.window(), shape.as_mut())
             {

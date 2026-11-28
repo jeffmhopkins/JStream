@@ -213,7 +213,7 @@ fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Fa
     if !dumps {
         tracing::warn!(
             log_dir = %dir.display(),
-            "native crash dumps were not installed; the log path does not fit"
+            "native crash dumps were not installed; the log path does not fit, or a filter is already installed"
         );
     }
     Ok(())

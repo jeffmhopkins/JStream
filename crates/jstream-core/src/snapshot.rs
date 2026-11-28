@@ -8499,14 +8499,6 @@ fn clear_skipped_model(
     Ok(())
 }
 
-/// Draws the 3D model item `boxed` shows into its canvas-sized layer `key` (ADR-0107
-/// decision 6): posed by its geometry with its live values and motion applied, seen
-/// through its scene's camera as it moves this frame, and lit as its source says. The
-/// model is uploaded once per version and kept ([`Chains::model`]). One that isn't
-/// there this frame, or can't be uploaded, fails its item, which then draws nothing.
-///
-/// # Errors
-/// What the compositor reports for drawing into the layer.
 /// The steps a model's layer that holds a part of the canvas is sized in, each side
 /// (ADR-0251): few sizes, so the layers of several models, and one model's as it moves,
 /// share their multisampled targets and are rarely made again.
@@ -8548,6 +8540,14 @@ fn percent_of(size: [u32; 2], percent: u32) -> [u32; 2] {
     size.map(|px| (u64::from(px) * percent).div_ceil(100).max(1) as u32)
 }
 
+/// Draws the 3D model item `boxed` shows into its layer `key` (ADR-0107 decision 6),
+/// which may hold only the part of the canvas the model covers (ADR-0251): posed by its geometry with its live values and motion applied, seen
+/// through its scene's camera as it moves this frame, and lit as its source says. The
+/// model is uploaded once per version and kept ([`Chains::model`]). One that isn't
+/// there this frame, or can't be uploaded, fails its item, which then draws nothing.
+///
+/// # Errors
+/// What the compositor reports for drawing into the layer.
 fn draw_model(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),

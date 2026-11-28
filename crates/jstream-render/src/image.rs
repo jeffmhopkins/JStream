@@ -149,7 +149,7 @@ pub struct Image {
     window: Option<Window>,
 }
 
-/// Where a layer that holds only part of its canvas sits on it (ADR-0250): a model's
+/// Where a layer that holds only part of its canvas sits on it (ADR-0251): a model's
 /// layer drawn only over the box its model can cover. The layer stands for
 /// [`Image::extent`] canvas pixels from `x`, `y`; [`crate::Placement::Layer`] places it
 /// there, and [`crate::Compositor::draw_model`] draws the model as the whole canvas's
