@@ -255,9 +255,12 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   senders this machine accepts
   (`AcceptedSender`: a tunnel name of at most 31 bytes, with no white space at either
   end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
-  taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
+  taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket, with a
+  receive buffer of 4 MiB asked of the system so a heavy sender's bursts wait in it
+  rather than being dropped, and runs a
   `jstream-jtunnel` thread that subscribes to each sender by name every half second and
-  says bye when it stops; it never announces itself or sends audio or MIDI. A
+  says bye when it stops (once a datagram comes, it reads up to 64 more that are waiting
+  before playing out what is due); it never announces itself or sends audio or MIDI. A
   `network_audio` source with an empty `sender` records the first accepted sender, the
   desktop app's one live sender (ADR-0221); a reader that names no input already reads
   it. Beside each
@@ -2220,7 +2223,7 @@ The engine keeps the keyframe each placed scene is switched to
 ## Snapshots
 <!-- @section
 covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
-depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry", "docs/adr/0257-models-in-one-scene-are-one-depth.md"]
+depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry", "docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md"]
 -->
 
 `video.snapshot` returns the program mix as a PNG
@@ -2727,12 +2730,13 @@ of the whole canvas and the model would not show
 (`a_small_model_draws_live_as_a_snapshot_does_from_every_side`).
 A scene with two or more models that can share one depth draws those into the scene
 instead of into those layers
-([ADR-0257](../../docs/adr/0257-models-in-one-scene-are-one-depth.md)); a model alone keeps
+([ADR-0259](../../docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md)); a model alone keeps
 its window. That draw stays in linear light even when the canvas blends in sRGB. An sRGB
 pass decodes its target when it finishes, and decoding the models' linear texels would
 darken the scene under a bloom
-(`warp_show_bloom_does_not_darken_a_rectangle_over_the_ship`, when the warp models are
-on disk). A model that shares does not carry `Item::depth`, so the view depth is not a
+(`a_depth_bloom_does_not_darken_a_rectangle_over_shared_models`). A faded or additive
+model in that draw writes no depth, and a model whose blend reads the picture under it
+keeps its layer. Program's own layer is used for that draw only when its scene shares. A model that shares does not carry `Item::depth`, so the view depth is not a
 copy of its private depth image. `draw_model_depth` poses the mesh into the view depth,
 and `Compositor::blend_scene_depth` max-blends the scene depth under that. The private
 layer and depth are cleared to transparent, the layer names an empty box so a composite
@@ -3334,7 +3338,10 @@ builds the source (its frame at time zero, which a plan shows first anyway), the
 new frame's that a plan takes, so a source no plan reaches keeps its first size. A
 source that shows a 3D model also has a depth (`model_depth`, ADR-0107 decision 8): its
 bounds front to back at the scale of its stand-in's size, kept beside the size and sent
-with it, so a change of depth alone is a size change too. A
+with it, so a change of depth alone is a size change too. Its named objects are kept
+there as well (`Objects`, `model_objects`, protocol 0.198): each glTF node's, else
+mesh's, box, which `source.sizes` sends as fractions of the model's whole box, so the
+size and depth beside them scale them. A
 source drawn at a density reports its extent, the size its frames are placed at
 ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). A capture
 source's (`display`, `window`, `webcam`) is the frame size of the capture the program

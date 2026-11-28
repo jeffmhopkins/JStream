@@ -1783,6 +1783,7 @@ impl State {
                         size: None,
                         depth: None,
                         duration_ms: None,
+                        objects: Vec::new(),
                     })
                     .collect(),
             },
