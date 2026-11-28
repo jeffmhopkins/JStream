@@ -315,6 +315,39 @@ fn ref_row(studio: Studio, r: SceneRef, depth: usize) -> impl IntoView {
     }
 }
 
+/// One object of a model item's source (protocol 0.198): its name, under the model's
+/// row. The pointer over it shows that object's box on the canvas; a click selects the
+/// model's item. It has no tag, star or eye, and isn't dragged.
+fn object_row(
+    studio: Studio,
+    (item_id, index): (ItemId, usize),
+    name: String,
+    depth: usize,
+) -> impl IntoView {
+    let over = (item_id.clone(), index);
+    let select = item_id.clone();
+    let title = format!("Object “{name}” of this model");
+    view! {
+        <li
+            class="row tree-row object-row"
+            style:padding-left=indent(depth)
+            data-tree-object=format!("{item_id}/{index}")
+            on:pointerenter=move |_| studio.hovered_object.set(Some(over.clone()))
+            on:pointerleave=move |_| studio.hovered_object.set(None)
+        >
+            <span class="tree-caret"></span>
+            <button
+                class="row-main"
+                title=title
+                on:click=move |_| studio.select_items(vec![select.clone()])
+            >
+                <Icon name="cube" size=15 />
+                <span class="tree-label">{name}</span>
+            </button>
+        </li>
+    }
+}
+
 /// The sources list.
 #[component]
 pub fn Sources() -> impl IntoView {
@@ -421,6 +454,8 @@ pub fn Sources() -> impl IntoView {
         let filtering = filter.active();
         let shows =
             |name: &str, favourite: bool, labels: &[LabelId]| filter.shows(name, favourite, labels);
+        // A model's objects arriving gives its row a caret.
+        studio.objects.track();
         expanded.with(|open| {
             studio.collection.with(|c| {
                 c.as_ref()
@@ -807,7 +842,30 @@ pub fn Sources() -> impl IntoView {
         let popover_target = Tagged::Source(source_id.clone());
         let popover_indent = indent(depth);
         let container = nests.is_some();
-        let caret = (nests.is_some() || !refs.is_empty()).then(|| {
+        // A model loaded with several objects lists them under its row (protocol 0.198).
+        let objects: Vec<String> = studio.objects.with_untracked(|known| {
+            known
+                .get(&source_id)
+                .map(|objects| objects.iter().map(|o| o.name.clone()).collect())
+                .unwrap_or_default()
+        });
+        // Its caret opens them, or opens them with the scenes its filters use.
+        let open = if nests.is_none() && refs.is_empty() && !objects.is_empty() {
+            expanded.with_untracked(|shown| shown.contains(&item_id))
+        } else {
+            open
+        };
+        let object_rows = open.then(|| {
+            let item = item_id.clone();
+            objects
+                .iter()
+                .enumerate()
+                .map(|(index, name)| {
+                    object_row(studio, (item.clone(), index), name.clone(), depth + 1)
+                })
+                .collect_view()
+        });
+        let caret = (nests.is_some() || !refs.is_empty() || !objects.is_empty()).then(|| {
             let id = item_id.clone();
             let label = format!("{} {name}", if open { "Collapse" } else { "Expand" });
             let toggle = move |_| {
@@ -900,6 +958,7 @@ pub fn Sources() -> impl IntoView {
                 </li>
             })}
             {open.then(|| refs.into_iter().map(|r| ref_row(studio, r, depth + 1)).collect_view())}
+            {object_rows}
         }
     };
 

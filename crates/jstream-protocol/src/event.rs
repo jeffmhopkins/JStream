@@ -67,6 +67,10 @@ pub enum Event {
         /// reports it (since 0.177): the length becoming known is a size change too.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         duration_ms: Option<u64>,
+        /// Its objects, as [`SourceSize::objects`](crate::SourceSize::objects) reports
+        /// them (since 0.198): a model loaded with others is a size change too.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        objects: Vec<crate::ModelObject>,
     },
     /// The scene on program or on preview changed: after a `scene.switch` or a
     /// `studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives

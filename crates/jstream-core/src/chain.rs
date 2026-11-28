@@ -7111,55 +7111,35 @@ mod tests {
         );
     }
 
-    /// The warp show's `ws_bloom` over the real ship and a plume, in the sRGB space the
-    /// show is drawn in. Sharing the pass must not decode the models' linear colour a
-    /// second time: that paints a darkened rectangle, and the bloom around it is what
-    /// makes the rectangle show. The same picture with the filter off, and the ship on
-    /// its own, are the baselines. Skips when the warp models are not on disk.
+    /// A depth bloom over a lit model and an additive one in front of it, in sRGB
+    /// blending. Sharing the pass must not decode the models' linear colour a second
+    /// time: that paints a darkened rectangle, and the bloom around it is what makes the
+    /// rectangle show. The same picture with the filter off, and the solid model on its
+    /// own, are the baselines.
     #[test]
-    fn warp_show_bloom_does_not_darken_a_rectangle_over_the_ship() {
+    fn a_depth_bloom_does_not_darken_a_rectangle_over_shared_models() {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
         let Some(mut compositor) = gpu() else {
             return;
         };
-        let root = std::path::PathBuf::from("/tmp/warp");
-        if !root.join("models/spaceship_r15_ship_2k_d.glb").is_file() {
-            return;
-        }
         use jstream_sources::SourceKind as _;
         let kind = jstream_sources::ModelKind::new();
-        let ctx = jstream_sources::Context {
-            assets: jstream_sources::AssetRoots {
-                collection: Some(root),
-                app: None,
-            },
-            ..jstream_sources::Context::default()
-        };
-        let load = |file: &str| {
+        let load = |shape: &str| {
             let mut settings: jstream_protocol::Settings = kind
                 .descriptor()
                 .params
                 .iter()
                 .map(|p| (p.id.clone(), p.default.clone()))
                 .collect();
-            settings.insert(String::from("shape"), serde_json::json!("file"));
+            settings.insert(String::from("shape"), serde_json::json!(shape));
             settings.insert(String::from("lighting"), serde_json::json!("scene"));
-            settings.insert(String::from("texture_size"), serde_json::json!("512"));
-            settings.insert(
-                String::from("file"),
-                jstream_protocol::Reference::Asset {
-                    root: jstream_protocol::AssetRoot::Collection,
-                    path: file.into(),
-                }
-                .to_value(),
-            );
-            kind.create(&settings, &ctx)
-                .unwrap_or_else(|err| panic!("load {file}: {err}"))
+            kind.create(&settings, &jstream_sources::Context::default())
+                .unwrap_or_else(|err| panic!("make a {shape}: {err}"))
                 .model()
                 .expect("a model")
         };
-        let ship = load("models/spaceship_r15_ship_2k_d.glb");
-        let plume = load("models/plume_t100_occ.glb");
+        let ship = load("cube");
+        let plume = load("cylinder");
         let (w, h) = (192u32, 108u32);
         let mut graph = graph(&[]);
         let main = SceneId::new("main");

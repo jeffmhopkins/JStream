@@ -245,7 +245,7 @@ pub enum NewKind {
     /// A recording into a folder on the engine's machine: a new, timestamped file each
     /// start (ADR-0260). An empty folder is the engine's own, `JStream` in Videos.
     Record,
-    /// A recording to one file, as a client older than protocol 0.198 made it. The
+    /// A recording to one file, as a client older than protocol 0.199 made it. The
     /// form never offers it; an existing one is edited as it is.
     RecordFile,
     /// The virtual camera: the program as a webcam other apps on the engine's machine

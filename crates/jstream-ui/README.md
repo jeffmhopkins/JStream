@@ -161,7 +161,7 @@ Contents ([Design](#design) explains the choices):
   in either mode, and `followed_scene`, the scene the canvas moves to when the preview
   scene changes in studio mode, or the program scene outside it), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`, and a
-  3D model's depth, `SourceDepths`, from the same; a media file's `duration_ms` isn't
+  3D model's depth, `SourceDepths`, and its named objects, `SourceObjects`, from the same; a media file's `duration_ms` isn't
   kept, since nothing in the UI shows it yet;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
@@ -626,6 +626,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   There a button before the caption, or Backspace on a row, goes back up (`holder`: the
   scene the panel came down from, kept on `step_trail`'s trail, or the first that nests
   it), selecting the nesting row.
+  A 3D model whose file has two or more named objects (`source.sizes`'s `objects`,
+  `SourceObjects`) has a caret that lists them under its row; hovering one draws its
+  3D bounding box on the canvas, and a click selects the model's item (OB-12).
   A scene that one of the object's filters uses (a scene mask, or another kind's scene
   setting, on its source's chain or its own effects) is a child row under it with a role
   badge (OB-05); under a plain object they start open, under a nested scene they open
@@ -1645,7 +1648,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `output-N` and sends one batch (`duplicate_edits`: the create, the encoder, mix and
   bus, and each filter's `filter.add` with its settings; a folder recording's copy
   records into the same folder, and a one-file recording's (`NewKind::RecordFile`, from a
-  client older than 0.198) gets a free path beside the original's, `copy_path`; never the stream key), then opens the copy's
+  client older than 0.199) gets a free path beside the original's, `copy_path`; never the stream key), then opens the copy's
   settings. Delete… asks first and is off while the output runs.
   An output's settings dialog (Settings…, a double-click, or "+ Add output" with a kind
   picker and a Name field) edits a draft (`OutputDraft`) on a property grid (C16) and

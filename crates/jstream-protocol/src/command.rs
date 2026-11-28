@@ -594,7 +594,7 @@ pub enum Edit {
         target: RtmpTarget,
     },
     /// Changes where a recording output writes its file (since 0.74, #1072), or the
-    /// folder a folder output records into (since 0.198), keeping its container,
+    /// folder a folder output records into (since 0.199), keeping its container,
     /// encoder profile, mix, bus and filters, and whether it is a folder output. A
     /// running output keeps writing where it started; the new path applies from its
     /// next `output.start`, which still never overwrites. The path is checked as in
