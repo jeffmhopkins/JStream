@@ -25,6 +25,9 @@
 //! `null` as the initiator of a web source's own first load, which the request policy
 //! must still count as the source's own.
 //!
+//! `audio_plays_from_a_pages_start` checks a page's audio reaches the engine soon after
+//! it opens and keeps coming in real time (#1845). It runs on Linux only in CI.
+//!
 //! `local_network` (in `linux_page/`) checks what pages reach on this computer through
 //! Chromium's own Local Network Access checks (#347, #1035).
 
@@ -623,4 +626,97 @@ fn open_levels(
             let log = std::fs::read_to_string(dir.join("cef.log")).unwrap_or_default();
             panic!("the levels page didn't open: {error}\nCEF's log:\n{log}");
         })
+}
+
+/// Plays a 440 Hz tone from the moment the page's script runs.
+const TONE: &str = r#"<!doctype html>
+<html><body><script>
+const ctx = new AudioContext({ sampleRate: 48000 });
+const osc = ctx.createOscillator();
+osc.frequency.value = 440;
+osc.connect(ctx.destination);
+osc.start();
+</script></body></html>"#;
+
+/// How soon after the page opened its audio must first arrive: well under a second here,
+/// with slack for a shared runner.
+const AUDIO_START: Duration = Duration::from_secs(5);
+
+/// #1845: a page's audio reaches the listener attached as it opens soon after, with
+/// nothing done to the page, and keeps coming in real time.
+#[test]
+#[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
+fn audio_plays_from_a_pages_start() {
+    use std::sync::Mutex;
+
+    use jstream_platform::{AudioInputHandler, AudioPacket, PlatformError};
+
+    /// When each packet arrived, and its frames.
+    struct Listener(Arc<Mutex<Vec<(Instant, usize)>>>);
+    impl AudioInputHandler for Listener {
+        fn on_packet(&mut self, packet: &AudioPacket<'_>) {
+            self.0
+                .lock()
+                .expect("lock")
+                .push((Instant::now(), packet.samples.len() / 2));
+        }
+        fn on_error(&mut self, error: &PlatformError) {
+            panic!("the page's audio failed: {error}");
+        }
+    }
+
+    let helper = PathBuf::from(
+        std::env::var_os("JSTREAM_BROWSER_HELPER").expect("JSTREAM_BROWSER_HELPER is set"),
+    );
+    let dir = temp_dir("audio");
+    let page_file = dir.join("index.html");
+    std::fs::write(&page_file, TONE).expect("the page");
+    let backend = CefBackend::new(
+        CefConfig {
+            helper,
+            cache_root: dir.join("cef"),
+            log_file: Some(dir.join("cef.log")),
+        },
+        Arc::new(FakeClock::new(Timebase::MILLIS)),
+    );
+    backend.use_device(None);
+    let page = backend
+        .open(&PageSpec {
+            location: PageLocation::File(page_file),
+            size: FrameSize::new(64, 36).expect("a size"),
+            fps: 30,
+            css: DEFAULT_CSS.into(),
+            local_network: false,
+            page_api: None,
+        })
+        .expect("the page opened");
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let stream = page.audio().open(Box::new(Listener(Arc::clone(&heard))));
+    let opened = Instant::now();
+    let deadline = opened + AUDIO_START;
+    let started = loop {
+        if let Some(&(at, _)) = heard.lock().expect("lock").first() {
+            break at;
+        }
+        if Instant::now() >= deadline {
+            let log = std::fs::read_to_string(dir.join("cef.log")).unwrap_or_default();
+            panic!("no audio within {AUDIO_START:?} of the page opening\nCEF's log:\n{log}");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    // Then 3 s of listening hears close to 3 s of audio.
+    std::thread::sleep(Duration::from_secs(3));
+    drop(stream);
+    let heard = heard.lock().expect("lock").clone();
+    let window = started.elapsed().as_secs_f64();
+    let frames: usize = heard.iter().map(|(_, n)| n).sum();
+    let secs = frames as f64 / 48_000.0;
+    assert!(
+        secs > window * 0.8,
+        "{secs:.2} s of audio in {window:.2} s, from {:?} after the page opened",
+        started.duration_since(opened)
+    );
+    drop(page);
+    drop(backend);
+    let _ = std::fs::remove_dir_all(&dir);
 }

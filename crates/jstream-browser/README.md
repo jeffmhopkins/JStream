@@ -75,7 +75,10 @@ as the daemon's pages do before a program stage lends its own context, and repor
 arrive, a custom-CSS change the page reacts to, the requests refused, each listed by kind,
 scheme and reason (the built-in page loads one image from outside its folder, which
 Chromium asks for more than once; the check fails if that image isn't among them or
-anything else is refused), and the shutdown time. It runs on Windows only.
+anything else is refused), and the shutdown time. Each audio listener's report gives
+when its packets arrived and the frames in each second after the page opened; the
+built-in page fails the check if its audio first arrives more than 5 s after the page
+opened (#1845). It runs on Windows only.
 
 **The Linux check.** `tests/linux_page.rs` (feature `cef`, ignored by default) opens a
 file page through the real helper named by `JSTREAM_BROWSER_HELPER`, as `cargo xtask
@@ -83,8 +86,9 @@ browser-linux` lays it out, and waits for a paint whose left half is opaque red 
 right half transparent, then shuts the helper down. A second test opens a page granted
 the page API, which paints one colour without `window.jstream`, another with it and
 no data, a third once an update has arrived (and a fourth if a member it wasn't
-granted exists), and checks the update survives a reload. CI's `browser-linux` job
-runs both, sandboxed, headless and without a GPU. On macOS the same file opens pages
+granted exists), and checks the update survives a reload. A third plays a tone and
+checks its audio arrives within 5 s of the page opening and then in real time (#1845).
+CI's `browser-linux` job runs them all, sandboxed, headless and without a GPU. On macOS the same file opens pages
 through the helper in a bundled `JStream.app` (ADR-0157): the after-review `macos-app`
 job runs its two page-load tests (`a_page_`) against the app it bundles.
 
