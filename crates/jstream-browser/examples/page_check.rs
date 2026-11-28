@@ -15,7 +15,14 @@
 //! The built-in test page is transparent, moves a box on every frame, and plays 440 Hz
 //! on the left and 660 Hz on the right at -12 dBFS. Halfway through, the check gives the
 //! page new custom CSS that sets `--jstream-tone: 880` on `:root`; the page reads that
-//! property and moves its right channel to 880 Hz, which shows the CSS reached it. The
+//! property and moves its right channel to 880 Hz, which shows the CSS reached it.
+//!
+//! One listener records the page's audio from the moment the page opens; a second
+//! attaches a second after the CSS change and takes the audio from it (a page's audio
+//! goes to one listener, the latest). Each is reported with when it attached, when its
+//! first and last packets arrived and the frames that arrived in each second, all counted
+//! from the page's opening. With the built-in page, the check fails if the audio first
+//! reached the first listener more than 5 s after the page opened (#1845). The
 //! page also loads one image beside it and one from the folder above, which its request
 //! policy refuses, so the check reports one refused request. Then the page is closed and
 //! the backend dropped, which shuts the helper down.
@@ -80,6 +87,10 @@ setInterval(() => {
 </body></html>
 "#;
 
+    /// How long after the page opened the built-in page's audio may first arrive, in
+    /// seconds. Earlier runs heard it within about a second; one heard it only after 10 s (#1845).
+    const AUDIO_START_LIMIT: f64 = 5.0;
+
     /// A small image for the page to load.
     const SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>"#;
 
@@ -131,19 +142,39 @@ setInterval(() => {
         /// Positive-going zero crossings per channel.
         crossings: [u64; 2],
         last: [f32; 2],
-        started: Option<Instant>,
+        /// When the first and the latest packet arrived, in seconds after the page opened.
+        first_at: Option<f64>,
+        last_at: f64,
+        /// The longest wait between two packets, in seconds, and when it ended.
+        longest_gap: (f64, f64),
+        /// Frames that arrived in each second after the page opened (#1845).
+        per_second: Vec<u64>,
     }
 
-    struct Listener(Arc<Mutex<Heard>>);
+    /// Hands what it hears to its [`Heard`]; `opened` is when the page opened.
+    struct Listener {
+        heard: Arc<Mutex<Heard>>,
+        opened: Instant,
+    }
 
     impl AudioInputHandler for Listener {
         fn on_packet(&mut self, packet: &AudioPacket<'_>) {
-            let mut h = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-            h.started.get_or_insert_with(Instant::now);
+            let at = self.opened.elapsed().as_secs_f64();
+            let mut h = self.heard.lock().unwrap_or_else(PoisonError::into_inner);
+            if h.first_at.is_some() && at - h.last_at > h.longest_gap.0 {
+                h.longest_gap = (at - h.last_at, at);
+            }
+            h.first_at.get_or_insert(at);
+            h.last_at = at;
             h.packets += 1;
             h.first_position.get_or_insert(packet.device_position);
             let frames = packet.samples.len() as u64 / 2;
             h.frames += frames;
+            let second = usize::try_from(self.opened.elapsed().as_secs()).unwrap_or(0);
+            if h.per_second.len() <= second {
+                h.per_second.resize(second + 1, 0);
+            }
+            h.per_second[second] += frames;
             h.last_position = packet.device_position + frames;
             if packet.time.is_none() {
                 h.unstamped += 1;
@@ -160,7 +191,7 @@ setInterval(() => {
         }
 
         fn on_error(&mut self, error: &PlatformError) {
-            let mut h = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut h = self.heard.lock().unwrap_or_else(PoisonError::into_inner);
             h.errors.push(error.to_string());
         }
     }
@@ -183,17 +214,36 @@ setInterval(() => {
         20.0 * f64::from(peak.max(1e-9)).log10()
     }
 
-    fn report_audio(name: &str, heard: &Heard) {
+    /// Reports one listener. `attached` is when it attached, in seconds after the page
+    /// opened.
+    fn report_audio(name: &str, attached: f64, heard: &Heard) {
         let secs = heard.frames as f64 / 48_000.0;
-        let wall = heard
-            .started
-            .map_or(f64::NAN, |s| s.elapsed().as_secs_f64());
         let lost = heard.first_position.map_or(0, |first| {
             (heard.last_position - first).saturating_sub(heard.frames)
         });
+        // From the first packet to the last: how long the audio took to arrive.
+        let wall = heard
+            .first_at
+            .map_or(f64::NAN, |first| heard.last_at - first);
         line(format_args!(
             "audio ({name}): {} packets, {} frames ({secs:.2} s of audio in {wall:.2} s), {lost} frames lost, {} unstamped",
             heard.packets, heard.frames, heard.unstamped
+        ));
+        match heard.first_at {
+            Some(first) => line(format_args!(
+                "  attached at {attached:.2} s, first packet at {first:.2} s (page position {}), last at {:.2} s, longest gap {:.2} s (ending at {:.2} s)",
+                heard.first_position.unwrap_or(0),
+                heard.last_at,
+                heard.longest_gap.0,
+                heard.longest_gap.1
+            )),
+            None => line(format_args!(
+                "  attached at {attached:.2} s, no packet arrived"
+            )),
+        }
+        line(format_args!(
+            "  frames each second after the page opened: {:?}",
+            heard.per_second
         ));
         for (ch, label) in ["left", "right"].iter().enumerate() {
             let hz = if secs > 0.0 {
@@ -308,12 +358,18 @@ setInterval(() => {
             started.elapsed().as_secs_f64() * 1e3
         ));
 
+        // Every listener's times count from here, the moment the page opened.
+        let opened = Instant::now();
         let first = Arc::new(Mutex::new(Heard::default()));
-        let stream = page.audio().open(Box::new(Listener(Arc::clone(&first))));
+        let stream = page.audio().open(Box::new(Listener {
+            heard: Arc::clone(&first),
+            opened,
+        }));
+        let first_attached = opened.elapsed().as_secs_f64();
         let mut seen = Seen::default();
         let half = Duration::from_secs_f64(args.seconds / 2.0);
         let end = Duration::from_secs_f64(args.seconds);
-        let mut second: Option<(Arc<Mutex<Heard>>, _)> = None;
+        let mut second: Option<(Arc<Mutex<Heard>>, _, f64)> = None;
         let mut css_at = None;
         let poll = Duration::from_millis(2);
         let mut window_frames = 0u64;
@@ -338,11 +394,15 @@ setInterval(() => {
                 page.set_css(&format!("{DEFAULT_CSS}\n:root {{ --jstream-tone: 880; }}"));
                 css_at = Some(Instant::now());
             }
-            // A second listener, a second after the CSS changed, hears the new tone.
+            // A second listener, a second after the CSS changed, hears the new tone. It
+            // takes the page's audio from the first, which hears nothing after it.
             if second.is_none() && css_at.is_some_and(|t| t.elapsed() > Duration::from_secs(1)) {
                 let heard = Arc::new(Mutex::new(Heard::default()));
-                let s = page.audio().open(Box::new(Listener(Arc::clone(&heard))));
-                second = Some((heard, s));
+                let s = page.audio().open(Box::new(Listener {
+                    heard: Arc::clone(&heard),
+                    opened,
+                }));
+                second = Some((heard, s, opened.elapsed().as_secs_f64()));
             }
             std::thread::sleep(poll);
         }
@@ -362,14 +422,30 @@ setInterval(() => {
                 args.fps
             ));
         }
+        let replaced_at = second.as_ref().map(|(_, _, at)| *at);
+        let first_heard = first.lock().unwrap_or_else(PoisonError::into_inner);
         report_audio(
-            "first half",
-            &first.lock().unwrap_or_else(PoisonError::into_inner),
+            &replaced_at.map_or("first listener".to_owned(), |at| {
+                format!("first listener, until the second attached at {at:.2} s")
+            }),
+            first_attached,
+            &first_heard,
         );
+        // #1845: the page's audio should reach the first listener soon after the page
+        // opened, as the page starts its tone at once.
+        let late = match first_heard.first_at {
+            Some(at) if at > AUDIO_START_LIMIT => Some(format!(
+                "the page's audio started {at:.2} s after it opened (expected within {AUDIO_START_LIMIT} s)"
+            )),
+            None => Some("the page's audio never reached the first listener".to_owned()),
+            _ => None,
+        };
+        drop(first_heard);
         drop(stream);
-        if let Some((heard, s)) = second {
+        if let Some((heard, s, at)) = second {
             report_audio(
                 "after the CSS change",
+                at,
                 &heard.lock().unwrap_or_else(PoisonError::into_inner),
             );
             drop(s);
@@ -392,6 +468,11 @@ setInterval(() => {
         ));
         if seen.frames == 0 {
             return Err("no frame arrived".into());
+        }
+        if let Some(late) = late
+            && args.url.is_none()
+        {
+            return Err(late);
         }
         Ok(())
     }
