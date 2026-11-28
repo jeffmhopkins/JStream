@@ -2230,7 +2230,7 @@ impl ModelRuntime {
         };
         // The canvas the model is placed on is the target's extent: a layer drawn with
         // fewer pixels than its canvas (ADR-0197) holds the same picture, less sharp. A
-        // layer that holds a part of its canvas (ADR-0250) sees the whole canvas through
+        // layer that holds a part of its canvas (ADR-0251) sees the whole canvas through
         // its camera, cut to that part.
         let window = target.window().filter(|_| !in_texture);
         let canvas = match window {
