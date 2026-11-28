@@ -778,7 +778,10 @@ somewhere it shouldn't.
   while the receiver runs. Nothing is sent from it. It takes only an mDNS message from a
   LAN address's port 5353, into the same parser and list as below, and drops the rest
   uncounted; it reads at most 16 datagrams per turn of the thread, so other programs'
-  mDNS traffic can't hold up playout. Another local program on 5353 sees the same
+  mDNS traffic can't hold up playout. The receive socket asks for a 4 MiB buffer and
+  reads at most 64 datagrams a turn: the buffer is the kernel's memory, bounded, and a
+  flood still only fills it (every datagram is dropped and counted as before), while
+  the bound per turn keeps playout on time. Another local program on 5353 sees the same
   group traffic it always did; the receiver adds nothing to it. (The network listener's
   own mDNS announcement, while network access is on, is a separate socket on the same
   port that answers only for `_jstream._tcp.local`; see [Pairing](#pairing).)
