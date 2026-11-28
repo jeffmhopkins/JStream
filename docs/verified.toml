@@ -2190,7 +2190,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:90fc136cabb7353b", by = "agent:claude", note = "Opus test now checks a controller drawn once (a held note is let go when the sender falls silent); tests list reworded to each MIDI message once | merge: #1828 rewrote the webcam capture text (auto frame rate, NV12 first) in this section; re-read, it doesn't touch the JTunnel receiver paragraph, which still holds | kept from the merged side: live.rs: a webcam with fps 0 now follows the program rate like a browser page; the Live sources bullet says so" }
+stamp = { hash = "b3:331d00ab59635845", by = "agent:claude", note = "JTunnel receiver paragraph: added the 4 MiB receive buffer and the read-up-to-64-waiting-datagrams batching; the rest (subscribe, names, discovery, state) unchanged by this diff" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:b0dde17f176fcfac", by = "agent:claude", note = "ST5: snapshot.rs plans the program through plan_program with the studio's show fades, transition.rs adds ShowFade, activity.rs adds the show scene as an audio root; the Snapshot bullet's description of plan, compose and keyframe drawing holds, and the details sit in Snapshots, Program scene and Audio routing." }
@@ -2205,13 +2205,13 @@ stamp = { hash = "b3:f03522a249ff7662", by = "agent:cockpit-demo", note = "re-re
 stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "merge: #1293 split this out of Purpose. Re-read it against this branch: live.rs, snapshot.rs and frames.rs gain frame slots and sheet pinning, which the Live sources, Snapshots and Frame sheets design sections describe. This summary still holds. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/mod.rs"]
-stamp = { hash = "b3:fd0aedee56fc2adc", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
+stamp = { hash = "b3:0ac611fba05ebc5c", by = "agent:claude", note = "JTunnel receiver paragraph: added the 4 MiB receive buffer and the read-up-to-64-waiting-datagrams batching; the rest (subscribe, names, discovery, state) unchanged by this diff" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/names.rs"]
 stamp = { hash = "b3:8f74417d2e85aef0", by = "agent:release-alpha13", note = "Re-read after the train merge: the jtunnel names text lists both the train's PTZ axis (Wide Zoom) and the mute/visibility names (Mic Mute, Logo Visible), and MidiFeed::alive marking a sender alive, matching jtunnel/names.rs and the receiver. | merge: Merge of #1784 at e8df220 (JTunnel mDNS listener and one live sender, ADR-0221) into the alpha.13 train, after #1711/#1772's per-sender MIDI switch: jtunnel.json's example now carries both midi and live, the desktop Settings list shows both the MIDI tick and Make live, and the setting test gains live: None; re-read, the live-sender text concerns data and audio readers and agrees with ADR-0220's MIDI gate | kept from the merged side: names.rs's target_label now names a PTZ axis as camera and axis; added that to the names packet bullet. The rest is untouched by this change. | kept from the merged side: Receiver: the mDNS listener text holds; alias text replaced by: an empty network_audio sender records the first accepted (Receiver::sender), unnamed readers already read it; state put under the sender's name only; checked against jtunnel/mod.rs, names.rs back to the train's" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/tests.rs"]
-stamp = { hash = "b3:fe75a64a7c6fa6ed", by = "agent:claude", note = "Opus test now pre-codes its frames, sends them on a 5 ms schedule and puts its controller at frame 100; the tests list still describes it" }
+stamp = { hash = "b3:1a4c89085bf52f17", by = "agent:claude", note = "JTunnel receiver paragraph: added the 4 MiB receive buffer and the read-up-to-64-waiting-datagrams batching; the rest (subscribe, names, discovery, state) unchanged by this diff" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:631f38c36d80f7f5", by = "agent:claude", note = "live.rs: a webcam with fps 0 now follows the program rate like a browser page; the Live sources bullet says so" }
@@ -9216,7 +9216,7 @@ stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cf
 stamp = { hash = "b3:3fa709a62e0e60ae", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): No change to what a page is granted or sent: only when a granted page's next look is scheduled (a page frame after the last look)." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:4868b9ded8915bdd", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
+stamp = { hash = "b3:6e5e88c26d32ab70", by = "agent:claude", note = "Added the receive buffer (kernel memory, bounded) and the 64-a-turn read bound; flooding controls unchanged: every datagram is still checked, dropped and counted as before" }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:b37f83f15f9a48ed", by = "agent:claude", note = "the JTunnel mDNS listener text says the announcement is a separate socket on 5353 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -9225,13 +9225,13 @@ stamp = { hash = "b3:b37f83f15f9a48ed", by = "agent:claude", note = "the JTunnel
 stamp = { hash = "b3:566e43a3335da375", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/mod.rs"]
-stamp = { hash = "b3:fd0aedee56fc2adc", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
+stamp = { hash = "b3:0ac611fba05ebc5c", by = "agent:claude", note = "Added the receive buffer (kernel memory, bounded) and the 64-a-turn read bound; flooding controls unchanged: every datagram is still checked, dropped and counted as before" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/names.rs"]
 stamp = { hash = "b3:8f74417d2e85aef0", by = "agent:release-alpha13", note = "Re-read in full after merging the train. Checked the claims this PR adds: MidiInputs::bindable and set_bindable exist in jstream-sources' midi module, and action_bindings.rs lets a held press go after SILENT_MS (500 ms) of silence. The train's names.rs change (a PTZ camera's name and axis in a names packet) is already described. | merge: Merge of #1784 at e8df220 (JTunnel mDNS listener and one live sender, ADR-0221) into the alpha.13 train, after #1711/#1772's per-sender MIDI switch: jtunnel.json's example now carries both midi and live, the desktop Settings list shows both the MIDI tick and Make live, and the setting test gains live: None; re-read, the live-sender text concerns data and audio readers and agrees with ADR-0220's MIDI gate | kept from the merged side: Names packets may now carry a PTZ camera's name and axis (names.rs target_label), and ptz_axis bindings send only to listed heads; edited both. | kept from the merged side: Re-read against jtunnel/mod.rs after the rework: listener text holds; one live sender, so an unnamed reader reads only its data; no alias, no data held twice" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/tests.rs"]
-stamp = { hash = "b3:fe75a64a7c6fa6ed", by = "agent:claude", note = "only the Opus test's pacing changed; the Opus decoding and allocation text still holds" }
+stamp = { hash = "b3:1a4c89085bf52f17", by = "agent:claude", note = "Added the receive buffer (kernel memory, bounded) and the 64-a-turn read bound; flooding controls unchanged: every datagram is still checked, dropped and counted as before" }
 
 ["THREAT-MODEL#mcp"."body"]
 stamp = { hash = "b3:98df5fd57774c8a1", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, people-only MCP nouns, server parts or gate credentials)" }
