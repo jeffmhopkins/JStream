@@ -254,7 +254,7 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   await dialog.getByLabel('Shows').selectOption({ label: 'Vertical' });
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(outputRow(page, 'output-1').locator('.output-row-target')).toContainText('a.mkv · AV1 archive');
+  await expect(outputRow(page, 'output-1').locator('.output-row-target')).toContainText('archive · AV1 archive');
   // In use, neither can be deleted.
   library = await openEncoders(page);
   await archive.click();

@@ -7983,7 +7983,7 @@ stamp = { hash = "b3:b6d1bba66bcd3a81", by = "agent:issues-thread", note = "Spec
 stamp = { hash = "b3:a67fe1a52d668d3f", by = "agent:claude", note = "Re-read: fixtures.js's addOutput now fills Folder for a recording; the harness (mock daemon, one per test) is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js"]
-stamp = { hash = "b3:dc9ca1175e56f2b9", by = "agent:claude", note = "Re-read: fixtures.js's addOutput now fills Folder for a recording; the harness (mock daemon, one per test) is unchanged." }
+stamp = { hash = "b3:2b4c5af98ce437a8", by = "agent:claude", note = "Re-read after fixing outputs.spec.js's encoder test to expect the folder recording's row summary (archive, the folder's name) instead of a file name; the harness is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/pairing.spec.js"]
 stamp = { hash = "b3:9d476b1c074b987d", by = "agent:claude", note = "Re-read against the spec changes (video-settings, clap-plugins, plugins, menus) and the new pairing.spec.js, which routes the WebSocket as the other specs do; the harness itself is unchanged." }
@@ -8148,7 +8148,7 @@ stamp = { hash = "b3:b6d1bba66bcd3a81", by = "agent:issues-thread", note = "Edit
 stamp = { hash = "b3:a67fe1a52d668d3f", by = "agent:claude", note = "Browse asks a folder dialog for a recording, rows show the folder and Last recording's, a duplicate shares the folder, a dialog follows a folder change, as the specs now check." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js"]
-stamp = { hash = "b3:dc9ca1175e56f2b9", by = "agent:claude", note = "Browse asks a folder dialog for a recording, rows show the folder and Last recording's, a duplicate shares the folder, a dialog follows a folder change, as the specs now check." }
+stamp = { hash = "b3:2b4c5af98ce437a8", by = "agent:claude", note = "Re-read after fixing outputs.spec.js's encoder test to expect the folder's name in the row; the tests text (Folder field, folder browse) holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/pairing.spec.js"]
 stamp = { hash = "b3:9d476b1c074b987d", by = "agent:claude", note = "Edited Plugins, Audio plugins, Menus, Video settings and keyframes lines and added Pairing; each matches its spec after this change." }
