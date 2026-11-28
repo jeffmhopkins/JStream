@@ -25,7 +25,7 @@
 //! source's kind doesn't drive, an `emissive` one with no material, and a material the
 //! model doesn't have add nothing. A `replace` modifier on a material setting drives
 //! nothing, except on `emissive_strength`, where the last one sets the multiplier before
-//! the others add to it ([ADR-0259](../../../docs/adr/0259-a-replace-sets-a-models-glow-strength.md)).
+//! the others add to it ([ADR-0260](../../../docs/adr/0260-a-replace-sets-a-models-glow-strength.md)).
 //! An environment light's `intensity` follows too, and so does its sky
 //! ([`environment`]): `stars`, `nebula` and `galaxy` within 0 to 1, `star_brightness`
 //! within 0 to 8 and `warp` within 0 to 1, which its backdrop's ramp then eases toward; its `sky_color`, `horizon_color`, `ground_color`, `nebula_color` and
@@ -288,7 +288,7 @@ pub(crate) fn environment(
 /// nothing. `value` gives what a modifier adds to 0. A material's values are the model's
 /// own, which this doesn't know, so a `replace` modifier (ADR-0203) drives nothing here,
 /// except on `emissive_strength`, whose own value is 1: there `value` gives what it sets
-/// from 1, and the last one sets it before the others add (ADR-0259).
+/// from 1, and the last one sets it before the others add (ADR-0260).
 pub(crate) fn materials(
     drives: &[(MotionSetting, Modifier)],
     value: impl Fn(&Modifier, f64) -> f64,
@@ -320,7 +320,7 @@ pub(crate) fn materials(
         }
         if modifier.replace {
             // Only the glow's strength has an own value the frame knows: it is 1 at rest,
-            // whatever the file's glow (ADR-0259).
+            // whatever the file's glow (ADR-0260).
             if setting.param != "emissive_strength" || !modifier.enabled {
                 continue;
             }
@@ -554,7 +554,7 @@ mod tests {
         assert_eq!(materials(&[], by_id, |_| None).1, 0);
     }
 
-    /// ADR-0259: a `replace` modifier sets a material's glow strength from its rest of
+    /// ADR-0260: a `replace` modifier sets a material's glow strength from its rest of
     /// 1, whatever the file's glow, and drives no other material setting.
     #[test]
     fn a_replace_sets_the_glow_strength_and_nothing_else_on_a_material() {

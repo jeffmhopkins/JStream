@@ -1125,7 +1125,7 @@ scaled by its own brightness. A drive can also set the base colour (`set_color`)
 glow's colour at its own brightness (`set_emissive`) before the others add, the last
 one that sets winning (ADR-0171 decision 5), and set the glow's strength
 (`set_emissive_strength`, for a `replace` modifier,
-[ADR-0259](../../docs/adr/0259-a-replace-sets-a-models-glow-strength.md)) the same way. The draw writes each changed material's uniform before it
+[ADR-0260](../../docs/adr/0260-a-replace-sets-a-models-glow-strength.md)) the same way. The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of
 the same model draws it as it is. A material with a live texture binds a uniform of its
 own for each slot, which is driven the same way

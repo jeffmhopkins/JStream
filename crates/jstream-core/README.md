@@ -516,7 +516,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   number the same way; a model's materials take none, since their own values are the
   model's, except the glow strength, whose own value is 1
   (`MaterialDrive::set_emissive_strength`,
-  [ADR-0259](../../docs/adr/0259-a-replace-sets-a-models-glow-strength.md)). A painting `data` modifier sets a light's colour, a
+  [ADR-0260](../../docs/adr/0260-a-replace-sets-a-models-glow-strength.md)). A painting `data` modifier sets a light's colour, a
   model's colour or a material's glow colour instead (`MaterialDrive::set_color` and
   `set_emissive`), and an effect's colour setting the same way (`driven.rs`).
 - **Value bindings** (`value_bindings.rs`,

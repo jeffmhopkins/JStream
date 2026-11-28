@@ -2501,7 +2501,7 @@ fn a_material_drive_adds_within_ranges_and_nothing_when_it_adds_nothing() {
     });
     assert_eq!(&off[4..7], &[0.0, 0.0, 0.0]);
     // A set strength replaces the multiplier, the last one wins, and drives then add to
-    // it (ADR-0259): 0 turns the glow off, 3 triples it.
+    // it (ADR-0260): 0 turns the glow off, 3 triples it.
     let set = |to: f32| super::MaterialDrive {
         set_emissive_strength: Some(to),
         ..none

@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0259"
+id = "ADR-0260"
 title = "A replace sets a model's glow strength"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0259: A replace sets a model's glow strength
+# ADR-0260: A replace sets a model's glow strength
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

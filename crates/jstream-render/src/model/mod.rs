@@ -385,7 +385,7 @@ pub struct MaterialDrive<'a> {
     /// `emissive` adds to it.
     pub set_emissive: Option<[f32; 3]>,
     /// Replaces the glow's strength, the multiplier that is 1 at rest, before
-    /// `emissive_strength` adds to it (ADR-0259). The last drive that sets one wins.
+    /// `emissive_strength` adds to it (ADR-0260). The last drive that sets one wins.
     pub set_emissive_strength: Option<f32>,
 }
 
