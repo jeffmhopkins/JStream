@@ -43,7 +43,7 @@ struct Light {
     cone: vec4<f32>,
 }
 
-// The item this model is drawn for (ADR-0257): x is its opacity. 1 draws the
+// The item this model is drawn for (ADR-0259): x is its opacity. 1 draws the
 // material as authored. A shared scene pass multiplies it here, because the
 // model is not composited as its own layer afterwards.
 struct ItemFade {
@@ -734,9 +734,10 @@ fn fs_prepass(in: VsOut, @builtin(front_facing) front_facing: bool) {
 }
 
 // The model's view depth (ADR-0143 decision 4): red holds 1 / w, the viewer's distance
-// over the fragment's along the viewing axis, wherever the fragment covers the texel.
-// A faint fragment is still a depth. The pipeline keeps the larger value, so the nearest
-// thing wins. Only a model seen with perspective (a camera) is drawn here.
+// over the fragment's along the viewing axis, where the material's alpha is at least one
+// half. The pipeline keeps the larger value, so the nearest thing wins. Only a model seen
+// with perspective (a camera) is drawn here. A model's own layer keeps this limit
+// (ADR-0259 decision 1): its depth is what cards behind faint glass are tested against.
 @fragment
 fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
     if below_floor(in.seen) {
@@ -752,9 +753,7 @@ fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
     }
     let p = frame.params.x;
     let w = (p - in.seen.z) / max(p, 1e-6);
-    // Any coverage is a real depth. A faint fragment is still tested where it is;
-    // only nothing (alpha 0) is absent.
-    if alpha <= 0.0 || p <= 0.0 || w <= 0.0 {
+    if alpha < 0.5 || p <= 0.0 || w <= 0.0 {
         discard;
     }
     return vec4<f32>(1.0 / w, 0.0, 0.0, 1.0);

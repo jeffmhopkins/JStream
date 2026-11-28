@@ -692,7 +692,7 @@ impl GpuModel {
     }
 
     /// Whether any primitive is opaque or masked. Those write the shared depth even
-    /// when the model also has a blended material (ADR-0257).
+    /// when the model also has a blended material (ADR-0259).
     pub(crate) fn has_opaque(&self) -> bool {
         self.inner.primitives.iter().any(|primitive| {
             !self
@@ -762,17 +762,25 @@ impl std::fmt::Debug for GpuModel {
     }
 }
 
-/// One model in a 3D scene's shared colour and depth pass (ADR-0257).
+/// One model in a 3D scene's shared colour and depth pass (ADR-0259).
 #[derive(Clone, Copy, Debug)]
 pub struct SharedModel<'a> {
     /// The model, its pose and its lighting, as [`crate::Compositor::draw_model`] takes them.
     pub draw: ModelDraw<'a>,
-    /// The item's opacity, 0 to 4. It scales every fragment. Opaque primitives still
-    /// write depth; blended ones are only tested.
+    /// The item's opacity, 0 to 4. It scales every fragment. Under 1, every primitive is
+    /// drawn as a transparent one: tested, and not written.
     pub opacity: f32,
-    /// The item's blend. [`BlendMode::Additive`] adds the fragment; other modes composite
-    /// it source-over.
+    /// The item's blend. [`BlendMode::Additive`] adds the fragment, and every primitive
+    /// is then transparent; other modes composite it source-over.
     pub blend: BlendMode,
+}
+
+impl SharedModel<'_> {
+    /// Whether the whole item is drawn as transparent primitives: under full opacity, or
+    /// additive. Such an item writes no depth, so what is behind it still shows.
+    pub fn is_transparent(&self) -> bool {
+        self.opacity < 1.0 || self.blend == BlendMode::Additive
+    }
 }
 
 /// One placement of a model: what [`crate::Compositor::draw_model`] draws.
@@ -2136,7 +2144,7 @@ impl ModelRuntime {
     }
 
     /// Max-blends the scene depth `depth` into `target`, a depth layer of the same size,
-    /// as `1 / w` (ADR-0257). What `target` already holds that is nearer stays.
+    /// as `1 / w` (ADR-0259). What `target` already holds that is nearer stays.
     pub(crate) fn blend_scene_depth(
         &self,
         gpu: &Gpu,
@@ -2605,7 +2613,7 @@ impl ModelRuntime {
             // Depth first, then shading only where it is the nearest: a pixel several
             // surfaces cover is shaded once, not once a surface. A shared scene pass
             // draws every model's prepass before any model's shading, so the equal
-            // test keeps the nearest of all of them (ADR-0257).
+            // test keeps the nearest of all of them (ADR-0259).
             let is_opaque =
                 |p: &&GpuPrimitive| !model.materials.get(p.material).is_some_and(|m| m.blended);
             let draw_opaque = !matches!(phase, Some(SharePhase::Transparent));
@@ -2622,14 +2630,9 @@ impl ModelRuntime {
             // Inside one primitive its triangles still draw in index order, so of two
             // of its own triangles in one plane the later now shows.
             if draw_opaque && !matches!(phase, Some(SharePhase::Prepass)) {
-                // An additive item's opaque parts (a hull copy on a plume) add their
-                // colour at the depth the prepass wrote, instead of replacing it.
-                let pipeline = if share.is_some_and(|share| share.blend == BlendMode::Additive) {
-                    &pipelines.additive_opaque
-                } else {
-                    opaque
-                };
-                pass.set_pipeline(pipeline);
+                // An additive item never reaches here in a shared pass: all of it is
+                // transparent (ADR-0259).
+                pass.set_pipeline(opaque);
                 for p in model.primitives.iter().rev().filter(is_opaque) {
                     draw_one(&mut pass, p);
                 }
@@ -2719,7 +2722,7 @@ impl ModelRuntime {
     /// Records the view depth of the model whose layer's pass just tested `depth` into
     /// `target` (ADR-0143 decision 4), as [`Self::draw_depth`] would draw it: the
     /// opaque primitives' nearest depth read from the tested one, then the blended
-    /// primitives drawn over it wherever they cover, the nearest kept, since the layer's
+    /// primitives at least half opaque drawn over it, the nearest kept, since the layer's
     /// pass tests them but writes no depth for them. Seen without a camera it holds
     /// nothing, as `draw_depth` draws nothing.
     fn record_view_depth(
@@ -3183,10 +3186,8 @@ struct LayerPipelines {
     plain: [wgpu::RenderPipeline; 3],
     surface: [wgpu::RenderPipeline; 3],
     /// Transparent primitives composited additively, depth tested and not written
-    /// (ADR-0257). The plain blended pipeline is source-over.
+    /// (ADR-0259). The plain blended pipeline is source-over.
     additive: wgpu::RenderPipeline,
-    /// Opaque primitives of an additive item, shaded where the prepass left them.
-    additive_opaque: wgpu::RenderPipeline,
 }
 
 /// The layer's pipelines drawn with `samples` (ADR-0242), of the model shader and its
@@ -3205,8 +3206,6 @@ fn layer_pipelines(
         Opaque,
         Blended,
         Additive,
-        /// Additive colour where the prepass left this primitive's depth.
-        AdditiveOpaque,
     }
     // With `surface`, the pass also has a surface buffer's three targets, which only
     // the opaque shading writes (`fs_with_surface`, ADR-0170 decision 4).
@@ -3228,7 +3227,7 @@ fn layer_pipelines(
         };
         let blend = match kind {
             Kind::Prepass => None,
-            Kind::Additive | Kind::AdditiveOpaque => Some(wgpu::BlendState {
+            Kind::Additive => Some(wgpu::BlendState {
                 color: wgpu::BlendComponent {
                     src_factor: wgpu::BlendFactor::One,
                     dst_factor: wgpu::BlendFactor::One,
@@ -3265,7 +3264,6 @@ fn layer_pipelines(
                 (Kind::Opaque, false) => "jstream-render-model-opaque",
                 (Kind::Blended, false) => "jstream-render-model-blended",
                 (Kind::Additive, _) => "jstream-render-model-additive",
-                (Kind::AdditiveOpaque, _) => "jstream-render-model-additive-opaque",
                 (Kind::Prepass, true) => "jstream-render-model-prepass-surface",
                 (Kind::Opaque, true) => "jstream-render-model-opaque-surface",
                 (Kind::Blended, true) => "jstream-render-model-blended-surface",
@@ -3301,7 +3299,7 @@ fn layer_pipelines(
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
                 depth_write_enabled: Some(kind == Kind::Prepass),
-                depth_compare: Some(if kind == Kind::Opaque || kind == Kind::AdditiveOpaque {
+                depth_compare: Some(if kind == Kind::Opaque {
                     wgpu::CompareFunction::Equal
                 } else {
                     wgpu::CompareFunction::Greater
@@ -3343,7 +3341,6 @@ fn layer_pipelines(
             pipeline(Kind::Blended, true),
         ],
         additive: pipeline(Kind::Additive, false),
-        additive_opaque: pipeline(Kind::AdditiveOpaque, false),
     }
 }
 
@@ -3413,7 +3410,7 @@ fn merge_pipeline(gpu: &Gpu) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline) {
 /// A live texture's whole picture as a model reads it: its texture and its view.
 pub(crate) type LiveView<'a> = Option<(&'a wgpu::Texture, &'a wgpu::TextureView)>;
 
-/// Which part of a model a shared scene pass draws (ADR-0257).
+/// Which part of a model a shared scene pass draws (ADR-0259).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SharePhase {
     /// Opaque depth only, before any model is shaded.
@@ -3424,7 +3421,7 @@ pub(crate) enum SharePhase {
     Transparent,
 }
 
-/// One model drawn into a scene's shared colour and depth (ADR-0257), rather than into
+/// One model drawn into a scene's shared colour and depth (ADR-0259), rather than into
 /// a layer of its own.
 #[derive(Clone, Copy)]
 pub(crate) struct Share<'a> {

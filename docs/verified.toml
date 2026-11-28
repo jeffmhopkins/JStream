@@ -186,7 +186,7 @@ stamp = { hash = "b3:c06c302493ca4828", by = "agent:claude", note = "The retarge
 stamp = { hash = "b3:737259c9f9481f49", by = "agent:scene-folders", note = "Edited: Folder gains scene?, each owner (the scene list, or one scene's keyframes and timelines) with its own tree (ADR-0222). The scenes line already lists timelines and folder?; holds. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:94cfdb5449c4d130", by = "agent:grok", note = "Two or more sharing models draw into the scene depth; one model and a filtered model keep a layer and its view depth. | kept from the merged side: Model texture text now says each slot's source goes on the parts it names by material, node or mesh (ADR-0250)" }
+stamp = { hash = "b3:20f7bd728b82b765", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -194,8 +194,8 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 ["ARCH#gpu-pipeline"."dep:docs/adr/0063-macos-platform-support.md"]
 stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:mac1", note = "added the macOS paragraph (IOSurface wrap, release ordered by a shared event signalled after the reading submit, planar encode targets next); covers now include the macOS gpu module and ADR-0063" }
 
-["ARCH#gpu-pipeline"."dep:docs/adr/0257-models-in-one-scene-are-one-depth.md"]
-stamp = { hash = "b3:15b39da34eb4a138", by = "agent:grok", note = "Opaque primitives write the scene depth even when the model also has a blended material." }
+["ARCH#gpu-pipeline"."dep:docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md"]
+stamp = { hash = "b3:194faaebd60d25f3", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-platform-macos/src/gpu/metal.rs"]
 stamp = { hash = "b3:b676ec6be77fb1b6", by = "agent:aa-thread", note = "Edited the 3D model paragraph: drawn multisampled with the switches' samples, resolved before filters, 4 until set (ADR-0242); re-read the Windows path, model and depth parts against render's model/msaa.rs, gpu.rs and the platform device features change." }
@@ -219,7 +219,7 @@ stamp = { hash = "b3:813757b8f56afa0e", by = "agent:aa-thread", note = "Edited t
 stamp = { hash = "b3:d8980baa4f07826b", by = "agent:effects-perf", note = "Re-read against cheaper depth bloom, ambient occlusion and volumetric fog shaders and a per-filter bench: the pipeline's steps, the compositor's passes, the view depth a depth-reading scene filter gets (one more draw into a half-float 1/w layer) and how filters draw into Rgba16Float layers are as described; only the work inside three filters' fragment shaders changed." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:be0f43deafba8b26", by = "agent:claude", note = "MaterialDrive gains set_emissive_strength for a replace on glow strength (ADR-0259); the pipeline stages described here are unchanged" }
+stamp = { hash = "b3:00207342a1ddc0d8", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:180ad23d23def296", by = "agent:grok", note = "Two or more sharing models draw into the scene depth; one model and a filtered model keep a layer and its view depth. | kept from the merged side: Model texture text now says each slot's source goes on the parts it names by material, node or mesh (ADR-0250)" }
@@ -243,7 +243,7 @@ stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:9047dbc99dbc7ed8", by = "agent:grok", note = "Re-read the model-depth sentences. Opaque models share one Depth32Float and hide each other per pixel; blended and additive models test without writing; cards test every occluder (ADR-0256)." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:dc0df4be365c93c1", by = "agent:grok", note = "Re-read the sRGB composite. Item passes still encode then decode once. The shared model draw is switched to linear for that pass only, which this section does not describe. | kept from the merged side: Re-read: model layers are still placed flat as Placement::Layer; the window is a render detail the section doesn't state" }
+stamp = { hash = "b3:b585bd61d7e1656c", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:8876931db8ee6e38", by = "agent:mac1-planar", note = "Step 4 text now says an encode target is a native NV12 texture or a two-plane R8Unorm/Rg8Unorm frame over one surface (Metal), the pass writing plane views or the two textures, and the submit handing its textures back in PRESENT; matches convert/mod.rs | kept from the merged side: Re-read the SubmitLock and timestamp-span paragraphs: staging, locking and the spans' command buffers are untouched; the count sits beside each submit. The change adds a per-thread count of the compositor's own GPU submits (jstream_render::submits_on_this_thread), which each drawer's DrawMeter reads at the end of a frame and profile.get reports as DrawerProfile.submits (protocol 0.174). No submit, pass, lock or frame path changes. Re-read after merging main's alpha.11 train, whose conversion and readback now go through Gpu::submit_work and so are counted there. | kept from the merged side: Nv12Converter::submit and the readback ring's submit now go through Compositor::submit_work, so they carry a unit's timestamps when the drawer names one; compositor.rs gained that one wrapper. Nothing drawn, staged or ordered changes: the same command buffers in the same submits under the same lock. The sentence on units timed one frame in four, each submit of a unit's work bracketed by timestamps, still holds and now covers the conversion and readback submits" }
@@ -573,7 +573,7 @@ stamp = { hash = "b3:34112162b6e1206d", by = "agent:claude", note = "Re-read the
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "This branch: the program stage's and preview's caches hold a frame only items draw at its drawn size, floored at the plan over every mix (#1139). The upload is still converted by the ingest compute pass to premultiplied linear Rgba16Float, which can now also write a smaller texture as a box mean of the frame's texels; cache retirement after the fence is unchanged. The section's one added sentence holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:14a1a3c32510bbf2", by = "agent:grok", note = "Two or more sharing models draw into the scene depth; one model and a filtered model keep a layer and its view depth. | kept from the merged side: Re-read: model layers are still placed flat as Placement::Layer; the window is a render detail the section doesn't state" }
+stamp = { hash = "b3:610c2ac2fae0191e", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -585,7 +585,7 @@ stamp = { hash = "b3:d3fbff92bbc3e30a", by = "agent:claude", note = "Replayed on
 stamp = { hash = "b3:07ea0a1ced72831c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/depth_resolve.rs"]
-stamp = { hash = "b3:f2e4231a9b32efe9", by = "agent:grok", note = "The pipeline section now draws sharing models into the scene depth, opaque then transparent, and cards test that depth." }
+stamp = { hash = "b3:7dd8143517bd263e", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/depth_resolve.wgsl"]
 stamp = { hash = "b3:bce3182b2d04ac90", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
@@ -615,10 +615,10 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Changed the
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: replaced 'a 3D model's layer isn't blurred' with ADR-0165's model depth of field: colour and view depth drawn first, four passes gathering neighbours whose blur reaches each pixel; the model draw, lights and placement text still hold" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:a7cf82ca4c83470b", by = "agent:claude", note = "MaterialDrive gains set_emissive_strength for a replace on glow strength (ADR-0259); the pipeline stages described here are unchanged" }
+stamp = { hash = "b3:3aedf664bfc856a1", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:1fef8d1d457b942e", by = "agent:grok", note = "Opaque primitives write the scene depth even when the model also has a blended material. | kept from the merged side: Model texture text (slots on parts by material, node or mesh) still holds; the region is a render detail" }
+stamp = { hash = "b3:ed0194c9ccfe4a03", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/msaa.rs"]
 stamp = { hash = "b3:b7725af72ef97cd9", by = "agent:claude", note = "Re-read: model layers are still placed flat as Placement::Layer; the window is a render detail the section doesn't state" }
@@ -630,7 +630,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited the 3D model paragraph: drawn multisampled with the switches' samples, resolved before filters, 4 until set (ADR-0242); re-read the Windows path, model and depth parts against render's model/msaa.rs, gpu.rs and the platform device features change." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:017c3886bf0eeaec", by = "agent:claude", note = "MaterialDrive gains set_emissive_strength for a replace on glow strength (ADR-0259); the pipeline stages described here are unchanged" }
+stamp = { hash = "b3:dd0f406e47fbb12c", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -660,7 +660,7 @@ stamp = { hash = "b3:258406a060552c0b", by = "agent:claude", note = "Nv12Convert
 stamp = { hash = "b3:e653c8257135f3e4", by = "agent:claude", note = "Edited the blending-space sentences: the decode pass is a layer's, and a frame's own target is left sRGB-encoded in srgb and decoded by its resolve (Compositor::render passes decode false to record_composite; resolve.wgsl's fs_encoded). Re-read the rest against the diff: layers still end linear, the output is still Rgba8UnormSrgb, and the whole-layer shortcut and NV12 steps are unchanged." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/scene.rs"]
-stamp = { hash = "b3:c133ebb3d7996229", by = "agent:grok", note = "The shared-pass content and depth bookkeeping does not change the capture, composite, or encode pipeline this section describes." }
+stamp = { hash = "b3:811f95022d553f79", by = "agent:claude", note = "Updated for ADR-0259: opaque write only for full-opacity normal items, faded/additive models all transparent, other blends keep a layer" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky.rs"]
 stamp = { hash = "b3:e4642391b1fe2cbe", by = "agent:claude-sun", note = "Backdrop clause says pictures pinned in the sky, the first near straight ahead, citing ADR-0198; matches sky.rs/sky.wgsl and the render README bullet" }
@@ -918,7 +918,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "edited the capture.targets entry to add devices with formats at 0.90" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:fd9e55c8d3386ab2", by = "agent:aa-thread", note = "Edited the rendering switches sentence: since 0.196 the samples models are anti-aliased with (ADR-0242); matches rendering.rs, version.rs, the schema snapshots and mock.rs." }
+stamp = { hash = "b3:334d4c993fe1fbe1", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:5e5bdf76142e17eb", by = "agent:mute-thread", note = "Replaced 'No input fires them yet' with the engine firing MIDI bindings since 0.179 from inputs let run them, with releases; value bindings gain the mute and visibility switches; added a Mutes from an action bullet; bus and source deletes remove the hotkeys naming them." }
@@ -942,10 +942,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:2d8a1ceed902c773", by = "agent:claude", note = "profile.get summary now mentions gpu_parts (a model's draw, view depth, shadow maps, surface buffer, each filter; 0.197); checked against profile.rs." }
+stamp = { hash = "b3:66cc3963ffc8f722", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:21c45f616c339859", by = "agent:claude", note = "the snapshot and profile.rs change only a field description; nothing in this section changes" }
+stamp = { hash = "b3:d6b5852185d57885", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -987,7 +987,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:6060fd53a521e384", by = "agent:claude", note = "pairing bullet adds the 0.193 ask (pairing.asked, pairing.answer, pairing.ask_ended, ADR-0235)" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:026d0ef8ef4b0843", by = "agent:claude", note = "pairing bullet adds the 0.193 ask (pairing.asked, pairing.answer, pairing.ask_ended, ADR-0235)" }
+stamp = { hash = "b3:b9973325a474287d", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/filter.rs"]
 stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "File filters on master/output chains, whole PR: the graph and mock refuse only scene, source and bus references on a master or output filter, the engine loads their assets (live.rs sync_assets), Add filter offers Apply LUT there; protocol 0.79 (version.rs, the versions entry, FilterOwner::Master's doc, snapshots regenerated). Tests: chain.rs the_output_stage_reads_its_filters_assets, tests/sources.rs a_master_or_output_filters_asset_is_loaded_for_its_chain, graph master_and_output_chains_are_validated, mock a_master_or_output_filter_may_name_a_file (review N1). Main brought #1144 (protocol and core README split into topic sections), #1111 (item effects in canvas space, 0.76), #1122 (depth of field, 0.77), #1127 (shared values, 0.78) and smaller PRs; this branch's change, file filters (asset references) allowed on master and output chains at protocol 0.79, still reads right in the merged text." }
@@ -996,7 +996,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Edited: since 0.99 item.set_timing and the three easings; mock and fixtures match" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:970c5eb83de72131", by = "agent:claude", note = "profile.get summary now mentions gpu_parts (a model's draw, view depth, shadow maps, surface buffer, each filter; 0.197); checked against profile.rs." }
+stamp = { hash = "b3:32c8c1ae0da1f9b5", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/frames.rs"]
 stamp = { hash = "b3:5fc2e1a197c77868", by = "agent:release-thread", note = "Queries bullet adds video.frames and the frame sheet scene.switch_and_watch answers with; the protocol inputs add frames.rs (FrameStrip, FrameSheet, SheetFrame), both ops in command.rs, query.rs and envelope.rs, plugin scopes, fixtures and snapshots; control README notes the mock answers both with internal. Renumbered to tentative 0.78 (0.76 and 0.77 held by other PRs), restoring item.set_locked's since 0.71; main merged up to #1109 with nothing there touching frame sheets. | merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); video.frames now says protocol 0.82 beside main's shared values at 0.78 | merge: wave/alpha4 into #1080 (protocol 0.82): the merge brought into crates/jstream-protocol/src/frames.rs no merged PR, only the conflict resolution. The protocol summary keeps #1080's frame-sheet clause (0.82) beside #1125's item.set_motion (0.81); snapshots, fixtures and frames.rs match. | merge: main into wave/alpha4 (second sync): main didn't change crates/jstream-protocol/src/frames.rs. ARCH#protocol has #1041's Codec downloads bullet (0.69) beside the wave's 0.80 to 0.86 clauses; mock, snapshots and protocol sources match." }
@@ -1038,7 +1038,7 @@ stamp = { hash = "b3:0abc1408609095ff", by = "agent:claude", note = "Edited: sin
 stamp = { hash = "b3:53a91a0fd2352131", by = "agent:claude", note = "kind.rs's new ParamType::Looks (0.156) and its schema, now with a control-character pattern and bytes note, and the examples.snap fixture that shows it; the protocol section's account holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:db104e70ed543a52", by = "agent:claude", note = "profile.get summary now mentions gpu_parts (a model's draw, view depth, shadow maps, surface buffer, each filter; 0.197); checked against profile.rs." }
+stamp = { hash = "b3:4a31fcf785b8889a", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/live.rs"]
 stamp = { hash = "b3:b65a3df1b54eeca5", by = "agent:release-alpha13", note = "merge: Merged #1744 (ADR-0213: live filter settings, opacity, source and master faders and sends) into the alpha.13 train at bd7644b; its protocol 0.180 is renumbered 0.183 after the train's 0.178 to 0.182. Checked that every line #1744 added to this section is in the merged text, apart from the renumbered version mentions and the WS-05 row, which now carries both #1744's live-drag text and #1697's mapping text | merge: Merged main after #1699 landed there as protocol 0.179 (profile.get's GPU submits per frame); it merged cleanly beside the train apart from the versions paragraph. The train moves its own versions up one (39a9…: 0.180 shows, 0.181 several actions per key or trigger, 0.182 PTZ axes, 0.183 timer restart, 0.184 live drags), and the versions paragraph lists 0.184 down to 0.177 with #1699's 0.179 in place. Re-read this section's version mentions after the shift: each names its feature's new number | kept from the merged side: Live values bullet renumbered to since 0.180; the content is unchanged and still matches live.rs and mock.rs" }
@@ -1080,7 +1080,7 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:7b10774d4698b759", by = "agent:claude-audio-picker", note = "capture.targets line now names the 0.194 audio devices; re-read the rest against query.rs, version.rs and fixtures | merge: Merging the train brings #1805 (min_model_resolution and any whole model_resolution percentage, ADR-0241) at protocol 0.194, so this PR's audio device targets move to 0.195; the capture.targets line now says (0.195) for the audio devices, beside #1805's 0.194 rendering line" }
+stamp = { hash = "b3:81f511726060df49", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/rendering.rs"]
 stamp = { hash = "b3:0c4d4f6146b4e355", by = "agent:aa-thread", note = "Edited the rendering switches sentence: since 0.196 the samples models are anti-aliased with (ADR-0242); matches rendering.rs, version.rs, the schema snapshots and mock.rs." }
@@ -1107,7 +1107,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Proto
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3ab76a94220a2167", by = "agent:claude", note = "profile.get summary now mentions gpu_parts (a model's draw, view depth, shadow maps, surface buffer, each filter; 0.197); checked against profile.rs." }
+stamp = { hash = "b3:a037cb91a6dc76de", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1872,7 +1872,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "edited the capture.targets bullet to name the mock webcam and its two formats" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:fd9e55c8d3386ab2", by = "agent:aa-thread", note = "Edited the mock's studio.set_rendering refusals to name a model_antialiasing outside MODEL_ANTIALIASING, matching mock.rs and the engine (ADR-0242); re-read the surrounding mock behaviour list." }
+stamp = { hash = "b3:334d4c993fe1fbe1", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:5e5bdf76142e17eb", by = "agent:mute-thread", note = "Mock section now lists source.mute and bus.mute as applied like item.show (rev, no undo step, unchanged emits nothing, not_found), bus among the deletes that remove bindings, and source and bus among a hotkey's checked named objects; checked against mock.rs." }
@@ -1911,7 +1911,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "the mock's capture.targets gains MOCK_DEVICE with two formats; the purpose still holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:fd9e55c8d3386ab2", by = "agent:aa-thread", note = "Re-read in full: mock.rs only gains studio.set_rendering's refusal of a model_antialiasing outside MODEL_ANTIALIASING (ADR-0242); the trait, mock and client contents listed still hold." }
+stamp = { hash = "b3:334d4c993fe1fbe1", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:5e5bdf76142e17eb", by = "agent:mute-thread", note = "Re-read the contents list: mock.rs and mock/audio.rs gained the mute actions and bus_muted; the list of files and roles holds." }
@@ -1974,7 +1974,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, history.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on 0013-command-model.md, RULES.md#R-API-004, README.md#batches, matching what it relies on" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8a8d9e5e1bf4b06b", by = "agent:claude", note = "engine.rs only passes the collection's base rate to the draft planner for preview.subscribe; nothing this section says about that changed" }
+stamp = { hash = "b3:b830845fbdccb299", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:3396a70c4ea3f458", by = "agent:lane-d", note = "collection.* dispatch through collection_call before the generic path; the call flow, saving after batches and audit described here still hold. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Re-read: no call changed; state.changed from the engine's own upgrade is described in Snapshots and Undo, and the calls' result shapes are as written." }
@@ -1998,7 +1998,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:bed209a5fa5e3ce3", by = "agent:claude", note = "ST5: the Engine bullet now says set_show_scene saves the collection file at once (Shared::save_marker, #1748) and that State::set_show_scene_item_shown shows and hides the show scene's items for the runner; checked against engine.rs." }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8a8d9e5e1bf4b06b", by = "agent:claude", note = "engine.rs only passes the collection's base rate to the draft planner for preview.subscribe; nothing this section says about that changed" }
+stamp = { hash = "b3:b830845fbdccb299", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:0e08de8c8f119e9c", by = "agent:claude", note = "ST5: the Engine bullet now says set_show_scene saves the collection file at once (Shared::save_marker, #1748) and that State::set_show_scene_item_shown shows and hides the show scene's items for the runner; checked against engine.rs." }
@@ -2127,7 +2127,7 @@ stamp = { hash = "b3:e3e51b3180721327", by = "agent:release-alpha13", note = "me
 stamp = { hash = "b3:3252a4c530fbf708", by = "agent:claude", note = "Added ADR-0203: motion replace via Offsets::on/base, effect and light/sky replace before adds (materials add-only), value bindings sum adds onto last moved replace or Graph::stored_value with enabled, camera replace pulled by amount" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8a8d9e5e1bf4b06b", by = "agent:claude", note = "engine.rs only passes the collection's base rate to the draft planner for preview.subscribe; nothing this section says about that changed" }
+stamp = { hash = "b3:b830845fbdccb299", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/follow.rs"]
 stamp = { hash = "b3:d555833a9c49c454", by = "agent:claude", note = "Added ADR-0203: motion replace via Offsets::on/base, effect and light/sky replace before adds (materials add-only), value bindings sum adds onto last moved replace or Graph::stored_value with enabled, camera replace pulled by amount" }
@@ -2193,7 +2193,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:90fc136cabb7353b", by = "agent:claude", note = "Opus test now checks a controller drawn once (a held note is let go when the sender falls silent); tests list reworded to each MIDI message once | merge: #1828 rewrote the webcam capture text (auto frame rate, NV12 first) in this section; re-read, it doesn't touch the JTunnel receiver paragraph, which still holds | kept from the merged side: live.rs: a webcam with fps 0 now follows the program rate like a browser page; the Live sources bullet says so" }
+stamp = { hash = "b3:331d00ab59635845", by = "agent:claude", note = "JTunnel receiver paragraph: added the 4 MiB receive buffer and the read-up-to-64-waiting-datagrams batching; the rest (subscribe, names, discovery, state) unchanged by this diff" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:b0dde17f176fcfac", by = "agent:claude", note = "ST5: snapshot.rs plans the program through plan_program with the studio's show fades, transition.rs adds ShowFade, activity.rs adds the show scene as an audio root; the Snapshot bullet's description of plan, compose and keyframe drawing holds, and the details sit in Snapshots, Program scene and Audio routing." }
@@ -2208,19 +2208,19 @@ stamp = { hash = "b3:f03522a249ff7662", by = "agent:cockpit-demo", note = "re-re
 stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "merge: #1293 split this out of Purpose. Re-read it against this branch: live.rs, snapshot.rs and frames.rs gain frame slots and sheet pinning, which the Live sources, Snapshots and Frame sheets design sections describe. This summary still holds. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/mod.rs"]
-stamp = { hash = "b3:fd0aedee56fc2adc", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
+stamp = { hash = "b3:0ac611fba05ebc5c", by = "agent:claude", note = "JTunnel receiver paragraph: added the 4 MiB receive buffer and the read-up-to-64-waiting-datagrams batching; the rest (subscribe, names, discovery, state) unchanged by this diff" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/names.rs"]
 stamp = { hash = "b3:8f74417d2e85aef0", by = "agent:release-alpha13", note = "Re-read after the train merge: the jtunnel names text lists both the train's PTZ axis (Wide Zoom) and the mute/visibility names (Mic Mute, Logo Visible), and MidiFeed::alive marking a sender alive, matching jtunnel/names.rs and the receiver. | merge: Merge of #1784 at e8df220 (JTunnel mDNS listener and one live sender, ADR-0221) into the alpha.13 train, after #1711/#1772's per-sender MIDI switch: jtunnel.json's example now carries both midi and live, the desktop Settings list shows both the MIDI tick and Make live, and the setting test gains live: None; re-read, the live-sender text concerns data and audio readers and agrees with ADR-0220's MIDI gate | kept from the merged side: names.rs's target_label now names a PTZ axis as camera and axis; added that to the names packet bullet. The rest is untouched by this change. | kept from the merged side: Receiver: the mDNS listener text holds; alias text replaced by: an empty network_audio sender records the first accepted (Receiver::sender), unnamed readers already read it; state put under the sender's name only; checked against jtunnel/mod.rs, names.rs back to the train's" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/tests.rs"]
-stamp = { hash = "b3:fe75a64a7c6fa6ed", by = "agent:claude", note = "Opus test now pre-codes its frames, sends them on a 5 ms schedule and puts its controller at frame 100; the tests list still describes it" }
+stamp = { hash = "b3:1a4c89085bf52f17", by = "agent:claude", note = "JTunnel receiver paragraph: added the 4 MiB receive buffer and the read-up-to-64-waiting-datagrams batching; the rest (subscribe, names, discovery, state) unchanged by this diff" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:631f38c36d80f7f5", by = "agent:claude", note = "live.rs: a webcam with fps 0 now follows the program rate like a browser page; the Live sources bullet says so" }
+stamp = { hash = "b3:d87fd2319e11c1bc", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:74fa00c055b9ad15", by = "agent:grok", note = "model_layer_shares now also requires two or more sharing models, so a lone model keeps its windowed layer and depth (ADR-0257 decision 7); the section's sources and contents are unchanged. | kept from the merged side: Only ADR references in comments moved to ADR-0255" }
+stamp = { hash = "b3:b4e41e670dc6a781", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:21fd4f392d245f9c", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
@@ -2244,7 +2244,7 @@ stamp = { hash = "b3:f893dad728d37a4d", by = "agent:smooth-paths", note = "keyfr
 stamp = { hash = "b3:340cab5f57cb3721", by = "agent:smooth-paths", note = "keyframes.rs gains path, refusal and orbit tests under the keyframe scenes it already lists; the rest are constructor fields" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:3b866550d5e67ae8", by = "agent:release-alpha13", note = "Re-read after the train merge: the test list carries both mute.rs and show_scene.rs and the train's PTZ, seek and live-value tests; tests.rs only adds the mute module. | merge: Merge of #1786 at 01a9218 (scene folders, schema 23) into the alpha.13 train as protocol 0.190 with its ADR renumbered 0219 to 0222 (#1774 took 0219): re-read; where both sides edited a section their hunks are disjoint and compose (the train's mute, show, MIDI-gate and layer text beside this PR's folder-owner text), and every link now names ADR-0222 | merge: Merge of #1786's round 2 head 97292fe (its own train merge at 2c8fbfc and the ADR-0222 renumber, both already in the train) over its r1 fold: the merge changed no text or code, only the stamps it brought for #1786's branch; re-read, the section matches the train with #1721's 0.189 and #1786's 0.190 | kept from the merged side: tests.rs: the output stream profile test also asserts the encoder is named and software with the fakes; preview/mod.rs gains hardware_tests. The section's list of what the tests cover holds. | merge: Merged #1694, which changed one drop-counter expectation in tests.rs; this branch's side only renumbers a comment to protocol 0.177. The test file list holds. | merge: Merged #1717 (source.seek, media duration_ms, a warm upcoming scene; protocol 0.177) and two UI changes. This branch's side is unchanged apart from its protocol number, now 0.178; engine.rs's encoder_status preview count and main's seek handling do not touch each other, and this section holds for both. | merge: Merged #1681 (model resolution as a rendering switch, protocol 0.178), #1724, #1719 and #1715. In core that changed resolution.rs, the profile meter and a few lines of pipeline.rs and engine.rs for the model size; nothing in Program::encoders, the preview hardware slot or encoder_status moved. This branch's side changes only its protocol number, now 0.179, and the section holds for both. | merge: Merged #1712 (an internal show scene drawn over program), #1726 and #1735. In core that added the show scene to engine.rs, snapshot.rs and studio.rs with its tests; it does not touch encoder_status, the preview hardware slot or Program::encoders, and this branch's side is unchanged (protocol stays 0.179). The section holds for both. | merge: Merged #1699 (profile.get counts each drawing thread's GPU submits, protocol 0.179). In core that added a submits count to the profile meter and one line each in preview/mod.rs and pipeline.rs where a frame is metered; nothing in Program::encoders, the preview hardware slot or the staged streams moved. This branch's side changes only its protocol number, now 0.180, and the section holds for both. | merge: Train merge of #1701 at c5d5258 (add or replace mappings, audio inputs): re-read; #1701's added lines are present, its protocol bump renumbered 0.177 to 0.186 (version paragraph, since notes), and the core and graph value-binding text keeps #1709's PTZ axis sentences beside #1701's add/replace text. | kept from the merged side: Re-read the Tests list against the new tests: added sources.rs's a_seek_holds_through_the_switch_that_shows_the_file (duration_ms 1000 from the container, seek before and after the switch, seek on a held upcoming-scene file, not_found) and warm_scenes.rs's the_upcoming_scene_is_warm_past_the_budget_and_the_gpu_limit; the duration_ms: None lines in tests.rs, captures.rs and source_sizes.rs change no behaviour tested. | kept from the merged side: Added src/tests/show_scene.rs to the list and what it checks: overlay over program and a fade, hidden, other output size, lists and refusals | merge: #1717's tests merged beside show_scene.rs | kept from the merged side: Re-read: the listed core test files changed only by folder: None and scene_id: None in TimelineInfo and folder.create literals; no test was added or dropped there, so the list holds. | Merged the alpha.13 train at c616f3f (preview.show and request_keyframe at 0.188, ADR-0217 direct encoders, the fly camera and mapping panels): its text here is kept as the train stamped it, it touches no scene-folder code (scenes.rs, organise.rs, the mock), and the only combined text is the versions paragraph, 0.190 above the train's 0.188." }
+stamp = { hash = "b3:03938ad60dcd7686", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/activity.rs"]
 stamp = { hash = "b3:1f503152ce8ea35d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2271,7 +2271,7 @@ stamp = { hash = "b3:d3020011a2ccbca3", by = "agent:cockpit-demo", note = "re-re
 stamp = { hash = "b3:d99fc78658a04b8a", by = "agent:claude", note = "ST5: the list gains show_scene.rs's overlay fade tests (own effect over a program fade, the runner's fade length, cut, reversed), events.rs dropping events naming the show scene, and collection.rs's show scene marker saved on set and loaded; the motion test from #1712 is kept." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/cpu_pipeline/captures.rs"]
-stamp = { hash = "b3:632266016148497f", by = "agent:claude-audio-picker", note = "Added desktop_audio_with_a_device_records_that_output to the audio tests list; capture_targets_lists_the_displays_then_the_windows_then_the_devices now also checks the fake mic and speakers" }
+stamp = { hash = "b3:8923046731c3b351", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/cpu_pipeline/hardware_sessions.rs"]
 stamp = { hash = "b3:5630bdea3506e652", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2334,10 +2334,10 @@ stamp = { hash = "b3:169cf336925477d0", by = "agent:release-alpha13", note = "me
 stamp = { hash = "b3:51909fec2e320851", by = "agent:claude", note = "Re-read after the train merges: the shows tests in tests/shows.rs are listed in the Shows section; this list's descriptions still hold. | kept from the merged side: Re-read: the listed core test files changed only by folder: None and scene_id: None in TimelineInfo and folder.create literals; no test was added or dropped there, so the list holds. | Merged the alpha.13 train at c616f3f (preview.show and request_keyframe at 0.188, ADR-0217 direct encoders, the fly camera and mapping panels): its text here is kept as the train stamped it, it touches no scene-folder code (scenes.rs, organise.rs, the mock), and the only combined text is the versions paragraph, 0.190 above the train's 0.188." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/source_sizes.rs"]
-stamp = { hash = "b3:461963d8db32882c", by = "agent:st6-docs", note = "Re-read the Tests list against the new tests: added sources.rs's a_seek_holds_through_the_switch_that_shows_the_file (duration_ms 1000 from the container, seek before and after the switch, seek on a held upcoming-scene file, not_found) and warm_scenes.rs's the_upcoming_scene_is_warm_past_the_budget_and_the_gpu_limit; the duration_ms: None lines in tests.rs, captures.rs and source_sizes.rs change no behaviour tested." }
+stamp = { hash = "b3:ff0e61b1d30c797f", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:6a94cfaa14083b23", by = "agent:claude", note = "tests now expect a webcam's auto spec to carry canvas_fps 30; the tests list notes the canvas-rate and NV12 choice" }
+stamp = { hash = "b3:10351ab8a790985b", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/timelines.rs"]
 stamp = { hash = "b3:0d08975a9e2933d8", by = "agent:scene-folders", note = "Re-read: the listed core test files changed only by folder: None and scene_id: None in TimelineInfo and folder.create literals; no test was added or dropped there, so the list holds. | Merged the alpha.13 train at c616f3f (preview.show and request_keyframe at 0.188, ADR-0217 direct encoders, the fly camera and mapping panels): its text here is kept as the train stamped it, it touches no scene-folder code (scenes.rs, organise.rs, the mock), and the only combined text is the versions paragraph, 0.190 above the train's 0.188." }
@@ -2394,7 +2394,7 @@ stamp = { hash = "b3:34acd8d83a29caa6", by = "agent:claude", note = "Re-read eng
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8a8d9e5e1bf4b06b", by = "agent:claude", note = "engine.rs only passes the collection's base rate to the draft planner for preview.subscribe; nothing this section says about that changed" }
+stamp = { hash = "b3:b830845fbdccb299", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
 stamp = { hash = "b3:1b4bab45ab886418", by = "agent:claude", note = "Re-read Engine and sessions: scene.drawn_camera runs to completion inside call like other queries; nothing here changes | merge: The train merge brought fixed_aperture (a SceneCamera field, ADR-0223; snapshot.rs light_camera sets it false) and the collection-load channel fix (engine.rs wake_values on load); re-read: no design statement touched by either side; drawn camera read lock-free. | merge: Merged the alpha.13 train at a2b0855 (#1789 warp arrival fades ADR-0224, #1792 Show Next button, #1794 light CI for non-main PRs ADR-0231): none of it touches the drawn camera or this section's text; snapshot.rs's change is in draw_sky_of and arrival_light, outside the colour-pass notes. Re-read: holds. | kept from the merged side: lib.rs back to the train's; design holds" }
@@ -2418,7 +2418,7 @@ stamp = { hash = "b3:7a9eeaca528ab36b", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:69bdfd1ecd124a00", by = "agent:claude", note = "ST5: Subscribers::follow keeps the show scene and its timelines (Hidden::of) as each change and plan leaves them, and emit drops scene.keyframe_changed and timeline.changed naming it and timeline.cue_fired of its timelines; state.changed still goes out; matches events.rs and its tests." }
 
 ["CRATE-jstream-core#events"."dep:crates/jstream-protocol/README.md#events"]
-stamp = { hash = "b3:93c2270d8cf2acf1", by = "agent:release-alpha13", note = "Re-read against the new show.changed event: the engine does not emit it yet (no show runner until ST1), so the engine's event list stays accurate. | merge: Re-read against the merged protocol events section, where #1717 adds source.size_changed's duration_ms and this PR moves show.changed to 0.178: the engine's event list holds; show.changed is not emitted until the runner. | merge: Re-read against the merged protocol events section, where show.changed now says 0.179 (#1681 took 0.178): the engine's event list holds; show.changed is not emitted until the runner. | merge: Merged main after #1699 landed there as protocol 0.179 (profile.get's GPU submits per frame); it merged cleanly beside the train apart from the versions paragraph. The train moves its own versions up one (39a9…: 0.180 shows, 0.181 several actions per key or trigger, 0.182 PTZ axes, 0.183 timer restart, 0.184 live drags), and the versions paragraph lists 0.184 down to 0.177 with #1699's 0.179 in place. Re-read this section's version mentions after the shift: each names its feature's new number | kept from the merged side: Re-read against protocol#events' change (source.size_changed gains duration_ms): this section covers subscription queues and ordering only, which an extra optional field doesn't change; holds." }
+stamp = { hash = "b3:3e35e0564e307289", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#events"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:0e08de8c8f119e9c", by = "agent:claude", note = "ST5: Subscribers::follow keeps the show scene and its timelines (Hidden::of) as each change and plan leaves them, and emit drops scene.keyframe_changed and timeline.changed naming it and timeline.cue_fired of its timelines; state.changed still goes out; matches events.rs and its tests." }
@@ -2427,7 +2427,7 @@ stamp = { hash = "b3:0e08de8c8f119e9c", by = "agent:claude", note = "ST5: Subscr
 stamp = { hash = "b3:bfa9a4fc540d5bc2", by = "agent:issues-thread", note = "#1538 only changes when take_samples (engine.rs) reads each frame-sheet picture: never sooner than interval_ms after the previous one. Re-read the Frame sheets section; added that overdue pictures are taken an interval apart (engine::sample_due), so a late sheet runs longer; the at_ms and switch_and_watch text still holds." }
 
 ["CRATE-jstream-core#frame-sheets"."dep:crates/jstream-protocol/README.md#queries"]
-stamp = { hash = "b3:e0ae04d19dd63ab7", by = "agent:claude", note = "queries changed only the network unsupported description (Opus frames refused); frame sheets don't read it" }
+stamp = { hash = "b3:ce981cfb1a795e36", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#frame-sheets"."file:crates/jstream-core/src/frames.rs"]
 stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "Shared::sample now pins each slot's frame (Shot::pin) and draw_sheet draws through View.pinned, so a painted source's tile shows it as taken; the text says so, and at_ms is again the time each tile shows (new test a_sheet_shows_a_painted_source_as_each_picture_was_taken)." }
@@ -2460,7 +2460,7 @@ stamp = { hash = "b3:d7cfd4c7dc40542e", by = "agent:issues-thread", note = "Edit
 stamp = { hash = "b3:07423ff281328e13", by = "agent:claude", note = "Re-read the jstream-live paragraph: the ticker also moves the show's audio faders under the same collection lock (live_tick, clock_moved); no new lock. | kept from the merged side: merged #1711's head a0278b0 (alpha.13 train, protocol 0.187) under ADR-0202's data triggers, now 0.189: values-thread paragraph names MIDI action bindings and data triggers and the live data leaf lock read last; matches engine.rs" }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8a8d9e5e1bf4b06b", by = "agent:claude", note = "engine.rs only passes the collection's base rate to the draft planner for preview.subscribe; nothing this section says about that changed" }
+stamp = { hash = "b3:b830845fbdccb299", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2469,7 +2469,7 @@ stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:50e82dc508a130ff", by = "agent:claude", note = "merged #1711's head a0278b0 (alpha.13 train, protocol 0.187) under ADR-0202's data triggers, now 0.189: values-thread warn and bound-action debug lines now name data triggers, which run through the same path (engine.rs 'a bound action failed')" }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8a8d9e5e1bf4b06b", by = "agent:claude", note = "engine.rs only passes the collection's base rate to the draft planner for preview.subscribe; nothing this section says about that changed" }
+stamp = { hash = "b3:b830845fbdccb299", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2523,7 +2523,7 @@ stamp = { hash = "b3:8075d6481df3afad", by = "agent:claude", note = "Edited Movi
 stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audio inputs open while the stage runs, including while an H.264 program preview is open (Jeff chose the OBS behaviour)." }
 
 ["CRATE-jstream-core#privacy"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8a8d9e5e1bf4b06b", by = "agent:claude", note = "engine.rs only passes the collection's base rate to the draft planner for preview.subscribe; nothing this section says about that changed" }
+stamp = { hash = "b3:b830845fbdccb299", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#program-scene"."body"]
 stamp = { hash = "b3:5861d316fb7d1b6d", by = "agent:aa-thread", note = "Edited the 3D rendering switches paragraph: model_antialiasing outside MODEL_ANTIALIASING is invalid_argument, and a file leaving it out reads 4 samples (ADR-0242); checked against engine.rs and rendering.rs." }
@@ -2607,7 +2607,7 @@ stamp = { hash = "b3:dd9dbcda681737d4", by = "agent:claude", note = "Re-stamped 
 stamp = { hash = "b3:51909fec2e320851", by = "agent:claude", note = "Re-stamped after the train merges dropped this PR's stamp. Re-read the audio clip paragraph and test list against show_audio.rs, shows.rs and tests/shows.rs: opacity-0 show-audio items for when_shown or media sources, seeks, the floor, live values under gestures and bindings, hand takeover, the release on stop, a clip on a second track keeping its source up, and no faders moved in rehearsal. | kept from the merged side: Re-read: tests/shows.rs changed only by folder: None in a TimelineInfo literal; holds. | Merged the alpha.13 train at c616f3f (preview.show and request_keyframe at 0.188, ADR-0217 direct encoders, the fly camera and mapping panels): its text here is kept as the train stamped it, it touches no scene-folder code (scenes.rs, organise.rs, the mock), and the only combined text is the versions paragraph, 0.190 above the train's 0.188." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:9596f8d0d0deacbe", by = "agent:grok", note = "A skipped model's layer is cleared and names an empty box, and any window it had is dropped. The sRGB linear draw is unchanged. | kept from the merged side: Pass-through sentence now cites ADR-0255 for the turned/flipped case; ADR-0249 is back as merged" }
+stamp = { hash = "b3:907a5c08ab5aabfd", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2615,14 +2615,14 @@ stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "Th
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#geometry"]
 stamp = { hash = "b3:c802a93fc0f13af0", by = "agent:3d-groups", note = "Dependency jstream-protocol#geometry reworded how GroupPose writes angles back (B1); the snapshot section's 3D groups sentence holds." }
 
-["CRATE-jstream-core#snapshots"."dep:docs/adr/0257-models-in-one-scene-are-one-depth.md"]
-stamp = { hash = "b3:15b39da34eb4a138", by = "agent:grok", note = "A hull with glass still writes depth; blended fragments are tested with no half-opacity cutoff." }
+["CRATE-jstream-core#snapshots"."dep:docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md"]
+stamp = { hash = "b3:194faaebd60d25f3", by = "agent:claude", note = "Re-read against ADR-0259: shared models draw in linear light; the bloom test now uses built-in shapes; a faded or additive model writes no depth; a model whose blend reads under it keeps its layer; program's layer only when its scene shares" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/audio_sources.rs"]
 stamp = { hash = "b3:3a4b70d1f92163a7", by = "agent:claude-audio-picker", note = "Audio sources: an audio_input with a device records Input, desktop_audio with a device records OutputLoopback, without one DefaultOutputLoopback; edited" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/chain.rs"]
-stamp = { hash = "b3:f9aeb5bcff9970d8", by = "agent:grok", note = "A skipped model's layer is cleared and names an empty box, and any window it had is dropped. The sRGB linear draw is unchanged. | kept from the merged side: Only ADR references in comments moved to ADR-0255; the section already cites it" }
+stamp = { hash = "b3:478cce03b7d127c5", by = "agent:claude", note = "Re-read against ADR-0259: shared models draw in linear light; the bloom test now uses built-in shapes; a faded or additive model writes no depth; a model whose blend reads under it keeps its layer; program's layer only when its scene shares" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/effect_packs.rs"]
 stamp = { hash = "b3:2dea51e38948ab0c", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Extended the upgrade paragraph to shader sources (Migration, ShaderSource::migrate, live sync after) and said a shader source loads before its pack verbatim; checked against effect_packs.rs, engine.rs and the new test; dropped the not-yet line for sources. | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Replaced 'not migrated yet' with the upgrade: older-version settings through Effect::migrate, fitted to the kind, newer ones kept, one revision with state.changed from client engine, saved, logged in undo history; checked against install_effects and Graph::upgrade_filters." }
@@ -2637,7 +2637,7 @@ stamp = { hash = "b3:7493aa67968d72f1", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:7340afc60977b334", by = "agent:lane-d-wave-sync", note = "Edited: the follow camera comes from the scene's first enabled follow_pointer effect, follow filters don't block flattening, and a scene with a follow and no camera draws through the framing camera (ADR-0120 d2-d3). | merge: Main→wave sync brought #1460 (the engine draws a 3D scene's view depth for depth_fog, ADR-0143; kinds.rs adds depth_filter_descriptors beside the wave's follow_pointer, chain.rs/snapshot.rs feed depth); re-read the merged section: main's view-depth text and the wave's blending-space background sentence both hold | kept from the merged side: Re-read: the view-depth paragraph (Pass::view_depth, draw_view_depth, Chains::drew_depth, run_one handing it to depth-aware filters) now says a model writes depth whether placed by its layer (ItemBox) or its effects' output (Filtered), matching the B1 fix and the extended test; the scene-lights text from #1458 still holds." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:631f38c36d80f7f5", by = "agent:claude", note = "live.rs: a webcam with fps 0 is rebuilt when the base rate changes, as a browser page is; nothing in this section depends on which kinds follow the rate" }
+stamp = { hash = "b3:d87fd2319e11c1bc", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/model_uploads.rs"]
 stamp = { hash = "b3:761e156c336cdd02", by = "agent:claude", note = "Added the jstream-models paragraph: the program stage's Chains asks the thread for each upload (upload_models_aside, model_uploads.rs added to covers), draws the version before or nothing meanwhile, a refused upload isn't asked again, the thread skips a model a newer one of its source waits behind, uploads owed by a thread that died are refused, other compositors upload inline, and keep_models keeps the warm scenes' models; named the four new tests. live.rs gained only LiveSources::model, a quiet read of a running source's model. Re-read the model, pose and stills paragraphs beside it: they hold." }
@@ -2649,7 +2649,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:74fa00c055b9ad15", by = "agent:grok", note = "Re-read: a lone model keeps its private layer, only two or more share the scene pass and depth, as the section and ADR-0257 say; the fix restores that for a lone model with a card behind it. | kept from the merged side: Only ADR references in comments moved to ADR-0255; the section already cites it" }
+stamp = { hash = "b3:b4e41e670dc6a781", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:59f7faf81423e628", by = "agent:claude", note = "Model maps paragraph now says texture slots resolve one picture each into ModelMaps::textures (ADR-0250); nested pass-through text checked for the 180-degree/flip case" }
@@ -2751,7 +2751,7 @@ stamp = { hash = "b3:50e82dc508a130ff", by = "agent:claude", note = "re-read aft
 stamp = { hash = "b3:359c75f4e17e4a0d", by = "agent:release-alpha13", note = "Re-read against F6b: core outputs now records HEVC and AV1 to MP4; the daemon's recording and receiver tests still describe an H.264 run, which stays true. Re-verified after merging the alpha.13 train (up to d3d82ca), whose stamps were kept; the train's encoder-session text sits beside this change. | merge: Train merges of #1753 r2 (c85053c, overlays come down when a running show is deleted), #1757 r2 (fcea255, seek on jump and rehearse) and #1766 (5569e22, shared preview encode): re-read; each PR's added lines are present, and core#shows' test list combines #1753's 'or the show is deleted' with #1757's upcoming-clip and rehearsal clauses. | kept from the merged side: Dependency change only: core outputs now says a new video session that got no hardware encoder takes a preview stream's session back; the daemon design says nothing about encoder sessions and holds. | kept from the merged side: Dependency change only: core outputs now speaks of several preview hardware sessions; the daemon design does not mention encoder sessions and holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:9596f8d0d0deacbe", by = "agent:grok", note = "Re-read the session and priming notes. They do not restate a skipped model's empty content box. | kept from the merged side: Cites Snapshots only for priming; an ADR link in the pass-through sentence changes nothing it states" }
+stamp = { hash = "b3:907a5c08ab5aabfd", by = "agent:claude", note = "Re-read against the model objects change: engine keeps Objects beside size and depth (Known), source.sizes and source.size_changed carry them as fractions; Source sizes paragraph updated; locking, events and logging unchanged" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:fb916fb4301acdcb", by = "agent:claude", note = "Re-read in full after the train merge. Its stale inputs were core's audit-log and logging sections (mute sentences, MIDI binding debug log), which change nothing it says; its option list names --jtunnel-midi and --ptz-camera, both parsed in args.rs." }
@@ -3507,7 +3507,7 @@ stamp = { hash = "b3:e377cd1ec7217983", by = "agent:claude", note = "Server bull
 stamp = { hash = "b3:bfa973e45abbebf9", by = "agent:claude-audio-picker", note = "Re-read: tools.rs only adds capture.targets guidance for audio_input and desktop_audio device targets" }
 
 ["CRATE-jstream-media#purpose"."body"]
-stamp = { hash = "b3:0179eea7e99e1fe8", by = "agent:claude", note = "Primitive now carries its node's and mesh's names (Primitive::names); 3D models bullet says so" }
+stamp = { hash = "b3:5019031cb3d24fc7", by = "agent:claude", note = "Re-read: Model::objects and Object (named primitives' rest-pose boxes, MAX_OBJECTS 256) added to the rig paragraph" }
 
 ["CRATE-jstream-media#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-media"]
 stamp = { hash = "b3:18137b74917731cc" }
@@ -3531,7 +3531,7 @@ stamp = { hash = "b3:1d2c5fbae960d299" }
 stamp = { hash = "b3:e9781e5c790d4f08", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/model.rs"]
-stamp = { hash = "b3:1e3b522e5af77d07", by = "agent:claude", note = "Primitive now carries its node's and mesh's names (Primitive::names); 3D models bullet says so" }
+stamp = { hash = "b3:df2579b41e5784cd", by = "agent:claude", note = "Re-read: Model::objects and Object (named primitives' rest-pose boxes, MAX_OBJECTS 256) added to the rig paragraph" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/model/pick.rs"]
 stamp = { hash = "b3:29d8d416c70d0f18", by = "agent:claude", note = "Primitive now carries its node's and mesh's names (Primitive::names); 3D models bullet says so" }
@@ -3576,7 +3576,7 @@ stamp = { hash = "b3:c69287ef170e0374", by = "agent:r9bzj2", note = "Re-read aft
 stamp = { hash = "b3:58e5f293bd798f39", by = "agent:f6b", note = "Edited for fmp4's VideoConfig (avc1/avcC, hvc1/hvcC complete arrays, av01/av1C), the ftyp brands, the per-codec first-keyframe rule, HevcDecoderConfig::to_bytes_complete, and removed HEVC/AV1 in MP4 from Not yet. Re-verified after merging the alpha.13 train (up to d3d82ca), whose stamps were kept; the train's encoder-session text sits beside this change." }
 
 ["CRATE-jstream-mux#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:0179eea7e99e1fe8", by = "agent:claude", note = "Only depends on media's purpose; a model primitive's names don't touch muxing" }
+stamp = { hash = "b3:5019031cb3d24fc7", by = "agent:claude", note = "Re-read: depends on jstream-media's purpose, which only gained Model::objects; nothing here uses it, holds" }
 
 ["CRATE-jstream-mux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mux"]
 stamp = { hash = "b3:cc699c75167f9edd" }
@@ -3693,7 +3693,7 @@ stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "macOS para
 stamp = { hash = "b3:3acee7da88d02f8e", by = "agent:grok", note = "The GPU-frame design does not mention crash dumps. The crate-map row gained a minidump and does not change this section." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:94cfdb5449c4d130", by = "agent:grok", note = "GPU frames still composite one scene; texture slots, windowed layers and shared depth are inside that composite. | kept from the merged side: ARCH gpu-pipeline's model texture text changed; GPU frame import is unaffected" }
+stamp = { hash = "b3:20f7bd728b82b765", by = "agent:claude", note = "GPU pipeline section changed only in which models share the scene depth; GPU frame lifetime unaffected" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map, against wave/m3, gains main's MediaDecoders and paths in the platform row, the jstream-browser row, platform-windows without the CEF backend, the outputs row, the ADR-0058 links and the apps row's desktop, daemon and browser-helper text, beside wave/m3's CLAP rows. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. The GPU-frame types and who may use unsafe with them still hold." }
@@ -3705,7 +3705,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:e00ce7603731784e", by = "agent:mac1-planar", note = "GpuFrame summary now mentions GpuFrame::planar and planes(); rest of the contents list unchanged by gpu.rs" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:0179eea7e99e1fe8", by = "agent:claude", note = "Only depends on media's purpose; model primitive names don't touch the platform" }
+stamp = { hash = "b3:5019031cb3d24fc7", by = "agent:claude", note = "Re-read: depends on jstream-media's purpose, which only gained Model::objects; nothing here uses it, holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
 stamp = { hash = "b3:ee2cb26ac3f01c54", by = "agent:vcam-242", note = "depends_on, the VcamSink 'registering is the app's job' and paths.rs citations and lib.rs's doc now cite ADR-0066, which keeps registration in the app and the data-folder rule; crate-map dep changed only by the same swap" }
@@ -4782,7 +4782,7 @@ stamp = { hash = "b3:790f705bb44181ed", by = "agent:claude", note = "Action::Pai
 stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:7b10774d4698b759", by = "agent:claude-audio-picker", note = "Re-read: no call changes beyond capture.targets' listed kinds | merge: Merging the train brings #1805 (min_model_resolution and any whole model_resolution percentage, ADR-0241) at protocol 0.194, so this PR's audio device targets move to 0.195; re-read, this section's text holds with both" }
+stamp = { hash = "b3:81f511726060df49", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#camera-aim"."body"]
 stamp = { hash = "b3:beaf081f013c6b07", by = "agent:ptz-builder", note = "new section for camera_aim.rs: the actions, the query, the checks, binding and plugin classes, matching the code; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -4806,25 +4806,25 @@ stamp = { hash = "b3:0c38de263356370e", by = "agent:claude", note = "0.193 adds 
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:2d8a1ceed902c773", by = "agent:claude", note = "Re-read: gpu_parts is a new optional field (skipped when empty, defaulted when missing) and GpuPart has an Unknown fallback, so 0.197 is an additive minor bump as described; snaps regenerated." }
+stamp = { hash = "b3:66cc3963ffc8f722", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:21c45f616c339859", by = "agent:claude", note = "protocol.snap changed only in the unsupported description; wire forms unchanged, so no protocol minor per this section" }
+stamp = { hash = "b3:d6b5852185d57885", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3ab76a94220a2167", by = "agent:claude", note = "Re-read: gpu_parts is a new optional field (skipped when empty, defaulted when missing) and GpuPart has an Unknown fallback, so 0.197 is an additive minor bump as described; snaps regenerated." }
+stamp = { hash = "b3:a037cb91a6dc76de", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
-stamp = { hash = "b3:c7895c21132ad9c6", by = "agent:claude", note = "profile.get's listed shapes now include GpuPartProfile and GpuPart since 0.197; rest of the calls list unchanged." }
+stamp = { hash = "b3:1aa4cc033a8a89e4", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:026d0ef8ef4b0843", by = "agent:claude", note = "events list names pairing.asked and pairing.ask_ended (0.193); plugin.rs places pairing.answer under never like pairing.start" }
+stamp = { hash = "b3:b9973325a474287d", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/keyframe.rs"]
 stamp = { hash = "b3:0abc1408609095ff", by = "agent:claude", note = "Edited: item.set_timing in the command list and ItemOverride's timing since 0.99; KeyframeTiming and Bezier exported" }
@@ -4845,7 +4845,7 @@ stamp = { hash = "b3:a939919a9223c802", by = "agent:claude", note = "profile.rs 
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:7b10774d4698b759", by = "agent:claude-audio-picker", note = "Re-read: capture.targets and CaptureTargetInfo are still listed; the shape gains no field, only two kinds | merge: Merging the train brings #1805 (min_model_resolution and any whole model_resolution percentage, ADR-0241) at protocol 0.194, so this PR's audio device targets move to 0.195; re-read, this section's text holds with both" }
+stamp = { hash = "b3:81f511726060df49", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/settings.rs"]
 stamp = { hash = "b3:12085313843efe02", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**" }
@@ -4875,7 +4875,7 @@ stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:e0baef463ab704b5", by = "agent:st0-show-format", note = "Re-read against error.rs, id.rs and version.rs: added ShowId to the client-chosen IDs; EntityKind::Show needs no mention here; PROTOCOL_VERSION described generically." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3ab76a94220a2167", by = "agent:claude", note = "Re-read: names PROTOCOL_VERSION without its value; the bump to 0.197 changes nothing stated." }
+stamp = { hash = "b3:a037cb91a6dc76de", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:f51db24756c732a2", by = "agent:claude", note = "lens_blur listed beside CameraView::blur_at (ADR-0223); camera.rs exports it and view() uses it for a fixed-aperture camera." }
@@ -4905,7 +4905,7 @@ stamp = { hash = "b3:f04efc8b542328fd", by = "agent:claude", note = "Added solid
 stamp = { hash = "b3:f939a38d27b421fa", by = "agent:st0-show-format", note = "Re-read against parity.rs and fixtures.rs: the parity collection sets a show twice (empty, then the rich one), and the rejected batches list the show cases added (bookmarks out of order, a cue that switches program, deleting an unknown show); schema snapshots regenerated." }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:970c5eb83de72131", by = "agent:claude", note = "Re-read: the profile fixture now carries gpu_parts and the snaps were regenerated; schema/examples/parity description still holds." }
+stamp = { hash = "b3:32c8c1ae0da1f9b5", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:f4bb9fdc430857e6", by = "agent:release-alpha13", note = "Re-read the fixture and parity descriptions: still accurate with the added second-action, clear-with-action and not_found cases. | merge: The alpha.13 train merged #1716, #1708, #1705, #1681, #1709 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it." }
@@ -4938,7 +4938,7 @@ stamp = { hash = "b3:74597d1be76b6882", by = "agent:scene-folders", note = "Re-r
 stamp = { hash = "b3:058a20509ea722cf", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to filter.rs, output.rs, hotkey.rs, encoder.rs, mix.rs, audio.rs, organise.rs, query.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#contents-state"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:7b10774d4698b759", by = "agent:claude-audio-picker", note = "Re-read: query.rs only gains CaptureTargetKind::AudioInput and AudioOutput and doc text; no state shape changes | merge: Merging the train brings #1805 (min_model_resolution and any whole model_resolution percentage, ADR-0241) at protocol 0.194, so this PR's audio device targets move to 0.195; re-read, this section's text holds with both" }
+stamp = { hash = "b3:81f511726060df49", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#design"."body"]
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now the preface plus Envelope and versioning and Tagging; the other subsections moved out unchanged as their own sections. Re-read: the envelope, handshake, message size, semver rule and tagging hold against envelope.rs, version.rs (can_serve) and lib.rs, the narrowed covers; depends_on keeps R-API-001 and R-API-002, which these two subsections cite; ADR-0013, R-ARCH-006 and R-API-004 moved with the subsections that cite them (#calls, #batches); the schema files moved to #compatibility" }
@@ -4953,10 +4953,10 @@ stamp = { hash = "b3:b1f1a1a0e75365c4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:db104e70ed543a52", by = "agent:claude", note = "Re-read envelope, versioning and tagging: GpuPart is internally tagged by type like every enum, and the 0.197 minor bump fits the can_serve rule stated." }
+stamp = { hash = "b3:4a31fcf785b8889a", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3ab76a94220a2167", by = "agent:claude", note = "Re-read envelope, versioning and tagging: GpuPart is internally tagged by type like every enum, and the 0.197 minor bump fits the can_serve rule stated." }
+stamp = { hash = "b3:a037cb91a6dc76de", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:7fa91f8463ac660e", by = "agent:f6b", note = "Edited: every codec streams (HEVC/AV1 via enhanced RTMP) and records to MP4; ranges, defaults and the output.start failure on a missing encoder unchanged. Re-verified after merging the alpha.13 train (up to d3d82ca), whose stamps were kept; the train's encoder-session text sits beside this change." }
@@ -4971,10 +4971,10 @@ stamp = { hash = "b3:6adfba26f894a42c", by = "agent:claude-settings", note = "Re
 stamp = { hash = "b3:6060fd53a521e384", by = "agent:claude", note = "not_found with entity pairing_ask for an ask that isn't open, as documented" }
 
 ["CRATE-jstream-protocol#events"."body"]
-stamp = { hash = "b3:93c2270d8cf2acf1", by = "agent:release-alpha13", note = "Re-read against event.rs: show.changed is listed with its fields (show_id, change, running, at_ms, bookmark_id?, loop_id?) and ShowChange values; runtime, no rev. | merge: Re-read after the merge: #1717 adds duration_ms to source.size_changed, and show.changed now says 0.178; both match event.rs. | merge: Re-read after the merge: show.changed now says 0.179 (#1681 took 0.178); event.rs's ShowChanged doc matches. | merge: Merged main after #1699 landed there as protocol 0.179 (profile.get's GPU submits per frame); it merged cleanly beside the train apart from the versions paragraph. The train moves its own versions up one (39a9…: 0.180 shows, 0.181 several actions per key or trigger, 0.182 PTZ axes, 0.183 timer restart, 0.184 live drags), and the versions paragraph lists 0.184 down to 0.177 with #1699's 0.179 in place. Re-read this section's version mentions after the shift: each names its feature's new number | kept from the merged side: Re-read source.size_changed against event.rs's duration_ms: added duration_ms? to its signature and replaced the audio-only/no-size claim with when a length becomes known (end of a play when the container didn't say), a change even with an unchanged size." }
+stamp = { hash = "b3:3e35e0564e307289", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#events"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:026d0ef8ef4b0843", by = "agent:claude", note = "event.rs adds PairingAsked and PairingAskEnded, described under Queries › Pairing by asking" }
+stamp = { hash = "b3:b9973325a474287d", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#filters"."body"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -5136,7 +5136,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:6060fd53a521e384", by = "agent:claude", note = "contents now list pairing.answer (actions) and pairing.asked/pairing.ask_ended with PairingAsk/PairingAskOutcome in pairing_ask.rs; lib re-exports them" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:026d0ef8ef4b0843", by = "agent:claude", note = "contents now list pairing.answer (actions) and pairing.asked/pairing.ask_ended with PairingAsk/PairingAskOutcome in pairing_ask.rs; lib re-exports them" }
+stamp = { hash = "b3:b9973325a474287d", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/filter.rs"]
 stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "File filters on master/output chains: PROTOCOL_VERSION placeholder 0.80 (version.rs), FilterOwner::Master's doc and parity.rs's reason; the purpose text holds. | merge: Main brought #1144 (protocol and core README split into topic sections), #1111 (item effects in canvas space, 0.76), #1122 (depth of field, 0.77), #1127 (shared values, 0.78) and smaller PRs; this branch's change, file filters (asset references) allowed on master and output chains at protocol 0.79, still reads right in the merged text." }
@@ -5145,7 +5145,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read against ADR-0129 (keyframe timing in switches into a keyframe, item.set_timing, ease_in/hold/cubic_bezier, protocol 0.99 and schema 9 placeholders); holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:970c5eb83de72131", by = "agent:claude", note = "Re-read: lists envelope, history and live modules only; the new GpuPart/GpuPartProfile in profile.rs and the 0.197 bump don't touch what it states." }
+stamp = { hash = "b3:32c8c1ae0da1f9b5", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/frames.rs"]
 stamp = { hash = "b3:5fc2e1a197c77868", by = "agent:release-thread", note = "Added video.frames to the queries, scene.switch_and_watch to the actions, a Frame sheets bullet for frames.rs (FrameStrip with its limits and check, FrameSheet, SheetFrame), and the frame sheets to the version history. Renumbered to tentative 0.78 (0.76 and 0.77 held by other PRs), restoring item.set_locked's since 0.71; main merged up to #1109 with nothing there touching frame sheets. | merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | merge: wave/alpha4 into #1080 (protocol 0.82): the merge brought into crates/jstream-protocol/src/frames.rs no merged PR, only the conflict resolution. The file list holds: frames.rs (#1080), command.rs, fixtures.rs (scene.switch_and_watch and the item actions both), plugin.rs, lib.rs and query.rs carry the merged motion; version.rs is 0.82. | merge: main into wave/alpha4 (second sync): main didn't change crates/jstream-protocol/src/frames.rs. command.rs, fixtures.rs, lib.rs, plugin.rs and query.rs carry #1041's codec downloads (codec.downloads, codec.download, codec.delete, protocol 0.69, people-only) beside the wave's motion work (0.80 to 0.86); lib.rs's Docs line now names both #motion and #codec-downloads (the one conflict in it). frames.rs is the wave's and unchanged by main." }
@@ -5187,7 +5187,7 @@ stamp = { hash = "b3:0abc1408609095ff", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:53a91a0fd2352131", by = "agent:claude", note = "kind.rs adds ParamType::Looks with check_looks, its constants and JSON Schema; this round adds the schema's propertyNames pattern (no control characters) and a note that names count bytes; the purpose still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:db104e70ed543a52", by = "agent:claude", note = "Re-read: lists envelope, history and live modules only; the new GpuPart/GpuPartProfile in profile.rs and the 0.197 bump don't touch what it states." }
+stamp = { hash = "b3:4a31fcf785b8889a", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/live.rs"]
 stamp = { hash = "b3:b65a3df1b54eeca5", by = "agent:release-alpha13", note = "merge: Merged #1744 (ADR-0213: live filter settings, opacity, source and master faders and sends) into the alpha.13 train at bd7644b; its protocol 0.180 is renumbered 0.183 after the train's 0.178 to 0.182. Checked that every line #1744 added to this section is in the merged text, apart from the renumbered version mentions and the WS-05 row, which now carries both #1744's live-drag text and #1697's mapping text | merge: Merged main after #1699 landed there as protocol 0.179 (profile.get's GPU submits per frame); it merged cleanly beside the train apart from the versions paragraph. The train moves its own versions up one (39a9…: 0.180 shows, 0.181 several actions per key or trigger, 0.182 PTZ axes, 0.183 timer restart, 0.184 live drags), and the versions paragraph lists 0.184 down to 0.177 with #1699's 0.179 in place. Re-read this section's version mentions after the shift: each names its feature's new number | kept from the merged side: Version now 0.180 (0.178 and 0.179 are claimed by open PRs); live.rs doc comment updated; purpose holds" }
@@ -5229,7 +5229,7 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:7b10774d4698b759", by = "agent:claude-audio-picker", note = "Re-read: 0.194 adds two CaptureTargetKind variants and fixtures for them; the crate's purpose is unchanged | merge: Merging the train brings #1805 (min_model_resolution and any whole model_resolution percentage, ADR-0241) at protocol 0.194, so this PR's audio device targets move to 0.195; re-read, this section's text holds with both" }
+stamp = { hash = "b3:81f511726060df49", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/rendering.rs"]
 stamp = { hash = "b3:0c4d4f6146b4e355", by = "agent:aa-thread", note = "Re-read in full: rendering.rs gains RenderFeatures::model_antialiasing and MODEL_ANTIALIASING (ADR-0242), re-exported from lib.rs, and version.rs moves to 0.196; the envelope, history and live contents listed still hold." }
@@ -5256,7 +5256,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Addit
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3ab76a94220a2167", by = "agent:claude", note = "Re-read: lists envelope, history and live modules only; the new GpuPart/GpuPartProfile in profile.rs and the 0.197 bump don't touch what it states." }
+stamp = { hash = "b3:a037cb91a6dc76de", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -5268,7 +5268,7 @@ stamp = { hash = "b3:83762eebb87f7e1a", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to pack.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#queries"."body"]
-stamp = { hash = "b3:e0ae04d19dd63ab7", by = "agent:claude", note = "network's unsupported now described as Opus frames the decoder refused, matching profile.rs and the receiver" }
+stamp = { hash = "b3:ce981cfb1a795e36", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -5280,7 +5280,7 @@ stamp = { hash = "b3:a939919a9223c802", by = "agent:claude", note = "network's u
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:7b10774d4698b759", by = "agent:claude-audio-picker", note = "capture.targets: audio inputs then outputs after the video devices, primary marks the default, fails only when every list fails; edited | merge: Merging the train brings #1805 (min_model_resolution and any whole model_resolution percentage, ADR-0241) at protocol 0.194, so this PR's audio device targets move to 0.195; capture.targets' audio devices now say since 0.195, beside #1805's min_model_resolution text" }
+stamp = { hash = "b3:81f511726060df49", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#shared-values"."body"]
 stamp = { hash = "b3:1a6b4bf810de3cb0", by = "agent:claude", note = "Edited: the tempo.* bullet says a page reads them only with page_api_tempo, never through page_api_values." }
@@ -5319,13 +5319,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:37acdaae728f9ab7", by = "agent:claude", note = "Added the 0.197 entry (UnitProfile.gpu_parts by part) ahead of 0.196; re-read the entry against profile.rs and version.rs." }
+stamp = { hash = "b3:e958a369a35d03e1", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3ab76a94220a2167", by = "agent:claude", note = "Added the 0.197 entry (UnitProfile.gpu_parts by part) ahead of 0.196; re-read the entry against profile.rs and version.rs." }
+stamp = { hash = "b3:a037cb91a6dc76de", by = "agent:claude", note = "Re-read against protocol 0.198: SourceSize/source.size_changed gain optional objects (ModelObject name, min, max fractions of the model box); additive, holds" }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
@@ -5340,7 +5340,7 @@ stamp = { hash = "b3:83fd3bbd406c7796", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to youtube.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:a26cff05e24e2d85", by = "agent:claude", note = "Driven materials paragraph adds set_emissive_strength, set by a replace modifier and applied before the drives' sum (ADR-0259); rest holds" }
+stamp = { hash = "b3:469b9ee5ce8ed9fa", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -5348,8 +5348,8 @@ stamp = { hash = "b3:24c0e2f735f7e770" }
 ["CRATE-jstream-render#design"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
-["CRATE-jstream-render#design"."dep:docs/adr/0257-models-in-one-scene-are-one-depth.md"]
-stamp = { hash = "b3:15b39da34eb4a138", by = "agent:grok", note = "Opaque primitives prepass even on an additive item; blended ones only test, with no alpha cutoff." }
+["CRATE-jstream-render#design"."dep:docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md"]
+stamp = { hash = "b3:194faaebd60d25f3", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/blend.rs"]
 stamp = { hash = "b3:707dce782a77152e", by = "agent:grok", note = "Re-read the composite depth paragraph. Occluders draw first via fs_model, which tests and optionally writes the view-depth texel; blended and additive models only test. The cube/rod test is named." }
@@ -5364,7 +5364,7 @@ stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:9047dbc99dbc7ed8", by = "agent:grok", note = "Re-read the composite depth paragraph. Occluders draw first via fs_model, which tests and optionally writes the view-depth texel; blended and additive models only test. The cube/rod test is named." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:dc0df4be365c93c1", by = "agent:grok", note = "Re-read the composite and scene-depth steps. The depth target is still kept per canvas size; wgpu 30's view owns that texture. Additive model alpha now keeps destination coverage, which this section does not specify. | kept from the merged side: Placement::Layer now notes Image::window; Models paragraph names windowed and seen_box; MSAA and depth target rows say four sizes kept" }
+stamp = { hash = "b3:b585bd61d7e1656c", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:8876931db8ee6e38", by = "agent:mac1-planar", note = "Step 6 says submit transitions both plane textures of a two-plane frame to PRESENT, as convert/mod.rs now does | kept from the merged side: Re-read the submit statements: every submit is made exactly as on main, with a thread-local count beside it. The change adds a per-thread count of the compositor's own GPU submits (jstream_render::submits_on_this_thread), which each drawer's DrawMeter reads at the end of a frame and profile.get reports as DrawerProfile.submits (protocol 0.174). No submit, pass, lock or frame path changes. Re-read after merging main's alpha.11 train, whose conversion and readback now go through Gpu::submit_work and so are counted there. | kept from the merged side: Nv12Converter::submit and the readback ring's submit now go through Compositor::submit_work, so they carry a unit's timestamps when the drawer names one; compositor.rs gained that one wrapper. Nothing drawn, staged or ordered changes: the same command buffers in the same submits under the same lock. The composite, resolve, readback and NV12 steps described here are as before" }
@@ -5694,7 +5694,7 @@ stamp = { hash = "b3:34112162b6e1206d", by = "agent:claude", note = "Re-read the
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "Passes step 1 now describes upload_rgba8_into's smaller texture (box mean in premultiplied linear, rewrite into the same texture, Image::full); the ResourceCache paragraph describes upload_drawn's record_draw measurement, planned first size, power-of-two scale with quarter headroom, 1/16 floor, 256x256 floor and hysteresis, with the lavapipe numbers measured for this change; the resource table still holds." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:14a1a3c32510bbf2", by = "agent:grok", note = "Design keeps the slot textures and the windowed clip, and the shared pass still draws opaque then transparent into the scene depth. | kept from the merged side: Placement::Layer now notes Image::window; Models paragraph names windowed and seen_box; MSAA and depth target rows say four sizes kept" }
+stamp = { hash = "b3:610c2ac2fae0191e", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -5706,7 +5706,7 @@ stamp = { hash = "b3:d3fbff92bbc3e30a", by = "agent:claude", note = "Replayed on
 stamp = { hash = "b3:07ea0a1ced72831c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/depth_resolve.rs"]
-stamp = { hash = "b3:f2e4231a9b32efe9", by = "agent:grok", note = "Design describes draw_shared_models before render_over, and fs_model only for a model that kept its layer." }
+stamp = { hash = "b3:7dd8143517bd263e", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/depth_resolve.wgsl"]
 stamp = { hash = "b3:bce3182b2d04ac90", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
@@ -5736,10 +5736,10 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: the depth of field paragraph now says models blur as their layer is drawn, and a new paragraph describes ModelFocus's four passes (tiles, reach, pack, gather) as built in model/focus.rs and focus/*.wgsl; the resource table lists its layers and scratch" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:a7cf82ca4c83470b", by = "agent:claude", note = "Driven materials paragraph adds set_emissive_strength, set by a replace modifier and applied before the drives' sum (ADR-0259); rest holds" }
+stamp = { hash = "b3:3aedf664bfc856a1", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:1fef8d1d457b942e", by = "agent:grok", note = "Opaque primitives prepass even on an additive item; blended ones only test, with no alpha cutoff. | kept from the merged side: Live textures paragraph now says each is read over its region of the part's coordinates (live_values, sixth vec4), with its test" }
+stamp = { hash = "b3:ed0194c9ccfe4a03", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/msaa.rs"]
 stamp = { hash = "b3:b7725af72ef97cd9", by = "agent:claude", note = "Placement::Layer now notes Image::window; Models paragraph names windowed and seen_box; MSAA and depth target rows say four sizes kept" }
@@ -5751,7 +5751,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited: resources table gains the multisampled model targets and surface resolve pipeline (model/msaa.rs), Models says prepass and Equal shading are per sample with the colour resolved in-pass, and the surface buffer paragraph says the multisampled surface resolves to the nearest sample (ADR-0242); re-read the model, depth-of-field, surface and adapter parts against model/mod.rs, msaa.rs, compositor.rs and gpu.rs." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:017c3886bf0eeaec", by = "agent:claude", note = "Driven materials paragraph adds set_emissive_strength, set by a replace modifier and applied before the drives' sum (ADR-0259); rest holds" }
+stamp = { hash = "b3:dd0f406e47fbb12c", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -5781,7 +5781,7 @@ stamp = { hash = "b3:258406a060552c0b", by = "agent:claude", note = "Nv12Convert
 stamp = { hash = "b3:e653c8257135f3e4", by = "agent:claude", note = "Edited step 3 (the copy and fs_decode draw follow a layer's last item; render's own target is left encoded) and step 4 (with Blending::Srgb the resolve is fs_encoded, decoding the un-premultiplied colour as it writes it), naming the new test. Checked record_composite's decode flag at its two callers, record_resolve's choice of pipeline by blending, and that the one-whole-layer paragraph, the wipe and the layer content passages are unchanged. Also carries the targets branch's lookup-before-set-aside in ensure_targets, which the resources row already describes." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/scene.rs"]
-stamp = { hash = "b3:c133ebb3d7996229", by = "agent:grok", note = "After the shared pass the layer names no content box, so a filter reads the whole picture. The rest of the composite and depth description still matches the code." }
+stamp = { hash = "b3:811f95022d553f79", by = "agent:claude", note = "Re-read: shared pass lists every fully drawn normal model's opaque primitives then all transparent ones (faded and additive items wholly transparent); fs_depth keeps the half-opacity limit for private layers; additive_opaque pipeline removed" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky.rs"]
 stamp = { hash = "b3:e4642391b1fe2cbe", by = "agent:claude-sun", note = "sky.rs/sky.wgsl draw up to four pinned pictures (ADR-0198); lib.rs exports MAX_SKY_PICTURES; the resource table's sky row still holds" }
@@ -6132,7 +6132,7 @@ stamp = { hash = "b3:e2466de961093c0f", by = "agent:grok", note = "Re-read where
 stamp = { hash = "b3:5ef676bebc254917", by = "agent:issues-thread", note = "Added Pixel units (ADR-0211, #1680): px and px/s settings of built-in kinds scaled by the input's texels per extent pixel in VideoFilter::fit before the pass draws, per axis or by the geometric mean, ints rounded, caps kept; border frame_slice, depth kinds and pack effects unscaled; reach in texels, video_filter_outset in extent pixels, pad in texels. Bounded filters now say reach is in input texels." }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:c41be421eaf9de53", by = "agent:grok", note = "Purpose now says two models that can share do so, and one model keeps its windowed layer (ADR-0251) with texture slots (ADR-0250). | kept from the merged side: Image::window, Window, GpuModel::seen_box and cache set_window/draws_small are inside the purpose's scope; nothing it states changed" }
+stamp = { hash = "b3:50ede4ff0214dcfd", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "upstream GPU-frames and pipeline text changed for macOS encode targets and the planar pair; render's purpose (from #1767) already names Nv12Target::plane_textures and gpu_frame | merge: #1767's merged step 4 says the NV12 pass writes GpuFrame::planar pairs too; render's purpose already says it renders into an encode target's plane views, which covers both, so it holds | merge: The train merge brought only #1767, already merged here; render's purpose says it renders into an encode target's plane views, which covers the planar pair, so it holds | merge: Train merge brought #1765 webcam GPU frames, sampled like capture frames; render's purpose covers them and the plane-view NV12 pass, holds | kept from the merged side: Nv12Converter bullet now lists Nv12Target::plane_textures and gpu_frame beside nv12_texture and Nv12Planes; matches convert/mod.rs and the platform's GPU frames section | kept from the merged side: #1767: Nv12Converter bullet lists Nv12Target::plane_textures and gpu_frame beside nv12_texture and Nv12Planes, matching convert/mod.rs; merged the train's #1761, whose ARCH On macOS paragraph (Metal interop, planar targets planned) agrees with it | kept from the merged side: ARCH gpu-pipeline gained a macOS paragraph only; render's purpose is unchanged by it | merge: Train merge of #1767 (db1e07a, two-plane NV12 encode targets): re-read; #1767's added lines are present, no text conflicts. | kept from the merged side: Re-read against the GPU-frames and GPU-pipeline edits, which only add macOS webcams as another IOSurface producer; render still imports Bgra8UnormSrgb frames as before, nothing here changes | merge: Train merge brought #1767: render's NV12 pass writes planar pairs too; the purpose text about sampling capture frames on the engine device covers webcam GPU frames, holds" }
@@ -6141,7 +6141,7 @@ stamp = { hash = "b3:554c388c2e28fd56", by = "agent:mac1-vt", note = "upstream G
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:94cfdb5449c4d130", by = "agent:grok", note = "Purpose now says two models that can share do so, and one model keeps its windowed layer (ADR-0251) with texture slots (ADR-0250). | kept from the merged side: ModelDraw::textures replaces texture; purpose names no field of it" }
+stamp = { hash = "b3:20f7bd728b82b765", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -6152,8 +6152,8 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0073-sources-drawn-at-their-shown-size.md"]
 stamp = { hash = "b3:ce2e7fda649ee5f2", by = "agent:ui-parity", note = "Re-read against #749: the extent is described (Image::extent / set_extent in image.rs, ResourceCache::set_extent in cache.rs, compositor.rs placing by it, the tests.rs pixel test); crops, a legacy scale and a fit mode's aspect count in the extent and the texture is sampled across it; depends_on names ADR-0073. The wave/m1-4 merge changed nothing in this crate." }
 
-["CRATE-jstream-render#purpose"."dep:docs/adr/0257-models-in-one-scene-are-one-depth.md"]
-stamp = { hash = "b3:15b39da34eb4a138", by = "agent:grok", note = "The shared pass writes depth for every opaque primitive, glass on the same model included, and tests faint fragments." }
+["CRATE-jstream-render#purpose"."dep:docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md"]
+stamp = { hash = "b3:194faaebd60d25f3", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/Cargo.toml"]
 stamp = { hash = "b3:d8980baa4f07826b", by = "agent:effects-perf", note = "Re-read against three depth-aware shaders doing less work per pixel and a new [[bench]] in Cargo.toml: the scene, placement, view depth, cache and device descriptions here are about what is drawn, which is the same (the view depth is still 1/w in red, read by the same kinds). No public API changed." }
@@ -6171,7 +6171,7 @@ stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:9047dbc99dbc7ed8", by = "agent:grok", note = "Re-read the 3D model bullet. Layers are still drawn per model and sorted at the centre; the composite now depth-tests them (ADR-0256), so that sort does not pick which surface covers a pixel." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:dc0df4be365c93c1", by = "agent:grok", note = "Re-read the scene and model summary. Additive coverage and the depth-view hold are implementation details the purpose section does not state. | kept from the merged side: Image::window, Window, GpuModel::seen_box and cache set_window/draws_small are inside the purpose's scope; nothing it states changed" }
+stamp = { hash = "b3:b585bd61d7e1656c", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:8876931db8ee6e38", by = "agent:mac1-planar", note = "Nv12Converter bullet now lists Nv12Target::plane_textures and gpu_frame beside nv12_texture and Nv12Planes; matches convert/mod.rs and the platform's GPU frames section | kept from the merged side: lib.rs exports one more function, submits_on_this_thread; the purpose, device opening and SubmitLock text is unchanged by a counter. The change adds a per-thread count of the compositor's own GPU submits (jstream_render::submits_on_this_thread), which each drawer's DrawMeter reads at the end of a frame and profile.get reports as DrawerProfile.submits (protocol 0.174). No submit, pass, lock or frame path changes. Re-read after merging main's alpha.11 train, whose conversion and readback now go through Gpu::submit_work and so are counted there. | kept from the merged side: Nv12Converter::submit and the readback ring's submit now go through Compositor::submit_work, so they carry a unit's timestamps when the drawer names one; compositor.rs gained that one wrapper. Nothing drawn, staged or ordered changes: the same command buffers in the same submits under the same lock. The section's lists of what the crate draws, converts and reads back still hold" }
@@ -6501,7 +6501,7 @@ stamp = { hash = "b3:34112162b6e1206d", by = "agent:claude", note = "lib.rs expo
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "Added upload_drawn/draw_uploads_small to the ResourceCache bullet; the rest (uploads premultiplied Rgba16Float, extents, imports) still holds since a drawn-small upload is still Rgba16Float premultiplied linear, placed at its frame's extent." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:14a1a3c32510bbf2", by = "agent:grok", note = "Purpose now says two models that can share do so, and one model keeps its windowed layer (ADR-0251) with texture slots (ADR-0250). | kept from the merged side: Image::window, Window, GpuModel::seen_box and cache set_window/draws_small are inside the purpose's scope; nothing it states changed" }
+stamp = { hash = "b3:610c2ac2fae0191e", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -6513,7 +6513,7 @@ stamp = { hash = "b3:d3fbff92bbc3e30a", by = "agent:claude", note = "Replayed on
 stamp = { hash = "b3:07ea0a1ced72831c", by = "agent:claude", note = "Replayed on #1812: re-read for block-compressed model textures (bc.rs, BC1/BC3, normal maps RGBA8) and the model source's texture_size; the section's text holds with the earlier items and the GPU parts beside it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/depth_resolve.rs"]
-stamp = { hash = "b3:f2e4231a9b32efe9", by = "agent:grok", note = "Purpose now says unfiltered models share one scene colour and depth, and a filtered, blurred or reflected model keeps its layer." }
+stamp = { hash = "b3:7dd8143517bd263e", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/depth_resolve.wgsl"]
 stamp = { hash = "b3:bce3182b2d04ac90", by = "agent:claude", note = "Rebased onto #1812: re-read for draw_model_and_depth (a model's view depth read from its layer's tested depth, drawn once, timed in the Model part); the section's text holds for both" }
@@ -6543,10 +6543,10 @@ stamp = { hash = "b3:8a958c63a1001f5a", by = "agent:claude", note = "Depth of fi
 stamp = { hash = "b3:66238b4b774c7662", by = "agent:claude", note = "re-read: the 3D model bullet now says draw_model blurs a model by its own depth when the camera has depth of field (ADR-0165); view depth and placement bullets unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:a7cf82ca4c83470b", by = "agent:claude", note = "MaterialDrive gains set_emissive_strength (ADR-0259); the crate's purpose and layering are unchanged" }
+stamp = { hash = "b3:3aedf664bfc856a1", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:1fef8d1d457b942e", by = "agent:grok", note = "The shared pass writes depth for every opaque primitive, glass on the same model included, and tests faint fragments. | kept from the merged side: LiveTexture::region and the material uniform's sixth vec4 are inside the purpose; nothing it states changed" }
+stamp = { hash = "b3:ed0194c9ccfe4a03", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/msaa.rs"]
 stamp = { hash = "b3:b7725af72ef97cd9", by = "agent:claude", note = "Image::window, Window, GpuModel::seen_box and cache set_window/draws_small are inside the purpose's scope; nothing it states changed" }
@@ -6558,7 +6558,7 @@ stamp = { hash = "b3:7837a207c79e93c5", by = "agent:claude", note = "ADR-0197: a
 stamp = { hash = "b3:69e2f84aa82d0b71", by = "agent:aa-thread", note = "Edited: the model paragraph says layers draw multisampled with set_model_antialiasing's count (1 until set, stepping down to what the device draws), colour resolved in-pass, surface resolved to the nearest sample, lit cards single-sampled (ADR-0242); checked against model/mod.rs, msaa.rs, surface_resolve.wgsl, compositor.rs, gpu.rs and the new tests." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:017c3886bf0eeaec", by = "agent:claude", note = "MaterialDrive gains set_emissive_strength (ADR-0259); the crate's purpose and layering are unchanged" }
+stamp = { hash = "b3:dd0f406e47fbb12c", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/panorama_blur.rs"]
 stamp = { hash = "b3:367528b84f143e21", by = "agent:claude", note = "Replayed on #1812: re-read for the panorama blur (sky and probe reflections read once from blurred levels made per chain build, panorama_blur.rs); the section's text holds with the GPU parts and view-depth changes beside it" }
@@ -6588,7 +6588,7 @@ stamp = { hash = "b3:258406a060552c0b", by = "agent:claude", note = "Nv12Convert
 stamp = { hash = "b3:e653c8257135f3e4", by = "agent:claude", note = "Edited the set_blending bullet: the one decode pass is after a layer's last item, and a frame's own target is decoded by its resolve instead. The other bullets on blending, layers and nested scenes hold: a layer is linear either way, as render_into still decodes." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/scene.rs"]
-stamp = { hash = "b3:c133ebb3d7996229", by = "agent:grok", note = "A model layer without Item::depth still writes nothing into the view depth. The shared pass does not change the depth-layer contract this section states." }
+stamp = { hash = "b3:811f95022d553f79", by = "agent:claude", note = "Re-read: models that share draw into the scene colour and depth per ADR-0259; layer path unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky.rs"]
 stamp = { hash = "b3:e4642391b1fe2cbe", by = "agent:claude-sun", note = "SkyDraw.pictures is an array of MAX_SKY_PICTURES (4) SkyPictures drawn bottom first through bindings 7-10 (ADR-0198); the README sky bullet says so and links ADR-0198; golden test covers two pictures; re-read after merging the train's render changes" }
@@ -7095,7 +7095,7 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:ff923b70ae781b73" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:b9c619b27cdea693", by = "agent:claude", note = "Rewrote the 3D orbit and wheel/fly paragraphs for #1809: moves held unsaved in one live gesture (Held, camera::Unsaved), Save bar commits one scene.set_camera, Revert/leaving/stored-camera change cancel; Wheeling and WHEEL_SETTLE gone" }
+stamp = { hash = "b3:cffff37a9e3a4ef5", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the 3D scenes and crop paragraphs: crop.rs changed only a test SceneInfo initialiser. The canvas still outlines and drags a group's item as one box; outlining a 3D group by its children (ADR-0164 §6) is a follow-up, so nothing here is wrong." }
@@ -7116,7 +7116,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:a5ad680026f05fb2", by = "agent:issues-thread", note = "Re-read after merging the train: the live aim paragraph says a button holds its axis from one drive on press to one stop on release, pointer captured and let go on pointerup, pointercancel or lostpointercapture, never on leave, and Space or Enter holds it (repeats ignored) until keyup or blur (#1707); matches live_aim.rs." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "Added the Live preview off bullet: Disable closes the stream and moves Stream to the next channel, switch/reshow only update Stream while off, Enable subscribes it, choice kept under jstream.canvas.preview_off; checked against mod.rs and preview.rs." }
+stamp = { hash = "b3:9ca1164015c800ad", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Rewrote the outline paragraph: a hidden item draws nothing and isn't hit, marqueed or snapped to unless selected (Layout::seen_boxes/seen_shapes), and only a selected hidden item is dashed (#1732)" }
@@ -7140,7 +7140,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:7cb40b0906c102c2", by = "agent:claude", note = "Edited the Sequences paragraph: Add lane's switches include each audio source's mute and each item's visibility (ADR-0207); matches lane_offers::offers and visibility | merge: #1816 (2333721e) adds data triggers (DataPreset, DataTriggerForm), note Learn and the Mappings notes to this section; this branch's Sequences sentence on Add lane's mute and visibility switches is untouched and holds beside them | kept from the merged side: Re-read: the design choices hold; the data trigger form reuses the trigger-new layout and the When::Midi path to bindings, Learn polls notes beside controls, and no new dependency or context was added" }
+stamp = { hash = "b3:464244bf2fc556db", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:d734669b20426aff", by = "agent:aa-thread", note = "Re-read the parts on Settings › 3D rendering and the scene dialog's rendering rows: nothing describes the new select (it is in purpose); control's design change is the matching mock refusal." }
@@ -7164,7 +7164,7 @@ stamp = { hash = "b3:a1522a5c39a7a3bf", by = "agent:mappings-thread", note = "Re
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:b9c619b27cdea693", by = "agent:claude", note = "Re-read: no new module, state store or style mechanism; the Save bar is a style.css class like the keyframe banner, no inline style" }
+stamp = { hash = "b3:cffff37a9e3a4ef5", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers." }
@@ -7185,7 +7185,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:a5ad680026f05fb2", by = "agent:issues-thread", note = "Re-read after merging the train (#1707): the live aim buttons capture the pointer and take Space/Enter; no design choice (connecting, state, styles, CSP) changes, and the buttons set no style attribute." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "Re-read the design section: the canvas still opens one preview stream per session channel; the off state keeps run_preview reading the binary channel for taps, and persistence is browser storage like the camera controls." }
+stamp = { hash = "b3:9ca1164015c800ad", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Re-read the canvas and model parts of the design section; nothing there names hidden-item outlines or hit rules, which the canvas section covers; still holds" }
@@ -7428,7 +7428,7 @@ stamp = { hash = "b3:6214130ac830b4e0", by = "agent:show-integrator", note = "Th
 stamp = { hash = "b3:619402a04ea67cf6", by = "agent:claude", note = "Edited the scene-row menu, Filters panel and nested-scene bullets: Edit filters… opens Properties/Scene properties on Filters (open_filters), Properties and Edit filters lead, Sources backs out of a nested scene via holder/step_trail; re-read the rest, holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:11e72a828702f4db", by = "agent:claude", note = "Edited the scene-row menu, Filters panel and nested-scene bullets: Edit filters… opens Properties/Scene properties on Filters (open_filters), Properties and Edit filters lead, Sources backs out of a nested scene via holder/step_trail; re-read the rest, holds" }
+stamp = { hash = "b3:cd98bdb31e5de350", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/stats.rs"]
 stamp = { hash = "b3:cccb4552a14a540c", by = "agent:claude", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs" }
@@ -7473,7 +7473,7 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:d53f81d7653d743a", by = "agent:release-alpha13", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs. | merge: The alpha.13 train merged #1716, #1714, #1735, #1738, #1740, #1697, #1708, #1705, #1681, #1709, #1742 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:219c52b5302fdaa0", by = "agent:scene-folders", note = "Edited: the scene list paragraph adds a scene's own folders, then its unfiled keyframes and sequences, moving only under the scene (space_of) by drag or Move to folder; the keyframe paragraph says they drag only under their scene. plan_summary's sequence count and Show media's list-only folder re-read: covered by existing text. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
+stamp = { hash = "b3:d8ec0d8aa4c3bbd5", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ui_scale.rs"]
 stamp = { hash = "b3:66b0d58e3bbe08ee", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
@@ -7500,7 +7500,7 @@ stamp = { hash = "b3:9b9c233af41edbd2", by = "agent:claude", note = "Merged the 
 stamp = { hash = "b3:b21d7fa5b17d1358", by = "agent:claude", note = "Re-read: no new module, state store or style mechanism; the Save bar is a style.css class like the keyframe banner, no inline style | merge: #1816 added the data trigger form (style.css selectors shared with .midi-trigger-form, keys-and-midi spec and its README entry); re-read, nothing in this section about the camera Save bar changes | kept from the merged side: Re-read: the design choices hold; the data trigger form reuses the trigger-new layout and the When::Midi path to bindings, Learn polls notes beside controls, and no new dependency or context was added" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:edff1bdb5226c8f4", by = "agent:mappings-thread", note = "Re-read against this change: the Keys and MIDI triggers bullet now names DataPreset, data_trigger, DataTriggerForm and Learn hearing notes (midi.last_notes); the Mappings bullet says readers lists an overriding keyframe's every row and rows lists each key once; map_control's key wording matches ADR-0208" }
+stamp = { hash = "b3:b5a83290f598c9a8", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -7521,7 +7521,7 @@ stamp = { hash = "b3:a1522a5c39a7a3bf", by = "agent:mappings-thread", note = "Re
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:b9c619b27cdea693", by = "agent:claude", note = "Re-read: crate purpose and module list unchanged by the unsaved-camera change in canvas/mod.rs and camera.rs" }
+stamp = { hash = "b3:cffff37a9e3a4ef5", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the store and scene Properties bullets: Collection still carries SceneInfo as reported, now with camera_anchor, and the dialog's edits stay tested natively (a new test covers the share switch and anchor). The covered files' other changes are test initialisers." }
@@ -7542,7 +7542,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:a5ad680026f05fb2", by = "agent:issues-thread", note = "Re-read after merging the alpha.13 train: live_aim.rs only changes how its buttons hold and release an axis (#1707); the crate's purpose, layering and contents list still hold." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "Re-read the purpose against the live-preview toggle: still a Leptos client over the protocol; the toggle only subscribes and unsubscribes the canvas's existing preview stream, no new protocol use." }
+stamp = { hash = "b3:9ca1164015c800ad", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "canvas/mod.rs and model.rs only change which items the canvas draws and hits (hidden ones only while selected, #1732); the crate's purpose is unchanged" }
@@ -7785,7 +7785,7 @@ stamp = { hash = "b3:6214130ac830b4e0", by = "agent:show-integrator", note = "Th
 stamp = { hash = "b3:619402a04ea67cf6", by = "agent:claude", note = "item_menu.rs, scene_properties.rs, source_properties.rs, scenes.rs and sources.rs changed behaviour (Edit filters opens Properties on Filters, menu order, Sources back-out) but not what each module is; the module list holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:11e72a828702f4db", by = "agent:claude", note = "item_menu.rs, scene_properties.rs, source_properties.rs, scenes.rs and sources.rs changed behaviour (Edit filters opens Properties on Filters, menu order, Sources back-out) but not what each module is; the module list holds" }
+stamp = { hash = "b3:cd98bdb31e5de350", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/stats.rs"]
 stamp = { hash = "b3:cccb4552a14a540c", by = "agent:claude", note = "C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds" }
@@ -7830,7 +7830,7 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:d53f81d7653d743a", by = "agent:release-alpha13", note = "Host detection names desktop_ptz_cameras and set_ptz_cameras; module bullets for ptz_cameras.rs and panels/ptz.rs. | merge: The alpha.13 train merged #1716, #1714, #1735, #1738, #1740, #1697, #1708, #1705, #1681, #1709, #1742 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:219c52b5302fdaa0", by = "agent:scene-folders", note = "Re-read: scenes.rs (scene folders under a scene, drags and Move to folder, described in the design section), store.rs plan_summary now counting sequences moved up, show/drop.rs picking Show media only among the scene list's folders, and literal fields in labels.rs and sequence.rs; the purpose's module list holds. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
+stamp = { hash = "b3:d8ec0d8aa4c3bbd5", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ui_scale.rs"]
 stamp = { hash = "b3:66b0d58e3bbe08ee", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
@@ -8634,7 +8634,7 @@ stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "Pack
 stamp = { hash = "b3:c313eded3773d2d1", by = "agent:preview-toggle", note = "Added two sentences on Disable/Enable live preview from the canvas right-click menu; the rest of the section is untouched by the change." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#canvas"]
-stamp = { hash = "b3:e942751dcba1bce8", by = "agent:preview-toggle", note = "Added two sentences on Disable/Enable live preview from the canvas right-click menu; the rest of the section is untouched by the change." }
+stamp = { hash = "b3:52e8b7d8b0f457d1", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#dialogs"]
 stamp = { hash = "b3:004a982aa9267782", by = "agent:claude", note = "Re-read against SceneCamera.fixed_aperture (0.191, ADR-0223) on the latest alpha.13 train: nothing here describes the camera's depth-of-field fields or the protocol number, so it holds." }
@@ -8655,7 +8655,7 @@ stamp = { hash = "b3:c4b1df27b03af988", by = "agent:preview-toggle", note = "Add
 stamp = { hash = "b3:e8fcc2e69060d66e", by = "agent:claude", note = "Re-read: step 4 only says to watch meters and mute or set a fader; the mixer's right-click mapping (UI-FEATURES#mixer) isn't described here" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#objects"]
-stamp = { hash = "b3:a13ca480dd7a8ec5", by = "agent:claude", note = "Upstream CM-02/03/04, SC-11, OB-01 and OB-10 changed menu order, Edit filters opening Properties on Filters and the Sources back-out button; this walkthrough names New scene, Add source, Copy/Paste, Duplicate scene and Pop out, none of which moved; holds" }
+stamp = { hash = "b3:1f6e95b526091e49", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#scenes"]
 stamp = { hash = "b3:33f6aacd5f22551a", by = "agent:claude", note = "Upstream CM-02/03/04, SC-11, OB-01 and OB-10 changed menu order, Edit filters opening Properties on Filters and the Sources back-out button; this walkthrough names New scene, Add source, Copy/Paste, Duplicate scene and Pop out, none of which moved; holds" }
@@ -9231,7 +9231,7 @@ stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cf
 stamp = { hash = "b3:3fa709a62e0e60ae", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): No change to what a page is granted or sent: only when a granted page's next look is scheduled (a page frame after the last look)." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:4868b9ded8915bdd", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
+stamp = { hash = "b3:6e5e88c26d32ab70", by = "agent:claude", note = "Added the receive buffer (kernel memory, bounded) and the 64-a-turn read bound; flooding controls unchanged: every datagram is still checked, dropped and counted as before" }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:b37f83f15f9a48ed", by = "agent:claude", note = "the JTunnel mDNS listener text says the announcement is a separate socket on 5353 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -9240,13 +9240,13 @@ stamp = { hash = "b3:b37f83f15f9a48ed", by = "agent:claude", note = "the JTunnel
 stamp = { hash = "b3:566e43a3335da375", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/mod.rs"]
-stamp = { hash = "b3:fd0aedee56fc2adc", by = "agent:claude", note = "ADR renumbered 0250 to 0253 (0250 to 0252 taken by other branches); re-read, links and text otherwise unchanged" }
+stamp = { hash = "b3:0ac611fba05ebc5c", by = "agent:claude", note = "Added the receive buffer (kernel memory, bounded) and the 64-a-turn read bound; flooding controls unchanged: every datagram is still checked, dropped and counted as before" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/names.rs"]
 stamp = { hash = "b3:8f74417d2e85aef0", by = "agent:release-alpha13", note = "Re-read in full after merging the train. Checked the claims this PR adds: MidiInputs::bindable and set_bindable exist in jstream-sources' midi module, and action_bindings.rs lets a held press go after SILENT_MS (500 ms) of silence. The train's names.rs change (a PTZ camera's name and axis in a names packet) is already described. | merge: Merge of #1784 at e8df220 (JTunnel mDNS listener and one live sender, ADR-0221) into the alpha.13 train, after #1711/#1772's per-sender MIDI switch: jtunnel.json's example now carries both midi and live, the desktop Settings list shows both the MIDI tick and Make live, and the setting test gains live: None; re-read, the live-sender text concerns data and audio readers and agrees with ADR-0220's MIDI gate | kept from the merged side: Names packets may now carry a PTZ camera's name and axis (names.rs target_label), and ptz_axis bindings send only to listed heads; edited both. | kept from the merged side: Re-read against jtunnel/mod.rs after the rework: listener text holds; one live sender, so an unnamed reader reads only its data; no alias, no data held twice" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/tests.rs"]
-stamp = { hash = "b3:fe75a64a7c6fa6ed", by = "agent:claude", note = "only the Opus test's pacing changed; the Opus decoding and allocation text still holds" }
+stamp = { hash = "b3:1a4c89085bf52f17", by = "agent:claude", note = "Added the receive buffer (kernel memory, bounded) and the 64-a-turn read bound; flooding controls unchanged: every datagram is still checked, dropped and counted as before" }
 
 ["THREAT-MODEL#mcp"."body"]
 stamp = { hash = "b3:98df5fd57774c8a1", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, people-only MCP nouns, server parts or gate credentials)" }
@@ -9501,10 +9501,10 @@ stamp = { hash = "b3:21472b2516d7a36f", by = "agent:claude", note = "C18: the WA
 stamp = { hash = "b3:076299ee126c849d", by = "agent:claude-ui-features", note = "session.rs: connect and open with hello and engine_url_for_page back the connect form; host.rs: desktop() hands the desktop app's engine for the automatic connection and desktop_vcam its camera; pairing.rs: start, devices and revoke back the pairing panel per ADR-0044." }
 
 ["UI-FEATURES#canvas"."body"]
-stamp = { hash = "b3:e942751dcba1bce8", by = "agent:preview-toggle", note = "Added CV-19 (Disable/Enable live preview in the canvas menu, unsubscribes the stream, follows scene/rate/size while off, kept in this browser, canvas only); other rows unchanged by the diff." }
+stamp = { hash = "b3:52e8b7d8b0f457d1", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:b9c619b27cdea693", by = "agent:claude", note = "CV-11 now names the Save bar under the tool bar for an unsaved camera move (#1809)" }
+stamp = { hash = "b3:cffff37a9e3a4ef5", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read this section's rows for the covered file: its only change is camera_anchor: None in test SceneInfo initialisers (protocol 0.125), so no feature it describes changed." }
@@ -9525,7 +9525,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:a5ad680026f05fb2", by = "agent:issues-thread", note = "Re-read after merging the train (no canvas rows changed there): CV-11 says the live aim press captures the pointer, passing over a button sends nothing, and Space or Enter holds one until keyup or blur (#1707); matches live_aim.rs and the scene-cameras e2e test." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "Added CV-19 (Disable/Enable live preview in the canvas menu, unsubscribes the stream, follows scene/rate/size while off, kept in this browser, canvas only); other rows unchanged by the diff." }
+stamp = { hash = "b3:9ca1164015c800ad", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "CV-04 now says a hidden item draws nothing and takes no click, marquee or snap until selected, then shows a dashed outline (#1732); matches boxes/hit/marquee/snap in canvas/mod.rs" }
@@ -9549,7 +9549,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "CV-03 holds
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: CV-04, CV-08 and CV-11 are done, and their notes match the code; CV-08 now says the box's handles resize as usual with no size (review N1). crop.rs gives the picture, the crop gesture, Clear crop's uncropped extent and the readout; mod.rs the crop mode, Alt crop, the amber chrome and ghost, the Crop tool and the pill texts; model.rs commits box and crop as one batch; live.rs streams item.set_crop live; store.rs supplies sizes from source.sizes and source.size_changed, with the canvas size for a nested scene, and leaves crop mode on a scene switch; transform.rs only makes rotate and from_local pub(crate)." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:219c52b5302fdaa0", by = "agent:scene-folders", note = "Re-read: store.rs changed only plan_summary (sequences moved up a level in a folder plan); the canvas rows' keyframe banner and live picture text are unaffected. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
+stamp = { hash = "b3:d8ec0d8aa4c3bbd5", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["UI-FEATURES#dialogs"."body"]
 stamp = { hash = "b3:004a982aa9267782", by = "agent:claude", note = "DL-03 has the Real lens check under Depth of field (ADR-0223, protocol 0.191), keeping the blur as it toggles." }
@@ -9636,7 +9636,7 @@ stamp = { hash = "b3:d7dc35a103517112", by = "agent:claude-audio-picker", note =
 stamp = { hash = "b3:6ea512f03f193bae", by = "agent:mappings-thread", note = "KB-08 now describes + Data trigger (presets, sender, Equals/Changes/Rises to/Falls below, the read-back and the state note) and Learn taking the next pad played (midi.last_notes); checked against triggers.rs and bindings.rs" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b8e51461fcb7cf2b", by = "agent:preview-toggle", note = "The diff adds no key handling; canvas keys (V, C, arrows, Ctrl+A) unchanged." }
+stamp = { hash = "b3:9ca1164015c800ad", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: KB-01 (C toggles crop mode, V leaves it) and KB-02 (Alt on a handle crops; Shift halves a crop drag's speed) match on_key and single_handle in mod.rs, which leaves Alt a plain resize while no size is known; transform.rs only makes rotate and from_local pub(crate) for crop.rs and changes no key." }
@@ -9672,19 +9672,19 @@ stamp = { hash = "b3:e8fcc2e69060d66e", by = "agent:claude", note = "Added that 
 stamp = { hash = "b3:66cf47f1d28dd678", by = "agent:claude", note = "Added that a right-click on a row's fader, dB field or readout opens the fader's menu and one on the mute button the mute's, now that the row holds two learn buttons (data-map on each)" }
 
 ["UI-FEATURES#objects"."body"]
-stamp = { hash = "b3:a13ca480dd7a8ec5", by = "agent:claude", note = "Edited OB-01 (the back-out button before the caption and Backspace in a nested scene, to the scene it came from or the first that nests it, nesting row selected) and OB-10 (Filters acts as the menu's Edit filters); checked against sources.rs" }
+stamp = { hash = "b3:1f6e95b526091e49", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/labels.rs"]
 stamp = { hash = "b3:2b7aa2fc5f25f12a", by = "agent:scene-folders", note = "Re-read: labels.rs gained a TimelineInfo literal field and store.rs plan_summary a sequence count; the objects rows describe neither; holds. | Merged the alpha.13 train at c616f3f (preview.show and request_keyframe at 0.188, ADR-0217 direct encoders, the fly camera and mapping panels): its text here is kept as the train stamped it, it touches no scene-folder code (scenes.rs, organise.rs, the mock), and the only combined text is the versions paragraph, 0.190 above the train's 0.188." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:11e72a828702f4db", by = "agent:claude", note = "Edited OB-01 (the back-out button before the caption and Backspace in a nested scene, to the scene it came from or the first that nests it, nesting row selected) and OB-10 (Filters acts as the menu's Edit filters); checked against sources.rs" }
+stamp = { hash = "b3:cd98bdb31e5de350", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c4c082d984b5bb6d", by = "agent:claude", note = "Merged into the alpha.13 train (claude/project-thread-zaejbd): re-read against style.css with the train's rules plus this branch's user-select list (with a[href], .settings-error, .toast, .about-facts dd), the flush .dropdown and the .new-band strip; nothing in this section changes. | kept from the merged side: Re-read against style.css: the change turns user-select off on body and back on for text fields and readable text, stretches .top-menu to the bar's height and hangs .dropdown flush under it with square top corners; nothing in this section changes." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:219c52b5302fdaa0", by = "agent:scene-folders", note = "Re-read: labels.rs gained a TimelineInfo literal field and store.rs plan_summary a sequence count; the objects rows describe neither; holds. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
+stamp = { hash = "b3:d8ec0d8aa4c3bbd5", by = "agent:claude", note = "Re-read against hover 3D bounding boxes (camera::bounds_edges, object_edges) and the Sources object rows (SourceObjects, hovered_object, object_row); CV-15 and OB-12 and the README text match the code" }
 
 ["UI-FEATURES#outputs"."body"]
 stamp = { hash = "b3:36ea955a5820dd92", by = "agent:release-alpha13", note = "merge: The alpha.13 train merged #1714, #1735, #1738, #1740, #1697, #1708, #1705, #1681, #1709, #1742 into this section's inputs. Re-read: each PR's added lines here are in the merged text, apart from protocol versions renumbered in order (checked line by line against every PR head), and no conflict resolution or merge fix contradicts it. output.toggle renumbered to 0.179; rest as merged." }

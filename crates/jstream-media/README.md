@@ -67,7 +67,10 @@ Contents:
   axes: kept in glTF's y up, each slot turned by the flip on both sides. `rig::skin`
   places one vertex as the GPU does. `Model::rigged` builds a model with its rig, its
   bounds those of its rest pose, and refuses a weighted vertex naming a slot it hasn't
-  (`ModelError::Joint`), so a model without a rig weighs nothing.
+  (`ModelError::Joint`), so a model without a rig weighs nothing. It also lists the
+  model's named objects (`Model::objects`, `Object`): each primitive's first name (its
+  node's, else its mesh's) with the union of those primitives' rest-pose boxes, in file
+  order, at most `MAX_OBJECTS` (256), for an editor to list and outline.
 - **Ray picking** (`model::pick`, [ADR-0218](../../docs/adr/0218-autofocus-meets-a-model-at-its-surface.md)):
   `Model::ray_hit` is where a ray in the model's own space first meets the surface it
   draws, beyond a minimum distance: blended triangles are seen through, masked ones

@@ -8261,6 +8261,13 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "objects": {
+              "description": "Its objects, as [`SourceSize::objects`](crate::SourceSize::objects) reports\nthem (since 0.198): a model loaded with others is a size change too.",
+              "items": {
+                "$ref": "#/$defs/ModelObject"
+              },
+              "type": "array"
+            },
             "size": {
               "anyOf": [
                 {
@@ -10972,6 +10979,41 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         }
       },
+      "type": "object"
+    },
+    "ModelObject": {
+      "description": "One named object of a 3D model, in a [`SourceSize`] (since 0.198).",
+      "properties": {
+        "max": {
+          "description": "The largest x, y and z of its box, in the same terms.",
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "min": {
+          "description": "The smallest x, y and z of its box, each from 0 to 1 across the model's own box\n(x right, y down, z toward the viewer), so it scales with `size` and `depth`.",
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "name": {
+          "description": "Its name in the model's file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "min",
+        "max"
+      ],
       "type": "object"
     },
     "MonitorTap": {
@@ -18584,6 +18626,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "null"
           ]
         },
+        "objects": {
+          "description": "The named objects of a 3D model, in the order its file draws them (since 0.198):\neach node, or a mesh with no node name, and the box around it, at most 256.\nOmitted for every other source, a model with no names, and while `size` is.",
+          "items": {
+            "$ref": "#/$defs/ModelObject"
+          },
+          "type": "array"
+        },
         "size": {
           "anyOf": [
             {
@@ -20993,5 +21042,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.197"
+  "title": "JStream protocol 0.198"
 }
