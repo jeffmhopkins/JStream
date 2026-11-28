@@ -41,6 +41,14 @@
 //! named gets none, so names its DAW saved stay. This is the one thing it sends besides
 //! queries, subscribes and byes.
 //!
+//! **Keeping up with a heavy sender.** A busy DAW session's state (a 32 x 32 clip grid,
+//! every meter and note, the modulation params, each changing every tick) runs to a few
+//! megabytes a second beside the audio, and comes in bursts: what changed each tick, and
+//! the whole state at once to a new listener. So the receive socket asks the system for a
+//! buffer of [`RECV_BUFFER`] (the default holds a fraction of one burst, and a datagram
+//! that finds it full is dropped unseen), and once a datagram comes the thread reads what
+//! else is waiting, up to [`READ_PER_TURN`], before it plays out what is due.
+//!
 //! Each accepted sender has a [`Playout`] (its jitter buffer, sequence tracking and
 //! clock estimate, from `jstream-jtunnel`). The thread pushes each frame in as it
 //! arrives and pops each one when it is due, handing its samples to the mixer input of
@@ -111,6 +119,17 @@ const MAX_DATAGRAM: usize = 9000;
 /// The most datagrams read from the mDNS listener each turn of the thread (at most every
 /// 5 ms), so mDNS chatter on a busy LAN can't hold up playout.
 const LISTEN_PER_TURN: usize = 16;
+/// The receive socket's buffer, asked of the system: room for about a second of a heavy
+/// DAW session's state beside its audio (a 32 x 32 clip grid changing every tick is
+/// about 2 MB/s), so a burst (a sender's whole state at once, or the thread held up
+/// a moment) waits in it rather than being dropped. The system's default holds far
+/// less (64 KiB on Windows, 208 KiB on Linux); a system that caps it lower gives
+/// what it allows.
+const RECV_BUFFER: usize = 4 << 20;
+/// The most datagrams read one after another, without waiting, once one has come, before
+/// the thread plays out what is due: a burst is taken off the socket at once, while one
+/// read at a time with a timeout set before each would fall behind it.
+const READ_PER_TURN: usize = 64;
 /// mDNS's group and port, where the thread sends its queries.
 pub const MDNS: SocketAddr = SocketAddr::new(
     IpAddr::V4(Ipv4Addr::new(
@@ -446,7 +465,7 @@ impl Receiver {
         data: LiveData,
         changed: Option<SyncSender<()>>,
     ) -> io::Result<Self> {
-        let socket = UdpSocket::bind(setup.bind)?;
+        let socket = receive_socket(setup.bind)?;
         socket.set_read_timeout(Some(MAX_WAIT))?;
         let local = socket.local_addr()?;
         // Senders answer and announce to the group, so discovery hears them only there.
@@ -834,11 +853,17 @@ impl Run {
             // An error is a timeout, or an ICMP port-unreachable from a sender not
             // running yet, reported on the next receive on some systems.
             if let Ok((len, from)) = self.socket.recv_from(&mut datagram) {
-                if len > MAX_DATAGRAM {
-                    // Cut short by the buffer: never parsed as if it were whole.
-                    self.counters.malformed.fetch_add(1, Ordering::Relaxed);
-                } else {
-                    self.receive(&datagram[..len], from, &mut samples);
+                self.take(&datagram, len, from, &mut samples);
+                // What else is waiting, without waiting for more: a burst comes off the
+                // socket now, before it can fill.
+                if self.socket.set_nonblocking(true).is_ok() {
+                    for _ in 1..READ_PER_TURN {
+                        let Ok((len, from)) = self.socket.recv_from(&mut datagram) else {
+                            break;
+                        };
+                        self.take(&datagram, len, from, &mut samples);
+                    }
+                    let _ = self.socket.set_nonblocking(false);
                 }
             }
             self.play();
@@ -1064,6 +1089,16 @@ impl Run {
             .map_or(0, |t| u64::try_from(t.ticks()).unwrap_or(0))
     }
 
+    /// Takes a datagram of `len` bytes read into `datagram`.
+    fn take(&mut self, datagram: &[u8], len: usize, from: SocketAddr, samples: &mut [f32]) {
+        if len > MAX_DATAGRAM {
+            // Cut short by the buffer: never parsed as if it were whole.
+            self.counters.malformed.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.receive(&datagram[..len], from, samples);
+        }
+    }
+
     fn receive(&mut self, datagram: &[u8], from: SocketAddr, samples: &mut [f32]) {
         let counters = &self.counters;
         if !is_lan(from.ip()) {
@@ -1238,6 +1273,27 @@ impl Run {
             self.senders[index].seen.publish(stream, now);
         }
     }
+}
+
+/// The receive socket, bound to `bind`, with a buffer of [`RECV_BUFFER`] if the system
+/// allows it: one it refuses leaves the system's own, which is logged, since a heavy
+/// sender then loses packets in bursts.
+///
+/// # Errors
+/// The socket could not be made or bound.
+fn receive_socket(bind: SocketAddr) -> io::Result<UdpSocket> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let socket = Socket::new(Domain::for_address(bind), Type::DGRAM, Some(Protocol::UDP))?;
+    if let Err(error) = socket.set_recv_buffer_size(RECV_BUFFER) {
+        tracing::warn!(%error, "could not enlarge the JTunnel receive buffer; a heavy sender may lose packets");
+    }
+    socket.bind(&bind.into())?;
+    tracing::debug!(
+        asked = RECV_BUFFER,
+        got = socket.recv_buffer_size().unwrap_or(0),
+        "JTunnel receive buffer"
+    );
+    Ok(socket.into())
 }
 
 /// The mDNS listener for `group` (ADR-0123 §3): a non-blocking UDP socket on any IPv4

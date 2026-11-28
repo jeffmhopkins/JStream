@@ -255,9 +255,12 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   senders this machine accepts
   (`AcceptedSender`: a tunnel name of at most 31 bytes, with no white space at either
   end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
-  taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
+  taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket, with a
+  receive buffer of 4 MiB asked of the system so a heavy sender's bursts wait in it
+  rather than being dropped, and runs a
   `jstream-jtunnel` thread that subscribes to each sender by name every half second and
-  says bye when it stops; it never announces itself or sends audio or MIDI. A
+  says bye when it stops (once a datagram comes, it reads up to 64 more that are waiting
+  before playing out what is due); it never announces itself or sends audio or MIDI. A
   `network_audio` source with an empty `sender` records the first accepted sender, the
   desktop app's one live sender (ADR-0221); a reader that names no input already reads
   it. Beside each
