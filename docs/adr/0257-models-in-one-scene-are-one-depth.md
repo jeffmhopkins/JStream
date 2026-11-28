@@ -2,14 +2,15 @@
 id = "ADR-0257"
 title = "Models in one 3D scene are one depth"
 kind = "adr"
-status = "accepted"
+status = "superseded"
 tier = "agent"
+superseded_by = "docs/adr/0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md"
 -->
 
 # ADR-0257: Models in one 3D scene are one depth
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0259: Faded and additive models in the shared pass are transparent](0259-faded-and-additive-models-in-the-shared-pass-are-transparent.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

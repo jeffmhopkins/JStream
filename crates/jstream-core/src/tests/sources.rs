@@ -2025,6 +2025,7 @@ fn an_asset_install_announces_the_sizes_its_plan_changed() {
             }),
             depth: None,
             duration_ms: None,
+            objects: Vec::new(),
         }]
     );
     let _ = fs::remove_dir_all(dir);

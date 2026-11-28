@@ -58,10 +58,10 @@ use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
     CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
     Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, KindsCause, LiveOutcome, MAX_WARM_GPU_MIB, MAX_WARM_SCENES, OutputHealth,
-    OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream,
-    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
-    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
+    IdempotencyKey, KindsCause, LiveOutcome, MAX_WARM_GPU_MIB, MAX_WARM_SCENES, ModelObject,
+    OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings,
+    ProbeStream, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget,
+    SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
     YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
@@ -4809,6 +4809,35 @@ fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<A
     shared.load.ticker_ended();
 }
 
+/// A source's size as `source.sizes` reports it: its frame's size, the depth of a source
+/// with depth, and a 3D model's named objects ([`crate::snapshot::Objects`]).
+type Known = (FrameSize, Option<u32>, Option<crate::snapshot::Objects>);
+
+/// `objects` as `source.sizes` lists them (protocol 0.198): each box in fractions of
+/// the model's whole box, which the size and depth beside it scale. Empty for a model
+/// with none.
+pub(crate) fn model_objects(objects: &Option<crate::snapshot::Objects>) -> Vec<ModelObject> {
+    let Some((whole, objects)) = objects else {
+        return Vec::new();
+    };
+    let at = |value: f32, axis: usize| {
+        let span = whole.max[axis] - whole.min[axis];
+        if span > 0.0 {
+            ((value - whole.min[axis]) / span).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    };
+    objects
+        .iter()
+        .map(|object| ModelObject {
+            name: object.name.clone(),
+            min: [0, 1, 2].map(|axis| at(object.bounds.min[axis], axis)),
+            max: [0, 1, 2].map(|axis| at(object.bounds.max[axis], axis)),
+        })
+        .collect()
+}
+
 /// A frame size as the protocol reports it.
 fn pixel_size(size: FrameSize) -> PixelSize {
     PixelSize {
@@ -5289,8 +5318,8 @@ struct State {
     /// Each source's size as `source.sizes` reports it and `source.size_changed` last
     /// announced it (ADR-0022 §4): runtime state, not part of `rev`. A source with no
     /// size has no entry. Beside it, the depth of a source with depth (a 3D model,
-    /// ADR-0107 decision 8).
-    sizes: BTreeMap<SourceId, (FrameSize, Option<u32>)>,
+    /// ADR-0107 decision 8), and a model's named objects (protocol 0.198).
+    sizes: BTreeMap<SourceId, Known>,
     /// Each source's length in milliseconds as `source.size_changed` last announced it,
     /// for a source with a known length (a `media` file): runtime state like `sizes`.
     durations: BTreeMap<SourceId, u64>,
@@ -6790,12 +6819,15 @@ impl State {
                         .state()
                         .sources()
                         .map(|source| {
-                            let known = self.sizes.get(source.id()).copied();
+                            let known = self.sizes.get(source.id());
                             SourceSize {
                                 source_id: source.id().clone(),
-                                size: known.map(|(size, _)| pixel_size(size)),
-                                depth: known.and_then(|(_, depth)| depth),
+                                size: known.map(|(size, _, _)| pixel_size(*size)),
+                                depth: known.and_then(|(_, depth, _)| *depth),
                                 duration_ms: self.durations.get(source.id()).copied(),
+                                objects: known
+                                    .map(|(_, _, objects)| model_objects(objects))
+                                    .unwrap_or_default(),
                             }
                         })
                         .collect(),
@@ -7335,15 +7367,16 @@ impl State {
             ..
         } = self;
         let state = graph.state();
-        let mut emit = |source_id: &SourceId,
-                        known: Option<(FrameSize, Option<u32>)>,
-                        duration_ms: Option<u64>| {
+        let mut emit = |source_id: &SourceId, known: Option<&Known>, duration_ms: Option<u64>| {
             subscribers.emit(
                 &Event::SourceSizeChanged {
                     source_id: source_id.clone(),
-                    size: known.map(|(size, _)| pixel_size(size)),
-                    depth: known.and_then(|(_, depth)| depth),
+                    size: known.map(|(size, _, _)| pixel_size(*size)),
+                    depth: known.and_then(|(_, depth, _)| *depth),
                     duration_ms,
+                    objects: known
+                        .map(|(_, _, objects)| model_objects(objects))
+                        .unwrap_or_default(),
                 },
                 wake,
             );
@@ -7361,14 +7394,16 @@ impl State {
         }
         for source in state.sources() {
             let source_id = source.id();
-            let now = match frames.get(source_id) {
-                Some(frame) => frame.extent().map(|size| (size, frame.depth())),
+            let now: Option<Known> = match frames.get(source_id) {
+                Some(frame) => frame
+                    .extent()
+                    .map(|size| (size, frame.depth(), frame.objects())),
                 None => match live.size(source_id) {
-                    Some(size) => Some((size, live.depth(source_id))),
+                    Some(size) => Some((size, live.depth(source_id), live.objects(source_id))),
                     None => live
                         .capture_key(source_id)
                         .and_then(|key| capture_sizes.get(&key))
-                        .map(|size| (*size, None)),
+                        .map(|size| (*size, None, None)),
                 },
             };
             let duration_ms = live.duration_ms(source_id);
@@ -7377,6 +7412,7 @@ impl State {
             {
                 continue;
             }
+            emit(source_id, now.as_ref(), duration_ms);
             match now {
                 Some(size) => sizes.insert(source_id.clone(), size),
                 None => sizes.remove(source_id),
@@ -7385,7 +7421,6 @@ impl State {
                 Some(ms) => durations.insert(source_id.clone(), ms),
                 None => durations.remove(source_id),
             };
-            emit(source_id, now, duration_ms);
         }
     }
 

@@ -207,9 +207,9 @@ pub struct Item<'a> {
     /// other where each is nearer. `None` for every other item, and in a scene with
     /// none of them nothing changes.
     pub depth: Option<&'a Image>,
-    /// Whether a model with [`Self::depth`] writes that depth. An opaque or masked
-    /// material does, even when the model also has a blended one and even when the
-    /// item is additive: only the blended primitives skip the write (ADR-0257).
+    /// Whether a model with [`Self::depth`] writes that depth: a `normal` item whose
+    /// model has an opaque or masked material, even when it also has a blended one
+    /// (ADR-0259). The compositor also skips the write for an item under half opacity.
     /// Ignored when `depth` is `None`.
     pub occludes: bool,
 }

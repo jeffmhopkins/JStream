@@ -40,6 +40,7 @@ fn changed(id: &str, size: Option<PixelSize>) -> Event {
         size,
         depth: None,
         duration_ms: None,
+        objects: Vec::new(),
     }
 }
 
@@ -87,18 +88,21 @@ fn sizes_follow_live_sources_stored_frames_and_deletes() {
                 size: size(4, 2),
                 depth: None,
                 duration_ms: None,
+                objects: Vec::new(),
             },
             SourceSize {
                 source_id: SourceId::new("spare"),
                 size: size(8, 6),
                 depth: None,
                 duration_ms: None,
+                objects: Vec::new(),
             },
             SourceSize {
                 source_id: SourceId::new("webcam"),
                 size: None,
                 depth: None,
                 duration_ms: None,
+                objects: Vec::new(),
             },
         ]
     );
@@ -196,12 +200,14 @@ fn a_model_reports_its_depth_beside_its_size() {
                 size: size(512, 512),
                 depth: Some(512),
                 duration_ms: None,
+                objects: Vec::new(),
             },
             SourceSize {
                 source_id: SourceId::new("fill"),
                 size: size(4, 2),
                 depth: None,
                 duration_ms: None,
+                objects: Vec::new(),
             },
         ]
     );
@@ -211,7 +217,43 @@ fn a_model_reports_its_depth_beside_its_size() {
             size: size(512, 512),
             depth: Some(512),
             duration_ms: None,
+            objects: Vec::new(),
         }),
         "the model's first size carries its depth"
     );
+}
+
+/// Protocol 0.198: a model's objects are listed as fractions of its own box, which the
+/// size and depth beside them scale, so the canvas can place each one.
+#[test]
+fn a_models_objects_are_fractions_of_its_box() {
+    use jstream_media::model::{Bounds, Object};
+    let whole = Bounds {
+        min: [-2.0, 0.0, -1.0],
+        max: [2.0, 4.0, 1.0],
+    };
+    let objects: std::sync::Arc<[Object]> = vec![
+        Object {
+            name: "hull".into(),
+            bounds: Bounds {
+                min: [-2.0, 1.0, -1.0],
+                max: [0.0, 4.0, 1.0],
+            },
+        },
+        Object {
+            name: "flat".into(),
+            bounds: Bounds {
+                min: [2.0, 2.0, 0.0],
+                max: [2.0, 2.0, 0.0],
+            },
+        },
+    ]
+    .into();
+    let listed = crate::engine::model_objects(&Some((whole, objects)));
+    assert_eq!(listed.len(), 2);
+    assert_eq!(listed[0].name, "hull");
+    assert_eq!(listed[0].min, [0.0, 0.25, 0.0]);
+    assert_eq!(listed[0].max, [0.5, 1.0, 1.0]);
+    assert_eq!(listed[1].min, [1.0, 0.5, 0.5]);
+    assert!(crate::engine::model_objects(&None).is_empty());
 }
